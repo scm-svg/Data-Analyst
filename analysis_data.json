@@ -1,0 +1,122 @@
+{
+  "C_total": 281,
+  "C_by_gen": {
+    "CAB": 151,
+    "DAMA": 107,
+    "KIDS": 23
+  },
+  "stock_total": 2988,
+  "store_stock": 1636,
+  "taller_stock": 1352,
+  "pending_80": 2908,
+  "pending_cab": 1564,
+  "pending_dama": 1344,
+  "prod_20_cab": 736,
+  "prod_20_dama": 616,
+  "fabric_kg": {
+    "Negro": 414.0,
+    "Kaki": 156.96,
+    "Gris Oscuro": 361.2,
+    "Verde Militar": 65.56,
+    "Azul Marino": 90.6
+  },
+  "fabric_total": 1088.32,
+  "shorts_units": 2080,
+  "monthly_labels": [
+    "Post-Jul",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre"
+  ],
+  "inv_no_order": [
+    2946,
+    2721,
+    2468,
+    2187,
+    1802,
+    1417
+  ],
+  "inv_full_order": [
+    2946,
+    2721,
+    2468,
+    5095,
+    4710,
+    4325
+  ],
+  "inv_split": [
+    2946,
+    2721,
+    2468,
+    3641,
+    4710,
+    4325
+  ],
+  "monthly_demand": [
+    225,
+    253,
+    281,
+    385,
+    385
+  ],
+  "monthly_scenarios": [
+    "E",
+    "D",
+    "C",
+    "B",
+    "B"
+  ],
+  "color_stock": {
+    "Azul Marino": 543,
+    "Gris Claro": 147,
+    "Gris Oscuro": 94,
+    "Kaki": 640,
+    "Negro": 1024,
+    "Verde Militar": 540
+  },
+  "color_demand_5m": {
+    "Azul Marino": 205,
+    "Gris Claro": 170,
+    "Gris Oscuro": 153,
+    "Kaki": 347,
+    "Negro": 451,
+    "Verde Militar": 202
+  },
+  "gris_runway": [
+    89.78899082568807,
+    66.78899082568807,
+    41.788990825688074,
+    13.788990825688074,
+    -25.211009174311926,
+    -64.21100917431193
+  ],
+  "demand_assigned": 1571,
+  "demand_optimistic": 2077,
+  "demand_pessimistic": 887,
+  "dec_hist": 627,
+  "meses_und": {
+    "mayo-2025": 93,
+    "junio-2025": 138,
+    "julio-2025": 272,
+    "agosto-2025": 331,
+    "septiembre-2025": 190,
+    "octubre-2025": 348,
+    "noviembre-2025": 370,
+    "diciembre-2025": 627,
+    "enero-2026": 174,
+    "febrero-2026": 281,
+    "marzo-2026": 368,
+    "abril-2026": 276,
+    "mayo-2026": 320,
+    "junio-2026": 281,
+    "julio-2026": 89
+  },
+  "safety_stock": 70,
+  "lead_fabric": 30,
+  "lead_prod": 42,
+  "order_deadline": "2026-08-21",
+  "prod_ready": "2026-10-01",
+  "split2_ready": "2026-11-15"
+}
