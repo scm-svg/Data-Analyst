@@ -42,6 +42,22 @@ Análisis de compra para los 3 productos nuevos que **sustituyen** a los modelos
 | **Travel Bag 40L (new)** | **~250 – 400 uds** (lanzamiento) | Ya hay 1.227 uds del actual; introducir Azul Petróleo + Negro y liquidar. |
 | **Moon Bag** | **~150 – 300 uds** (prueba) | Hay 2.679 Mini Bags en stock; validar los tonos nuevos antes de comprar volumen. |
 
+## Dry Bag 30L — asignación por color (6 colores prioritarios)
+
+Colores prioritarios = top 6 por ventas (80.6% del total). Compra distribuida por peso de ventas y neta de inventario:
+
+| Color | Ventas hist. | Mix | Inv. actual | Compra (base ~3.270) |
+|---|---:|---:|---:|---:|
+| Blanco | 738 | 23.4% | 19 | **745** |
+| Verde Militar | 526 | 16.7% | 21 | **524** |
+| Negro | 511 | 16.2% | 1 | **528** |
+| Azul Rey | 496 | 15.7% | 22 | **492** |
+| Gris Claro | 464 | 14.7% | 26 | **454** |
+| Camu | 423 | 13.4% | 2 | **436** |
+| **TOTAL** | 3.158 | 100% | 91 | **~3.179** |
+
+(Colores no prioritarios excluidos de esta 1ª compra: Amarillo, Naranja, Rojo.)
+
 **2ª compra (May–Oct):** planificar en Dic/Ene con escenario conservador (baja estacionalidad).
 
 ## Notas / supuestos a confirmar

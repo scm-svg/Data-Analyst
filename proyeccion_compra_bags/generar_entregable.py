@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 UP = "/home/ubuntu/.cursor/projects/workspace/uploads/"
-OUT = "/workspace/PROYECCION_COMPRA_6MESES.xlsx"
+OUT = "/workspace/proyeccion_compra_bags/PROYECCION_COMPRA_6MESES.xlsx"
 
 def load_sales(fn):
     df = pd.read_csv(UP+fn, sep=';', encoding='latin-1')
@@ -95,6 +95,25 @@ for m,df in sales.items():
         AGRESIVO_demanda=round(agr), AGRESIVO_compra=round(max(agr-it,0))))
 escen=pd.DataFrame(esc_rows)
 
+# ================= HOJA: Dry Bag asignacion por color (top 6) =================
+dry=sales['DRY BAG 30L']
+top6=['Blanco','Verde Militar','Negro','Azul Rey','Gris Claro','Camu']
+vdry=dry.groupby('color')['cant'].sum()
+v6=vdry[top6]; share6=v6/v6.sum()
+invd=inv[inv['modelo']=='DRY BAG 30L']
+inv6=invd.groupby('color')['cant'].apply(lambda s:s.clip(lower=0).sum())
+dry_rows=[]
+for c in top6:
+    dry_rows.append(dict(Color=c, Ventas_hist=int(v6[c]), Mix_pct=round(share6[c]*100,1),
+        Inv_actual=int(inv6.get(c,0)),
+        Compra_conservador_3100=round(max(3100*share6[c]-inv6.get(c,0),0)),
+        Compra_BASE_3270=round(max(3270*share6[c]-inv6.get(c,0),0)),
+        Compra_alto_3470=round(max(3470*share6[c]-inv6.get(c,0),0))))
+dry_alloc=pd.DataFrame(dry_rows)
+dry_alloc.loc['TOTAL']=['TOTAL', v6.sum(), round(share6.sum()*100,1), int(inv6[top6].sum()),
+    dry_alloc['Compra_conservador_3100'].sum(), dry_alloc['Compra_BASE_3270'].sum(),
+    dry_alloc['Compra_alto_3470'].sum()]
+
 # ================= HOJA: color =================
 col_rows=[]
 for m,df in sales.items():
@@ -144,6 +163,7 @@ with pd.ExcelWriter(OUT, engine='openpyxl') as xl:
     notas.to_excel(xl,sheet_name='Guia',index=False)
     resumen.to_excel(xl,sheet_name='Compra_recomendada',index=False)
     escen.to_excel(xl,sheet_name='Escenarios',index=False)
+    dry_alloc.to_excel(xl,sheet_name='DryBag_colores',index=False)
     men.to_excel(xl,sheet_name='Ventas_mensuales',index=False)
     estac.to_excel(xl,sheet_name='Estacionalidad',index=False)
     colores.to_excel(xl,sheet_name='Colores_mix',index=False)
