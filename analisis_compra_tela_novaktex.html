@@ -35,6 +35,9 @@ h1 em{color:var(--ac);font-style:normal}
 .verdict p,.verdict li{margin-bottom:8px;font-size:0.92rem}
 .highlight{background:rgba(91,106,247,.08);border:1px solid rgba(91,106,247,.25);border-radius:10px;padding:14px;margin:12px 0;font-size:0.85rem}
 table{width:100%;border-collapse:collapse;font-size:0.82rem}
+table.compact{font-size:0.76rem}
+table.compact th,table.compact td{padding:3px 8px;line-height:1.3;border-bottom:1px solid rgba(42,43,58,.6)}
+table.compact td:first-child{white-space:nowrap;width:28%}
 th{background:var(--s2);padding:8px 10px;text-align:left;font-weight:600;color:var(--mu);border-bottom:1px solid var(--brd)}
 td{padding:8px 10px;border-bottom:1px solid var(--brd)}
 .pos{color:var(--gr);font-weight:600}
@@ -50,7 +53,7 @@ footer{text-align:center;color:var(--mu);font-size:0.72rem;margin-top:32px;paddi
 <p class="subtitle">Explore Pants + Short Sport R1 · Proyección Ago–Dic 2026 · 21/Jul/2026</p>
 
 <div class="verdict">
-  <h2>Veredicto Ejecutivo</h2>
+  <h2>Decisión</h2>
   <p><span class="badge b-urgent">ACCIÓN URGENTE: COMPRA 65% INMEDIATA + 35% EN SEPTIEMBRE</span></p>
   <ul>
     <li><strong>Demanda proyectada Jul–Dic: 2,228 und</strong> de Explore Pants, incorporando expansión comercial y temporada alta</li>
@@ -72,64 +75,22 @@ footer{text-align:center;color:var(--mu);font-size:0.72rem;margin-top:32px;paddi
 <!-- FACTORES -->
 <div class="card">
   <h2>1. Factores Considerados para la Justificación</h2>
-  <table>
+  <table class="compact">
     <tr><th>Factor</th><th>Descripción</th></tr>
-    <tr>
-      <td><strong>Escenarios de venta A–G</strong></td>
-      <td>Escenario C = mes normal desestacionalizado (281 und/mes). Variaciones: A +45%, B +37%, D −10%, E −20%, F −30%, G −40%</td>
-    </tr>
-    <tr>
-      <td><strong>Asignación mensual Ago–Dic</strong></td>
-      <td>Agosto E · Septiembre D · Octubre C · Noviembre B · Diciembre B — refleja rampa hacia temporada alta</td>
-    </tr>
-    <tr>
-      <td><strong>Temporada alta Nov–Dic</strong></td>
-      <td>Escenario B (+37% sobre C). Diciembre 2025 vendió 627 und — referencia de riesgo al alza frente a proyección de 598 und/mes</td>
-    </tr>
-    <tr>
-      <td><strong>VELA — tienda recién abierta</strong></td>
-      <td>Proyección a 1.5× ventas de GRIE (57.3 → 86.0 und/mes). Rampa gradual: 40% ago, 60% sep, 80% oct, 100% nov–dic</td>
-    </tr>
-    <tr>
-      <td><strong>Tienda nueva 2026</strong></td>
-      <td>Nueva apertura proyectada este año. Volumen estimado = promedio de tiendas establecidas (GRIE, SAMBIL, CHACAO, CERRO VERDE) = <strong>63.2 und/mes</strong>. Incorporada desde <strong>octubre 2026</strong></td>
-    </tr>
-    <tr>
-      <td><strong>WEB + Pedidos</strong></td>
-      <td>Canal digital estimado en 5% adicional sobre demanda base de Explore Pants, basado en comportamiento de Shorts R1 (WEB 3.8% + Pedidos 0.6%)</td>
-    </tr>
-    <tr>
-      <td><strong>Lead time proveedor tela</strong></td>
-      <td>30 días calendario desde orden hasta recepción de Novaktex Repel</td>
-    </tr>
-    <tr>
-      <td><strong>Lead time producción externa</strong></td>
-      <td>~30 días hábiles (~42 días calendario). Producto disponible ~72 días después de emitir la orden</td>
-    </tr>
-    <tr>
-      <td><strong>Stock de seguridad</strong></td>
-      <td>Factor de respuesta equivalente a ~25% de un mes normal (≈ 70–90 und). Nivel mínimo operativo ante variabilidad de demanda</td>
-    </tr>
-    <tr>
-      <td><strong>Producción 80% pendiente</strong></td>
-      <td>2,908 und Explore Pants (1,564 CAB + 1,344 DAMA) sin tela. Incluye cobertura Gris Oscuro para 10 tiendas</td>
-    </tr>
-    <tr>
-      <td><strong>Gris Oscuro — brecha de color</strong></td>
-      <td>Excluido del 20% recibido. Solo 94 und en stock. Demanda proyectada ago–dic: ~153 und. Quiebre estimado: septiembre</td>
-    </tr>
-    <tr>
-      <td><strong>Shorts R1 — producción completa</strong></td>
-      <td>667 und en inventario actual. Solicitud de 2,080 und nuevas (1,040 CAB + 1,040 DAMA) para 10 tiendas al 100%</td>
-    </tr>
-    <tr>
-      <td><strong>Flujo de caja — compra dividida</strong></td>
-      <td>Propuesta 65% ahora (~708 kg) + 35% en septiembre (~380 kg). Prioriza Gris Oscuro y Shorts R1 en primera orden</td>
-    </tr>
-    <tr>
-      <td><strong>Consumo total de tela</strong></td>
-      <td>1,088.3 kg Novaktex Repel (con 20% merma): Negro 414 · Gris Oscuro 361.2 · Kaki 157 · Azul Marino 90.6 · Verde Militar 65.6 kg</td>
-    </tr>
+    <tr><td><strong>Escenarios A–G</strong></td><td>C = 281 und/mes (mes normal). A +45% · B +37% · D −10% · E −20% · F −30% · G −40%</td></tr>
+    <tr><td><strong>Meses Ago–Dic</strong></td><td>Ago E · Sep D · Oct C · Nov B · Dic B</td></tr>
+    <tr><td><strong>Temporada alta</strong></td><td>Nov–Dic en escenario B (+37%). Referencia histórica: dic 2025 = 627 und</td></tr>
+    <tr><td><strong>VELA</strong></td><td>Proyección 1.5× GRIE = 86 und/mes, incorporada de forma progresiva ago–dic</td></tr>
+    <tr><td><strong>Tienda nueva 2026</strong></td><td>+63 und/mes desde octubre (promedio tiendas establecidas)</td></tr>
+    <tr><td><strong>WEB + Pedidos</strong></td><td>+5% sobre demanda base (referencia Shorts R1)</td></tr>
+    <tr><td><strong>Lead time tela</strong></td><td>30 días hasta recepción de tela</td></tr>
+    <tr><td><strong>Lead time producción</strong></td><td>~42 días hasta producto listo · Total ~72 días desde la orden</td></tr>
+    <tr><td><strong>Stock de seguridad</strong></td><td>~25% del mes normal (70–90 und)</td></tr>
+    <tr><td><strong>80% pendiente</strong></td><td>2,908 und EP sin tela (incluye Gris Oscuro en 10 tiendas)</td></tr>
+    <tr><td><strong>Gris Oscuro</strong></td><td>94 und stock · ~153 und demanda ago–dic · Quiebre: septiembre</td></tr>
+    <tr><td><strong>Shorts R1</strong></td><td>667 und stock · 2,080 und por producir (10 tiendas)</td></tr>
+    <tr><td><strong>Compra dividida</strong></td><td>65% ahora (~708 kg) + 35% sep (~380 kg). 1ª orden: Gris Oscuro + Shorts R1 completos</td></tr>
+    <tr><td><strong>Tela total</strong></td><td>1,088 kg con merma (Negro 414 · Gris Oscuro 361 · Kaki 157 · Azul 91 · Verde 66)</td></tr>
   </table>
 </div>
 
@@ -152,11 +113,11 @@ footer{text-align:center;color:var(--mu);font-size:0.72rem;margin-top:32px;paddi
       <h3>Demanda Mensual Proyectada (Ago–Dic)</h3>
       <table>
         <tr><th>Mes</th><th>Esc.</th><th>Demanda</th><th>Factores activos</th></tr>
-        <tr><td>Agosto</td><td>E</td><td>261</td><td>VELA rampa 40%, WEB</td></tr>
-        <tr><td>Septiembre</td><td>D</td><td>308</td><td>VELA rampa 60%, WEB</td></tr>
-        <tr><td>Octubre</td><td>C</td><td class="neg">421</td><td>VELA 80% + <strong>Tienda nueva</strong> + WEB</td></tr>
-        <tr><td>Noviembre</td><td>B</td><td class="neg">598</td><td>VELA 100% + <strong>Tienda nueva</strong> + temporada</td></tr>
-        <tr><td>Diciembre</td><td>B</td><td class="neg">598</td><td>VELA 100% + <strong>Tienda nueva</strong> + temporada</td></tr>
+        <tr><td>Agosto</td><td>E</td><td>261</td><td>VELA + WEB</td></tr>
+        <tr><td>Septiembre</td><td>D</td><td>308</td><td>VELA + WEB</td></tr>
+        <tr><td>Octubre</td><td>C</td><td class="neg">421</td><td>VELA + <strong>Tienda nueva</strong> + WEB</td></tr>
+        <tr><td>Noviembre</td><td>B</td><td class="neg">598</td><td>VELA + <strong>Tienda nueva</strong> + temporada alta</td></tr>
+        <tr><td>Diciembre</td><td>B</td><td class="neg">598</td><td>VELA + <strong>Tienda nueva</strong> + temporada alta</td></tr>
         <tr><td><strong>Total</strong></td><td></td><td><strong>2,228</strong></td><td></td></tr>
       </table>
     </div>
@@ -271,11 +232,10 @@ footer{text-align:center;color:var(--mu);font-size:0.72rem;margin-top:32px;paddi
   <h3 style="margin-top:16px">Acciones Recomendadas</h3>
   <ol style="padding-left:20px;font-size:0.88rem">
     <li><strong>Emitir Orden 1 (65%)</strong> — Gris Oscuro + Shorts R1 al 100%, más 65% de colores restantes</li>
-    <li><strong>Distribuir 1,352 und de taller</strong> a tiendas — priorizar GRAND, VELA y GRANDPLAZ</li>
+    <li><strong>Distribuir 1,352 und de taller</strong> a tiendas según necesidad de surtido</li>
     <li><strong>Programar Orden 2 (35%)</strong> para mediados de septiembre</li>
     <li><strong>Preparar surtido tienda nueva 2026</strong> — dotación inicial basada en promedio de tiendas (63 und/mes)</li>
-    <li><strong>Monitorear VELA y tienda nueva</strong> — validar proyecciones con ventas reales de agosto–septiembre</li>
-    <li><strong>Revisión en octubre</strong> — si diciembre replica las 627 und de 2025, acelerar segunda orden</li>
+    <li><strong>Monitorear ventas ago–sep</strong> — validar proyección de VELA y tienda nueva antes de confirmar Orden 2</li>
   </ol>
 </div>
 
