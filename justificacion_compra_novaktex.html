@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Justificación de compra · Novaktex Repel · Explore Pants</title>
+  <style>
+    :root{
+      --ink:#162033;--muted:#657087;--line:#dfe5ee;--paper:#fff;--bg:#f4f7fb;
+      --navy:#173a64;--blue:#2672d8;--green:#198754;--amber:#b86b00;--red:#c43b3b;
+      --soft-blue:#eaf3ff;--soft-green:#eaf8f0;--soft-amber:#fff5df;--soft-red:#fff0f0;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif;line-height:1.42}
+    header{background:linear-gradient(125deg,#102b4c,#245f9d);color:#fff;padding:30px 5vw 26px}
+    header .wrap,.wrap{max-width:1280px;margin:auto}
+    h1{margin:0 0 5px;font-size:clamp(1.65rem,3vw,2.55rem);letter-spacing:-.035em}
+    header p{margin:0;color:#dceaff}
+    .meta{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+    .tag{border:1px solid #ffffff50;background:#ffffff18;border-radius:999px;padding:4px 10px;font-size:.76rem}
+    main{padding:22px 5vw 48px}
+    nav{display:flex;gap:7px;overflow:auto;padding:0 0 14px;position:sticky;top:0;z-index:8;background:linear-gradient(var(--bg) 75%,transparent)}
+    nav a{white-space:nowrap;text-decoration:none;color:var(--navy);background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:.76rem;font-weight:700}
+    section{scroll-margin-top:62px;margin-bottom:18px}
+    .card{background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:19px;box-shadow:0 5px 22px #1f35550a}
+    h2{font-size:1.18rem;margin:0 0 4px;color:var(--navy)}
+    h3{font-size:.94rem;margin:0 0 7px;color:var(--navy)}
+    .sub{font-size:.79rem;color:var(--muted);margin:0 0 14px}
+    .grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+    .kpi{padding:16px;border-radius:12px;border:1px solid var(--line);background:#fff}
+    .kpi .v{font-size:1.65rem;font-weight:850;letter-spacing:-.04em;color:var(--navy)}
+    .kpi .l{text-transform:uppercase;font-size:.66rem;letter-spacing:.07em;font-weight:800;color:var(--muted)}
+    .kpi .n{font-size:.72rem;color:var(--muted);margin-top:3px}
+    .verdict{border-left:6px solid var(--amber);background:linear-gradient(90deg,var(--soft-amber),#fff 70%)}
+    .verdict strong.big{display:block;color:#7c4b00;font-size:1.08rem;margin-bottom:7px}
+    .callout{border-radius:10px;padding:11px 13px;font-size:.82rem;margin-top:12px}
+    .info{background:var(--soft-blue);border-left:4px solid var(--blue)}
+    .ok{background:var(--soft-green);border-left:4px solid var(--green)}
+    .warn{background:var(--soft-amber);border-left:4px solid var(--amber)}
+    .danger{background:var(--soft-red);border-left:4px solid var(--red)}
+    table{border-collapse:collapse;width:100%;font-size:.78rem}
+    th{background:#f0f4f9;color:#4e5d73;text-align:right;font-size:.67rem;text-transform:uppercase;letter-spacing:.045em}
+    th:first-child,td:first-child{text-align:left}
+    th,td{border-bottom:1px solid var(--line);padding:8px 8px;text-align:right;vertical-align:top}
+    tr:last-child td{border-bottom:0}
+    td strong{color:var(--navy)}
+    .scroll{overflow:auto}
+    .pos{color:var(--green);font-weight:750}.neg{color:var(--red);font-weight:750}.amber{color:var(--amber);font-weight:750}
+    .barrow{display:grid;grid-template-columns:92px 1fr 47px;gap:9px;align-items:center;margin:8px 0;font-size:.75rem}
+    .track{height:12px;background:#edf1f6;border-radius:7px;overflow:hidden}.fill{height:100%;border-radius:7px;background:var(--blue)}
+    .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:13px}
+    .month{border:1px solid var(--line);border-radius:10px;padding:11px;background:#fff;position:relative;overflow:hidden}
+    .month::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--blue)}
+    .month .m{font-weight:800}.month .s{font-size:.67rem;color:var(--muted)}.month .u{font-size:1.18rem;font-weight:850;color:var(--navy)}
+    .flow{display:flex;align-items:stretch;gap:7px;overflow:auto;padding:8px 0}
+    .step{min-width:155px;flex:1;border:1px solid var(--line);border-radius:10px;padding:11px;background:#fff}
+    .arrow{align-self:center;color:var(--blue);font-size:1.25rem;font-weight:900}
+    .step b{font-size:.79rem;color:var(--navy)}.step span{display:block;font-size:.7rem;color:var(--muted);margin-top:3px}
+    .control{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0}
+    label{display:block;font-size:.67rem;color:var(--muted);font-weight:750;text-transform:uppercase;letter-spacing:.04em}
+    input{width:100%;margin-top:4px;padding:8px;border:1px solid #ccd5e2;border-radius:7px;font:inherit;color:var(--ink)}
+    .calc{background:#102b4c;color:#fff;border-radius:12px;padding:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+    .calc .cv{font-size:1.15rem;font-weight:850}.calc .cl{font-size:.64rem;color:#bcd0e7;text-transform:uppercase}
+    ol,ul{margin:8px 0 0;padding-left:21px}li{margin:6px 0;font-size:.82rem}
+    .rank{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;text-align:center;line-height:22px;font-weight:800;font-size:.72rem;margin-right:5px}
+    .footnote{font-size:.7rem;color:var(--muted)}
+    footer{max-width:1280px;margin:auto;padding:0 5vw 35px;color:var(--muted);font-size:.7rem}
+    @media(max-width:900px){.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.timeline{grid-template-columns:repeat(2,1fr)}.control,.calc{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:540px){.g4,.g3{grid-template-columns:1fr}.timeline,.control,.calc{grid-template-columns:1fr}}
+    @media print{
+      body{background:#fff}header{padding:18px 0;background:#fff;color:#111;border-bottom:2px solid #173a64}header p,.tag{color:#333;border-color:#aaa}main{padding:15px 0}.card{box-shadow:none;break-inside:avoid}nav{display:none}section{break-inside:avoid}.control{display:none}
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Decisión de compra · Novaktex Repel</h1>
+    <p>Explore Pants · cobertura, escenarios, mezcla por SKU y viabilidad de compra fraccionada</p>
+    <div class="meta">
+      <span class="tag">Corte de análisis: 21 jul 2026</span>
+      <span class="tag">Ventas: may 2025–jul 2026</span>
+      <span class="tag">Julio 2026 excluido del promedio por ser parcial</span>
+      <span class="tag">Solicitud: 4.988 unidades / 1.088,32 kg</span>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <nav>
+    <a href="#dictamen">Dictamen</a><a href="#demanda">Demanda</a><a href="#inventario">Inventario</a>
+    <a href="#mezcla">Mezcla</a><a href="#solicitud">Solicitud</a><a href="#leadtime">Lead time</a>
+    <a href="#split">Dos órdenes</a><a href="#calidad">Calidad de datos</a><a href="#metodo">Método</a>
+  </nav>
+
+  <section id="dictamen" class="card verdict">
+    <h2>Dictamen ejecutivo</h2>
+    <p class="sub">Respuesta directa a “¿es estrictamente necesario comprar la tela ahora?”</p>
+    <strong class="big">Sí existe una necesidad selectiva por SKU; no está sustentada la compra completa tal como fue solicitada.</strong>
+    <p>El inventario Explore disponible es alto en volumen, pero está mal balanceado. Las 2.988 unidades actuales cubren teóricamente 10,1 meses normales; sin embargo, la simulación por género–color–talla sólo alcanza un nivel de servicio de 88,2% entre agosto y diciembre. Se estiman 190 unidades de demanda no atendida por quiebres puntuales, 174 de ellas en grises.</p>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="kpi"><div class="v">2.988</div><div class="l">Stock Explore actual</div><div class="n">1.636 en tiendas + 1.352 en taller</div></div>
+      <div class="kpi"><div class="v">1.612</div><div class="l">Demanda ago–dic</div><div class="n">Plan E, D, C, B, B</div></div>
+      <div class="kpi"><div class="v">88,2%</div><div class="l">Servicio por SKU</div><div class="n">Aunque sobra inventario agregado</div></div>
+    </div>
+    <div class="callout danger"><strong>Desalineación principal:</strong> la solicitud agrega aproximadamente 880 Explore Pants Gris Oscuro, pero no compra Gris Claro, que concentra el mayor déficit proyectado. Antes de aprobar hay que confirmar si Gris Oscuro sustituirá comercialmente a Gris Claro y corregir la curva de tallas.</div>
+    <div class="callout ok"><strong>Recomendación:</strong> aprobar primero una orden focalizada y condicionada; reservar capacidad/tela para una segunda liberación a más tardar el 21 de agosto. No esperar a terminar o vender el primer lote para decidir la segunda orden: llegaría demasiado tarde para noviembre.</div>
+  </section>
+
+  <section class="grid g4">
+    <div class="kpi"><div class="v">296</div><div class="l">Escenario C</div><div class="n">Unidades por mes normal</div></div>
+    <div class="kpi"><div class="v">+112%</div><div class="l">Pico dic 2025</div><div class="n">627 vs C=296; B es conservador</div></div>
+    <div class="kpi"><div class="v">72 días</div><div class="l">Lead time nominal</div><div class="n">30 calendario + 30 hábiles</div></div>
+    <div class="kpi"><div class="v">181,39 kg</div><div class="l">Recargo de 20%</div><div class="n">Debe separarse merma de reposición</div></div>
+  </section>
+
+  <section id="demanda" class="card">
+    <h2>1. Demanda normalizada y escenarios</h2>
+    <p class="sub">C se calculó con nueve meses comparables: jul–oct 2025 y feb–jun 2026. Se excluyen lanzamiento, pico nov–dic, reinicio de enero y julio 2026 parcial.</p>
+    <div class="grid g2">
+      <div>
+        <h3>Base desestacionalizada</h3>
+        <table>
+          <thead><tr><th>Línea</th><th>C mensual</th><th>Demanda ago–dic</th><th>% plan</th></tr></thead>
+          <tbody>
+            <tr><td>Caballero</td><td>124,9</td><td>679,4</td><td>42,1%</td></tr>
+            <tr><td>Dama</td><td>135,0</td><td>734,4</td><td>45,6%</td></tr>
+            <tr><td>Niños</td><td>36,4</td><td>198,3</td><td>12,3%</td></tr>
+            <tr><td><strong>Total</strong></td><td><strong>296,3</strong></td><td><strong>1.612,1</strong></td><td><strong>100%</strong></td></tr>
+          </tbody>
+        </table>
+        <div class="callout info">La media de los 14 meses completos es 290,6 y la mediana 281; por eso C=296,3 no es un supuesto agresivo. La desviación de los nueve meses normales es 52,9 unidades (CV 17,8%).</div>
+      </div>
+      <div>
+        <h3>Todos los escenarios constantes durante cinco meses</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Esc.</th><th>Factor</th><th>Mes</th><th>5 meses</th><th>Servicio SKU</th><th>No atendidas</th></tr></thead>
+            <tbody>
+              <tr><td>A</td><td>+45%</td><td>430</td><td>2.148</td><td>85,0%</td><td>321</td></tr>
+              <tr><td>B</td><td>+37%</td><td>406</td><td>2.030</td><td>85,7%</td><td>290</td></tr>
+              <tr><td>C</td><td>Real</td><td>296</td><td>1.482</td><td>89,0%</td><td>163</td></tr>
+              <tr><td>D</td><td>−10%</td><td>267</td><td>1.333</td><td>89,8%</td><td>136</td></tr>
+              <tr><td>E</td><td>−20%</td><td>237</td><td>1.185</td><td>90,1%</td><td>117</td></tr>
+              <tr><td>F</td><td>−30%</td><td>207</td><td>1.037</td><td>90,5%</td><td>99</td></tr>
+              <tr><td>G</td><td>−40%</td><td>178</td><td>889</td><td>90,9%</td><td>81</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <h3 style="margin-top:16px">Secuencia solicitada: E → D → C → B → B</h3>
+    <div class="timeline">
+      <div class="month"><div class="m">Agosto</div><div class="s">Escenario E · −20%</div><div class="u">237</div></div>
+      <div class="month"><div class="m">Septiembre</div><div class="s">Escenario D · −10%</div><div class="u">267</div></div>
+      <div class="month"><div class="m">Octubre</div><div class="s">Escenario C · real</div><div class="u">296</div></div>
+      <div class="month"><div class="m">Noviembre</div><div class="s">Escenario B · +37%</div><div class="u">406</div></div>
+      <div class="month"><div class="m">Diciembre</div><div class="s">Escenario B · +37%</div><div class="u">406</div></div>
+    </div>
+    <div class="callout warn"><strong>Prueba de estrés estacional:</strong> agosto–diciembre de 2025 vendió 1.866 unidades, 254 más (+15,8%) que el plan 2026. Diciembre 2025 llegó a 627 unidades; usar B=406 para diciembre es prudente, pero no reproduce el único pico navideño observado.</div>
+  </section>
+
+  <section id="inventario" class="card">
+    <h2>2. ¿Cuánto cubre la producción del 20%?</h2>
+    <p class="sub">Las fotos totalizan exactamente 1.352 unidades en taller. El dashboard también reporta 1.636 unidades ya ubicadas en tiendas.</p>
+    <div class="grid g2">
+      <div>
+        <h3>Producción recién recibida</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Color</th><th>Cab.</th><th>Dama</th><th>Total</th></tr></thead>
+            <tbody>
+              <tr><td>Negro</td><td>368</td><td>336</td><td>704</td></tr>
+              <tr><td>Kaki</td><td>184</td><td>168</td><td>352</td></tr>
+              <tr><td>Verde Militar</td><td>92</td><td>56</td><td>148</td></tr>
+              <tr><td>Azul Marino</td><td>92</td><td>56</td><td>148</td></tr>
+              <tr><td>Gris Oscuro</td><td>0</td><td>0</td><td class="neg">0</td></tr>
+              <tr><td><strong>Total</strong></td><td><strong>736</strong></td><td><strong>616</strong></td><td><strong>1.352</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3>Lectura de cobertura</h3>
+        <div class="barrow"><span>Tiendas</span><div class="track"><div class="fill" style="width:54.8%"></div></div><strong>1.636</strong></div>
+        <div class="barrow"><span>Taller 20%</span><div class="track"><div class="fill" style="width:45.2%;background:#198754"></div></div><strong>1.352</strong></div>
+        <div class="callout info"><strong>Volumen:</strong> las 2.988 unidades equivalen a 10,1 meses C. Después de la demanda planificada a diciembre quedarían 1.376 unidades si cualquier SKU pudiera sustituir a otro.</div>
+        <div class="callout danger"><strong>Realidad SKU:</strong> color, género y talla no son intercambiables. La simulación vendería 1.422 de 1.612 unidades y dejaría 1.566 unidades de otras variantes inmovilizadas. Tener stock total no evita quiebres.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="mezcla" class="card">
+    <h2>3. Diagnóstico de mezcla: dónde comprar y dónde no</h2>
+    <p class="sub">Explore Pants Caballero + Dama. Demanda agosto–diciembre distribuida según el mix histórico; inventario incluye tiendas y taller.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Color</th><th>Stock actual</th><th>Demanda plan</th><th>Saldo teórico</th><th>Explore solicitado</th><th>Saldo postcompra</th><th>Lectura</th></tr></thead>
+        <tbody>
+          <tr><td>Negro</td><td>929</td><td>397</td><td class="pos">+532</td><td>1.056</td><td class="pos">+1.588</td><td>Compra completa no sustentada</td></tr>
+          <tr><td>Kaki</td><td>537</td><td>296</td><td class="pos">+241</td><td>528</td><td class="pos">+769</td><td>Sobrecobertura</td></tr>
+          <tr><td>Gris Oscuro</td><td>83</td><td>90</td><td class="neg">−7</td><td>880</td><td class="pos">+873</td><td>Necesidad sí; cantidad no validada</td></tr>
+          <tr><td>Verde Militar</td><td>416</td><td>213</td><td class="pos">+203</td><td>222</td><td class="pos">+425</td><td>Diferir</td></tr>
+          <tr><td>Azul Marino</td><td>405</td><td>217</td><td class="pos">+188</td><td>222</td><td class="pos">+410</td><td>Sólo tallas críticas</td></tr>
+          <tr><td>Gris Claro</td><td>122</td><td>200</td><td class="neg">−78</td><td>0</td><td class="neg">−78</td><td>Déficit omitido en solicitud</td></tr>
+          <tr><td><strong>Total</strong></td><td><strong>2.492</strong></td><td><strong>1.414</strong></td><td class="pos"><strong>+1.078</strong></td><td><strong>2.908</strong></td><td class="pos"><strong>+3.986</strong></td><td>20,8 meses al recibir todo</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="callout danger"><strong>116 und</strong><br>Demanda no atendida en Gris Claro, incluyendo Kids.</div>
+      <div class="callout warn"><strong>58 und</strong><br>Demanda no atendida en Gris Oscuro por talla/género.</div>
+      <div class="callout info"><strong>16 und</strong><br>Déficit combinado en todos los demás colores.</div>
+    </div>
+    <p class="footnote">Los déficits SKU son mayores que el saldo por color porque una talla sobrante no cubre otra talla agotada. Las unidades solicitadas por color fueron inferidas a partir de metros y consumo constante dentro de cada línea: CAB 1,0787 m/und y DAMA 1,1543 m/und.</p>
+  </section>
+
+  <section id="solicitud" class="card">
+    <h2>4. Auditoría de la solicitud de tela</h2>
+    <p class="sub">La solicitud contiene Explore Pants y Shorts R1. Sólo hay histórico e inventario Explore en el dashboard revisado.</p>
+    <div class="grid g2">
+      <div>
+        <h3>Unidades incluidas</h3>
+        <table>
+          <thead><tr><th>Modelo</th><th>Unidades</th><th>%</th><th>¿Validable aquí?</th></tr></thead>
+          <tbody>
+            <tr><td>Explore Pants Cab.</td><td>1.564</td><td>31,4%</td><td>Sí</td></tr>
+            <tr><td>Explore Pants Dama</td><td>1.344</td><td>26,9%</td><td>Sí</td></tr>
+            <tr><td>Shorts R1 Cab.</td><td>1.040</td><td>20,9%</td><td class="amber">No</td></tr>
+            <tr><td>Shorts R1 Dama</td><td>1.040</td><td>20,9%</td><td class="amber">No</td></tr>
+            <tr><td><strong>Total</strong></td><td><strong>4.988</strong></td><td><strong>100%</strong></td><td></td></tr>
+          </tbody>
+        </table>
+        <div class="callout warn">No se debe justificar 2.080 Shorts R1 con las ventas de Explore Pants. Para aprobar esa porción faltan ventas, inventario, curva por talla y consumo real de Shorts.</div>
+      </div>
+      <div>
+        <h3>Conciliación de kilogramos</h3>
+        <table>
+          <thead><tr><th>Concepto</th><th>kg</th><th>Observación</th></tr></thead>
+          <tbody>
+            <tr><td>Suma de filas de detalle</td><td>907,20</td><td>Calculada</td></tr>
+            <tr><td>Total escrito en detalle</td><td class="neg">883,90</td><td>Error de 23,30 kg</td></tr>
+            <tr><td>Suma de subtotales por color</td><td>906,93</td><td>Base usada</td></tr>
+            <tr><td>20% adicional</td><td>181,39</td><td>Merma + reposición mezcladas</td></tr>
+            <tr><td><strong>Total solicitado</strong></td><td><strong>1.088,32</strong></td><td>906,93 × 1,20</td></tr>
+          </tbody>
+        </table>
+        <div class="callout danger">Corregir el total 883,90 kg antes de emitir la orden. El total final sí cuadra con los subtotales por color, no con el “TOTAL GENERAL” de la sección de detalle.</div>
+      </div>
+    </div>
+    <div class="callout info"><strong>Sobre el 20%:</strong> equivale a tela para unas 998 unidades adicionales manteniendo el mismo mix. No debe llamarse íntegramente “merma” sin rendimiento histórico de corte. Separar: merma técnica demostrada, reposiciones confirmadas y stock de seguridad estadístico.</div>
+  </section>
+
+  <section id="leadtime" class="card">
+    <h2>5. Lead time y ventana de temporada alta</h2>
+    <p class="sub">Cálculo nominal sin feriados, tránsito adicional, aprobación de muestras ni retrasos.</p>
+    <div class="flow">
+      <div class="step"><b>21 jul · Orden</b><span>Compra liberada y especificación congelada</span></div><div class="arrow">→</div>
+      <div class="step"><b>20 ago · Tela</b><span>30 días calendario del proveedor</span></div><div class="arrow">→</div>
+      <div class="step"><b>1 oct · Producto</b><span>30 días hábiles de producción externa</span></div><div class="arrow">→</div>
+      <div class="step"><b>Nov–dic · Pico</b><span>La primera orden llega antes del período fuerte</span></div>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <div class="callout ok"><strong>Orden 2 liberada el 21 ago:</strong> tela alrededor del 20 sep y producto alrededor del 30 oct. Es la última ventana razonable para apoyar noviembre, con muy poco margen.</div>
+      <div class="callout danger"><strong>Orden 2 liberada al recibir lote 1 (1 oct):</strong> producto alrededor del 11 dic. No protege noviembre y sólo llega para una fracción de diciembre.</div>
+    </div>
+    <div class="callout warn">El lead time total mínimo es aproximadamente 72 días calendario. Con transporte, control de calidad, feriados o reprocesos puede acercarse a 2,5–3 meses; por eso dividir de forma estrictamente secuencial aumenta el riesgo operativo.</div>
+  </section>
+
+  <section id="split" class="card">
+    <h2>6. ¿Es viable dividir la compra en dos?</h2>
+    <p class="sub">Sí, pero como liberaciones calendarizadas y con tela/capacidad reservadas; no como “comprar, producir, esperar venta y luego comenzar desde cero”.</p>
+    <div class="grid g2">
+      <div>
+        <h3>Diseño recomendado</h3>
+        <ol>
+          <li><span class="rank">1</span><strong>Orden 1 ahora:</strong> SKU críticos, corrección de grises y sólo la porción de Shorts que tenga respaldo propio.</li>
+          <li><span class="rank">2</span><strong>Gate comercial al 21 ago:</strong> revisar cuatro semanas de sell-through, quiebres y ventas de Gris Oscuro.</li>
+          <li><span class="rank">3</span><strong>Orden 2 antes del 21 ago:</strong> liberar sólo si los disparadores se cumplen. Asegurar lote de color, precio y capacidad desde julio.</li>
+          <li><span class="rank">4</span><strong>Negociar flujo:</strong> PO marco con entregas parciales, pago contra despacho y reserva de materia prima; evita duplicar homologación, flete y arranque.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Disparadores objetivos para la segunda orden</h3>
+        <ul>
+          <li>Venta agosto ≥237 unidades o ritmo ≥55 unidades/semana.</li>
+          <li>Cobertura por SKU menor que lead time + seguridad: <strong>2,9 meses</strong>.</li>
+          <li>Nivel de servicio proyectado por debajo de 95% en noviembre–diciembre.</li>
+          <li>Gris Oscuro demuestra rotación suficiente para sustituir Gris Claro.</li>
+          <li>Shorts R1 aporta su propio histórico e inventario y confirma necesidad.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout danger"><strong>No recomendar:</strong> dos compras proporcionales idénticas por color. El problema no es el porcentaje financiero sino la mezcla; Negro/Kaki/Verde deben diferirse más que grises y tallas críticas.</div>
+
+    <h3 style="margin-top:17px">Simulador de caja y fechas</h3>
+    <p class="sub">Herramienta administrativa. El porcentaje no sustituye la selección por SKU.</p>
+    <div class="control">
+      <div><label>Costo por kg (moneda)<input id="cost" type="number" value="0" min="0" step="0.01"></label></div>
+      <div><label>% primera liberación<input id="pct1" type="number" value="35" min="0" max="100" step="1"></label></div>
+      <div><label>% adicional sobre 906,93 kg<input id="buffer" type="number" value="20" min="0" max="50" step="1"></label></div>
+      <div><label>Fecha de orden 2<input id="date2" type="date" value="2026-08-21"></label></div>
+    </div>
+    <div class="calc">
+      <div><div class="cv" id="totalkg">1.088,32 kg</div><div class="cl">Compra calculada</div></div>
+      <div><div class="cv" id="firstkg">380,91 kg</div><div class="cl">Primera liberación</div></div>
+      <div><div class="cv" id="secondkg">707,41 kg</div><div class="cl">Segunda liberación</div></div>
+      <div><div class="cv" id="finish2">30 oct 2026</div><div class="cl">Producto orden 2</div></div>
+      <div><div class="cv" id="cash1">0,00</div><div class="cl">Caja orden 1</div></div>
+      <div><div class="cv" id="cash2">0,00</div><div class="cl">Caja orden 2</div></div>
+      <div><div class="cv" id="defer">0,0%</div><div class="cl">Caja diferida</div></div>
+      <div><div class="cv" id="risk">A tiempo</div><div class="cl">Riesgo para noviembre</div></div>
+    </div>
+  </section>
+
+  <section id="calidad" class="card">
+    <h2>7. Datos que deben cerrarse antes de aprobar</h2>
+    <div class="grid g2">
+      <div>
+        <h3>Bloqueos de decisión</h3>
+        <ul>
+          <li>Histórico e inventario de Shorts R1.</li>
+          <li>Detalle de las 4.988 unidades por talla; el CSV sólo permite inferir color.</li>
+          <li>Confirmar si Gris Oscuro reemplaza a Gris Claro o es una referencia distinta.</li>
+          <li>Rendimiento real kg/metro y merma histórica de corte por modelo.</li>
+          <li>Precio por kg, condiciones de pago, flete y costo fijo por cada orden.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Riesgos no cuantificados</h3>
+        <ul>
+          <li>Ventas censuradas por falta histórica de Gris Oscuro.</li>
+          <li>Inventario envejecido: no se recibió fecha de ingreso por SKU.</li>
+          <li>Canibalización entre Gris Claro y Gris Oscuro.</li>
+          <li>Diferencias de tono entre lotes si se divide la compra.</li>
+          <li>Feriados, muestras, inspección, tránsito y capacidad real del taller.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="metodo" class="card">
+    <h2>8. Metodología y alcance</h2>
+    <ul>
+      <li><strong>Fuentes:</strong> <code>dash_explorepants.html</code>, CSV “Justificacion_Tela_novaktex_repel” y las dos tablas de producción recibida.</li>
+      <li><strong>Escenario C:</strong> promedio de nueve meses comparables; no se usa julio 2026 porque está marcado como parcial.</li>
+      <li><strong>Proyección:</strong> C multiplicado por E=0,80; D=0,90; C=1,00; B=1,37; B=1,37.</li>
+      <li><strong>Mix SKU:</strong> participación histórica completa por género, color y talla. Se consume inventario mes a mes sin sustitución entre SKU.</li>
+      <li><strong>Nivel de servicio:</strong> demanda cubierta / demanda total. No incorpora ventas transferidas entre colores o tallas.</li>
+      <li><strong>Seguridad:</strong> referencia estadística de 95% ≈135 unidades agregadas para 2,4 meses, basada en σ mensual de 52,9; debe recalcularse por SKU y con error de pronóstico real.</li>
+    </ul>
+    <div class="callout info"><strong>Lectura responsable:</strong> este análisis sí permite decidir que el pedido completo requiere rediseño. No permite fijar una orden final por talla ni validar Shorts R1 hasta recibir los datos faltantes.</div>
+  </section>
+</main>
+<footer>
+  Informe analítico autónomo · Valores redondeados; pueden existir diferencias menores por decimales. Imprimir en PDF desde el navegador para circular la justificación.
+</footer>
+<script>
+  const fmt=(v,d=2)=>Number(v).toLocaleString('es-VE',{minimumFractionDigits:d,maximumFractionDigits:d});
+  const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function addDays(date,n){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+n);return d}
+  function addBusiness(date,n){
+    const d=new Date(date);let done=0;
+    while(done<n){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)done++}
+    return d;
+  }
+  function niceDate(d){return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()}
+  function recalc(){
+    const base=906.93,extra=Math.max(0,Number(document.getElementById('buffer').value)||0);
+    const total=base*(1+extra/100),p=Math.min(100,Math.max(0,Number(document.getElementById('pct1').value)||0));
+    const first=total*p/100,second=total-first,cost=Math.max(0,Number(document.getElementById('cost').value)||0);
+    const date2=document.getElementById('date2').value||'2026-08-21';
+    const finish=addBusiness(addDays(date2,30),30);
+    document.getElementById('totalkg').textContent=fmt(total)+' kg';
+    document.getElementById('firstkg').textContent=fmt(first)+' kg';
+    document.getElementById('secondkg').textContent=fmt(second)+' kg';
+    document.getElementById('cash1').textContent=fmt(first*cost);
+    document.getElementById('cash2').textContent=fmt(second*cost);
+    document.getElementById('defer').textContent=fmt(100-p,1)+'%';
+    document.getElementById('finish2').textContent=niceDate(finish);
+    const cutoff=new Date('2026-11-01T00:00:00');
+    const days=Math.round((cutoff-finish)/86400000);
+    const r=document.getElementById('risk');
+    if(days>=7){r.textContent='A tiempo (+'+days+'d)';r.style.color='#9ee3bc'}
+    else if(days>=0){r.textContent='Margen '+days+'d';r.style.color='#ffd58a'}
+    else{r.textContent='Tarde ('+Math.abs(days)+'d)';r.style.color='#ffaaaa'}
+  }
+  document.querySelectorAll('input').forEach(x=>x.addEventListener('input',recalc));
+  recalc();
+</script>
+</body>
+</html>
