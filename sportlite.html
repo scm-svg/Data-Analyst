@@ -444,6 +444,7 @@ function rInventario(){
   }
   var tot=0,enTiendas=0,enTaller=0,byLoc={};
   invRows.forEach(function(r){
+    if(r.qty<=0)return;
     tot+=r.qty;
     if(r.ubicacion==='TALLER')enTaller+=r.qty;else enTiendas+=r.qty;
     if(!byLoc[r.ubicacion])byLoc[r.ubicacion]={total:0,colors:{}};
@@ -479,7 +480,7 @@ function rInventario(){
       h+='<tr><td class="color-cell"><span class="chip" style="background:'+cn(col)+'"></span>'+col+'</td>';
       allTallas.forEach(function(t){
         var v=ld.colors[col][t]||0;
-        h+='<td style="text-align:center">'+(v?'<span class="qty-pill">'+v+'</span>':'<span class="qty-empty">·</span>')+'</td>';
+        h+='<td style="text-align:center">'+(v>0?'<span class="qty-pill">'+v+'</span>':'<span class="qty-empty">·</span>')+'</td>';
       });
       h+='</tr>';
     });
