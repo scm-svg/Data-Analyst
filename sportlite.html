@@ -300,96 +300,23 @@ function ag(rows,key){var m={};rows.forEach(function(r){m[r[key]]=(m[r[key]]||0)
 function ag2(rows,k1,k2){var m={};rows.forEach(function(r){if(!m[r[k1]])m[r[k1]]={};m[r[k1]][r[k2]]=(m[r[k1]][r[k2]]||0)+r.v;});return m;}
 function filterModelButtons(){
   var _fg=document.getElementById('fG')?document.getElementById('fG').value:'';
-  if(_fg==='CAB'){
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){
-      var m=b.dataset.m;
-      if(m===''||m==='NOAH SPORT LITE')b.style.display='';else b.style.display='none';
-    });
-  } else if(_fg==='DAMA'){
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){
-      var m=b.dataset.m;
-      if(m===''||m==='MIKA SPORT LITE'||m==='MAYA SPORT LITE')b.style.display='';else b.style.display='none';
-    });
-  } else {
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){b.style.display='';});
-  }
-  // original function body follows:
-  return;
-  var generoSel=document.getElementById('fG').value;
-  var mA=getMesesActivos();
-  var validModelos={};
-  DATA.raw_rows.forEach(function(r){
-    if(mA.indexOf(r.mes)>=0){
-      if(!generoSel||r.genero===generoSel) validModelos[r.modelo]=1;
-    }
-  });
-  document.querySelectorAll('.mbtn').forEach(function(b){
-    var m=b.dataset.m;
+  document.querySelectorAll('.mbtn[data-m]').forEach(function(b){
+    var m=b.dataset.m,show=true;
     if(!m){b.style.display='';return;}
-    if(!generoSel){b.style.display='';return;}
-    if(validModelos[m]){
-      b.style.display='';
-    } else {
-      b.style.display='none';
-      if(_modelo===m){
-        _modelo='';
-        document.querySelectorAll('.mbtn').forEach(function(b2){b2.classList.toggle('active',b2.dataset.m==='');});
-        var titleEl=document.getElementById('titleModelo');
-        if(titleEl)titleEl.textContent='Global';
-      }
+    if(_fg==='CAB') show=(m==='NOAH SPORT LITE');
+    else if(_fg==='DAMA') show=(m==='MIKA SPORT LITE'||m==='MAYA SPORT LITE');
+    b.style.display=show?'':'none';
+    if(!show&&_modelo===m){
+      _modelo='';
+      document.querySelectorAll('.mbtn').forEach(function(b2){b2.classList.toggle('active',b2.dataset.m==='');});
+      var titleEl=document.getElementById('titleModelo');
+      if(titleEl)titleEl.textContent='Global';
     }
   });
 }
 function af(){var f=gf();var active=f.tienda||f.genero||f.color||_selectedMeses.length||_modelo;document.getElementById('fBadge').style.display=active?'inline-block':'none';updateModeloCounts();filterModelButtons();updateKPIs();rs(aTab());}
 function rf(){document.getElementById('fT').value='';document.getElementById('fG').value='';document.getElementById('fC').value='';_modelo='';document.querySelectorAll('.mbtn').forEach(function(b){b.classList.toggle('active',b.dataset.m==='');});var t=document.getElementById('titleModelo');if(t)t.textContent='Global';updateColorFilter();filterModelButtons();_selectedMeses=[];buildPeriodBtns();af();}
 function updateColorFilter(){var sel=document.getElementById('fC'),cur=sel.value;sel.innerHTML='<option value="">Todos</option>';var rows=DATA.raw_rows.filter(function(r){return(!_modelo||r.modelo===_modelo);});var cols={};rows.forEach(function(r){cols[r.color]=1;});Object.keys(cols).sort().forEach(function(c){sel.innerHTML+='<option value="'+c+'">'+c+'</option>';});if(cur&&cols[cur])sel.value=cur;}
-function filterModelButtons(){
-  var _fg=document.getElementById('fG')?document.getElementById('fG').value:'';
-  if(_fg==='CAB'){
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){
-      var m=b.dataset.m;
-      if(m===''||m==='NOAH SPORT LITE')b.style.display='';else b.style.display='none';
-    });
-  } else if(_fg==='DAMA'){
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){
-      var m=b.dataset.m;
-      if(m===''||m==='MIKA SPORT LITE'||m==='MAYA SPORT LITE')b.style.display='';else b.style.display='none';
-    });
-  } else {
-    document.querySelectorAll('.mbtn[data-m]').forEach(function(b){b.style.display='';});
-  }
-  // original function body follows:
-  return;
-  // Show/hide modelo buttons based on active género filter
-  var generoSel=document.getElementById('fG').value;
-  var mA=getMesesActivos();
-  // Build set of modelos that have rows for this género+period
-  var validModelos={};
-  DATA.raw_rows.forEach(function(r){
-    if(mA.indexOf(r.mes)>=0){
-      if(!generoSel||r.genero===generoSel) validModelos[r.modelo]=1;
-    }
-  });
-  document.querySelectorAll('.mbtn').forEach(function(b){
-    var m=b.dataset.m;
-    if(!m){b.style.display='';return;} // "Todos" always visible
-    if(!generoSel){b.style.display='';return;} // no filter = show all
-    if(validModelos[m]){
-      b.style.display='';
-    } else {
-      b.style.display='none';
-      // If this hidden button was active, reset to Todos
-      if(_modelo===m){
-        _modelo='';
-        document.querySelectorAll('.mbtn').forEach(function(b2){
-          b2.classList.toggle('active',b2.dataset.m==='');
-        });
-        var titleEl=document.getElementById('titleModelo');
-        if(titleEl)titleEl.textContent='Global';
-      }
-    }
-  });
-}
 
 function aTab(){var t=document.querySelector('.tab.active');if(!t)return'resumen';var tx=t.textContent;if(tx.indexOf('Resumen')>=0)return'resumen';if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Talla')>=0)return'tallas';if(tx.indexOf('Tienda')>=0)return'tiendas';if(tx.indexOf('Inventario')>=0)return'inventario';return'decisiones';}
 var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];
