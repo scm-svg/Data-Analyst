@@ -368,7 +368,6 @@ function updateKPIs(){
 function renderAlertas(){
   var alerts=[];
   if(DATA.meses_order.length>=2){var lv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-1]]||0,pv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-2]]||0;if(pv>0){var d=Math.round((lv-pv)/pv*100);if(d<-25)alerts.push({type:'danger',text:'🔴 Caída '+Math.abs(d)+'% vs mes anterior'});else if(d>25)alerts.push({type:'good',text:'🟢 Crecimiento '+d+'%'});}}
-  if(DATA.es_parcial)alerts.push({type:'info',text:'📅 Mayo 2026 con datos parciales'});
   var el=document.getElementById('alertBar');if(!el||!alerts.length){if(el)el.style.display='none';return;}
   el.style.display='flex';
   var clr={danger:'#ef4444',warn:'#ffc107',info:'#5b6af7',good:'#4caf76'},bg={danger:'rgba(239,68,68,.12)',warn:'rgba(255,193,7,.12)',info:'rgba(91,106,247,.12)',good:'rgba(76,175,118,.12)'};
@@ -407,8 +406,8 @@ function rTallas(){
   var grid=document.getElementById('tallasGrid');var cols=generos.length===1?'1fr':generos.length===2?'1fr 1fr':'1fr 1fr 1fr';
   grid.style.cssText='display:grid;grid-template-columns:'+cols+';gap:14px;margin-bottom:14px';
   grid.innerHTML=generos.map(function(g){return'<div class="card"><h3 style="color:'+gcol(g)+'">'+(GICO[g]||'')+' '+g+' — Tallas</h3><div class="sub">Distribución de tallas vendidas</div><div class="cw"><canvas id="cTalla_'+g+'"></canvas></div></div>';}).join('');
-  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=sortTallas(ag(gRows,'talla'));var col=gcol(g);
-    mc('cTalla_'+g,'bar',{labels:byT.map(function(x){return x.k;}),datasets:[{data:byT.map(function(x){return x.pct;}),backgroundColor:col+'bb',borderColor:col,borderWidth:1,borderRadius:5,_units:byT.map(function(x){return x.v;})}]},Object.assign(bo(),{plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%  ('+ctx.dataset._units[ctx.dataIndex]+' und)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:12},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v){return v.toFixed(1)+'%';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:Math.min(100,Math.ceil((byT[0]?byT[0].pct:100)*1.3/5)*5)}}}));
+  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=sortTallas(ag(gRows,'talla'));var col=gcol(g);var yMax=Math.min(100,Math.ceil(byT.reduce(function(m,x){return Math.max(m,x.pct);},0)*1.15/5)*5);
+    mc('cTalla_'+g,'bar',{labels:byT.map(function(x){return x.k;}),datasets:[{data:byT.map(function(x){return x.pct;}),backgroundColor:col+'bb',borderColor:col,borderWidth:1,borderRadius:5,_units:byT.map(function(x){return x.v;})}]},Object.assign(bo(),{plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%  ('+ctx.dataset._units[ctx.dataIndex]+' und)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:12},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v){return v.toFixed(1)+'%';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:yMax}}}}));
   });
   var byColor=ag(rows,'color').slice(0,12),tallas=sortTallaKeys(ag(rows,'talla').map(function(x){return x.k;}));var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
   var h='<table class="hmt"><thead><tr><th></th>'+tallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';byColor.forEach(function(x){h+='<tr><td class="rl"><span class="chip" style="background:'+cn(x.k)+'"></span>'+x.k+'</td>'+tallas.map(function(t){var v=(m2[x.k]&&m2[x.k][t])||0;return'<td style="background:'+hb(v,mx)+';color:'+ht(v,mx)+'" title="'+x.k+' T'+t+': '+v+'">'+v+'</td>';}).join('')+'</tr>';});
@@ -561,144 +560,54 @@ function makeRow(s,col,v,colV,tSug,stk){
 
 function rDecisiones(){
   var meses=_decMeses||2;
-  var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5,'3XL':6,'2':0,'4':1,'6':2,'8':3,'10':4,'12':5,'14':6};
+  var allRows=DATA.raw_rows;
+  var filteredRows=allRows.filter(function(r){return(!_modelo||r.modelo===_modelo);});
+  var modelos=ag(filteredRows,'modelo').map(function(x){return x.k;});
+  var pgEl=document.getElementById('propGrid');pgEl.innerHTML='';
 
-  // ── PRODUCTION CURVE
-  var prodGrid=document.getElementById('propGrid');
-  if(prodGrid){
-    var modelList=_modelo?[_modelo]:['MIKA SPORT LITE','NOAH SPORT LITE','MAYA SPORT LITE'];
-    prodGrid.innerHTML='';
-    modelList.forEach(function(mod){
-      var smry=DATA.summary_prod[mod];
-      if(!smry) return;
-      var rows=DATA.prod_curve.filter(function(r){return r.modelo===mod;});
-      var totalNeed=meses===1?smry.need_1m:meses===2?smry.need_2m:smry.need_3m;
-      var cob=smry.v_mes>0?(smry.stk_total/smry.v_mes).toFixed(1):0;
-      var cobColor=cob<1?'#ef4444':cob<2?'#f59e0b':cob<3?'#3b82f6':'#10b981';
-
-      // group by color
-      var byColor={};
-      rows.forEach(function(r){
-        if(!byColor[r.color]) byColor[r.color]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0};
-        byColor[r.color].rows.push(r);
-        byColor[r.color].totalStk+=r.stk_total;
-        byColor[r.color].totalNeed1+=r.need_1m;
-        byColor[r.color].totalNeed2+=r.need_2m;
-        byColor[r.color].totalNeed3+=r.need_3m;
-        byColor[r.color].v_mes+=r.v_mes;
-      });
-      var colorKeys=Object.keys(byColor).sort(function(a,b){return byColor[b].v_mes-byColor[a].v_mes;});
-
-      var colorsHtml=colorKeys.map(function(col){
-        var cdata=byColor[col];
-        var need=meses===1?cdata.totalNeed1:meses===2?cdata.totalNeed2:cdata.totalNeed3;
-        var colCob=cdata.v_mes>0?(cdata.totalStk/cdata.v_mes).toFixed(1):99;
-        var cc=colCob<1?'#ef4444':colCob<2?'#f59e0b':colCob<3?'#3b82f6':'#10b981';
-        // sort tallas
-        var sortedRows=cdata.rows.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
-        var tallasHtml=sortedRows.map(function(r){
-          var tn=meses===1?r.need_1m:meses===2?r.need_2m:r.need_3m;
-          var tc=r.cobertura<1?'#ef4444':r.cobertura<2?'#f59e0b':r.cobertura<3?'#3b82f6':'#10b981';
-          return '<div style="display:flex;align-items:center;gap:6px;padding:3px 8px 3px 12px;background:rgba(0,0,0,.15);border-radius:5px;margin-bottom:2px">'
-            +'<span style="font-family:var(--fm);font-size:.68rem;color:var(--mu);width:28px">'+r.talla+'</span>'
-            +'<span style="font-family:var(--fm);font-size:.65rem;color:var(--mu2)">'+r.v_mes.toFixed(1)+'/mes</span>'
-            +'<span style="font-family:var(--fm);font-size:.65rem;color:var(--mu2)">stk '+r.stk_total+'</span>'
-            +'<span style="font-family:var(--fm);font-size:.65rem;color:'+tc+';font-weight:700">'+r.cobertura.toFixed(1)+'m</span>'
-            +(tn>0?'<span style="margin-left:auto;background:rgba(245,158,11,.15);color:#f59e0b;border-radius:4px;padding:1px 7px;font-size:.63rem;font-weight:700">+'+tn+' prod</span>':'<span style="margin-left:auto;font-size:.63rem;color:#10b981">✓ OK</span>')
-            +'</div>';
+  modelos.forEach(function(modelo){
+    var modRows=allRows.filter(function(r){return r.modelo===modelo;});
+    var generos=ag(modRows,'genero').map(function(x){return x.k;});
+    var cards=generos.map(function(genero){
+      var lRows=modRows.filter(function(r){return r.genero===genero;});
+      var lt=lRows.reduce(function(a,r){return a+r.v;},0);if(!lt)return'';
+      var lineFc=getLF(genero,meses,modelo);
+      var cM={};lRows.forEach(function(r){cM[r.color]=(cM[r.color]||0)+r.v;});
+      var cA=Object.entries(cM).sort(function(a,b){return b[1]-a[1];});
+      var lProd=0;
+      var bars=cA.map(function(ce){
+        var col=ce[0],colV=ce[1],pct=lt>0?Math.round(colV/lt*1000)/10:0;
+        var sug=calcProp(colV,lt,lineFc);
+        var cUid='pg_'+modelo.replace(/\W/g,'_')+'_'+genero+'_'+col.replace(/\W/g,'_');
+        var tM={};lRows.filter(function(r){return r.color===col;}).forEach(function(r){tM[r.talla]=(tM[r.talla]||0)+r.v;});
+        var tA=Object.entries(tM).sort(function(a,b){return b[1]-a[1];});
+        var cNS=0;
+        var cColorStk=gColorStk(modelo,genero,col);
+        var det=tA.map(function(tv){
+          var tSug=calcProp(tv[1],lt,lineFc);cNS+=tSug;lProd+=tSug;
+          var tStk=gTallaStk(modelo,genero,col,tv[0]);
+          return makeRow(tv[0],col,tv[1],colV,tSug,tStk);
         }).join('');
-        return '<div style="background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
-          +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-          +'<span style="font-size:.73rem;font-weight:700">'+col+'</span>'
-          +'<span style="font-family:var(--fm);font-size:.64rem;color:var(--mu2)">'+cdata.v_mes.toFixed(1)+'/mes</span>'
-          +'<span style="font-family:var(--fm);font-size:.64rem;color:'+cc+';font-weight:700;margin-left:auto">'+colCob+'m cob</span>'
-          +(need>0?'<span style="background:rgba(245,158,11,.18);color:#f59e0b;border-radius:5px;padding:2px 8px;font-size:.66rem;font-weight:700">Necesita +'+need+'</span>':'<span style="background:rgba(16,185,129,.12);color:#10b981;border-radius:5px;padding:2px 8px;font-size:.66rem">OK</span>')
-          +'</div>'+tallasHtml+'</div>';
+        return '<div style="margin-bottom:7px">'+
+          '<div data-pguid="'+cUid+'" style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 5px;border-radius:6px">'+
+          '<span style="width:9px;height:9px;border-radius:50%;background:'+cn(col)+';flex-shrink:0;border:1.5px solid rgba(255,255,255,.15)"></span>'+
+          '<div style="font-size:0.73rem;font-weight:600;color:#e0e0f5;width:95px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+col+'</div>'+
+          '<div style="flex:1;background:var(--s3);border-radius:3px;height:10px;overflow:hidden;position:relative"><div style="height:10px;border-radius:3px;background:'+cn(col)+';width:'+pct+'%"></div><span style="position:absolute;left:5px;top:0;line-height:10px;font-size:0.62rem;font-weight:700;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.9)">'+pct+'%</span></div>'+
+          '<div style="color:#86efac;font-weight:700;font-size:0.7rem;width:44px;text-align:right">'+cNS+'u</div>'+
+          (cColorStk>0?'<div style="background:rgba(255,193,7,.15);border:1px solid #ffc10766;border-radius:5px;padding:1px 6px;color:#ffc107;font-size:0.62rem;font-weight:700;white-space:nowrap">📦'+cColorStk+'</div>':'')+
+          '<span style="color:var(--ac);font-size:0.62rem;width:10px">&#9658;</span></div>'+
+          '<div id="'+cUid+'" style="display:none;margin:2px 0 0 16px;padding:5px 7px;background:var(--s2);border-radius:5px;border-left:2px solid '+cn(col)+'44">'+
+          '<div style="font-size:0.59rem;color:var(--mu2);margin-bottom:3px;font-weight:600">TALLA &middot; % &middot; HIST &middot; PROD &middot; <span style="color:#ffc107">STK</span></div>'+det+'</div></div>';
       }).join('');
-
-      var card=document.createElement('div');
-      card.className='card';
-      card.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
-        +'<h3 style="margin:0">'+mod+'</h3>'
-        +'<span style="font-family:var(--fm);font-size:.72rem;color:var(--mu2)">'+smry.v_mes.toFixed(0)+'/mes · stk '+smry.stk_total+'</span>'
-        +'<span style="margin-left:auto;font-family:var(--fm);font-size:.78rem;font-weight:800;color:'+cobColor+'">'+cob+' meses cobertura</span>'
-        +'</div>'
-        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
-        +'<div style="text-align:center;background:rgba(99,102,241,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#818cf8">'+smry.need_1m+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 1 mes</div></div>'
-        +'<div style="text-align:center;background:rgba(245,158,11,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#f59e0b">'+smry.need_2m+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 2 meses</div></div>'
-        +'<div style="text-align:center;background:rgba(244,63,94,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#f43f5e">'+smry.need_3m+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 3 meses</div></div>'
-        +'</div>'
-        +'<div style="font-size:.67rem;color:var(--mu2);margin-bottom:8px">📦 PT global: '+smry.stk_pt+' und &nbsp;·&nbsp; Velocidad base: Feb–Mar–Abr 2026</div>'
-        +'<div>'+colorsHtml+'</div>';
-      prodGrid.appendChild(card);
-    });
-  }
-
-  // ── REABASTECIMIENTO incluyendo MARGARITA y TOLON proyectadas
-  var reabastGrid=document.getElementById('reabastGrid');
-  if(reabastGrid){
-    var mesesActivos=getMesesActivos();
-    var nMeses=Math.min(meses,mesesActivos.length)||1;
-
-    // Real stores (excl. CERRO VERDE in restock display)
-    var EXCLUIR_RESTOCK=['CERRO VERDE'];
-    var tiendaData={};
-    DATA.raw_rows.forEach(function(r){
-      if(EXCLUIR_RESTOCK.indexOf(r.tienda)>=0) return;
-      if(mesesActivos.slice(-nMeses).indexOf(r.mes)<0) return;
-      if(!tiendaData[r.tienda]) tiendaData[r.tienda]={v:0,items:{},proyectada:false,nota:''};
-      tiendaData[r.tienda].v+=r.v;
-      var k=r.modelo+'<br><span style="font-size:.6rem;color:var(--mu)">'+r.color+' / '+r.talla+'</span>';
-      tiendaData[r.tienda].items[r.color+'/'+r.talla]=(tiendaData[r.tienda].items[r.color+'/'+r.talla]||0)+r.v;
-    });
-
-    // Add MARGARITA as projected store
-    var marNeed=meses===1?DATA.margarita.need_1m:meses===2?DATA.margarita.need_2m:DATA.margarita.need_3m;
-    tiendaData['MARGARITA 🆕']={v:marNeed,items:{},proyectada:true,nota:DATA.margarita.nota};
-    // build items from margarita SKUs sorted by talla
-    DATA.margarita.skus.forEach(function(s){
-      var need=meses===1?s.need_1m:meses===2?s.need_2m:s.need_3m;
-      if(need>0){
-        var k=s.COLOR+' / '+s.TALLA;
-        tiendaData['MARGARITA 🆕'].items[k]=(tiendaData['MARGARITA 🆕'].items[k]||0)+need;
-      }
-    });
-    tiendaData['MARGARITA 🆕'].nota=DATA.margarita.nota;
-
-    // Enrich TOLON with note
-    if(tiendaData['TOLON']) tiendaData['TOLON'].nota='';
-
-    var tiendas=Object.keys(tiendaData).sort(function(a,b){
-      return tiendaData[b].v-tiendaData[a].v;
-    });
-
-    reabastGrid.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">'
-      +tiendas.map(function(t){
-        var td=tiendaData[t];
-        // sort items by talla within color
-        var itemKeys=Object.keys(td.items).sort(function(a,b){
-          var ta=a.split(' / ')[1]||'', tb=b.split(' / ')[1]||'';
-          return (TORD[ta]||99)-(TORD[tb]||99);
-        });
-        var topItems=itemKeys.slice(0,8);
-        var isNew=td.proyectada;
-        return '<div style="background:var(--s2);border-radius:10px;padding:12px;border:1px solid '+(isNew?'rgba(249,115,22,.3)':'var(--brd)')+';">'
-          +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
-          +'<span style="font-weight:700;font-size:.8rem">🏪 '+t+'</span>'
-          +(isNew?'<span style="background:rgba(249,115,22,.15);color:#f97316;border-radius:4px;padding:1px 6px;font-size:.61rem">Proyectada</span>':'')
-          +'</div>'
-          +(td.nota?'<div style="font-size:.62rem;color:var(--mu2);margin-bottom:6px;font-style:italic">'+td.nota+'</div>':'')
-          +'<div style="font-family:var(--fm);font-size:.68rem;color:var(--mu);margin-bottom:8px">'+td.v+' und sugeridas / '+nMeses+' mes(es)</div>'
-          +topItems.map(function(k){
-            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:.69rem;padding:3px 0;border-bottom:1px solid var(--brd)">'
-              +'<span style="color:var(--tx)">'+k+'</span>'
-              +'<span style="color:var(--a2);font-family:var(--fm);font-weight:700">'+td.items[k]+'</span></div>';
-          }).join('')
-          +(itemKeys.length>8?'<div style="font-size:.61rem;color:var(--mu2);margin-top:5px">+ '+(itemKeys.length-8)+' variantes más</div>':'')
-          +'</div>';
-      }).join('')
-      +'</div>';
-  }
+      return '<div style="background:var(--s2);border-radius:10px;padding:13px;margin-bottom:8px">'+
+        '<div style="font-family:var(--fh);font-size:0.79rem;font-weight:800;color:var(--a2);margin-bottom:2px">'+(GICO[genero]||'')+' '+genero+' <span style="font-size:0.67rem;font-weight:400;color:var(--mu)">(orden '+lineFc+' und/mes)</span></div>'+
+        '<div style="font-size:0.65rem;color:var(--mu2);margin-bottom:8px">&#127981; Producir: <strong style="color:#86efac">'+lProd+'</strong> und</div>'+bars+'</div>';
+    }).filter(Boolean).join('');
+    if(!cards)return;
+    pgEl.innerHTML+='<div style="background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px">'+
+      '<div style="font-family:var(--fh);font-size:0.9rem;font-weight:800;color:var(--ac);margin-bottom:10px">'+(MICO[modelo]||'')+' '+modelo+'</div>'+cards+'</div>';
+  });
+  renderReabast(allRows);
 }
 
 function renderReabast(allRows){
