@@ -12,7 +12,6 @@ MESES = [
 ]
 TALLA_ORDER = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '6', '8', '10', '12', '14']
 BASE_MESES = ['febrero-2026', 'marzo-2026', 'abril-2026']
-MODEL_CANON = 'CLASICA DAILY'
 
 
 def mes_sort_key(m):
@@ -52,8 +51,14 @@ def norm_genero(g):
 def norm_modelo(m):
     s = str(m).strip().upper()
     s = s.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+    if 'ELIMINAR' in s:
+        return None
+    if '3.0' in s or '3,0' in s:
+        return 'CLASICA DAILY 3.0'
+    if '2.0' in s or '2,0' in s:
+        return 'CLASICA DAILY 2.0'
     if 'DAILY' in s or 'CLASICA' in s:
-        return MODEL_CANON
+        return 'CLASICA DAILY'
     return None
 
 
