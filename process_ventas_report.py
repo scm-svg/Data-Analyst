@@ -126,6 +126,60 @@ def assign_tienda(orden_relacionada: str, vendedor: str) -> str | None:
     return None
 
 
+_ILLEGAL_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def sanitize_excel_value(value):
+    """Remove characters that break Excel / Office Open XML."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime().replace(tzinfo=None)
+    s = _ILLEGAL_XML_RE.sub("", str(value))
+    if len(s) > 32767:
+        s = s[:32767]
+    return s
+
+
+def sanitize_dataframe_for_excel(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "Fecha de la orden" in out.columns:
+        out["Fecha de la orden"] = pd.to_datetime(
+            out["Fecha de la orden"], errors="coerce"
+        ).dt.tz_localize(None)
+    for col in out.columns:
+        if out[col].dtype == object or pd.api.types.is_string_dtype(out[col]):
+            out[col] = out[col].map(sanitize_excel_value)
+    return out
+
+
+def add_fecha_mes_anio(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    fechas = pd.to_datetime(out["Fecha de la orden"], errors="coerce")
+    out["fecha (mes año)"] = fechas.dt.strftime("%m/%Y")
+    return out
+
+
+def export_excel(df: pd.DataFrame, output_path: str) -> None:
+    df = sanitize_dataframe_for_excel(df)
+    with pd.ExcelWriter(
+        output_path,
+        engine="openpyxl",
+        datetime_format="yyyy-mm-dd hh:mm:ss",
+        date_format="yyyy-mm-dd",
+    ) as writer:
+        df.to_excel(writer, sheet_name="Ventas", index=False)
+        ws = writer.sheets["Ventas"]
+        ws.freeze_panes = "A2"
+        for idx, col in enumerate(df.columns, start=1):
+            width = min(max(len(str(col)), 12), 40)
+            if col in ("Variante del producto", "Orden relacionada"):
+                width = 42
+            ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
+
+
 def main():
     input_path = (
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
@@ -156,10 +210,11 @@ def main():
 
     df.drop(columns=["SKU_p", "GENERO_p", "COLOR_p", "TALLA_p"], errors="ignore", inplace=True)
 
-    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Ventas", index=False)
+    df = add_fecha_mes_anio(df)
+    export_excel(df, output_path)
 
     print("Output:", output_path)
+    print("Columns:", list(df.columns))
     print("Rows:", len(df))
     print("\nNull counts after processing:")
     print(df[["SKU", "GENERO", "COLOR", "TALLA", "tienda / ubicación"]].isnull().sum())
@@ -168,6 +223,8 @@ def main():
     print("\nGENERO filled:", df["GENERO"].notna().sum())
     print("TALLA filled:", df["TALLA"].notna().sum())
     print("COLOR filled:", df["COLOR"].notna().sum())
+    print("fecha (mes año) nulls:", df["fecha (mes año)"].isna().sum())
+    print("fecha (mes año) sample:", df["fecha (mes año)"].dropna().head(3).tolist())
 
 
 if __name__ == "__main__":
