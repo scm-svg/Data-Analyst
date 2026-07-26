@@ -1,5 +1,8 @@
 """Process sales report: parse variants and assign store locations."""
+import argparse
 import re
+import sys
+
 import pandas as pd
 
 SIZES = {"XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"}
@@ -13,6 +16,7 @@ STORE_RULES_ORDEN = [
     ("GRANDPLAZ", "GRAND PLAZ"),
     ("TOLON", "TOLON"),
     ("LA VELA", "LA VELA"),
+    ("VELA", "LA VELA"),
     ("GRIETA", "GRIETA"),
     ("SAMBIL", "SAMBIL VALENCIA"),
 ]
@@ -26,8 +30,33 @@ STORE_RULES_VENDEDOR = [
     ("GRAND PLAZ", "GRAND PLAZ"),
     ("TOLON", "TOLON"),
     ("LA VELA", "LA VELA"),
+    ("VELA", "LA VELA"),
     ("GRIETA", "GRIETA"),
 ]
+
+OUTPUT_COLUMNS = [
+    "Fecha de la orden",
+    "Orden relacionada",
+    "Variante del producto",
+    "modelo",
+    "SKU",
+    "GENERO",
+    "COLOR",
+    "TALLA",
+    "tienda / ubicación",
+    "Cant. ordenada",
+    "vendedor",
+    "fecha (mes año)",
+]
+
+
+def normalize_input_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "Producto" in out.columns and "modelo" not in out.columns:
+        out["modelo"] = out["Producto"]
+    if "Vendedor" in out.columns and "vendedor" not in out.columns:
+        out["vendedor"] = out["Vendedor"]
+    return out
 
 
 def _split_size_color(content: str):
@@ -86,7 +115,7 @@ def parse_variant(variante: str, modelo: str):
 
 
 def clean_color(color):
-    """Remove numeric color codes; keep names only (e.g. Rosado Pastel - 20663 → Rosado Pastel)."""
+    """Remove numeric color codes; keep names only."""
     if color is None or (isinstance(color, float) and pd.isna(color)):
         return color
     s = str(color).strip()
@@ -117,7 +146,7 @@ def assign_tienda(orden_relacionada: str, vendedor: str) -> str | None:
             return store
 
     for keyword, store in STORE_RULES_VENDEDOR:
-        if keyword in str(vendedor).upper():
+        if keyword in vend_upper:
             return store
 
     if "EVENTOS" in orden_upper:
@@ -130,7 +159,6 @@ _ILLEGAL_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
 
 
 def sanitize_excel_value(value):
-    """Remove characters that break Excel / Office Open XML."""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -180,39 +208,38 @@ def export_excel(df: pd.DataFrame, output_path: str) -> None:
             ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
 
 
-def main():
-    input_path = (
-        "/home/ubuntu/.cursor/projects/workspace/uploads/"
-        "Reporte_del_an_lisis_de_ventas_ARREGLAR_INSTANCIA_VIEJA_65d2.xlsx"
-    )
-    output_path = "/workspace/Reporte_ventas_COMPLETO.xlsx"
-
-    df = pd.read_excel(input_path)
+def process_sales_report(df: pd.DataFrame) -> pd.DataFrame:
+    df = normalize_input_columns(df)
 
     for col in ["SKU", "GENERO", "COLOR", "TALLA", "tienda / ubicación"]:
-        df[col] = df[col].astype(object)
+        df[col] = None
 
     parsed = df.apply(
         lambda r: parse_variant(r["Variante del producto"], r["modelo"]),
         axis=1,
         result_type="expand",
     )
-    parsed.columns = ["SKU_p", "GENERO_p", "COLOR_p", "TALLA_p"]
-    df["SKU"] = parsed["SKU_p"]
-    df["GENERO"] = parsed["GENERO_p"]
-    df["COLOR"] = parsed["COLOR_p"].apply(clean_color)
-    df["TALLA"] = parsed["TALLA_p"]
+    parsed.columns = ["SKU", "GENERO", "COLOR", "TALLA"]
+    df["SKU"] = parsed["SKU"]
+    df["GENERO"] = parsed["GENERO"]
+    df["COLOR"] = parsed["COLOR"].apply(clean_color)
+    df["TALLA"] = parsed["TALLA"]
 
     df["tienda / ubicación"] = df.apply(
         lambda r: assign_tienda(r["Orden relacionada"], r["vendedor"]),
         axis=1,
     )
 
-    df.drop(columns=["SKU_p", "GENERO_p", "COLOR_p", "TALLA_p"], errors="ignore", inplace=True)
-
     df = add_fecha_mes_anio(df)
-    export_excel(df, output_path)
 
+    for col in OUTPUT_COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+
+    return df[OUTPUT_COLUMNS]
+
+
+def print_summary(df: pd.DataFrame, output_path: str) -> None:
     print("Output:", output_path)
     print("Columns:", list(df.columns))
     print("Rows:", len(df))
@@ -224,7 +251,25 @@ def main():
     print("TALLA filled:", df["TALLA"].notna().sum())
     print("COLOR filled:", df["COLOR"].notna().sum())
     print("fecha (mes año) nulls:", df["fecha (mes año)"].isna().sum())
-    print("fecha (mes año) sample:", df["fecha (mes año)"].dropna().head(3).tolist())
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Process Cuadro sales report Excel.")
+    parser.add_argument("input_path", nargs="?", help="Input .xlsx path")
+    parser.add_argument("output_path", nargs="?", help="Output .xlsx path")
+    args = parser.parse_args(argv)
+
+    default_old = (
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Reporte_del_an_lisis_de_ventas_ARREGLAR_INSTANCIA_VIEJA_65d2.xlsx"
+    )
+    input_path = args.input_path or default_old
+    output_path = args.output_path or "/workspace/Reporte_ventas_COMPLETO.xlsx"
+
+    df = pd.read_excel(input_path)
+    result = process_sales_report(df)
+    export_excel(result, output_path)
+    print_summary(result, output_path)
 
 
 if __name__ == "__main__":
