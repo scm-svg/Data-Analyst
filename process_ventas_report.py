@@ -85,19 +85,39 @@ def parse_variant(variante: str, modelo: str):
     return sku, genero, color, talla
 
 
+def clean_color(color):
+    """Remove numeric color codes; keep names only (e.g. Rosado Pastel - 20663 → Rosado Pastel)."""
+    if color is None or (isinstance(color, float) and pd.isna(color)):
+        return color
+    s = str(color).strip()
+    if not s:
+        return s
+
+    if " - " in s:
+        left, right = s.rsplit(" - ", 1)
+        if re.search(r"\d", right.strip()):
+            s = left.strip()
+
+    s = re.sub(r"\d+", "", s)
+    s = re.sub(r"\s+", " ", s).strip(" -,")
+    return s if s else None
+
+
 def assign_tienda(orden_relacionada: str, vendedor: str) -> str | None:
     orden = str(orden_relacionada).strip()
+    vend_upper = str(vendedor).upper()
     if orden.upper().startswith("S0"):
-        return "Pedidos"
+        if "WEB" in vend_upper:
+            return "WEB"
+        return "PEDIDOS"
 
     orden_upper = orden.upper()
     for keyword, store in STORE_RULES_ORDEN:
         if keyword in orden_upper:
             return store
 
-    vend_upper = str(vendedor).upper()
     for keyword, store in STORE_RULES_VENDEDOR:
-        if keyword in vend_upper:
+        if keyword in str(vendedor).upper():
             return store
 
     if "EVENTOS" in orden_upper:
@@ -126,7 +146,7 @@ def main():
     parsed.columns = ["SKU_p", "GENERO_p", "COLOR_p", "TALLA_p"]
     df["SKU"] = parsed["SKU_p"]
     df["GENERO"] = parsed["GENERO_p"]
-    df["COLOR"] = parsed["COLOR_p"]
+    df["COLOR"] = parsed["COLOR_p"].apply(clean_color)
     df["TALLA"] = parsed["TALLA_p"]
 
     df["tienda / ubicación"] = df.apply(
