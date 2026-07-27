@@ -5,7 +5,8 @@ from collections import defaultdict
 
 import pandas as pd
 
-XLSX = '/home/ubuntu/.cursor/projects/workspace/uploads/CLASICA_DAILY_COMPLETO_ace7.xlsx'
+VENTAS_XLSX = '/home/ubuntu/.cursor/projects/workspace/uploads/data_daily_3.0_actualizada_58b1.xlsx'
+INVENTARIO_XLSX = '/home/ubuntu/.cursor/projects/workspace/uploads/CLASICA_DAILY_COMPLETO_ace7.xlsx'
 MESES = [
     'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
@@ -25,7 +26,7 @@ def mes_key_from_parts(month, year):
 
 
 def parse_mes(row):
-    raw = row.get('fecha mes año')
+    raw = row.get('fecha (mes año)') if 'fecha (mes año)' in row else row.get('fecha mes año')
     if pd.notna(raw):
         s = str(raw).strip()
         if '/' in s:
@@ -54,7 +55,7 @@ def norm_modelo(m):
     s = s.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
     if 'ELIMINAR' in s:
         return None
-    if '3.0' in s or '3,0' in s:
+    if '3.0' in s or '3,0' in s or 'DAILY 3' in s:
         return MODEL_ONLY
     return None
 
@@ -74,6 +75,7 @@ def norm_tienda(t):
         'GRIE': 'GRIE',
         'CERRO VERDE': 'CERRO VERDE',
         'CERRV': 'CERRO VERDE',
+        'GRAND PLAZ': 'GRANDPLAZ',
         'GRANDPLAZ': 'GRANDPLAZ',
         'GRAND': 'GRANDPLAZ',
         'GRACH': 'GRANDPLAZ',
@@ -104,10 +106,11 @@ def talla_sort(t):
 
 
 def read_ventas():
-    df = pd.read_excel(XLSX, sheet_name='Venta')
+    df = pd.read_excel(VENTAS_XLSX, sheet_name=0)
     rows = []
     for _, row in df.iterrows():
-        modelo = norm_modelo(row['modelo'])
+        modelo_col = row.get('Modelo') if 'Modelo' in row.index else row.get('modelo')
+        modelo = norm_modelo(modelo_col)
         if not modelo:
             continue
         qty = float(row['Cant. ordenada'])
@@ -116,13 +119,16 @@ def read_ventas():
         mes = parse_mes(row)
         if not mes:
             continue
-        talla = row['talla']
+        talla = row.get('TALLA') if 'TALLA' in row.index else row.get('talla')
         if pd.isna(talla):
             continue
+        tienda_col = row.get('tienda / ubicación') if 'tienda / ubicación' in row.index else row.get('Vendedor')
+        genero_col = row.get('GENERO') if 'GENERO' in row.index else row.get('genero')
+        color_col = row.get('COLOR') if 'COLOR' in row.index else row.get('color')
         rows.append({
-            'tienda': norm_tienda(row['Vendedor']),
-            'genero': norm_genero(row['genero']),
-            'color': norm_color(row['color']),
+            'tienda': norm_tienda(tienda_col),
+            'genero': norm_genero(genero_col),
+            'color': norm_color(color_col),
             'talla': str(talla).strip(),
             'mes': mes,
             'modelo': modelo,
@@ -132,7 +138,7 @@ def read_ventas():
 
 
 def read_inventario():
-    df = pd.read_excel(XLSX, sheet_name='Inventario')
+    df = pd.read_excel(INVENTARIO_XLSX, sheet_name='Inventario')
     stock = defaultdict(int)
     stock_by_loc = defaultdict(lambda: defaultdict(int))
     inv_rows = []
