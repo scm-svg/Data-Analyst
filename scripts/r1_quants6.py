@@ -135,8 +135,9 @@ def resolve_r1_sku(
     if not gen or not c or not t:
         return sk, None
 
-    hit = r1_index.get((gen, c, t))
-    if not hit:
-        return sk, None
-    new_sku, pid = hit
-    return new_sku, pid
+    for color_key in (c, c.replace(" CLARO", "")):
+        hit = r1_index.get((gen, color_key, t))
+        if hit:
+            new_sku, pid = hit
+            return new_sku, pid
+    return sk, None

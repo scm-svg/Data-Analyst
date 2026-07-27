@@ -14,6 +14,13 @@ from r1_quants6 import (
     resolve_r1_sku,
 )
 from sku_catalog import load_product_id_map, load_quants_product_id_map, norm_sku, resolve_product_id
+from ventas_sku_map import (
+    apply_sku_remap,
+    augment_r1_from_ventas,
+    audit_ventas_coverage,
+    load_ventas_product_id_map,
+    validate_product_ids,
+)
 
 DATA_PATH = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/"
@@ -37,13 +44,13 @@ def load_sources(r1_skus: set[str], r1_index: dict, r1_pid: dict[str, str]) -> t
         }
     )
     nm["source"] = "SKU No Migrados"
-    nm["SKU"] = nm["SKU"].map(norm_sku)
+    nm["SKU"] = nm["SKU"].map(lambda s: apply_sku_remap(s)[0])
     nm["product_id"] = nm["product_id_raw"].astype(str).str.strip()
     chunks.append(nm[["source", "SKU", "product_id", "qty"]])
 
     ent = pd.read_excel(DATA_PATH, sheet_name="ENTRADA LIMPIA")
     ent["source"] = "ENTRADA LIMPIA"
-    ent["SKU"] = ent["SKU"].map(norm_sku)
+    ent["SKU"] = ent["SKU"].map(lambda s: apply_sku_remap(s)[0])
     ent = ent.rename(columns={"CANT": "qty", "PRODUCTO": "fallback_name"})
     ent["product_id"] = None
     chunks.append(ent[["source", "SKU", "product_id", "qty", "fallback_name"]])
@@ -52,8 +59,9 @@ def load_sources(r1_skus: set[str], r1_index: dict, r1_pid: dict[str, str]) -> t
     lista = lista[lista["SKU"].notna()].copy()
     remapped_rows: list[dict] = []
     for _, row in lista.iterrows():
+        sku_after_remap, sku_remap_from = apply_sku_remap(row["SKU"])
         new_sku, r1_pid_row = resolve_r1_sku(
-            row["SKU"],
+            sku_after_remap,
             tipo_producto=row.get("Tipo de Producto"),
             talla=row.get("Talla"),
             color=row.get("color"),
@@ -68,7 +76,8 @@ def load_sources(r1_skus: set[str], r1_index: dict, r1_pid: dict[str, str]) -> t
                 "qty": row["Cantidad"],
                 "fallback_name": row.get("PRODUCTO CATALOGO"),
                 "product_id": r1_pid_row or (r1_pid.get(new_sku) if new_sku in r1_pid else None),
-                "sku_remap_from": norm_sku(row["SKU"]) if new_sku != norm_sku(row["SKU"]) else None,
+                "sku_remap_from": sku_remap_from
+                or (norm_sku(row["SKU"]) if new_sku != norm_sku(row["SKU"]) else None),
                 "r1_unresolved": is_invalid_r1_catalog_sku(row["SKU"])
                 and new_sku == norm_sku(row["SKU"]),
                 "Tipo de Producto": row.get("Tipo de Producto"),
@@ -112,13 +121,19 @@ def load_sources(r1_skus: set[str], r1_index: dict, r1_pid: dict[str, str]) -> t
 
 
 def enrich_product_ids(
-    df: pd.DataFrame, pid_map: dict[str, str], quants_pid: dict[str, str]
+    df: pd.DataFrame,
+    pid_map: dict[str, str],
+    quants_pid: dict[str, str],
+    ventas_pid: dict[str, str],
 ) -> pd.DataFrame:
     rows = []
     for _, r in df.iterrows():
         sku = norm_sku(r["SKU"])
         preset = r.get("product_id")
-        if pd.notna(preset) and str(preset).startswith("["):
+        if sku in ventas_pid:
+            pid = ventas_pid[sku]
+            method = "ventas_master"
+        elif pd.notna(preset) and str(preset).startswith("["):
             pid = str(preset).strip()
             method = "r1_quants6" if r.get("sku_remap_from") else "provided"
         elif sku in quants_pid:
@@ -141,6 +156,7 @@ def to_plantilla(df: pd.DataFrame) -> pd.DataFrame:
 
 
 METHOD_PRIORITY = {
+    "ventas_master": -1,
     "quants_master": 0,
     "r1_quants6": 0,
     "provided": 1,
@@ -184,22 +200,25 @@ def validate_no_invented_r1(consolidado: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     r1_skus, r1_index, r1_pid = load_r1_quants6()
+    augment_r1_from_ventas(r1_skus, r1_index, r1_pid)
+    ventas_pid = load_ventas_product_id_map()
     pid_map = load_product_id_map()
+    pid_map.update(ventas_pid)
     quants_pid = load_quants_product_id_map()
-    _, _, r1_pid_only = load_r1_quants6()
-    quants_pid.update(r1_pid_only)
+    quants_pid.update(r1_pid)
 
     chunks, r1_unresolved = load_sources(r1_skus, r1_index, r1_pid)
 
     detail_frames: list[pd.DataFrame] = []
     for raw in chunks:
-        enriched = enrich_product_ids(raw, pid_map, quants_pid)
+        enriched = enrich_product_ids(raw, pid_map, quants_pid, ventas_pid)
         plantilla = to_plantilla(enriched)
         plantilla["source"] = raw["source"].iloc[0]
         detail_frames.append(plantilla)
 
     all_enriched = pd.concat(
-        [enrich_product_ids(c, pid_map, quants_pid) for c in chunks], ignore_index=True
+        [enrich_product_ids(c, pid_map, quants_pid, ventas_pid) for c in chunks],
+        ignore_index=True,
     )
     all_enriched["location_id"] = LOCATION
     all_enriched = all_enriched.rename(columns={"qty": "inventory_quantity"})
@@ -220,6 +239,21 @@ def main() -> None:
     sin_q5 = all_enriched[~all_enriched["SKU"].isin(quants_pid.keys())][
         ["source", "SKU", "product_id", "inventory_quantity", "product_id_method"]
     ].drop_duplicates(subset=["SKU"])
+
+    sku_from_pid = consolidado["product_id"].str.extract(
+        r"^\[([^\]]+)\]", expand=False
+    ).map(norm_sku)
+    validacion = validate_product_ids(
+        pd.DataFrame(
+            {
+                "SKU": sku_from_pid,
+                "product_id": consolidado["product_id"],
+                "inventory_quantity": consolidado["inventory_quantity"],
+            }
+        ),
+        ventas_pid,
+    )
+    audit_ventas = audit_ventas_coverage(all_enriched, ventas_pid)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(OUT_PATH, engine="openpyxl") as writer:
@@ -245,6 +279,10 @@ def main() -> None:
             invalid_r1.to_excel(writer, sheet_name="ERROR SKU R1 invalidos", index=False)
         if len(r1_unresolved):
             r1_unresolved.to_excel(writer, sheet_name="R1 sin match Quants 6", index=False)
+        if len(validacion):
+            validacion.to_excel(writer, sheet_name="Validacion vs Ventas", index=False)
+        if len(audit_ventas):
+            audit_ventas.to_excel(writer, sheet_name="Etiquetas distintas ventas", index=False)
 
     print(f"Output: {OUT_PATH}")
     print(f"Consolidado filas (unique SKU): {len(consolidado)}")
@@ -253,6 +291,8 @@ def main() -> None:
     print(f"Invalid R1 catalog SKUs remaining: {len(invalid_r1)}")
     print(f"R1 sin match Quants 6: {len(r1_unresolved)}")
     print(f"Pendientes product_id: {len(pendientes)}")
+    print(f"Validacion vs Ventas (mismatches): {len(validacion)}")
+    print(f"Etiquetas distintas ventas (trazabilidad): {len(audit_ventas)}")
     if len(invalid_r1):
         raise SystemExit(1)
 
