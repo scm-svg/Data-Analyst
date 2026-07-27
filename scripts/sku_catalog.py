@@ -24,7 +24,16 @@ QUANTS_PATHS = (
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
         "Quants__stock.quant___2__3ab0.xlsx"
     ),
+    Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Quants__stock.quant___3__7680.xlsx"
+    ),
 )
+
+# Odoo labels confirmed outside quant exports (or not yet in a file).
+ODOO_KNOWN_LABELS: dict[str, str] = {
+    "MLMMJDA66TS": "MOTION LOOP MAFE DAMA (Verde Militar, S)",
+}
 
 CATALOG_SKU_SHEETS = (
     "MANUFACTURADO",
@@ -41,6 +50,7 @@ R2_COLOR_CODES = {
     "70": "Vinotinto",
     "12": "Azul Marino",
     "13": "Azul Rey",
+    "123": "Verde Manzana",
 }
 
 
@@ -74,8 +84,6 @@ def decode_r2_from_sku(raw_sku: str) -> tuple[str | None, str | None]:
     if not m:
         return None, None
     prefix, color_code, _, size = m.group(1), m.group(2), m.group(3), m.group(4)
-    if color_code == "123":
-        color_code = "12"
     color = R2_COLOR_CODES.get(color_code)
     if not color:
         return None, None
@@ -93,9 +101,6 @@ def normalize_sku_for_catalog(raw_sku: str) -> list[tuple[str, str]]:
         return []
 
     candidates: list[tuple[str, str]] = [(s, "exact")]
-
-    if s.startswith("MLMMJDA"):
-        candidates.append((s.replace("MLMMJDA", "MILMIDA", 1), "alias_mila"))
 
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
@@ -134,7 +139,8 @@ def load_quants_index() -> pd.DataFrame:
         )
 
     idx = pd.DataFrame(rows)
-    return idx.drop_duplicates(subset=["SKU"], keep="first").reset_index(drop=True)
+    # Later quant files win on duplicate SKU (more recent export).
+    return idx.drop_duplicates(subset=["SKU"], keep="last").reset_index(drop=True)
 
 
 def load_sku_index() -> pd.DataFrame:
@@ -219,6 +225,10 @@ def lookup_product(
                 "ok_quants_odoo",
                 row.get("PRODUCTO_ODOO"),
             )
+
+    if sku in ODOO_KNOWN_LABELS:
+        display = ODOO_KNOWN_LABELS[sku]
+        return odoo_label_to_producto(display), sku, "ok_odoo_known", display
 
     if sku.startswith("SSR2VIU") or sku.startswith("SRR2VIU"):
         prod, display = decode_r2_from_sku(sku)

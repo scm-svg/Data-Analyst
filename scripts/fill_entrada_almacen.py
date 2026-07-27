@@ -39,6 +39,8 @@ def main() -> None:
             if reason == "ok_quants_odoo":
                 qrow = quants[quants["SKU"] == sku_used].iloc[0]
                 fuentes.append(qrow["FUENTE"])
+            elif reason == "ok_odoo_known":
+                fuentes.append("odoo:known_label")
             elif reason.startswith("ok_catalog"):
                 fuente = catalog.set_index("SKU").loc[sku_used, "FUENTE"]
                 fuentes.append(f"{reason}; {fuente}")
