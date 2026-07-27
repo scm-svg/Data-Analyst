@@ -358,7 +358,7 @@ function updateKPIs(){
     '<div class="kpib"><div class="kv">'+total.toLocaleString()+'</div><div class="kl">Unidades</div></div>'+
     '<div class="kpib"><div class="kv">'+Object.keys(ts).length+'</div><div class="kl">Tiendas</div></div>'+
     '<div class="kpib"><div class="kv">'+Object.keys(cs).length+'</div><div class="kl">Colores</div></div>'+
-    '<div class="kpib"><div class="kv">'+mA.length+'</div><div class="kl">Meses</div></div>'+'<div class="kpib"><div class="kv" style="color:#ffc107">'+gStk+'</div><div class="kl">Stock PT</div></div>'+
+    '<div class="kpib"><div class="kv">'+mA.length+'</div><div class="kl">Meses</div></div>'+'<div class="kpib"><div class="kv" style="color:#ffc107">'+gStk+'</div><div class="kl">Stock Total</div></div>'+
     '<div class="kpib"><div class="kv">'+varText+'</div><div class="kl">Variación</div><div class="ksub">'+varSub+'</div></div>';
   var pl=document.getElementById('pills');if(!pl)return;
   var byM=ag(DATA.raw_rows.filter(function(r){return getMesesActivos().indexOf(r.mes)>=0;}),'modelo');
@@ -444,13 +444,18 @@ function rInventario(){
   }
   var tot=0,enTiendas=0,enTaller=0,byLoc={};
   invRows.forEach(function(r){
-    if(r.qty<=0)return;
     tot+=r.qty;
     if(r.ubicacion==='TALLER')enTaller+=r.qty;else enTiendas+=r.qty;
     if(!byLoc[r.ubicacion])byLoc[r.ubicacion]={total:0,colors:{}};
-    byLoc[r.ubicacion].total+=r.qty;
     if(!byLoc[r.ubicacion].colors[r.color])byLoc[r.ubicacion].colors[r.color]={};
     byLoc[r.ubicacion].colors[r.color][r.talla]=(byLoc[r.ubicacion].colors[r.color][r.talla]||0)+r.qty;
+  });
+  Object.keys(byLoc).forEach(function(loc){
+    var ld=byLoc[loc],lt=0;
+    Object.keys(ld.colors).forEach(function(col){
+      Object.keys(ld.colors[col]).forEach(function(t){lt+=(ld.colors[col][t]||0);});
+    });
+    ld.total=lt;
   });
   document.getElementById('invSummary').innerHTML=
     '<div class="inv-sum-card"><div class="num">'+tot.toLocaleString()+'</div><div class="lbl">Stock Total</div></div>'+

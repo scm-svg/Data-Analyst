@@ -73,6 +73,21 @@ html = re.sub(
     flags=re.DOTALL,
 )
 
+# Inventario: totales netos (incluye negativos), celdas solo muestran positivos
+html = html.replace(
+    "  invRows.forEach(function(r){\n    if(r.qty<=0)return;\n    tot+=r.qty;",
+    "  invRows.forEach(function(r){\n    tot+=r.qty;",
+)
+html = html.replace(
+    "    byLoc[r.ubicacion].total+=r.qty;\n    if(!byLoc[r.ubicacion].colors[r.color])",
+    "    if(!byLoc[r.ubicacion].colors[r.color])",
+)
+html = html.replace(
+    "    byLoc[r.ubicacion].colors[r.color][r.talla]=(byLoc[r.ubicacion].colors[r.color][r.talla]||0)+r.qty;\n  });\n  document.getElementById('invSummary')",
+    "    byLoc[r.ubicacion].colors[r.color][r.talla]=(byLoc[r.ubicacion].colors[r.color][r.talla]||0)+r.qty;\n  });\n  Object.keys(byLoc).forEach(function(loc){\n    var ld=byLoc[loc],lt=0;\n    Object.keys(ld.colors).forEach(function(col){\n      Object.keys(ld.colors[col]).forEach(function(t){lt+=(ld.colors[col][t]||0);});\n    });\n    ld.total=lt;\n  });\n  document.getElementById('invSummary')",
+)
+html = html.replace('<div class="kl">Stock PT</div>', '<div class="kl">Stock Total</div>')
+
 with open(DST, 'w', encoding='utf-8') as f:
     f.write(html)
 
