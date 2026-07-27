@@ -29,7 +29,13 @@ Todas las filas usan **`TH/Posproducción`**.
 cd /workspace/scripts && python3 build_odoo_ajuste_plantilla.py
 ```
 
-Resolución de `product_id`:
+## SHORT SPORT R1 (Quants 6)
+
+Los SKU **`SHOSPBFCA*` / `SHOSPBFDA*`** del catálogo global **no existen en Odoo**.  
+Para líneas **R1** se usan solo **`SHUNTCA*` / `SHUNTDA*`** del export **Quants (6)**.
+
+Hoja **`R1 SKU corregidos Q6`**: reemplazos aplicados.  
+Hoja **`R1 sin match Quants 6`**: combinaciones sin SKU en Odoo (no se inventan).
 
 1. **Quants (stock.quant) (5).xlsx** — maestro Odoo (~3 400 SKU), formato con paréntesis `(color/talla, …)`
 2. Quants (1)–(4), catálogo global, R2, MLMMJ, etc.

@@ -7,6 +7,12 @@ from pathlib import Path
 
 import pandas as pd
 
+from r1_quants6 import (
+    INVALID_R1_SKU_PREFIXES,
+    is_invalid_r1_catalog_sku,
+    load_r1_quants6,
+    resolve_r1_sku,
+)
 from sku_catalog import load_product_id_map, load_quants_product_id_map, norm_sku, resolve_product_id
 
 DATA_PATH = Path(
@@ -19,8 +25,9 @@ LOCATION = "TH/Posproducción"
 COLS = ["product_id", "inventory_quantity", "location_id"]
 
 
-def load_sources() -> list[pd.DataFrame]:
+def load_sources(r1_skus: set[str], r1_index: dict, r1_pid: dict[str, str]) -> tuple[list[pd.DataFrame], pd.DataFrame]:
     chunks: list[pd.DataFrame] = []
+    r1_unresolved_parts: list[pd.DataFrame] = []
 
     nm = pd.read_excel(DATA_PATH, sheet_name="SKU No Migrados")
     nm = nm.rename(
@@ -43,19 +50,65 @@ def load_sources() -> list[pd.DataFrame]:
 
     lista = pd.read_excel(DATA_PATH, sheet_name="LISTA POR AJUSTE produccion ", header=2)
     lista = lista[lista["SKU"].notna()].copy()
-    lista["source"] = "LISTA POR AJUSTE"
-    lista["SKU"] = lista["SKU"].map(norm_sku)
-    lista = lista.rename(columns={"Cantidad": "qty", "PRODUCTO CATALOGO": "fallback_name"})
-    lista["product_id"] = None
+    remapped_rows: list[dict] = []
+    for _, row in lista.iterrows():
+        new_sku, r1_pid_row = resolve_r1_sku(
+            row["SKU"],
+            tipo_producto=row.get("Tipo de Producto"),
+            talla=row.get("Talla"),
+            color=row.get("color"),
+            fallback_name=row.get("PRODUCTO CATALOGO"),
+            r1_skus=r1_skus,
+            r1_index=r1_index,
+        )
+        remapped_rows.append(
+            {
+                "source": "LISTA POR AJUSTE",
+                "SKU": new_sku,
+                "qty": row["Cantidad"],
+                "fallback_name": row.get("PRODUCTO CATALOGO"),
+                "product_id": r1_pid_row or (r1_pid.get(new_sku) if new_sku in r1_pid else None),
+                "sku_remap_from": norm_sku(row["SKU"]) if new_sku != norm_sku(row["SKU"]) else None,
+                "r1_unresolved": is_invalid_r1_catalog_sku(row["SKU"])
+                and new_sku == norm_sku(row["SKU"]),
+                "Tipo de Producto": row.get("Tipo de Producto"),
+                "Talla": row.get("Talla"),
+                "color": row.get("color"),
+                "SKU_original": norm_sku(row["SKU"]),
+            }
+        )
+    lista = pd.DataFrame(remapped_rows)
+    bad = lista[lista["r1_unresolved"]].copy()
+    if len(bad):
+        r1_unresolved_parts.append(
+            bad[
+                [
+                    "SKU_original",
+                    "Tipo de Producto",
+                    "Talla",
+                    "color",
+                    "fallback_name",
+                    "qty",
+                ]
+            ].rename(columns={"SKU_original": "SKU", "qty": "Cantidad"})
+        )
+    lista = lista[~lista["r1_unresolved"]].drop(
+        columns=["r1_unresolved", "Tipo de Producto", "Talla", "color", "SKU_original"],
+        errors="ignore",
+    )
     lista = (
         lista.groupby("SKU", as_index=False)
-        .agg(qty=("qty", "sum"), fallback_name=("fallback_name", "first"))
+        .agg(
+            qty=("qty", "sum"),
+            fallback_name=("fallback_name", "first"),
+            product_id=("product_id", "first"),
+            sku_remap_from=("sku_remap_from", "first"),
+        )
+        .assign(source="LISTA POR AJUSTE")
     )
-    lista["source"] = "LISTA POR AJUSTE"
-    lista["product_id"] = None
-    chunks.append(lista[["source", "SKU", "product_id", "qty", "fallback_name"]])
+    chunks.append(lista)
 
-    return chunks
+    return chunks, pd.concat(r1_unresolved_parts, ignore_index=True) if r1_unresolved_parts else pd.DataFrame()
 
 
 def enrich_product_ids(
@@ -64,12 +117,13 @@ def enrich_product_ids(
     rows = []
     for _, r in df.iterrows():
         sku = norm_sku(r["SKU"])
-        if sku in quants_pid:
+        preset = r.get("product_id")
+        if pd.notna(preset) and str(preset).startswith("["):
+            pid = str(preset).strip()
+            method = "r1_quants6" if r.get("sku_remap_from") else "provided"
+        elif sku in quants_pid:
             pid = quants_pid[sku]
             method = "quants_master"
-        elif pd.notna(r.get("product_id")) and str(r["product_id"]).startswith("["):
-            pid = str(r["product_id"]).strip()
-            method = "provided"
         else:
             fb = r.get("fallback_name") if "fallback_name" in r.index else None
             fb = None if pd.isna(fb) else str(fb)
@@ -88,6 +142,7 @@ def to_plantilla(df: pd.DataFrame) -> pd.DataFrame:
 
 METHOD_PRIORITY = {
     "quants_master": 0,
+    "r1_quants6": 0,
     "provided": 1,
     "map": 2,
     "lookup_odoo": 3,
@@ -99,7 +154,6 @@ METHOD_PRIORITY = {
 
 
 def canonical_product_ids(enriched: pd.DataFrame) -> pd.Series:
-    """One product_id per SKU; prefer No Migrados / provided Odoo labels."""
     tmp = enriched[enriched["product_id"].notna()].copy()
     tmp["_pri"] = tmp["product_id_method"].map(lambda m: METHOD_PRIORITY.get(str(m), 50))
     tmp = tmp.sort_values(["SKU", "_pri"])
@@ -116,17 +170,33 @@ def aggregate_consolidado(enriched: pd.DataFrame) -> pd.DataFrame:
     return qty[COLS]
 
 
+def validate_no_invented_r1(consolidado: pd.DataFrame) -> pd.DataFrame:
+    import re
+
+    bad = []
+    for _, r in consolidado.iterrows():
+        m = re.match(r"^\[([^\]]+)\]", str(r["product_id"]))
+        sku = m.group(1).upper() if m else ""
+        if is_invalid_r1_catalog_sku(sku):
+            bad.append(r)
+    return pd.DataFrame(bad)
+
+
 def main() -> None:
+    r1_skus, r1_index, r1_pid = load_r1_quants6()
     pid_map = load_product_id_map()
     quants_pid = load_quants_product_id_map()
-    chunks = load_sources()
+    _, _, r1_pid_only = load_r1_quants6()
+    quants_pid.update(r1_pid_only)
+
+    chunks, r1_unresolved = load_sources(r1_skus, r1_index, r1_pid)
 
     detail_frames: list[pd.DataFrame] = []
     for raw in chunks:
         enriched = enrich_product_ids(raw, pid_map, quants_pid)
         plantilla = to_plantilla(enriched)
         plantilla["source"] = raw["source"].iloc[0]
-        detail_frames.append(plantilla.assign(_sku=raw["SKU"].values))
+        detail_frames.append(plantilla)
 
     all_enriched = pd.concat(
         [enrich_product_ids(c, pid_map, quants_pid) for c in chunks], ignore_index=True
@@ -135,6 +205,13 @@ def main() -> None:
     all_enriched = all_enriched.rename(columns={"qty": "inventory_quantity"})
 
     consolidado = aggregate_consolidado(all_enriched)
+    invalid_r1 = validate_no_invented_r1(consolidado)
+
+    remaps = pd.DataFrame()
+    if "sku_remap_from" in all_enriched.columns:
+        remaps = all_enriched[all_enriched["sku_remap_from"].notna()][
+            ["source", "sku_remap_from", "SKU", "product_id", "inventory_quantity"]
+        ].drop_duplicates(subset=["sku_remap_from", "SKU"])
 
     pendientes = all_enriched[all_enriched["product_id"].isna()][
         ["source", "SKU", "inventory_quantity", "fallback_name", "product_id_method"]
@@ -146,7 +223,6 @@ def main() -> None:
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(OUT_PATH, engine="openpyxl") as writer:
-        # Main import sheet (like Plantilla Completa)
         consolidado.to_excel(writer, sheet_name="Carga Posproducción", index=False, startrow=0)
 
         for frame, name in zip(
@@ -159,21 +235,26 @@ def main() -> None:
             ["source", "SKU", "product_id", "inventory_quantity", "location_id", "product_id_method"]
         ].to_excel(writer, sheet_name="Trazabilidad", index=False)
 
-        if len(pendientes):
-            pendientes.to_excel(writer, sheet_name="PENDIENTES product_id", index=False)
-
+        if len(remaps):
+            remaps.to_excel(writer, sheet_name="R1 SKU corregidos Q6", index=False)
         if len(pendientes):
             pendientes.to_excel(writer, sheet_name="PENDIENTES product_id", index=False)
         if len(sin_q5):
             sin_q5.to_excel(writer, sheet_name="Sin referencia Quants 5", index=False)
+        if len(invalid_r1):
+            invalid_r1.to_excel(writer, sheet_name="ERROR SKU R1 invalidos", index=False)
+        if len(r1_unresolved):
+            r1_unresolved.to_excel(writer, sheet_name="R1 sin match Quants 6", index=False)
 
     print(f"Output: {OUT_PATH}")
     print(f"Consolidado filas (unique SKU): {len(consolidado)}")
     print(f"Total qty consolidado: {consolidado['inventory_quantity'].sum()}")
+    print(f"R1 remaps: {len(remaps)}")
+    print(f"Invalid R1 catalog SKUs remaining: {len(invalid_r1)}")
+    print(f"R1 sin match Quants 6: {len(r1_unresolved)}")
     print(f"Pendientes product_id: {len(pendientes)}")
-    print(f"SKUs sin Quants master: {sin_q5['SKU'].nunique() if len(sin_q5) else 0}")
-    for i, frame in enumerate(detail_frames):
-        print(f"  {frame['source'].iloc[0]}: {len(frame)} filas")
+    if len(invalid_r1):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

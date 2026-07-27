@@ -110,7 +110,7 @@ def product_candidates(raw_product: str, genero: str, color: str) -> list[str]:
         "CLASICA SPORT": ["CLASICA SPORT LISO", "CLASICA SPORT MESH"],
         "MOTION LOOP CLASICA": ["MOTION CLASICA"],
         "DAILY 3.0": ["DAILY CLASICA 3.0"],
-        "R1": ["SHORT SPORT R1 CAB" if g == "CAB" else "SHORT SPORT R1 DAMA", "SHORT SPORT R1", "SHORT SPORT R1 "],
+        "R1": [],  # resolved via r1_quants6 in match_row, not catalog SHOSPBFCA*
         "CROP TEE BASIC LINE": ["BASIC LINE CROP TEE"],
         "BASIC LINE CROP": ["BASIC LINE CROP TEE", "BASIC LINE CROP TEE TEENS"],
         "BASIC LINE OVERSIZED": [
@@ -224,6 +224,20 @@ def match_row(
             return sku, prod, st
         if st == "urban_cotton_not_found":
             return None, None, st
+
+    if norm(product_raw) == "R1":
+        from r1_quants6 import infer_r1_genero, load_r1_quants6, norm_color_r1, norm_talla_r1
+
+        r1_skus, r1_index, _r1_pid = load_r1_quants6()
+        gen = infer_r1_genero(f"SHORT SPORT R1 {'CAB' if genero == 'CAB' else 'DAMA'}", "")
+        if not gen:
+            gen = "CAB" if genero == "CAB" else "DAMA"
+        key = (gen, norm_color_r1(row["color"]), norm_talla_r1(row["Talla"]))
+        hit = r1_index.get(key)
+        if hit:
+            sku_key, _pid = hit
+            return sku_key, "SHORT SPORT R1", "ok_r1_quants6"
+        return None, "SHORT SPORT R1", "r1_not_in_quants6"
 
     candidates = product_candidates(str(product_raw), str(row["GENERO"]), str(row["color"]))
     candidate_norms = [norm(c) for c in candidates]
