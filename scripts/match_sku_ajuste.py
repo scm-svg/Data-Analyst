@@ -335,11 +335,10 @@ def main() -> None:
     print(f"Matched OK: {ok}")
     print(f"Unmatched: {len(valid) - ok}")
     print("\nUnmatched breakdown:")
-    print(valid[valid["MATCH_STATUS"] != "ok"].groupby("MATCH_STATUS").size().to_string())
+    pending = valid[~valid["MATCH_STATUS"].isin(["ok", "ok_urban_cotton"])]
+    print(pending.groupby("MATCH_STATUS").size().to_string())
     print("\nSample unmatched:")
-    bad = valid[valid["MATCH_STATUS"] != "ok"][
-        ["Tipo de Producto", "Talla", "GENERO", "color", "MATCH_STATUS"]
-    ]
+    bad = pending[["Tipo de Producto", "Talla", "GENERO", "color", "MATCH_STATUS"]]
     print(bad.head(25).to_string())
 
 
