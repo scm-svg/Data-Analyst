@@ -29,4 +29,9 @@ Todas las filas usan **`TH/Posproducción`**.
 cd /workspace/scripts && python3 build_odoo_ajuste_plantilla.py
 ```
 
-Resolución de `product_id`: catálogo global (DESCRIPCIÓN), Quants Odoo, R2, MLMMJ, etc. (`sku_catalog.py`).
+Resolución de `product_id`:
+
+1. **Quants (stock.quant) (5).xlsx** — maestro Odoo (~3 400 SKU), formato con paréntesis `(color/talla, …)`
+2. Quants (1)–(4), catálogo global, R2, MLMMJ, etc.
+
+La hoja **`Sin referencia Quants 5`** lista los SKU que no aparecen en el maestro (18); conservan etiqueta de catálogo / No Migrados.

@@ -32,6 +32,10 @@ QUANTS_PATHS = (
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
         "Quants__stock.quant___4__e718.xlsx"
     ),
+    Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Quants__stock.quant___5__c990.xlsx"
+    ),
 )
 
 # Odoo labels confirmed outside quant exports (or not yet in a file).
@@ -145,6 +149,29 @@ def load_quants_index() -> pd.DataFrame:
     idx = pd.DataFrame(rows)
     # Later quant files win on duplicate SKU (more recent export).
     return idx.drop_duplicates(subset=["SKU"], keep="last").reset_index(drop=True)
+
+
+def load_quants_product_id_map() -> dict[str, str]:
+    """Full Odoo `[SKU] Name (variant)` labels from all quant exports (5 wins on dupes)."""
+    rows: list[tuple[str, str]] = []
+    for path in QUANTS_PATHS:
+        if not path.exists():
+            continue
+        df = pd.read_excel(path, sheet_name=0)
+        col = "Producto" if "Producto" in df.columns else None
+        if not col:
+            continue
+        for val in df[col].dropna():
+            s = str(val).strip()
+            if not s.startswith("["):
+                continue
+            sku, _ = parse_odoo_product_label(s)
+            if sku:
+                rows.append((sku, s))
+    out: dict[str, str] = {}
+    for sku, pid in rows:
+        out[sku] = pid
+    return out
 
 
 def load_sku_index() -> pd.DataFrame:
@@ -277,6 +304,7 @@ def load_product_id_map() -> dict[str, str]:
     for sku, display in ODOO_KNOWN_LABELS.items():
         out[sku] = f"[{sku}] {display}"
 
+    out.update(load_quants_product_id_map())
     return out
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from sku_catalog import load_product_id_map, norm_sku, resolve_product_id
+from sku_catalog import load_product_id_map, load_quants_product_id_map, norm_sku, resolve_product_id
 
 DATA_PATH = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/"
@@ -58,16 +58,22 @@ def load_sources() -> list[pd.DataFrame]:
     return chunks
 
 
-def enrich_product_ids(df: pd.DataFrame, pid_map: dict[str, str]) -> pd.DataFrame:
+def enrich_product_ids(
+    df: pd.DataFrame, pid_map: dict[str, str], quants_pid: dict[str, str]
+) -> pd.DataFrame:
     rows = []
     for _, r in df.iterrows():
-        if pd.notna(r.get("product_id")) and str(r["product_id"]).startswith("["):
+        sku = norm_sku(r["SKU"])
+        if sku in quants_pid:
+            pid = quants_pid[sku]
+            method = "quants_master"
+        elif pd.notna(r.get("product_id")) and str(r["product_id"]).startswith("["):
             pid = str(r["product_id"]).strip()
             method = "provided"
         else:
             fb = r.get("fallback_name") if "fallback_name" in r.index else None
             fb = None if pd.isna(fb) else str(fb)
-            pid, method = resolve_product_id(r["SKU"], pid_map, fb)
+            pid, method = resolve_product_id(sku, pid_map, fb)
         rows.append({**r.to_dict(), "product_id": pid, "product_id_method": method})
     return pd.DataFrame(rows)
 
@@ -81,11 +87,12 @@ def to_plantilla(df: pd.DataFrame) -> pd.DataFrame:
 
 
 METHOD_PRIORITY = {
-    "provided": 0,
-    "map": 1,
-    "lookup_odoo": 2,
-    "desc:MANUFACTURADO": 3,
-    "desc:CLASFSKUSYSGRIETA": 4,
+    "quants_master": 0,
+    "provided": 1,
+    "map": 2,
+    "lookup_odoo": 3,
+    "desc:MANUFACTURADO": 4,
+    "desc:CLASFSKUSYSGRIETA": 5,
     "fallback_name": 9,
     "not_found": 99,
 }
@@ -111,17 +118,18 @@ def aggregate_consolidado(enriched: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     pid_map = load_product_id_map()
+    quants_pid = load_quants_product_id_map()
     chunks = load_sources()
 
     detail_frames: list[pd.DataFrame] = []
     for raw in chunks:
-        enriched = enrich_product_ids(raw, pid_map)
+        enriched = enrich_product_ids(raw, pid_map, quants_pid)
         plantilla = to_plantilla(enriched)
         plantilla["source"] = raw["source"].iloc[0]
         detail_frames.append(plantilla.assign(_sku=raw["SKU"].values))
 
     all_enriched = pd.concat(
-        [enrich_product_ids(c, pid_map) for c in chunks], ignore_index=True
+        [enrich_product_ids(c, pid_map, quants_pid) for c in chunks], ignore_index=True
     )
     all_enriched["location_id"] = LOCATION
     all_enriched = all_enriched.rename(columns={"qty": "inventory_quantity"})
@@ -131,6 +139,10 @@ def main() -> None:
     pendientes = all_enriched[all_enriched["product_id"].isna()][
         ["source", "SKU", "inventory_quantity", "fallback_name", "product_id_method"]
     ]
+
+    sin_q5 = all_enriched[~all_enriched["SKU"].isin(quants_pid.keys())][
+        ["source", "SKU", "product_id", "inventory_quantity", "product_id_method"]
+    ].drop_duplicates(subset=["SKU"])
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(OUT_PATH, engine="openpyxl") as writer:
@@ -150,10 +162,16 @@ def main() -> None:
         if len(pendientes):
             pendientes.to_excel(writer, sheet_name="PENDIENTES product_id", index=False)
 
+        if len(pendientes):
+            pendientes.to_excel(writer, sheet_name="PENDIENTES product_id", index=False)
+        if len(sin_q5):
+            sin_q5.to_excel(writer, sheet_name="Sin referencia Quants 5", index=False)
+
     print(f"Output: {OUT_PATH}")
     print(f"Consolidado filas (unique SKU): {len(consolidado)}")
     print(f"Total qty consolidado: {consolidado['inventory_quantity'].sum()}")
     print(f"Pendientes product_id: {len(pendientes)}")
+    print(f"SKUs sin Quants master: {sin_q5['SKU'].nunique() if len(sin_q5) else 0}")
     for i, frame in enumerate(detail_frames):
         print(f"  {frame['source'].iloc[0]}: {len(frame)} filas")
 
