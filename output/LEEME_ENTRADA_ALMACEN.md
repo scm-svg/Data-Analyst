@@ -2,41 +2,31 @@
 
 Archivo generado: **`SKU_ENTRADA_ALMACEN_completado.xlsx`**
 
-## Entrada
+## Fuentes (orden de prioridad)
 
-`SKU POR ARREGLAR ENTRADA ALMACEN.xlsx` — 193 filas con **SKU** y **CANT**, columna **PRODUCTO** vacía.
+1. **Quants Odoo** — `Quants (stock.quant) (1).xlsx` y `(2).xlsx` (export `stock.quant`)
+2. **Patrón R2** — SKU `SSR2VIU…` / `SRR2VIU…` sin quant (inferencia por código de color/talla)
+3. **Cuadro global** — MANUFACTURADO y hojas relacionadas
+4. **Urban Cotton ACTX1** — si aplica
 
-## Fuentes
+## Corrección importante (R2)
 
-- Cuadro global (`Coopia de Cuadro - SKU Productos (Global).xlsx`): hojas MANUFACTURADO, CLASFSKUSYSGRIETA, EQUIPAMIENTO, etc.
-- Urban Cotton ACTX1 (por si aplica; esta lista no traía SKUs `TALG…`)
+Los SKU `SSR2VIU…` y `SRR2VIU…` **no** son Serenity (`SERVIDA…`) del cuadro global. En Odoo son:
 
-## Resultado
+| Prefijo SKU | Producto (columna PRODUCTO) | Ejemplo en Quants |
+|-------------|----------------------------|-------------------|
+| `SSR2VIU…` | **R2 SPORT 5"** | `[SSR2VIU43TL] R2 SPORT 5" (Negro, L)` |
+| `SRR2VIU…` | **R2 RUNNING 3,5"** | `[SRR2VIU13TS] R2 RUNNING 3,5" (Azul Rey, S)` |
 
-| Estado | Filas |
-|--------|------:|
-| `ok` — SKU exacto en catálogo | 175 |
-| `ok_sku_corregido` — SKU con alias/typo | 18 |
-| **Total con PRODUCTO** | **193** |
+La hoja **`R2 VALIDADO QUANTS`** lista esas filas con `PRODUCTO_ODOO` (texto completo de Odoo).
 
-## Hojas del Excel
+SKUs R2 vistos en Quants pero no en catálogo global: **13** referencias (Sport + Running Azul Rey).
 
-1. **ENTRADA LIMPIA** — solo `SKU`, `PRODUCTO`, `CANT` (lista para cargar)
-2. **Hoja1** — incluye `SKU_CATALOGO`, `FUENTE`, `ESTADO` (auditoría)
-3. **PENDIENTES** — solo si queda algo sin match (vacía en esta corrida)
+SKUs R2 solo inferidos (no aparecen en los 2 Quants): `SRR2VIU123…`, `SRR2VIU43…` — mismo lineamiento Running + color/talla del código SKU.
 
-## SKUs corregidos (18)
+`MLMMJDA66TS` → **MILA** vía alias de catálogo (`MILMIDA66TS`); no está en los Quants exportados.
 
-Patrones detectados en entrada de almacén:
-
-| Patrón en archivo | SKU catálogo | Producto |
-|-------------------|--------------|----------|
-| `SSR2VIU…` / `SRR2VIU…` | `SERVIDA…` | SUMMER COOL 2.0 SERENITY |
-| `…123T…` (color azul marino mal digitado) | `…12T…` | SUMMER COOL 2.0 SERENITY |
-| `SRR2VIU13T…` (truncó `123`) | `SERVIDA12T…` | SUMMER COOL 2.0 SERENITY |
-| `MLMMJDA…` | `MILMIDA…` | MILA |
-
-Regenerar:
+## Regenerar
 
 ```bash
 cd /workspace/scripts && python3 fill_entrada_almacen.py

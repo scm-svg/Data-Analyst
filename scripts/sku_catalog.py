@@ -15,8 +15,17 @@ CATALOG_PATH = Path(
 URBAN_COTTON_PATH = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/urban_cotton_ACTX1_923d.xlsx"
 )
+QUANTS_PATHS = (
+    Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Quants__stock.quant___1__5059.xlsx"
+    ),
+    Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Quants__stock.quant___2__3ab0.xlsx"
+    ),
+)
 
-# Sheets with product/SKU rows in the global workbook.
 CATALOG_SKU_SHEETS = (
     "MANUFACTURADO",
     "CLASFSKUSYSGRIETA",
@@ -26,6 +35,14 @@ CATALOG_SKU_SHEETS = (
     "MATERIA PRIMA",
 )
 
+R2_COLOR_CODES = {
+    "43": "Negro",
+    "66": "Verde Militar",
+    "70": "Vinotinto",
+    "12": "Azul Marino",
+    "13": "Azul Rey",
+}
+
 
 def norm_sku(text) -> str:
     if pd.isna(text):
@@ -33,39 +50,53 @@ def norm_sku(text) -> str:
     return str(text).strip().upper().replace(" ", "")
 
 
-def normalize_sku_for_lookup(raw_sku: str) -> list[tuple[str, str]]:
-    """Return candidate catalog SKUs to try, with reason tags."""
+def parse_odoo_product_label(text: str) -> tuple[str | None, str | None]:
+    """Parse `[SKU] Product description` from Odoo quant export."""
+    if pd.isna(text):
+        return None, None
+    s = str(text).strip()
+    m = re.match(r"^\[([^\]]+)\]\s*(.*)$", s)
+    if not m:
+        return None, s
+    return norm_sku(m.group(1)), m.group(2).strip()
+
+
+def odoo_label_to_producto(display: str) -> str:
+    """Catalog-style name: line without color/size variant."""
+    base = display.split("(", 1)[0].strip()
+    return re.sub(r"\s+", " ", base)
+
+
+def decode_r2_from_sku(raw_sku: str) -> tuple[str | None, str | None]:
+    """Infer R2 product from SSR2VIU / SRR2VIU SKU when absent from quants."""
+    s = norm_sku(raw_sku)
+    m = re.match(r"^(SSR2VIU|SRR2VIU)(\d+)(T(.+))$", s)
+    if not m:
+        return None, None
+    prefix, color_code, _, size = m.group(1), m.group(2), m.group(3), m.group(4)
+    if color_code == "123":
+        color_code = "12"
+    color = R2_COLOR_CODES.get(color_code)
+    if not color:
+        return None, None
+    if prefix.startswith("SSR"):
+        display = f'R2 SPORT  5" ({color}, {size})'
+    else:
+        display = f'R2 RUNNING 3,5" ({color}, {size})'
+    return odoo_label_to_producto(display), display
+
+
+def normalize_sku_for_catalog(raw_sku: str) -> list[tuple[str, str]]:
+    """Catalog-only fallbacks (not R2 / Odoo)."""
     s = norm_sku(raw_sku)
     if not s:
         return []
 
     candidates: list[tuple[str, str]] = [(s, "exact")]
 
-    fixed = s
-    if "SSR2VIU" in fixed or "SRR2VIU" in fixed:
-        fixed = fixed.replace("SSR2VIU", "SERVIDA").replace("SRR2VIU", "SERVIDA")
-        candidates.append((fixed, "alias_servida"))
+    if s.startswith("MLMMJDA"):
+        candidates.append((s.replace("MLMMJDA", "MILMIDA", 1), "alias_mila"))
 
-    if fixed.startswith("MLMMJDA"):
-        fixed2 = fixed.replace("MLMMJDA", "MILMIDA", 1)
-        candidates.append((fixed2, "alias_mila"))
-
-    if "123T" in fixed:
-        candidates.append((fixed.replace("123T", "12T", 1), "color_123_to_12"))
-
-    # Entrada almacén truncó "123" como "13" en Serenity (p. ej. SRR2VIU13TS).
-    m = re.match(r"^(SERVIDA)13(T.+)$", fixed)
-    if m:
-        candidates.append((f"{m.group(1)}12{m.group(2)}", "color_13_to_12"))
-
-    m2 = re.match(r"^(SRR2VIU|SSR2VIU)13(T.+)$", s)
-    if m2:
-        expanded = s.replace("13T", "123T", 1)
-        for c, reason in normalize_sku_for_lookup(expanded):
-            if c not in {x[0] for x in candidates}:
-                candidates.append((c, f"expand_13_to_123:{reason}"))
-
-    # De-dupe preserving order
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
     for c, reason in candidates:
@@ -73,6 +104,37 @@ def normalize_sku_for_lookup(raw_sku: str) -> list[tuple[str, str]]:
             seen.add(c)
             out.append((c, reason))
     return out
+
+
+def load_quants_index() -> pd.DataFrame:
+    rows: list[dict] = []
+    for path in QUANTS_PATHS:
+        if not path.exists():
+            continue
+        df = pd.read_excel(path, sheet_name=0)
+        col = "Producto" if "Producto" in df.columns else None
+        if not col:
+            continue
+        for _, r in df.iterrows():
+            sku, display = parse_odoo_product_label(r.get(col))
+            if not sku or not display:
+                continue
+            rows.append(
+                {
+                    "SKU": sku,
+                    "PRODUCTO": odoo_label_to_producto(display),
+                    "PRODUCTO_ODOO": display,
+                    "FUENTE": f"quants:{path.name}",
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["SKU", "PRODUCTO", "PRODUCTO_ODOO", "FUENTE"]
+        )
+
+    idx = pd.DataFrame(rows)
+    return idx.drop_duplicates(subset=["SKU"], keep="first").reset_index(drop=True)
 
 
 def load_sku_index() -> pd.DataFrame:
@@ -118,7 +180,6 @@ def load_sku_index() -> pd.DataFrame:
         return pd.DataFrame(columns=["SKU", "PRODUCTO", "FUENTE"])
 
     idx = pd.DataFrame(rows)
-    # Prefer MANUFACTURADO / CLASFSKUSYSGRIETA over duplicates in other sheets.
     priority = {
         "global:MANUFACTURADO": 0,
         "global:CLASFSKUSYSGRIETA": 1,
@@ -136,12 +197,42 @@ def load_sku_index() -> pd.DataFrame:
     return idx.drop(columns=["_pri"]).reset_index(drop=True)
 
 
-def lookup_product(raw_sku: str, index: pd.DataFrame) -> tuple[str | None, str | None, str | None]:
-    sku_map = dict(zip(index["SKU"], index["PRODUCTO"]))
-    fuente_map = dict(zip(index["SKU"], index["FUENTE"]))
+def lookup_product(
+    raw_sku: str,
+    catalog_index: pd.DataFrame,
+    quants_index: pd.DataFrame | None = None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """
+    Returns: producto, sku_used, reason, producto_odoo (full Odoo label if known)
+    """
+    sku = norm_sku(raw_sku)
+    if not sku:
+        return None, None, "not_found", None
 
-    for candidate, reason in normalize_sku_for_lookup(raw_sku):
+    if quants_index is not None and not quants_index.empty:
+        hit = quants_index[quants_index["SKU"] == sku]
+        if not hit.empty:
+            row = hit.iloc[0]
+            return (
+                row["PRODUCTO"],
+                sku,
+                "ok_quants_odoo",
+                row.get("PRODUCTO_ODOO"),
+            )
+
+    if sku.startswith("SSR2VIU") or sku.startswith("SRR2VIU"):
+        prod, display = decode_r2_from_sku(sku)
+        if prod:
+            return prod, sku, "ok_r2_inferred", display
+
+    sku_map = dict(zip(catalog_index["SKU"], catalog_index["PRODUCTO"]))
+    fuente_map = dict(zip(catalog_index["SKU"], catalog_index["FUENTE"]))
+
+    for candidate, reason in normalize_sku_for_catalog(raw_sku):
         prod = sku_map.get(candidate)
         if prod:
-            return prod, candidate, reason
-    return None, None, "not_found"
+            fuente = fuente_map.get(candidate, "catalog")
+            tag = "ok" if reason == "exact" and candidate == sku else f"ok_catalog:{reason}"
+            return prod, candidate, tag, None
+
+    return None, None, "not_found", None
