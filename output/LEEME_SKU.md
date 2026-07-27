@@ -17,12 +17,19 @@ Columnas nuevas en la hoja principal:
 | **PRODUCTO CATALOGO** | Nombre del producto en MANUFACTURADO |
 | **MATCH_STATUS** | `ok` si hubo match; otro valor si falta revisión |
 
-Hoja **PENDIENTES REVISION**: solo filas sin SKU (9 de 244).
+Hoja **PENDIENTES REVISION**: solo filas sin SKU (2 de 244).
 
-## Pendientes (9 filas)
+## Pendientes (2 filas)
 
-1. **URBAN COTTON** (7 filas, AZUL MARINO): no existe producto terminado con ese nombre en MANUFACTURADO; en el cuadro global solo aparece materia prima `COSTURA URBAN COTTON`. Hace falta el nombre exacto del producto en catálogo o alta del SKU.
-2. **SHORT SPORT** talla **16** KIDS (2 filas): en catálogo las tallas KIDS van hasta **14**; no hay SKU para talla 16.
+1. **SHORT SPORT** talla **16** KIDS (2 filas): en catálogo las tallas KIDS van hasta **14**; no hay SKU para talla 16.
+
+## Urban Cotton
+
+Las filas **URBAN COTTON** se resolvieron con la base **`urban_cotton_ACTX1.xlsx`** (hoja `BASE DATOS URBAN COTTON`), eligiendo el SKU más frecuente por género + talla + color cuando hay varias referencias (p. ej. CAB / AZUL MARINO → `URBAN COTTON OVERSIZED OUTSIDE`; DAMA / AZUL MARINO → `URBAN COTTON TOP SAY YES`). `MATCH_STATUS` = `ok_urban_cotton`.
+
+## Pendientes anteriores (resuelto)
+
+- ~~URBAN COTTON~~ — cubierto con la base ACTX1.
 
 Para regenerar el archivo:
 

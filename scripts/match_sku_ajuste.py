@@ -16,6 +16,9 @@ CATALOG_PATH = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/"
     "Coopia_de_Cuadro_-_SKU_Productos__Global__cfa8.xlsx"
 )
+URBAN_COTTON_PATH = Path(
+    "/home/ubuntu/.cursor/projects/workspace/uploads/urban_cotton_ACTX1_923d.xlsx"
+)
 OUT_PATH = Path("/workspace/output/por_ajuste_sku_con_sku.xlsx")
 
 
@@ -117,7 +120,6 @@ def product_candidates(raw_product: str, genero: str, color: str) -> list[str]:
         "SHORT SUBLIMADO": ["SHORT PLAYA ESTAMPADO"],
         "MIA": ["MIA"],
         "ADVANCE MAFE": ["ADVANCE MAFE"],
-        "URBAN COTTON": ["URBAN COTTON"],
     }
 
     if p in explicit:
@@ -143,6 +145,53 @@ def load_catalog() -> pd.DataFrame:
     return mfg
 
 
+def load_urban_cotton_lookup() -> pd.DataFrame | None:
+    if not URBAN_COTTON_PATH.exists():
+        return None
+    uc = pd.read_excel(URBAN_COTTON_PATH, sheet_name="BASE DATOS URBAN COTTON")
+    uc = uc.dropna(subset=["SKU", "GENERO", "TALLA", "COLOR"])
+    uc = uc.copy()
+    uc["_gen_norm"] = uc["GENERO"].map(norm_genero)
+    uc["_talla_norm"] = uc["TALLA"].map(norm_talla)
+    uc["_color_norm"] = uc["COLOR"].map(norm_color)
+    grouped = (
+        uc.groupby(["_gen_norm", "_talla_norm", "_color_norm", "PRODUCTO", "SKU"], dropna=False)
+        .size()
+        .reset_index(name="_n")
+    )
+    idx = grouped.groupby(["_gen_norm", "_talla_norm", "_color_norm"])["_n"].idxmax()
+    return grouped.loc[idx].reset_index(drop=True)
+
+
+def match_urban_cotton(
+    row, lookup: pd.DataFrame | None
+) -> tuple[str | None, str | None, str]:
+    if lookup is None or norm(row["Tipo de Producto"]) != "URBAN COTTON":
+        return None, None, "product_not_found"
+
+    genero = norm_genero(row["GENERO"])
+    talla = norm_talla(row["Talla"])
+    color_w = norm_color(row["color"])
+
+    hits = lookup[
+        (lookup["_gen_norm"] == genero)
+        & (lookup["_talla_norm"] == talla)
+        & (lookup["_color_norm"] == color_w)
+    ]
+    if hits.empty and len(color_w) >= 4:
+        hits = lookup[
+            (lookup["_gen_norm"] == genero)
+            & (lookup["_talla_norm"] == talla)
+            & (lookup["_color_norm"].str.contains(re.escape(color_w[:4]), na=False))
+        ]
+
+    if hits.empty:
+        return None, None, "urban_cotton_not_found"
+
+    best = hits.iloc[0]
+    return str(best["SKU"]).strip(), str(best["PRODUCTO"]).strip(), "ok_urban_cotton"
+
+
 def resolve_color_wanted(wanted: str, catalog_colors: pd.Series) -> str:
     w = norm_color(wanted)
     uniq = catalog_colors.dropna().unique().tolist()
@@ -156,7 +205,11 @@ def resolve_color_wanted(wanted: str, catalog_colors: pd.Series) -> str:
     return w
 
 
-def match_row(row, catalog: pd.DataFrame) -> tuple[str | None, str | None, str]:
+def match_row(
+    row,
+    catalog: pd.DataFrame,
+    urban_lookup: pd.DataFrame | None = None,
+) -> tuple[str | None, str | None, str]:
     product_raw = row["Tipo de Producto"]
     if pd.isna(product_raw) or norm(product_raw) in ("", "TOTAL GENERAL"):
         return None, None, "empty"
@@ -164,6 +217,13 @@ def match_row(row, catalog: pd.DataFrame) -> tuple[str | None, str | None, str]:
     genero = norm_genero(row["GENERO"])
     talla = norm_talla(row["Talla"])
     color_w = norm_color(row["color"])
+
+    if norm(product_raw) == "URBAN COTTON":
+        sku, prod, st = match_urban_cotton(row, urban_lookup)
+        if sku:
+            return sku, prod, st
+        if st == "urban_cotton_not_found":
+            return None, None, st
 
     candidates = product_candidates(str(product_raw), str(row["GENERO"]), str(row["color"]))
     candidate_norms = [norm(c) for c in candidates]
@@ -219,6 +279,7 @@ def match_row(row, catalog: pd.DataFrame) -> tuple[str | None, str | None, str]:
 def main() -> None:
     raw = pd.read_excel(ADJ_PATH, sheet_name=0, header=None)
     catalog = load_catalog()
+    urban_lookup = load_urban_cotton_lookup()
 
     header_row = 2
     data = raw.iloc[header_row + 1 :].copy()
@@ -229,7 +290,7 @@ def main() -> None:
     status: list[str] = []
 
     for _, row in data.iterrows():
-        sku, prod, st = match_row(row, catalog)
+        sku, prod, st = match_row(row, catalog, urban_lookup)
         skus.append(sku)
         prod_cat.append(prod)
         status.append(st)
@@ -265,10 +326,10 @@ def main() -> None:
         ws = writer.sheets["LISTA POR AJUSTE produccion "]
         ws["A1"] = "REPORTE DE  PIEZAS SIN ORDEN DE PRODUCCION"
 
-        pendientes = valid[valid["MATCH_STATUS"] != "ok"].copy()
+        pendientes = valid[~valid["MATCH_STATUS"].isin(["ok", "ok_urban_cotton"])].copy()
         pendientes.to_excel(writer, sheet_name="PENDIENTES REVISION", index=False)
 
-    ok = (valid["MATCH_STATUS"] == "ok").sum()
+    ok = valid["MATCH_STATUS"].isin(["ok", "ok_urban_cotton"]).sum()
     print(f"Output: {OUT_PATH}")
     print(f"Rows with data: {len(valid)}")
     print(f"Matched OK: {ok}")
