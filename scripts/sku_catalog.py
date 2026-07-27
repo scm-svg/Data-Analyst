@@ -250,3 +250,70 @@ def lookup_product(
             return prod, candidate, tag, None
 
     return None, None, "not_found", None
+
+
+def load_product_id_map() -> dict[str, str]:
+    """SKU → Odoo product_id string `[SKU] Description`."""
+    out: dict[str, str] = {}
+
+    if CATALOG_PATH.exists():
+        for sheet in ("MANUFACTURADO", "CLASFSKUSYSGRIETA", "EQUIPAMIENTO - ROPA"):
+            df = pd.read_excel(CATALOG_PATH, sheet_name=sheet)
+            if "SKU" not in df.columns or "DESCRIPCIÓN" not in df.columns:
+                continue
+            for _, r in df.iterrows():
+                sku = norm_sku(r.get("SKU"))
+                desc = r.get("DESCRIPCIÓN")
+                if sku and pd.notna(desc) and sku not in out:
+                    out[sku] = f"[{sku}] {str(desc).strip()}"
+
+    quants = load_quants_index()
+    for _, r in quants.iterrows():
+        sku = r["SKU"]
+        display = r.get("PRODUCTO_ODOO")
+        if sku and pd.notna(display):
+            out[sku] = f"[{sku}] {str(display).strip()}"
+
+    for sku, display in ODOO_KNOWN_LABELS.items():
+        out[sku] = f"[{sku}] {display}"
+
+    return out
+
+
+def resolve_product_id(
+    raw_sku: str,
+    product_id_map: dict[str, str],
+    fallback_name: str | None = None,
+) -> tuple[str | None, str]:
+    sku = norm_sku(raw_sku)
+    if not sku:
+        return None, "empty_sku"
+
+    if sku in product_id_map:
+        return product_id_map[sku], "map"
+
+    _, _, _, odoo = lookup_product(sku, load_sku_index(), load_quants_index())
+    if odoo:
+        pid = f"[{sku}] {odoo}"
+        product_id_map[sku] = pid
+        return pid, "lookup_odoo"
+
+    if CATALOG_PATH.exists():
+        for sheet in CATALOG_SKU_SHEETS:
+            df = pd.read_excel(CATALOG_PATH, sheet_name=sheet)
+            if "SKU" not in df.columns:
+                continue
+            hit = df[df["SKU"].astype(str).str.upper().str.replace(" ", "", regex=False) == sku]
+            if hit.empty:
+                continue
+            r = hit.iloc[0]
+            if pd.notna(r.get("DESCRIPCIÓN")):
+                pid = f"[{sku}] {str(r['DESCRIPCIÓN']).strip()}"
+                product_id_map[sku] = pid
+                return pid, f"desc:{sheet}"
+
+    if fallback_name:
+        pid = f"[{sku}] {str(fallback_name).strip()}"
+        return pid, "fallback_name"
+
+    return None, "not_found"
