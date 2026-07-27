@@ -50,8 +50,9 @@ def load_sources() -> list[pd.DataFrame]:
     lista = (
         lista.groupby("SKU", as_index=False)
         .agg(qty=("qty", "sum"), fallback_name=("fallback_name", "first"))
-        .assign(source="LISTA POR AJUSTE")
     )
+    lista["source"] = "LISTA POR AJUSTE"
+    lista["product_id"] = None
     chunks.append(lista[["source", "SKU", "product_id", "qty", "fallback_name"]])
 
     return chunks
