@@ -4,7 +4,7 @@ Archivo generado: **`SKU_ENTRADA_ALMACEN_completado.xlsx`**
 
 ## Fuentes (orden de prioridad)
 
-1. **Quants Odoo** — exports `(1)`, `(2)` y **`(3)`** (`stock.quant`)
+1. **Quants Odoo** — exports `(1)` … **`(4)`** (`stock.quant`)
 2. **Etiquetas Odoo confirmadas** — p. ej. `MLMMJDA66TS`
 3. **Patrón R2** — SKU `SSR2VIU…` / `SRR2VIU…` sin quant
 4. **Cuadro global** — MANUFACTURADO y hojas relacionadas
@@ -16,7 +16,11 @@ Archivo generado: **`SKU_ENTRADA_ALMACEN_completado.xlsx`**
 | `SRR2VIU123…` | R2 RUNNING 3,5" **(Verde Manzana, …)** — no azul marino |
 | `SRR2VIU43TS` | R2 RUNNING 3,5" (Negro, S) |
 
-Siguen **inferidos** (negro L/M/XS): `SRR2VIU43TL`, `SRR2VIU43TM`, `SRR2VIU43TXS`.
+## Quants (4) — R2 negro L / M / XS
+
+Confirmados en Odoo: `SRR2VIU43TL`, `SRR2VIU43TM`, `SRR2VIU43TXS` → R2 RUNNING 3,5" (Negro, …).
+
+Todos los SKU fuera de catálogo global quedan **`ok_quants_odoo`** o **`ok_odoo_known`** (MLMMJ); ya no hay `ok_r2_inferred`.
 
 ## MLMMJDA66TS
 
@@ -39,7 +43,7 @@ La hoja **`R2 VALIDADO QUANTS`** lista esas filas con `PRODUCTO_ODOO` (texto com
 
 SKUs R2 vistos en Quants pero no en catálogo global: **13** referencias (Sport + Running Azul Rey).
 
-SKUs R2 solo inferidos (no aparecen en los Quants): `SRR2VIU43TL`, `SRR2VIU43TM`, `SRR2VIU43TXS` — Running negro, talla del código SKU.
+SKUs R2: todos confirmados vía Quants (1)–(4) salvo inferencia obsoleta.
 
 `MLMMJDA66TS` → **MOTION LOOP MAFE DAMA** (etiqueta Odoo confirmada; no MILA).
 

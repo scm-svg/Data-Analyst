@@ -28,6 +28,10 @@ QUANTS_PATHS = (
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
         "Quants__stock.quant___3__7680.xlsx"
     ),
+    Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "Quants__stock.quant___4__e718.xlsx"
+    ),
 )
 
 # Odoo labels confirmed outside quant exports (or not yet in a file).
