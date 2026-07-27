@@ -5,6 +5,12 @@ import re
 import shutil
 
 from build_classicpolo_data import build
+from classicpolo_decisiones_patches import (
+    MAKE_ROW_NEW,
+    MAKE_ROW_OLD,
+    PROD_BLOCK_NEW,
+    PROD_BLOCK_OLD,
+)
 
 SRC = '/home/ubuntu/.cursor/projects/workspace/uploads/index__2__3d1e.html'
 DST = '/workspace/classicpolo.html'
@@ -44,6 +50,26 @@ html = re.sub(
     html,
     count=1,
 )
+
+# Decisiones: VELA duplicada, producción neta vs stock
+html = html.replace(
+    'var storeList=ALL_STORES.concat(NEW_STORES);',
+    "var storeList=[],seen={};"
+    "ALL_STORES.forEach(function(s){if(seen[s])return;if(NEW_STORES.indexOf(s)>=0)return;seen[s]=1;storeList.push(s);});"
+    "NEW_STORES.forEach(function(s){if(!seen[s]){seen[s]=1;storeList.push(s);}});",
+)
+html = html.replace(
+    '<div class="sub">Sugerencia proporcional por color y talla · Clic en color para detalle · Basado en meses completos (excluye el mes en curso)</div>',
+    '<div class="sub">Demanda proporcional menos stock PT · Verde = unidades netas a producir · STK rojo = posible sobrestock en esa talla</div>',
+)
+html = html.replace(
+    '<div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 VELA (1.5× GRIETA) es tienda nueva proyectada</span> · TOLON ya opera con histórico propio</div>',
+    '<div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 VELA: una sola fila con proyección 1.5× GRIETA</span> (ventas recién arrancando) · TOLON con histórico propio</div>',
+)
+if MAKE_ROW_OLD in html:
+    html = html.replace(MAKE_ROW_OLD, MAKE_ROW_NEW)
+if PROD_BLOCK_OLD in html:
+    html = html.replace(PROD_BLOCK_OLD, PROD_BLOCK_NEW)
 
 with open(DST, 'w', encoding='utf-8') as f:
     f.write(html)

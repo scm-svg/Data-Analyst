@@ -187,13 +187,13 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="g2">
     <div class="card" style="grid-column:1/-1">
       <h3>🏭 Curva de Producción por Modelo</h3>
-      <div class="sub">Sugerencia proporcional por color y talla · Clic en color para detalle · Basado en meses completos (excluye el mes en curso)</div>
+      <div class="sub">Demanda proporcional menos stock PT · Verde = unidades netas a producir · STK rojo = posible sobrestock en esa talla</div>
       <div id="propGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:10px"></div>
     </div>
   </div>
   <div class="card g1">
     <h3>🏪 Reabastecimiento por Tienda</h3>
-    <div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 VELA (1.5× GRIETA) es tienda nueva proyectada</span> · TOLON ya opera con histórico propio</div>
+    <div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 VELA: una sola fila con proyección 1.5× GRIETA</span> (ventas recién arrancando) · TOLON con histórico propio</div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
 </div>
@@ -581,13 +581,22 @@ function gTallaStk(modelo,genero,color,talla){
 }
 function makeRow(s,col,v,colV,tSug,stk){
   var vp=colV>0?Math.round(v/colV*100):0;
-  var stkBadge=stk>0?'<div style="background:rgba(255,193,7,.15);border:1px solid #ffc10744;border-radius:4px;padding:0 4px;color:#ffc107;font-size:0.58rem;font-weight:700;min-width:24px;text-align:center">'+stk+'</div>':'<div style="min-width:24px"></div>';
+  var net=Math.max(0,tSug-stk);
+  var over=stk>0&&tSug>0&&stk>=tSug;
+  var prodCol=net>0?'#86efac':(over?'#7a7b95':'#10b981');
+  var stkBadge='';
+  if(stk>0){
+    var bg=over?'rgba(239,68,68,.15)':'rgba(255,193,7,.15)';
+    var bd=over?'#ef444466':'#ffc10744';
+    var fc=over?'#ef4444':'#ffc107';
+    stkBadge='<div style="background:'+bg+';border:1px solid '+bd+';border-radius:4px;padding:0 4px;color:'+fc+';font-size:0.58rem;font-weight:700;min-width:24px;text-align:center" title="'+(over?'Sobrestock vs demanda':'Stock PT')+'">'+stk+'</div>';
+  }else stkBadge='<div style="min-width:24px"></div>';
   return '<div style="display:flex;align-items:center;gap:5px;padding:2px 0;border-bottom:1px solid var(--brd);font-size:0.69rem">'+
     '<div style="width:24px;text-align:center;font-weight:700;color:#c0c0e8">'+s+'</div>'+
     '<div style="flex:1;background:#16171f;border-radius:3px;height:4px;overflow:hidden"><div style="height:4px;border-radius:3px;background:'+cn(col)+'88;width:'+vp+'%"></div></div>'+
     '<div style="color:#a5b4fc;font-weight:700;width:26px;text-align:right">'+vp+'%</div>'+
     '<div style="color:var(--mu);width:22px;text-align:right;font-size:0.61rem">'+v+'u</div>'+
-    '<div style="color:#86efac;font-size:0.61rem;font-weight:700;width:38px;text-align:right">'+tSug+'u</div>'+
+    '<div style="color:'+prodCol+';font-size:0.61rem;font-weight:700;width:38px;text-align:right" title="Demanda '+tSug+'u">'+(net>0?('+'+net):'0')+'</div>'+
     stkBadge+'</div>';
 }
 
@@ -608,34 +617,36 @@ function rDecisiones(){
       var lineFc=getLF(genero,meses,modelo);
       var cM={};lRows.forEach(function(r){cM[r.color]=(cM[r.color]||0)+r.v;});
       var cA=Object.entries(cM).sort(function(a,b){return b[1]-a[1];});
-      var lProd=0;
+      var lProd=0,lNet=0;
       var bars=cA.map(function(ce){
         var col=ce[0],colV=ce[1],pct=lt>0?Math.round(colV/lt*1000)/10:0;
         var sug=calcProp(colV,lt,lineFc);
         var cUid='pg_'+modelo.replace(/\W/g,'_')+'_'+genero+'_'+col.replace(/\W/g,'_');
         var tM={};lRows.filter(function(r){return r.color===col;}).forEach(function(r){tM[r.talla]=(tM[r.talla]||0)+r.v;});
         var tA=Object.entries(tM).sort(function(a,b){return b[1]-a[1];});
-        var cNS=0;
+        var cNS=0,cNet=0;
         var cColorStk=gColorStk(modelo,genero,col);
         var det=tA.map(function(tv){
           var tSug=calcProp(tv[1],lt,lineFc);cNS+=tSug;lProd+=tSug;
           var tStk=gTallaStk(modelo,genero,col,tv[0]);
+          var n=Math.max(0,tSug-tStk);cNet+=n;lNet+=n;
           return makeRow(tv[0],col,tv[1],colV,tSug,tStk);
         }).join('');
+        var stkWarn=cColorStk>cNS&&cNS>0;
         return '<div style="margin-bottom:7px">'+
           '<div data-pguid="'+cUid+'" style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 5px;border-radius:6px">'+
           '<span style="width:9px;height:9px;border-radius:50%;background:'+cn(col)+';flex-shrink:0;border:1.5px solid rgba(255,255,255,.15)"></span>'+
           '<div style="font-size:0.73rem;font-weight:600;color:#e0e0f5;width:95px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+col+'</div>'+
           '<div style="flex:1;background:var(--s3);border-radius:3px;height:10px;overflow:hidden;position:relative"><div style="height:10px;border-radius:3px;background:'+cn(col)+';width:'+pct+'%"></div><span style="position:absolute;left:5px;top:0;line-height:10px;font-size:0.62rem;font-weight:700;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.9)">'+pct+'%</span></div>'+
-          '<div style="color:#86efac;font-weight:700;font-size:0.7rem;width:44px;text-align:right">'+cNS+'u</div>'+
-          (cColorStk>0?'<div style="background:rgba(255,193,7,.15);border:1px solid #ffc10766;border-radius:5px;padding:1px 6px;color:#ffc107;font-size:0.62rem;font-weight:700;white-space:nowrap">📦'+cColorStk+'</div>':'')+
+          '<div style="color:#86efac;font-weight:700;font-size:0.7rem;width:44px;text-align:right" title="Demanda '+cNS+'u">+'+cNet+'</div>'+
+          (cColorStk>0?'<div style="background:'+(stkWarn?'rgba(239,68,68,.15)':'rgba(255,193,7,.15)')+';border:1px solid '+(stkWarn?'#ef444466':'#ffc10766')+';border-radius:5px;padding:1px 6px;color:'+(stkWarn?'#ef4444':'#ffc107')+';font-size:0.62rem;font-weight:700;white-space:nowrap" title="'+(stkWarn?'Stock supera demanda del período':'Stock PT')+'">'+(stkWarn?'⚠ ':'📦')+cColorStk+'</div>':'')+
           '<span style="color:var(--ac);font-size:0.62rem;width:10px">&#9658;</span></div>'+
           '<div id="'+cUid+'" style="display:none;margin:2px 0 0 16px;padding:5px 7px;background:var(--s2);border-radius:5px;border-left:2px solid '+cn(col)+'44">'+
-          '<div style="font-size:0.59rem;color:var(--mu2);margin-bottom:3px;font-weight:600">TALLA &middot; % &middot; HIST &middot; PROD &middot; <span style="color:#ffc107">STK</span></div>'+det+'</div></div>';
+          '<div style="font-size:0.59rem;color:var(--mu2);margin-bottom:3px;font-weight:600">TALLA &middot; % &middot; HIST &middot; <span style="color:#86efac">NETO</span> &middot; <span style="color:#ffc107">STK</span></div>'+det+'</div></div>';
       }).join('');
       return '<div style="background:var(--s2);border-radius:10px;padding:13px;margin-bottom:8px">'+
         '<div style="font-family:var(--fh);font-size:0.79rem;font-weight:800;color:var(--a2);margin-bottom:2px">'+(GICO[genero]||'')+' '+genero+' <span style="font-size:0.67rem;font-weight:400;color:var(--mu)">(orden '+lineFc+' und/mes)</span></div>'+
-        '<div style="font-size:0.65rem;color:var(--mu2);margin-bottom:8px">&#127981; Producir: <strong style="color:#86efac">'+lProd+'</strong> und</div>'+bars+'</div>';
+        '<div style="font-size:0.65rem;color:var(--mu2);margin-bottom:8px">&#127981; Neto a producir: <strong style="color:#86efac">'+lNet+'</strong> und · Demanda período: <strong>'+lProd+'</strong> und</div>'+bars+'</div>';
     }).filter(Boolean).join('');
     if(!cards)return;
     pgEl.innerHTML+='<div style="background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px">'+
@@ -649,7 +660,9 @@ function renderReabast(allRows){
   var meses=_decMeses||2;
   var filteredRows=allRows.filter(function(r){return(!_modelo||r.modelo===_modelo);});
   var modelos=ag(filteredRows,'modelo').map(function(x){return x.k;});
-  var storeList=ALL_STORES.concat(NEW_STORES);
+  var storeList=[],seen={};
+  ALL_STORES.forEach(function(s){if(seen[s])return;if(NEW_STORES.indexOf(s)>=0)return;seen[s]=1;storeList.push(s);});
+  NEW_STORES.forEach(function(s){if(!seen[s]){seen[s]=1;storeList.push(s);}});
   var h='';
   storeList.forEach(function(store){
     var isNew=NEW_STORES.indexOf(store)>=0;
