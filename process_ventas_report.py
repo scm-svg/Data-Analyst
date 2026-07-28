@@ -157,6 +157,12 @@ def assign_tienda(orden_relacionada, vendedor: str) -> str | None:
         if keyword in vend_upper:
             return store
 
+    if "WEB" in vend_upper:
+        return "WEB"
+
+    if "ADMINISTRATOR" in vend_upper:
+        return "PEDIDOS"
+
     if orden and "EVENTOS" in orden.upper():
         return "EVENTOS"
 
