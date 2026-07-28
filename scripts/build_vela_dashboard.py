@@ -796,24 +796,23 @@ function setGrain(el){{
   document.querySelectorAll('[data-grain]').forEach(c=>c.classList.remove('on'));
   el.classList.add('on');
   STATE.grain = el.dataset.grain;
+  const all = RAW.period.months.map(m=>m.k);
   if(STATE.grain==='all'){{
-    STATE.months = new Set(RAW.period.months.map(m=>m.k));
-  }} else if([...STATE.months].length===0){{
-    STATE.months = new Set([RAW.period.months.at(-1).k]);
+    STATE.months = new Set(all);
+  }} else if(STATE.months.size!==1){{
+    STATE.months = new Set([all.at(-1)]);
   }}
   syncMonthChips();
   renderAll();
 }}
 function setMonth(el){{
   const k = el.dataset.month;
+  // Click en un mes = selección exclusiva + activar vista Mes (o Semana si ya estaba)
   if(STATE.grain==='all'){{
     STATE.grain='month';
     document.querySelectorAll('[data-grain]').forEach(c=>c.classList.toggle('on', c.dataset.grain==='month'));
-    STATE.months = new Set([k]);
-  }} else {{
-    if(STATE.months.has(k) && STATE.months.size>1) STATE.months.delete(k);
-    else {{ STATE.months.add(k); }}
   }}
+  STATE.months = new Set([k]);
   syncMonthChips();
   renderAll();
 }}
