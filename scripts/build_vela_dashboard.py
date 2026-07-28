@@ -12,6 +12,16 @@ STOCK_PATH = Path("/home/ubuntu/.cursor/projects/workspace/uploads/VELA_STOCK_CO
 SALES_PATH = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Reporte_ventas_VELA_COMPLETO_5bff.xlsx")
 OUT_HTML = ROOT / "dashboard_vela.html"
 
+# Excluidos del análisis (material promocional / no operativo en piso)
+EXCLUDE_MODELS = frozenset({
+    "BOLSAS KRAFT NAVIDAD",
+    "BOLSAS KRAFT",
+    "CUADRO BAND VENEZUELA",
+})
+
+TARGET_COVERAGE_MONTHS = 2.5
+URGENT_COVERAGE_MAX = 2.0
+
 MES_LABELS = {6: "Jun", 7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic", 1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May"}
 MES_FULL = {
     6: "Jun 2026", 7: "Jul 2026", 8: "Ago 2026", 9: "Sep 2026", 10: "Oct 2026",
@@ -55,9 +65,47 @@ def categorize(model):
     return "Otros"
 
 
+def is_excluded(name):
+    n = base_model(name)
+    if n in EXCLUDE_MODELS:
+        return True
+    return norm_str(name).upper() in EXCLUDE_MODELS
+
+
+def stock_line_key(row):
+    modelo = norm_str(row.get("MODELO")).upper()
+    gen = norm_str(row.get("GENERO")).upper()
+    if gen:
+        return f"{modelo} {gen}"
+    return modelo
+
+
+def sales_line_key(row):
+    return norm_str(row.get("modelo")).upper()
+
+
+def inventory_status(v, s, vel, mos, r):
+    if v == 0 and s > 0:
+        return "sin_venta"
+    if v > 0 and s == 0:
+        return "quiebre"
+    if v > 0 and vel > 0 and mos < URGENT_COVERAGE_MAX:
+        return "critico"
+    if v > 0 and vel > 0 and mos > 6:
+        return "exceso"
+    if v > 0 and ((vel > 0 and mos > 4 and r < 30) or (s >= 10 and v > 0 and r < 15)):
+        return "lento"
+    if v > 0:
+        return "saludable"
+    return "sin_venta"
+
+
 def build_payload():
     stock = pd.read_excel(STOCK_PATH, sheet_name="Ventas")
     sales = pd.read_excel(SALES_PATH, sheet_name="Ventas")
+
+    stock = stock[~stock["MODELO"].apply(is_excluded)]
+    sales = sales[~sales["modelo"].apply(is_excluded)]
 
     sales = sales.copy()
     sales["base"] = sales["modelo"].apply(base_model)
@@ -107,6 +155,7 @@ def build_payload():
             vars_list.append({"color": color, "genero": gen, "v": data["v"], "tallas": tallas[:12]})
 
         mos = round(s / velocity, 1) if velocity > 0 else (999 if s > 0 else 0)
+        est = inventory_status(v, s, velocity, min(mos, 999), r)
 
         products.append({
             "n": model,
@@ -115,13 +164,92 @@ def build_payload():
             "r": r,
             "vel": velocity,
             "mos": min(mos, 999),
+            "est": est,
             "m": monthly,
             "cat": categorize(model),
             "vars": vars_list[:25],
+            "srch": model.lower(),
         })
 
     products.sort(key=lambda p: (-p["v"], -p["s"]))
 
+    # --- Líneas de venta (modelo + género) para reposición y rotación detallada ---
+    line_sales = defaultdict(lambda: {"v": 0, "colors": set(), "skus": set(), "base": ""})
+    for _, row in sales.iterrows():
+        lk = sales_line_key(row)
+        if is_excluded(lk):
+            continue
+        line_sales[lk]["v"] += int(row["qty"])
+        line_sales[lk]["base"] = base_model(row["modelo"])
+        c = norm_str(row.get("COLOR"))
+        if c:
+            line_sales[lk]["colors"].add(c.lower())
+        sku = norm_str(row.get("SKU"))
+        if sku:
+            line_sales[lk]["skus"].add(sku.lower())
+
+    line_stock = defaultdict(int)
+    for _, row in stock.iterrows():
+        lk = stock_line_key(row)
+        if is_excluded(lk):
+            continue
+        line_stock[lk] += int(row["qty"])
+
+    all_line_keys = sorted(set(line_sales.keys()) | set(line_stock.keys()))
+    lines = []
+    n_months = max(len(months_sorted), 1)
+
+    for lk in all_line_keys:
+        v = int(line_sales[lk]["v"]) if lk in line_sales else 0
+        s = int(line_stock.get(lk, 0))
+        base = line_sales[lk]["base"] if lk in line_sales else base_model(lk)
+        vel = round(v / n_months, 1)
+        total = v + s
+        r = round(v / total * 100) if total > 0 else 0
+        mos = round(s / vel, 1) if vel > 0 else (999 if s > 0 else 0)
+        mos_c = min(mos, 999)
+        est = inventory_status(v, s, vel, mos_c, r)
+        target = vel * TARGET_COVERAGE_MONTHS
+        reponer = max(0, int(round(target - s))) if vel > 0 else 0
+        srch_parts = [lk.lower()] + list(line_sales[lk]["colors"]) + list(line_sales[lk]["skus"]) if lk in line_sales else [lk.lower()]
+        lines.append({
+            "n": lk,
+            "v": v,
+            "s": s,
+            "r": r,
+            "vel": vel,
+            "mos": mos_c,
+            "est": est,
+            "cat": categorize(base),
+            "reponer": reponer,
+            "srch": " ".join(srch_parts),
+        })
+
+    lines.sort(key=lambda x: (-x["v"], -x["s"]))
+
+    v_lines = sum(l["v"] for l in lines)
+    sorted_lines = sorted([l for l in lines if l["v"] > 0], key=lambda x: -x["v"])
+    cum_l = 0
+    abc_line = {}
+    for l in sorted_lines:
+        cum_l += l["v"]
+        pct = cum_l / v_lines * 100 if v_lines else 100
+        if pct <= 80:
+            abc_line[l["n"]] = "A"
+        elif pct <= 95:
+            abc_line[l["n"]] = "B"
+        else:
+            abc_line[l["n"]] = "C"
+    for l in lines:
+        l["abc"] = abc_line.get(l["n"], "—" if l["v"] == 0 else "C")
+
+    urgent_replenish = [
+        l for l in lines
+        if l["abc"] in ("A", "B") and l["v"] > 0 and l["vel"] > 0 and l["mos"] < URGENT_COVERAGE_MAX and l["reponer"] > 0
+    ]
+    urgent_replenish.sort(key=lambda x: (-x["reponer"], x["mos"]))
+
+    # ABC por modelo base (productos)
     v_total = sum(p["v"] for p in products)
     s_total = sum(p["s"] for p in products)
     m_count = len([p for p in products if p["v"] > 0 or p["s"] > 0])
@@ -158,12 +286,12 @@ def build_payload():
     for p in sorted_by_v:
         cum += p["v"]
         pct = cum / v_total * 100 if v_total else 100
-        if pct <= 80:
-            abc["A"].append(p["n"])
-        elif pct <= 95:
-            abc["B"].append(p["n"])
-        else:
-            abc["C"].append(p["n"])
+        letter = "A" if pct <= 80 else ("B" if pct <= 95 else "C")
+        abc[letter].append(p["n"])
+        p["abc"] = letter
+    for p in products:
+        if "abc" not in p:
+            p["abc"] = "—" if p["v"] == 0 else "C"
 
     coverage_issues = []
     for p in products:
@@ -187,11 +315,11 @@ def build_payload():
 
     insights = [
         f"Período analizado: {periodo}. Ventas {v_total:,} und vs stock actual {s_total:,} und (sell-through acumulado {sell_through}%).",
+        f"Excluidos del análisis: {', '.join(sorted(EXCLUDE_MODELS))}.",
         f"Ritmo: {round(avg_monthly):,} und/mes promedio."
         + (f" Jun vs Jul: {mom:+.1f}% en unidades." if mom is not None else ""),
-        f"{len(reorder)} modelos con demanda fuerte y stock casi agotado (≤2 und en piso).",
+        f"Reposición urgente: {len(urgent_replenish)} líneas A/B con cobertura <{URGENT_COVERAGE_MAX} meses (+{sum(l['reponer'] for l in urgent_replenish):,} und sugeridas a {TARGET_COVERAGE_MONTHS} meses).",
         f"{dead_models} SKUs sin ventas en el período acumulan {dead_stock:,} unidades — revisar exhibición o traslado.",
-        f"Clase A (ABC): {len(abc['A'])} modelos concentran el 80% de ventas.",
     ]
 
     return {
@@ -206,6 +334,22 @@ def build_payload():
         "tL": tL,
         "tV": tV,
         "P": products,
+        "L": lines,
+        "cats": sorted({p["cat"] for p in products} | {l["cat"] for l in lines}),
+        "urgent_replenish": [
+            {
+                "n": l["n"],
+                "cat": l["cat"],
+                "abc": l["abc"],
+                "v": l["v"],
+                "s": l["s"],
+                "mos": l["mos"],
+                "reponer": l["reponer"],
+            }
+            for l in urgent_replenish
+        ],
+        "urgent_total_units": sum(l["reponer"] for l in urgent_replenish),
+        "target_mos": TARGET_COVERAGE_MONTHS,
         "cat_sales": dict(cat_sales),
         "cat_stock": dict(cat_stock),
         "gen_sales": dict(gen_sales),
@@ -333,6 +477,26 @@ body{background:radial-gradient(ellipse 120% 80% at 50% -20%,#0d2840 0%,var(--bg
 .di strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .di small{font-family:var(--fm);color:var(--mu);flex-shrink:0}
 
+.rep-card{margin-bottom:14px;border:1px solid rgba(52,211,153,.35);background:linear-gradient(180deg,rgba(20,184,166,.08),var(--su))}
+.rep-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.rep-hdr h3{font-size:.82rem;font-weight:800}
+.rep-hdr p{font-size:.62rem;color:var(--mu);margin-top:3px;max-width:520px;line-height:1.45}
+.rep-sum{font-family:var(--fm);font-size:.68rem;color:var(--a2);text-align:right;white-space:nowrap}
+.rtbl{width:100%;border-collapse:collapse;font-size:.71rem}
+.rtbl th{font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd)}
+.rtbl td{padding:8px 10px;border-bottom:1px solid #0a1520}
+.rtbl tr:hover td{background:var(--s2)}
+.b-abc{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:.62rem;font-weight:800;font-family:var(--fm)}
+.b-A{background:rgba(167,139,250,.25);color:#c4b5fd}.b-B{background:rgba(56,189,248,.2);color:#7dd3fc}
+.cov-r{color:var(--re);font-family:var(--fm);font-weight:700}
+.rep-q{color:var(--gr);font-family:var(--fm);font-weight:800}
+
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:.62rem;color:var(--mu)}
+.legend span{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--s2);border-radius:20px;border:1px solid var(--bd)}
+.dot-e{width:7px;height:7px;border-radius:50%}
+.sep-v{width:1px;height:20px;background:var(--bd);flex-shrink:0}
+.fsel{padding:6px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:.72rem;font-family:var(--fh)}
+
 .footer{text-align:center;padding:20px;font-size:.62rem;color:var(--m2);border-top:1px solid var(--bd);margin-top:24px}
 
 @media(max-width:900px){.g2,.g21,.g3,.dg,.abc-grid{grid-template-columns:1fr}.page,.hdr,.tabs,.krow,.insight-strip{margin-left:0;margin-right:0;padding-left:16px;padding-right:16px}}
@@ -428,16 +592,39 @@ body{background:radial-gradient(ellipse 120% 80% at 50% -20%,#0d2840 0%,var(--bg
 </div>
 
 <div class="sec" id="sec-rotacion">
+  <div class="card rep-card" id="repRotacion" style="margin-bottom:14px"></div>
+  <div class="legend" id="estLegend">
+    <span><i class="dot-e" style="background:var(--re)"></i> Quiebre · sin stock</span>
+    <span><i class="dot-e" style="background:#f97316"></i> Crítico · &lt;2 meses cobertura</span>
+    <span><i class="dot-e" style="background:var(--gr)"></i> Saludable</span>
+    <span><i class="dot-e" style="background:var(--am)"></i> Lento</span>
+    <span><i class="dot-e" style="background:#818cf8"></i> Exceso · &gt;6 meses</span>
+    <span><i class="dot-e" style="background:var(--mu)"></i> Sin venta</span>
+  </div>
   <div style="display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap" id="rotKpis"></div>
   <div class="fbar">
+    <span class="fb-l">Estado</span>
+    <span class="chip on" data-re="" onclick="SRE(this,'')">Todos</span>
+    <span class="chip" data-re="quiebre" onclick="SRE(this,'quiebre')">Quiebre</span>
+    <span class="chip" data-re="critico" onclick="SRE(this,'critico')">Crítico</span>
+    <span class="chip" data-re="saludable" onclick="SRE(this,'saludable')">Saludable</span>
+    <span class="chip" data-re="lento" onclick="SRE(this,'lento')">Lento</span>
+    <span class="chip" data-re="exceso" onclick="SRE(this,'exceso')">Exceso</span>
+    <span class="chip" data-re="sin_venta" onclick="SRE(this,'sin_venta')">Sin venta</span>
+    <div class="sep-v"></div>
+    <span class="fb-l">Categoría</span>
+    <select class="fsel" id="rCat" onchange="RR()"><option value="">Todas</option></select>
+    <div class="sep-v"></div>
     <span class="fb-l">Ordenar</span>
     <button class="sbtn on" id="sb-r" onclick="SS('r')">% Rotación</button>
     <button class="sbtn" id="sb-v" onclick="SS('v')">Ventas</button>
     <button class="sbtn" id="sb-s" onclick="SS('s')">Stock</button>
     <button class="sbtn" id="sb-vel" onclick="SS('vel')">Velocidad</button>
-    <input class="srch" id="rSrch" placeholder="Buscar modelo…" oninput="RR()" style="max-width:220px">
+    <button class="sbtn" id="sb-mos" onclick="SS('mos')">Cobertura</button>
+    <input class="srch" id="rSrch" placeholder="🔍 SKU, modelo, color…" oninput="RR()" style="min-width:180px;flex:1">
   </div>
-  <div id="rotList" style="max-height:calc(100vh - 320px);overflow-y:auto"></div>
+  <div style="font-size:.64rem;color:var(--mu);margin-bottom:8px" id="rotCnt"></div>
+  <div id="rotList" style="max-height:calc(100vh - 420px);overflow-y:auto"></div>
 </div>
 
 <div class="sec" id="sec-productos">
@@ -466,7 +653,7 @@ body{background:radial-gradient(ellipse 120% 80% at 50% -20%,#0d2840 0%,var(--bg
   <div class="card" style="padding:0;overflow:hidden">
     <div style="overflow:auto;max-height:calc(100vh - 260px)">
       <table class="itbl">
-        <thead><tr><th>#</th><th>Modelo</th><th>Categoría</th><th class="num">Vendido</th><th class="num">Stock</th><th class="num">Und/mes</th><th class="num">Meses stock</th><th>Estado</th></tr></thead>
+        <thead><tr><th>#</th><th>Modelo</th><th>Categoría</th><th class="num">Vendido</th><th class="num">Stock</th><th class="num">Und/mes</th><th class="num">Meses stock</th><th>Estado inventario</th></tr></thead>
         <tbody id="iBdy"></tbody>
       </table>
     </div>
@@ -474,8 +661,9 @@ body{background:radial-gradient(ellipse 120% 80% at 50% -20%,#0d2840 0%,var(--bg
 </div>
 
 <div class="sec" id="sec-decisiones">
+  <div class="card rep-card" id="repDecisiones" style="margin-bottom:14px"></div>
   <div class="dg" style="margin-bottom:14px">
-    <div class="dbox" style="border-color:var(--gr)"><h4 style="color:var(--gr)">🟢 REPONER</h4><p>Alta venta y stock ≤2 — riesgo de quiebre.</p><div id="dBuy"></div></div>
+    <div class="dbox" style="border-color:var(--gr)"><h4 style="color:var(--gr)">🟢 REPONER</h4><p>Modelos A/B con cobertura &lt;2 meses (ver tabla arriba).</p><div id="dBuy"></div></div>
     <div class="dbox" style="border-color:var(--ac)"><h4 style="color:var(--a2)">🔵 MANTENER</h4><p>Rotación equilibrada (35–75%).</p><div id="dHold"></div></div>
     <div class="dbox" style="border-color:var(--am)"><h4 style="color:var(--am)">🟡 ACTIVAR</h4><p>Stock alto, rotación baja — visibilidad/promo.</p><div id="dAct"></div></div>
     <div class="dbox" style="border-color:var(--re)"><h4 style="color:var(--re)">🔴 SIN MOVIMIENTO</h4><p>Cero ventas en el período.</p><div id="dLiq"></div></div>
@@ -488,7 +676,31 @@ body{background:radial-gradient(ellipse 120% 80% at 50% -20%,#0d2840 0%,var(--bg
 
 <script>
 const D=__DATA_JSON__;
-const P=D.P, MES=D.mes;
+const P=D.P, L=D.L||D.P, MES=D.mes;
+const EST_LBL={quiebre:'Quiebre',critico:'Crítico',saludable:'Saludable',lento:'Lento',exceso:'Exceso',sin_venta:'Sin venta'};
+const EST_COL={quiebre:'var(--re)',critico:'#f97316',saludable:'var(--gr)',lento:'var(--am)',exceso:'#818cf8',sin_venta:'var(--mu)'};
+
+function rbAbc(a){if(a==='A')return'<span class="b-abc b-A">A</span>';if(a==='B')return'<span class="b-abc b-B">B</span>';return'<span style="font-family:var(--fm);font-size:.62rem;color:var(--mu)">'+(a||'—')+'</span>'}
+
+function catDisp(c){return({'Ropa superior':'Ropa','Ropa inferior':'Ropa','Bolsos & Mochilas':'Bolsos'}[c]||c)}
+
+function renderRepTable(elId,compact){
+  const rows=D.urgent_replenish||[];
+  const host=document.getElementById(elId);
+  if(!host) return;
+  const tot=D.urgent_total_units||rows.reduce((a,r)=>a+r.reponer,0);
+  const head=`<div class="rep-hdr"><div><h3>① Reposición urgente · modelos A/B con menos de 2 meses de cobertura</h3>
+    <p>Cantidad sugerida para volver a ${D.target_mos||2.5} meses de cobertura a la velocidad actual de venta (und/mes).</p></div>
+    <div class="rep-sum">${rows.length} modelos<br><strong style="color:var(--gr)">+${tot} und sugeridas</strong></div></div>`;
+  if(!rows.length){host.innerHTML=head+'<p style="font-size:.7rem;color:var(--mu)">No hay líneas A/B bajo 2 meses de cobertura con unidades a reponer.</p>';return;}
+  const body=`<div style="overflow-x:auto"><table class="rtbl"><thead><tr>
+    <th>Modelo</th><th>Categoría</th><th>ABC</th><th class="num">Vta ${D.n_meses}M</th><th class="num">Stock</th><th class="num">Cobertura</th><th class="num">Reponer</th>
+  </tr></thead><tbody>`+rows.map(r=>`<tr>
+    <td><strong>${r.n}</strong></td><td style="color:var(--mu);font-size:.65rem">${catDisp(r.cat)}</td><td>${rbAbc(r.abc)}</td>
+    <td class="num">${r.v}</td><td class="num">${r.s}</td><td class="num cov-r">${r.mos}m</td><td class="num rep-q">+${r.reponer}</td>
+  </tr>`).join('')+'</tbody></table></div>';
+  host.innerHTML=head+body;
+}
 
 function rc(r){return r>=60?'var(--gr)':r>=30?'var(--am)':r>0?'var(--re)':'var(--mu)'}
 function rb(r){const c=r>=60?'pH':r>=30?'pM':r>0?'pL':'pZ';return`<span class="prt ${c}">${r}%</span>`}
@@ -520,8 +732,11 @@ function GT(id,el){
   ({rotacion:RR,productos:RP,inventario:RI})[id]?.();
 }
 
-document.getElementById('metaLine').textContent=D.periodo+' · '+D.n_meses+' mes(es) · '+D.M+' modelos activos';
+document.getElementById('metaLine').textContent=D.periodo+' · '+D.n_meses+' mes(es) · '+D.M+' modelos · excl. Kraft/Band VZLA';
 document.getElementById('insightBox').innerHTML='<strong>Insights clave</strong><ul>'+D.insights.map(i=>'<li>'+i+'</li>').join('')+'</ul>';
+renderRepTable('repRotacion',false);
+renderRepTable('repDecisiones',false);
+(document.getElementById('rCat')||{}).innerHTML='<option value="">Todas</option>'+(D.cats||[]).map(c=>`<option value="${c}">${c}</option>`).join('');
 
 (function(){
   const x=D.kpis_extra;
@@ -580,43 +795,50 @@ document.getElementById('abcGrid').innerHTML=['A','B','C'].map((k,i)=>{
 document.getElementById('fastList').innerHTML=(D.fast_movers||[]).map((p,i)=>`<div class="di"><strong>${i+1}. ${p.n}</strong><small>${p.vel} und/mes · ${p.v} total</small></div>`).join('')||'<p style="color:var(--mu);font-size:.68rem">—</p>';
 document.getElementById('covList').innerHTML=(D.coverage_issues||[]).map(p=>`<div class="di"><strong>${p.n}</strong><small>${p.months} meses · ${p.s}s</small></div>`).join('')||'<p style="color:var(--mu);font-size:.68rem">Sin excesos marcados</p>';
 
-const RG={h:P.filter(p=>p.r>=60),m:P.filter(p=>p.r>=30&&p.r<60),l:P.filter(p=>p.r>0&&p.r<30),z:P.filter(p=>p.r===0)};
+const RG={h:L.filter(p=>p.r>=60),m:L.filter(p=>p.r>=30&&p.r<60),l:L.filter(p=>p.r>0&&p.r<30),z:L.filter(p=>p.r===0)};
+const estCount=(e)=>L.filter(p=>p.est===e).length;
 document.getElementById('rotKpis').innerHTML=[
-  {k:'h',l:'Rota bien >60%',c:'c-gr',n:RG.h.length},
-  {k:'m',l:'Media 30–60%',c:'c-am',n:RG.m.length},
-  {k:'l',l:'Baja <30%',c:'c-re',n:RG.l.length},
-  {k:'z',l:'Sin ventas',c:'',n:RG.z.length},
-].map(x=>`<div class="kpi ${x.c}" style="min-width:120px;flex:1"><div class="kv">${x.n}</div><div class="kl">${x.l}</div></div>`).join('');
+  {l:'Quiebre',c:'c-re',n:estCount('quiebre')},
+  {l:'Crítico',c:'c-am',n:estCount('critico')},
+  {l:'Saludable',c:'c-gr',n:estCount('saludable')},
+  {l:'Lento / Exceso',c:'',n:estCount('lento')+estCount('exceso')},
+  {l:'Sin venta',c:'',n:estCount('sin_venta')},
+].map(x=>`<div class="kpi ${x.c}" style="min-width:100px;flex:1"><div class="kv">${x.n}</div><div class="kl">${x.l}</div></div>`).join('');
 
-let _srt='r';
-function SS(m){_srt=m;document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('on'));document.getElementById('sb-'+m.replace('vel','vel'))?.classList.add('on');document.getElementById('sb-'+m)?.classList.add('on');RR();}
+let _srt='mos',_rEst='',_rCat='';
+function SRE(el,e){document.querySelectorAll('[data-re]').forEach(c=>c.classList.remove('on'));el.classList.add('on');_rEst=e;RR();}
+function SS(m){_srt=m;document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('on'));const id='sb-'+m;if(document.getElementById(id))document.getElementById(id).classList.add('on');RR();}
 
 function RR(){
-  const q=(document.getElementById('rSrch').value||'').toLowerCase();
-  let prods=P.filter(p=>!q||p.n.toLowerCase().includes(q));
-  const sortKey={r:'r',v:'v',s:'s',vel:'vel'}[_srt]||'r';
-  prods=[...prods].sort((a,b)=>b[sortKey]-a[sortKey]);
+  const q=(document.getElementById('rSrch').value||'').toLowerCase().trim();
+  _rCat=document.getElementById('rCat').value;
+  let prods=L.filter(p=>{
+    const mq=!q||(p.srch||p.n.toLowerCase()).includes(q)||p.n.toLowerCase().includes(q);
+    const me=!_rEst||p.est===_rEst;
+    const mc=!_rCat||p.cat===_rCat;
+    return mq&&me&&mc;
+  });
+  const sortKey={r:'r',v:'v',s:'s',vel:'vel',mos:'mos'}[_srt]||'mos';
+  prods=[...prods].sort((a,b)=>{
+    const va=a[sortKey]??999, vb=b[sortKey]??999;
+    return (sortKey==='mos'?va-vb:vb-va);
+  });
+  document.getElementById('rotCnt').textContent=prods.length+' líneas · '+prods.reduce((a,p)=>a+p.v,0)+' und vendidas en el período';
   const mx=Math.max(...prods.map(p=>p.v+p.s),1);
-  const segs=[
-    {lb:'Rota bien',col:'var(--gr)',fl:p=>p.r>=60},
-    {lb:'Rotación media',col:'var(--am)',fl:p=>p.r>=30&&p.r<60},
-    {lb:'Baja rotación',col:'var(--re)',fl:p=>p.r>0&&p.r<30},
-    {lb:'Sin ventas',col:'var(--mu)',fl:p=>p.r===0},
-  ];
-  document.getElementById('rotList').innerHTML=segs.map(seg=>{
-    const items=prods.filter(seg.fl);
-    if(!items.length) return '';
-    return`<div style="margin-bottom:12px"><div style="font-size:.72rem;font-weight:800;color:${seg.col};margin-bottom:6px">${seg.lb} · ${items.length}</div>`+
-      items.map(p=>{
-        const vW=Math.round(p.v/mx*100),sW=Math.round(p.s/mx*100);
-        return`<div class="xi" onclick="TG(this)"><div class="xh"><span class="rnm">${p.n}</span>
-          <div style="display:flex;height:7px;flex:1;max-width:180px;background:var(--bd);border-radius:4px;overflow:hidden">
-            <div style="width:${vW}%;background:${seg.col}"></div><div style="width:${sW}%;background:${seg.col};opacity:.25"></div></div>
-          <span style="font-family:var(--fm);font-size:.68rem;color:${seg.col}">${p.r}%</span>
-          <span style="font-family:var(--fm);font-size:.6rem;color:var(--mu)">${p.v}v · ${p.s}s · ${p.vel}/m</span><span class="xa">▾</span></div>
-          <div class="xb">${VP(p)}</div></div>`;
-      }).join('')+'</div>';
-  }).join('');
+  document.getElementById('rotList').innerHTML=prods.map(p=>{
+    const col=EST_COL[p.est]||'var(--mu)';
+    const vW=Math.round(p.v/mx*100),sW=Math.round(p.s/mx*100);
+    const rep=p.reponer>0&&p.abc!=='—'?`<span style="color:var(--gr);font-family:var(--fm);font-size:.62rem">+${p.reponer}</span>`:'';
+    return`<div class="xi" onclick="TG(this)"><div class="xh">
+      <span style="font-size:.58rem;font-weight:800;color:${col};min-width:52px">${EST_LBL[p.est]||p.est}</span>
+      <span class="rnm">${p.n}</span>
+      <span style="font-size:.58rem;color:var(--mu)">${p.cat}</span>${rbAbc(p.abc)}
+      <div style="display:flex;height:7px;flex:1;max-width:140px;background:var(--bd);border-radius:4px;overflow:hidden">
+        <div style="width:${vW}%;background:${col}"></div><div style="width:${sW}%;background:${col};opacity:.25"></div></div>
+      <span style="font-family:var(--fm);font-size:.65rem;color:var(--mu)">${p.mos>=999?'—':p.mos+'m'}</span>
+      <span style="font-family:var(--fm);font-size:.6rem;color:var(--mu)">${p.v}v · ${p.s}s · ${p.vel}/m</span>${rep}<span class="xa">▾</span></div>
+      <div class="xb"><div style="font-size:.66rem;color:var(--mu);margin-bottom:4px">Rotación ${p.r}% · ${p.reponer?`Sugerido reponer <strong style="color:var(--gr)">+${p.reponer}</strong> und`: 'Sin reposición sugerida'}</div></div></div>`;
+  }).join('')||'<p style="color:var(--mu);padding:12px">Sin resultados con estos filtros.</p>';
 }
 
 let _pM='',_pR='';
@@ -657,17 +879,17 @@ function RI(){
     <td class="num" style="color:var(--a2)">${p.v||'—'}</td>
     <td class="num">${p.s}</td><td class="num">${p.vel||'—'}</td>
     <td class="num">${p.mos>=999?'—':p.mos}</td>
-    <td style="font-size:.62rem">${p.v>0?'<span style="color:var(--gr)">Activo</span>':'<span style="color:var(--re)">Sin ventas</span>'}</td>
+    <td style="font-size:.62rem"><span style="color:${EST_COL[p.est]||'var(--mu)'}">${EST_LBL[p.est]||'—'}</span></td>
   </tr>`).join('');
 }
 
 (function(){
-  const buy=(D.reorder||[]);
-  const hold=P.filter(p=>p.r>=35&&p.r<75&&p.s>0&&p.v>5).slice(0,10);
-  const act=P.filter(p=>p.r>0&&p.r<35&&p.s>=5).sort((a,b)=>b.s-a.s).slice(0,10);
-  const liq=P.filter(p=>p.r===0&&p.s>0).sort((a,b)=>b.s-a.s).slice(0,12);
-  const fi=l=>l.map(p=>`<div class="di"><strong>${p.n}</strong><small>${p.v||0}v · ${p.s||0}s ${p.vel?p.vel+'/m':''} ${p.r!=null?p.r+'%':''}</small></div>`).join('')||'<p style="color:var(--mu);font-size:.68rem">—</p>';
-  document.getElementById('dBuy').innerHTML=fi(buy);
+  const buy=(D.urgent_replenish||[]);
+  const hold=L.filter(p=>p.est==='saludable'&&p.v>5).slice(0,10);
+  const act=L.filter(p=>p.est==='lento'||p.est==='exceso').sort((a,b)=>b.s-a.s).slice(0,10);
+  const liq=L.filter(p=>p.est==='sin_venta').sort((a,b)=>b.s-a.s).slice(0,12);
+  const fi=l=>l.map(p=>`<div class="di"><strong>${p.n}</strong><small>${p.v||0}v · ${p.s||0}s ${p.mos<999?p.mos+'m':''} ${p.reponer? '+'+p.reponer:''}</small></div>`).join('')||'<p style="color:var(--mu);font-size:.68rem">—</p>';
+  document.getElementById('dBuy').innerHTML=fi(buy.slice(0,8));
   document.getElementById('dHold').innerHTML=fi(hold);
   document.getElementById('dAct').innerHTML=fi(act);
   document.getElementById('dLiq').innerHTML=fi(liq);
