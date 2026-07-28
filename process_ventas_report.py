@@ -132,24 +132,32 @@ def clean_color(color):
     return s if s else None
 
 
-def assign_tienda(orden_relacionada: str, vendedor: str) -> str | None:
-    orden = str(orden_relacionada).strip()
+def assign_tienda(orden_relacionada, vendedor: str) -> str | None:
+    orden = (
+        str(orden_relacionada).strip()
+        if orden_relacionada is not None and pd.notna(orden_relacionada)
+        else ""
+    )
+    if orden.lower() in {"", "nan", "none"}:
+        orden = ""
+
     vend_upper = str(vendedor).upper()
     if orden.upper().startswith("S0"):
         if "WEB" in vend_upper:
             return "WEB"
         return "PEDIDOS"
 
-    orden_upper = orden.upper()
-    for keyword, store in STORE_RULES_ORDEN:
-        if keyword in orden_upper:
-            return store
+    if orden:
+        orden_upper = orden.upper()
+        for keyword, store in STORE_RULES_ORDEN:
+            if keyword in orden_upper:
+                return store
 
     for keyword, store in STORE_RULES_VENDEDOR:
         if keyword in vend_upper:
             return store
 
-    if "EVENTOS" in orden_upper:
+    if orden and "EVENTOS" in orden.upper():
         return "EVENTOS"
 
     return None
@@ -211,22 +219,45 @@ def export_excel(df: pd.DataFrame, output_path: str) -> None:
 def process_sales_report(df: pd.DataFrame) -> pd.DataFrame:
     df = normalize_input_columns(df)
 
-    for col in ["SKU", "GENERO", "COLOR", "TALLA", "tienda / ubicación"]:
-        df[col] = None
+    if "Orden relacionada" not in df.columns:
+        df["Orden relacionada"] = None
 
-    parsed = df.apply(
-        lambda r: parse_variant(r["Variante del producto"], r["modelo"]),
-        axis=1,
-        result_type="expand",
-    )
-    parsed.columns = ["SKU", "GENERO", "COLOR", "TALLA"]
-    df["SKU"] = parsed["SKU"]
-    df["GENERO"] = parsed["GENERO"]
-    df["COLOR"] = parsed["COLOR"].apply(clean_color)
-    df["TALLA"] = parsed["TALLA"]
+    for col in ["SKU", "GENERO", "COLOR", "TALLA", "tienda / ubicación"]:
+        if col not in df.columns:
+            df[col] = None
+
+    try:
+        from process_inventory import (
+            build_color_code_map,
+            fix_misplaced_fields,
+            parse_inventory_product,
+        )
+
+        color_map = build_color_code_map(df["Variante del producto"])
+        parsed = df["Variante del producto"].apply(
+            lambda v: parse_inventory_product(v, color_map)
+        )
+        df["SKU"] = parsed.apply(lambda x: x[0])
+        df["GENERO"] = parsed.apply(lambda x: x[2])
+        df["COLOR"] = parsed.apply(lambda x: x[3])
+        df["TALLA"] = parsed.apply(lambda x: x[4])
+        fixed = df.apply(lambda r: fix_misplaced_fields(r, color_map), axis=1)
+        df["COLOR"] = fixed["COLOR"]
+        df["TALLA"] = fixed["TALLA"]
+    except ImportError:
+        parsed = df.apply(
+            lambda r: parse_variant(r["Variante del producto"], r["modelo"]),
+            axis=1,
+            result_type="expand",
+        )
+        parsed.columns = ["SKU", "GENERO", "COLOR", "TALLA"]
+        df["SKU"] = parsed["SKU"]
+        df["GENERO"] = parsed["GENERO"]
+        df["COLOR"] = parsed["COLOR"].apply(clean_color)
+        df["TALLA"] = parsed["TALLA"]
 
     df["tienda / ubicación"] = df.apply(
-        lambda r: assign_tienda(r["Orden relacionada"], r["vendedor"]),
+        lambda r: assign_tienda(r.get("Orden relacionada"), r["vendedor"]),
         axis=1,
     )
 

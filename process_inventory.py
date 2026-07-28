@@ -5,8 +5,9 @@ from collections import Counter
 import pandas as pd
 
 SIZES = {"XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "P"}
+SIZE_LABELS = {"PEQUEÑO", "MEDIANO", "GRANDE", "PEQUENO"}
 KIDS_SIZES = {str(n) for n in range(1, 20)}
-ALL_SIZES = SIZES | KIDS_SIZES
+ALL_SIZES = SIZES | KIDS_SIZES | SIZE_LABELS
 
 COLOR_ALIASES = {
     "Black": "Negro",
@@ -20,6 +21,8 @@ COLOR_ALIASES = {
 
 def _is_size(token: str) -> bool:
     token = str(token).strip()
+    if token.upper() in {s.upper() for s in SIZE_LABELS}:
+        return True
     return token in ALL_SIZES
 
 
