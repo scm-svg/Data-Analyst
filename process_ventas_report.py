@@ -142,6 +142,9 @@ def assign_tienda(orden_relacionada, vendedor: str) -> str | None:
         orden = ""
 
     vend_upper = str(vendedor).upper()
+    if vend_upper.strip() == "PEDIDOS":
+        return "PEDIDOS"
+
     if orden.upper().startswith("S0"):
         if "WEB" in vend_upper:
             return "WEB"
@@ -162,6 +165,9 @@ def assign_tienda(orden_relacionada, vendedor: str) -> str | None:
 
     if "ADMINISTRATOR" in vend_upper:
         return "PEDIDOS"
+
+    if "CORPORATIVO" in vend_upper or "GERENTES" in vend_upper:
+        return "CORPORATIVO"
 
     if orden and "EVENTOS" in orden.upper():
         return "EVENTOS"
