@@ -68,12 +68,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <div class="kpi-bar" id="kpiBar"></div>
 </div>
 <div id="loadErr"></div>
-<div id="periodWarn">Seleccioná al menos un mes/año con datos.</div>
+<div id="periodWarn">Seleccioná al menos un mes con datos (chips de mes o un atajo de período).</div>
 <div class="mbar">
-  <span class="mbar-lbl">Año</span><div id="yearChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  <span class="mbar-lbl">Mes</span><div id="monthChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  <button class="mbtn" type="button" onclick="AbcDashboard.presetSemester('h1')">H1 Ene–Jun</button>
-  <button class="mbtn" type="button" onclick="AbcDashboard.presetSemester('h2')">H2 Jul–Dic</button>
+  <span class="mbar-lbl">Período</span>
+  <div id="presetChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+</div>
+<div class="mbar">
+  <span class="mbar-lbl">Meses</span>
+  <div id="monthChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <span class="mbar-lbl" id="periodSelectionLabel" style="margin-left:8px;color:var(--ac);text-transform:none"></span>
 </div>
 <div class="fbar">
   <label>Tienda ventas</label><select id="fStore"></select>
@@ -133,18 +136,26 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 <script src="abc_dashboard.js"></script>
 <script>
 (function(){
-  if (window.__ABC_DATA__) {
-    AbcDashboard.loadData(window.__ABC_DATA__);
+  function start() {
+    if (window.__ABC_DATA__) {
+      AbcDashboard.loadData(window.__ABC_DATA__);
+      return;
+    }
+    fetch('abc_dashboard_data.json')
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(d){ AbcDashboard.loadData(d); })
+      .catch(function(){
+        var el = document.getElementById('loadErr');
+        el.style.display = 'block';
+        el.innerHTML = 'No se pudo cargar la data. Abrí <strong>abc_inventario_completo.html</strong> (un solo archivo, sin dependencias).';
+      });
+  }
+  if (typeof AbcDashboard === 'undefined') {
+    document.getElementById('loadErr').style.display = 'block';
+    document.getElementById('loadErr').innerHTML = 'Falta el script del dashboard. Usá <strong>abc_inventario_completo.html</strong>.';
     return;
   }
-  fetch('abc_dashboard_data.json')
-    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function(d){ AbcDashboard.loadData(d); })
-    .catch(function(){
-      var el = document.getElementById('loadErr');
-      el.style.display = 'block';
-      el.innerHTML = 'No se pudo cargar <code>abc_dashboard_data.json</code>. Abrí <strong>abc_inventario_standalone.html</strong> o serví la carpeta con un servidor local (<code>python3 -m http.server</code>).';
-    });
+  start();
 })();
 </script>
 </body>

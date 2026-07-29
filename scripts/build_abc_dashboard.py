@@ -208,17 +208,26 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
 
 def build_standalone() -> None:
     html_path = ROOT / "abc_inventario_dashboard.html"
-    out_path = ROOT / "abc_inventario_standalone.html"
+    js_path = ROOT / "abc_dashboard.js"
     html = html_path.read_text(encoding="utf-8")
+    js = js_path.read_text(encoding="utf-8")
     data = OUT_JSON.read_text(encoding="utf-8")
-    inject = f"<script>window.__ABC_DATA__={data};</script>\n"
     marker = '<script src="abc_dashboard.js"></script>'
     if marker not in html:
         raise RuntimeError("Marcador HTML no encontrado para standalone")
-    standalone = html.replace(marker, marker + "\n" + inject)
-    out_path.write_text(standalone, encoding="utf-8")
-    size_mb = out_path.stat().st_size / (1024 * 1024)
-    print(f"OK → {out_path} ({size_mb:.2f} MB)")
+    replacement = (
+        f"<script>\n{js}\n</script>\n"
+        f"<script>window.__ABC_DATA__={data};</script>"
+    )
+    standalone = html.replace(marker, replacement)
+    for name in (
+        "abc_inventario_completo.html",
+        "abc_inventario_standalone.html",
+    ):
+        out_path = ROOT / name
+        out_path.write_text(standalone, encoding="utf-8")
+        size_mb = out_path.stat().st_size / (1024 * 1024)
+        print(f"OK → {out_path} ({size_mb:.2f} MB)")
 
 
 def main() -> None:

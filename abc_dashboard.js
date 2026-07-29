@@ -8,8 +8,10 @@
   let DATA = null;
   let charts = {};
   let state = {
-    years: new Set(),
-    months: new Set(),
+    /** all | last3 | last6 | last12 | custom */
+    timePreset: "all",
+    /** period keys e.g. 2025-10 — used when timePreset === custom */
+    customPeriodKeys: new Set(),
     store: "",
     category: "",
     location: "",
@@ -17,6 +19,7 @@
     search: "",
     tab: "resumen",
   };
+  let filtersInitialized = false;
 
   function $(id) {
     return document.getElementById(id);
@@ -46,21 +49,56 @@
     }
   }
 
-  function activePeriodKeys() {
+  function allPeriodKeysOrdered() {
     if (!DATA) return [];
-    return DATA.periods
-      .filter((p) => {
-        if (state.years.size && !state.years.has(p.year)) return false;
-        if (state.months.size && !state.months.has(p.month)) return false;
-        return true;
-      })
-      .map((p) => p.key);
+    return DATA.periods.map((p) => p.key);
   }
 
-  function presetSemester(which) {
-    state.months.clear();
-    if (which === "h1") [1, 2, 3, 4, 5, 6].forEach((m) => state.months.add(m));
-    if (which === "h2") [7, 8, 9, 10, 11, 12].forEach((m) => state.months.add(m));
+  function activePeriodKeys() {
+    const ordered = allPeriodKeysOrdered();
+    if (!ordered.length) return [];
+    if (state.timePreset === "last3") return ordered.slice(-3);
+    if (state.timePreset === "last6") return ordered.slice(-6);
+    if (state.timePreset === "last12") return ordered.slice(-12);
+    if (state.timePreset === "custom") {
+      if (!state.customPeriodKeys.size) return [];
+      return ordered.filter((k) => state.customPeriodKeys.has(k));
+    }
+    return ordered;
+  }
+
+  function setTimePreset(preset) {
+    state.timePreset = preset;
+    if (preset !== "custom") state.customPeriodKeys.clear();
+    buildPeriodFilters();
+    refresh();
+  }
+
+  function togglePeriodKey(key) {
+    if (state.timePreset !== "custom") {
+      const current = new Set(activePeriodKeys());
+      state.timePreset = "custom";
+      state.customPeriodKeys = current;
+    }
+    if (state.customPeriodKeys.has(key)) {
+      state.customPeriodKeys.delete(key);
+    } else {
+      state.customPeriodKeys.add(key);
+    }
+    if (state.customPeriodKeys.size === 0) {
+      state.timePreset = "all";
+      state.customPeriodKeys.clear();
+    } else if (state.customPeriodKeys.size === DATA.periods.length) {
+      state.timePreset = "all";
+      state.customPeriodKeys.clear();
+    }
+    buildPeriodFilters();
+    refresh();
+  }
+
+  function selectAllPeriods() {
+    state.timePreset = "all";
+    state.customPeriodKeys.clear();
     buildPeriodFilters();
     refresh();
   }
@@ -731,71 +769,50 @@
   }
 
   function buildPeriodFilters() {
-    const years = [...new Set(DATA.periods.map((p) => p.year))].sort();
-    const yc = $("yearChips");
-    yc.innerHTML = "";
-    years.forEach((y) => {
-      const b = document.createElement("button");
-      const on =
-        !state.years.size || state.years.has(y);
-      b.className = "mbtn" + (on ? " active" : "");
-      b.textContent = String(y);
-      b.onclick = () => {
-        if (!state.years.size) {
-          years.forEach((yy) => {
-            if (yy !== y) state.years.add(yy);
-          });
-        } else if (state.years.has(y)) {
-          state.years.delete(y);
-          if (!state.years.size) state.years.clear();
-        } else {
-          state.years.add(y);
-          if (state.years.size === years.length) state.years.clear();
-        }
-        buildPeriodFilters();
-        refresh();
-      };
-      yc.appendChild(b);
-    });
+    const presets = $("presetChips");
+    if (presets) {
+      presets.innerHTML = "";
+      const defs = [
+        { id: "all", label: "Todo el rango" },
+        { id: "last3", label: "Últ. 3 meses" },
+        { id: "last6", label: "Últ. 6 meses" },
+        { id: "last12", label: "Últ. 12 meses" },
+      ];
+      defs.forEach((d) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className =
+          "mbtn" + (state.timePreset === d.id ? " active" : "");
+        b.textContent = d.label;
+        b.onclick = () => setTimePreset(d.id);
+        presets.appendChild(b);
+      });
+    }
 
     const mc = $("monthChips");
+    if (!mc) return;
     mc.innerHTML = "";
-    const monthNames = [
-      "Ene",
-      "Feb",
-      "Mar",
-      "Abr",
-      "May",
-      "Jun",
-      "Jul",
-      "Ago",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dic",
-    ];
-    for (let m = 1; m <= 12; m++) {
+    DATA.periods.forEach((p) => {
       const b = document.createElement("button");
-      const on = !state.months.size || state.months.has(m);
+      b.type = "button";
+      let on = false;
+      if (state.timePreset === "custom") {
+        on = state.customPeriodKeys.has(p.key);
+      } else if (state.timePreset === "all") {
+        on = true;
+      } else {
+        const active = new Set(activePeriodKeys());
+        on = active.has(p.key);
+      }
       b.className = "mbtn" + (on ? " active" : "");
-      b.textContent = monthNames[m - 1];
-      b.onclick = () => {
-        if (!state.months.size) {
-          for (let mm = 1; mm <= 12; mm++) {
-            if (mm !== m) state.months.add(mm);
-          }
-        } else if (state.months.has(m)) {
-          state.months.delete(m);
-          if (!state.months.size) state.months.clear();
-        } else {
-          state.months.add(m);
-          if (state.months.size === 12) state.months.clear();
-        }
-        buildPeriodFilters();
-        refresh();
-      };
+      b.textContent = p.short;
+      b.title = p.label;
+      b.onclick = () => togglePeriodKey(p.key);
       mc.appendChild(b);
-    }
+    });
+
+    const lbl = $("periodSelectionLabel");
+    if (lbl) lbl.textContent = periodLabel();
   }
 
   function fillSelects() {
@@ -818,44 +835,82 @@
 
   function periodLabel() {
     const keys = activePeriodKeys();
-    if (keys.length === DATA.periods.length) return "Todos los meses";
+    const total = DATA.periods.length;
+    if (!keys.length) return "Ningún mes seleccionado";
+    if (keys.length === total) {
+      const p0 = DATA.periods[0];
+      const p1 = DATA.periods[total - 1];
+      return p0.label + " → " + p1.label + " (" + total + " meses)";
+    }
     if (keys.length === 1) {
       const p = DATA.periods.find((x) => x.key === keys[0]);
-      return p ? p.label : keys.join(", ");
+      return p ? p.label : keys[0];
     }
-    return keys.length + " meses seleccionados";
+    const p0 = DATA.periods.find((x) => x.key === keys[0]);
+    const p1 = DATA.periods.find((x) => x.key === keys[keys.length - 1]);
+    return (
+      (p0 ? p0.short : keys[0]) +
+      " → " +
+      (p1 ? p1.short : keys[keys.length - 1]) +
+      " (" +
+      keys.length +
+      " meses)"
+    );
+  }
+
+  function showLoadError(msg) {
+    const el = $("loadErr");
+    if (el) {
+      el.style.display = "block";
+      el.textContent = msg;
+    }
   }
 
   function refresh() {
     if (!DATA) return;
-    const keys = activePeriodKeys();
-    if (!keys.length) {
-      $("periodWarn").style.display = "block";
-      return;
+    try {
+      const keys = activePeriodKeys();
+      const warn = $("periodWarn");
+      if (!keys.length) {
+        if (warn) warn.style.display = "block";
+        $("subtitle").textContent = "Seleccioná al menos un mes";
+        return;
+      }
+      if (warn) warn.style.display = "none";
+      const skuMap = aggregateSales(keys);
+      const { abc, items } = computeAbc(skuMap);
+      const summary = summarizeAbc(abc, items);
+      const invMap = inventoryBySku();
+      const pareto = paretoSeries(skuMap, abc);
+      const timeline = monthlyAbcTimeline();
+      const classByPeriod = skuClassByPeriod();
+      const alerts = detectTransitions(classByPeriod);
+      const models = aggregateByModel(skuMap, abc);
+
+      renderKpis(summary, skuMap, invMap, periodLabel());
+      renderPremisaCard(summary);
+      if (typeof Chart !== "undefined") {
+        renderCharts(summary, pareto, timeline);
+      } else {
+        showLoadError(
+          "Chart.js no cargó (revisá conexión). Las tablas y KPIs siguen activos."
+        );
+      }
+      renderSkuTable(skuMap, abc, invMap);
+      renderModelTable(models);
+      renderHeatmap(classByPeriod);
+      renderAlerts(alerts, invMap);
+
+      $("subtitle").textContent =
+        periodLabel() +
+        (state.store ? " · " + state.store : "") +
+        (state.category ? " · " + state.category : "");
+      const lbl = $("periodSelectionLabel");
+      if (lbl) lbl.textContent = periodLabel();
+    } catch (err) {
+      console.error(err);
+      showLoadError("Error al renderizar: " + err.message);
     }
-    $("periodWarn").style.display = "none";
-    const skuMap = aggregateSales(keys);
-    const { abc, items } = computeAbc(skuMap);
-    const summary = summarizeAbc(abc, items);
-    const invMap = inventoryBySku();
-    const pareto = paretoSeries(skuMap, abc);
-    const timeline = monthlyAbcTimeline();
-    const classByPeriod = skuClassByPeriod();
-    const alerts = detectTransitions(classByPeriod);
-    const models = aggregateByModel(skuMap, abc);
-
-    renderKpis(summary, skuMap, invMap, periodLabel());
-    renderPremisaCard(summary);
-    renderCharts(summary, pareto, timeline);
-    renderSkuTable(skuMap, abc, invMap);
-    renderModelTable(models);
-    renderHeatmap(classByPeriod);
-    renderAlerts(alerts, invMap);
-
-    $("subtitle").textContent =
-      periodLabel() +
-      (state.store ? " · " + state.store : "") +
-      (state.category ? " · " + state.category : "");
   }
 
   function st(name) {
@@ -902,6 +957,8 @@
   }
 
   function initFilters() {
+    if (filtersInitialized) return;
+    filtersInitialized = true;
     $("fStore").onchange = (e) => {
       state.store = e.target.value;
       refresh();
@@ -928,8 +985,8 @@
       state.location = "";
       state.abcClass = "";
       state.search = "";
-      state.months.clear();
-      state.years.clear();
+      state.timePreset = "all";
+      state.customPeriodKeys.clear();
       $("fStore").value = "";
       $("fCat").value = "";
       $("fLoc").value = "";
@@ -941,19 +998,36 @@
     $("btnExport").onclick = exportCsv;
   }
 
-  function loadData(payload) {
+  function boot(payload) {
     DATA = payload;
+    if (!DATA || !DATA.periods || !DATA.salesRows) {
+      showLoadError("Datos incompletos en el archivo del dashboard.");
+      return;
+    }
     renderMetaNotes();
     fillSelects();
-    buildPeriodFilters();
     initFilters();
+    buildPeriodFilters();
     refresh();
+    const err = $("loadErr");
+    if (err && err.textContent.indexOf("Error al renderizar") < 0) {
+      err.style.display = "none";
+    }
+  }
+
+  function loadData(payload) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => boot(payload));
+    } else {
+      boot(payload);
+    }
   }
 
   global.AbcDashboard = {
     loadData,
     st,
     refresh,
-    presetSemester,
+    setTimePreset,
+    selectAllPeriods,
   };
 })(window);
