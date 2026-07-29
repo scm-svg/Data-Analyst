@@ -6,56 +6,89 @@
 <title>Matriz ABC · Inventario & Ventas</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
-:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+:root{
+  --bg:#0a0b10;--surf:#12131a;--s2:#1a1b24;--s3:#22232e;--brd:#2e3040;
+  --tx:#eef0f8;--mu:#8b8da8;--mu2:#5c5e78;
+  --a:#22d3ee;--b:#fbbf24;--c:#f472b6;--gr:#34d399;--ac:#6366f1;
+  --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:12px;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
-.hdr{background:linear-gradient(135deg,#0d0e13,#191a2d 55%,#0d0e13);border-bottom:1px solid var(--brd);padding:18px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.hdr h1{font-family:var(--fh);font-size:1.45rem;font-weight:800}
-.hdr h1 em{color:var(--ac);font-style:normal}
-.hdr p{color:var(--mu);font-size:0.78rem;margin-top:4px;max-width:720px;line-height:1.45}
-.kpi-bar{display:flex;gap:10px;flex-wrap:wrap}
-.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:9px 14px;text-align:center;min-width:76px}
-.kpib .kv{font-family:var(--fh);font-size:1.2rem;font-weight:800;color:var(--ac)}
-.kpib .kl{font-size:0.62rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
-.kpib .ksub{font-size:0.58rem;color:var(--mu2);margin-top:1px}
-.mbar,.fbar{background:var(--s2);border-bottom:1px solid var(--brd);padding:10px 40px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.mbar-lbl,.fbar label{font-size:0.66rem;color:var(--mu);text-transform:uppercase;font-weight:600}
-.mbtn{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:20px;padding:6px 12px;font-size:0.74rem;cursor:pointer}
-.mbtn.active{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:700}
-.fbar select,.fbar input{background:var(--s3);color:var(--tx);border:1px solid var(--brd);border-radius:7px;padding:6px 10px;font-size:0.78rem}
-.fbtn{background:var(--ac);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-weight:600;cursor:pointer;margin-left:auto}
-.tabs{display:flex;gap:2px;padding:12px 40px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
-.tab{padding:8px 14px;font-family:var(--fh);font-size:0.76rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;border-bottom:3px solid transparent}
-.tab.active{color:var(--tx);border-bottom-color:var(--ac);background:var(--s2)}
-.content{padding:22px 40px;max-width:1600px;margin:0 auto}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(99,102,241,.12),transparent);}
+.hdr{border-bottom:1px solid var(--brd);padding:16px 32px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.hdr h1{font-family:var(--fh);font-size:1.35rem;font-weight:800;letter-spacing:-0.3px}
+.hdr h1 em{color:var(--a);font-style:normal}
+#subtitle{color:var(--mu);font-size:0.78rem;margin-top:4px}
+.kpi-bar{display:flex;gap:8px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:8px 12px;text-align:center;min-width:72px;
+  background-image:linear-gradient(145deg,rgba(255,255,255,.03),transparent);}
+.kpib .kv{font-family:var(--fh);font-size:1.1rem;font-weight:800;color:var(--a)}
+.kpib .kl{font-size:0.58rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.kpib .ksub{font-size:0.55rem;color:var(--mu2)}
+.mbar,.fbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:8px 32px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mbar-lbl,.fbar label{font-size:0.62rem;color:var(--mu);text-transform:uppercase;font-weight:600}
+.mbtn{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:18px;padding:5px 11px;font-size:0.72rem;cursor:pointer;transition:.15s}
+.mbtn:hover{border-color:var(--ac);color:var(--tx)}
+.mbtn.active{background:linear-gradient(135deg,var(--ac),#4f46e5);color:#fff;border-color:transparent;font-weight:600}
+.fbar select,.fbar input{background:var(--s3);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:5px 9px;font-size:0.76rem}
+.fbtn{background:var(--ac);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:0.76rem}
+.tabs{display:flex;gap:0;padding:10px 32px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:7px 12px;font-family:var(--fh);font-size:0.72rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:var(--tx);border-bottom-color:var(--a)}
+.content{padding:18px 32px;max-width:1680px;margin:0 auto}
 .sec{display:none}.sec.active{display:block}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-.g1{margin-bottom:14px}
-.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px}
-.card h3{font-family:var(--fh);font-size:0.88rem;margin-bottom:4px}
-.sub{font-size:0.7rem;color:var(--mu);margin-bottom:12px}
-.cw{position:relative;height:240px}
-.cw.t{height:300px}
-.rt,.ct{width:100%;border-collapse:collapse;font-size:0.78rem}
-.rt th,.ct th{font-size:0.62rem;text-transform:uppercase;color:var(--mu);padding:6px;text-align:left;border-bottom:1px solid var(--brd)}
-.rt td,.ct td{padding:6px;border-bottom:1px solid var(--brd)}
-.cscroll{max-height:420px;overflow:auto}
-.abc{display:inline-block;font-weight:800;font-family:var(--fh);padding:2px 8px;border-radius:6px;font-size:0.72rem}
-.abc-A{background:rgba(76,175,118,.25);color:var(--gr)}
-.abc-B{background:rgba(255,193,7,.22);color:var(--yw)}
-.abc-C{background:rgba(239,68,68,.22);color:var(--rd)}
-.chip{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px}
-.rn{font-weight:600;font-family:var(--fh)}
-.flag{color:var(--rd);font-size:0.72rem;font-weight:600}
-.flag.warn{color:var(--yw)}
-.nodata{color:var(--mu);padding:20px;text-align:center}
-#loadErr{display:none;background:rgba(239,68,68,.15);border:1px solid var(--rd);margin:12px 40px;padding:12px;border-radius:10px;color:#ffb4b4}
-#periodWarn{display:none;margin:0 40px 12px;padding:10px;background:rgba(255,193,7,.12);border:1px solid var(--yw);border-radius:8px;color:var(--yw);font-size:0.8rem}
-.metaNotes{font-size:0.75rem;color:var(--mu);line-height:1.5}
-.metaNotes ul{margin-left:18px}
-.footer{text-align:center;color:var(--mu);font-size:0.68rem;padding:16px;border-top:1px solid var(--brd)}
-@media(max-width:900px){.g2{grid-template-columns:1fr}.hdr,.mbar,.fbar,.tabs,.content{padding-left:16px;padding-right:16px}}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.g1{margin-bottom:12px}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,.25);}
+.card h3{font-family:var(--fh);font-size:0.82rem;margin-bottom:2px}
+.sub{font-size:0.66rem;color:var(--mu);margin-bottom:10px}
+.chart-row{display:grid;grid-template-columns:1fr 140px;gap:12px;align-items:center}
+.cw{position:relative;height:200px}
+.cw.s{height:160px}
+.side-legend{font-size:0.72rem;line-height:1.55}
+.side-legend div{margin-bottom:6px;padding:6px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--brd)}
+.side-legend strong{font-family:var(--fh);font-size:0.85rem}
+.rt,.ct{width:100%;border-collapse:collapse;font-size:0.74rem}
+.rt th,.ct th{font-size:0.58rem;text-transform:uppercase;color:var(--mu);padding:5px 6px;text-align:left;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf);z-index:1}
+.rt td,.ct td{padding:5px 6px;border-bottom:1px solid var(--brd);vertical-align:middle}
+.ct tr:hover td{background:rgba(99,102,241,.06)}
+.cscroll{max-height:480px;overflow:auto}
+.abc{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;font-weight:800;font-family:var(--fh);border-radius:6px;font-size:0.68rem}
+.abc-A{background:rgba(34,211,238,.2);color:var(--a);border:1px solid rgba(34,211,238,.45)}
+.abc-B{background:rgba(251,191,36,.15);color:var(--b);border:1px solid rgba(251,191,36,.4)}
+.abc-C{background:rgba(244,114,182,.15);color:var(--c);border:1px solid rgba(244,114,182,.4)}
+.abc-dash{background:rgba(120,120,140,.12);color:var(--mu);border:1px solid var(--brd)}
+.mig-cell{text-align:center;padding:4px!important}
+.mig-dot{display:inline-flex;width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800}
+.mig-dot.A{background:rgba(34,211,238,.25);color:var(--a);box-shadow:0 0 0 1px rgba(34,211,238,.35)}
+.mig-dot.B{background:rgba(251,191,36,.2);color:var(--b)}
+.mig-dot.C{background:rgba(244,114,182,.2);color:var(--c)}
+.mig-dot.-{background:var(--s3);color:var(--mu2);font-size:0.55rem}
+.trend-up{color:var(--gr);font-weight:700;font-size:0.7rem}
+.trend-dn{color:var(--c);font-weight:700;font-size:0.7rem}
+.expander{cursor:pointer;user-select:none;color:var(--a);font-weight:700;width:22px;display:inline-block}
+.row-model td{background:rgba(255,255,255,.02);font-weight:600}
+.row-variant td{padding-left:28px!important;font-size:0.7rem;color:var(--mu)}
+.cap-card{border-radius:10px;padding:12px;border:1px solid var(--brd);background:var(--s2)}
+.cap-card.a{border-color:rgba(34,211,238,.35)}
+.cap-card.b{border-color:rgba(251,191,36,.3)}
+.cap-card.c{border-color:rgba(244,114,182,.35)}
+.cap-card .big{font-family:var(--fh);font-size:1.35rem;font-weight:800}
+.cap-card .lbl{font-size:0.62rem;color:var(--mu);text-transform:uppercase}
+.bar-stack{display:flex;height:28px;border-radius:8px;overflow:hidden;margin:8px 0}
+.bar-stack span{display:flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;color:#0a0b10}
+.diag{padding:10px;border-radius:8px;font-size:0.72rem;line-height:1.45;margin-top:8px}
+.diag.r{background:rgba(244,114,182,.1);border:1px solid rgba(244,114,182,.25)}
+.diag.g{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25)}
+.diag.m{background:rgba(120,120,140,.1);border:1px solid var(--brd)}
+#loadErr{display:none;background:rgba(244,114,182,.12);border:1px solid var(--c);margin:10px 32px;padding:10px;border-radius:8px}
+#periodWarn{display:none;margin:0 32px 10px;padding:8px;background:rgba(251,191,36,.1);border:1px solid var(--b);border-radius:8px;color:var(--b);font-size:0.76rem}
+.footer{text-align:center;color:var(--mu2);font-size:0.62rem;padding:12px;border-top:1px solid var(--brd)}
+@media(max-width:960px){.g2,.g3,.chart-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -63,96 +96,132 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <div>
     <h1>Matriz <em>ABC</em> · Inventario</h1>
     <p id="subtitle">Cargando…</p>
-    <p class="metaNotes" id="metaNotes"></p>
   </div>
   <div class="kpi-bar" id="kpiBar"></div>
 </div>
 <div id="loadErr"></div>
-<div id="periodWarn">Seleccioná al menos un mes con datos (chips de mes o un atajo de período).</div>
+<div id="periodWarn">Seleccioná al menos un mes con datos.</div>
 <div class="mbar">
-  <span class="mbar-lbl">Período</span>
-  <div id="presetChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <span class="mbar-lbl">Período</span><div id="presetChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
 </div>
 <div class="mbar">
-  <span class="mbar-lbl">Meses</span>
-  <div id="monthChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  <span class="mbar-lbl" id="periodSelectionLabel" style="margin-left:8px;color:var(--ac);text-transform:none"></span>
+  <span class="mbar-lbl">Meses</span><div id="monthChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <span id="periodSelectionLabel" style="margin-left:6px;color:var(--a);font-size:0.72rem"></span>
 </div>
 <div class="fbar">
-  <label>Tienda ventas</label><select id="fStore"></select>
+  <label>Modelo</label><select id="fModel"></select>
+  <label>Tienda</label><select id="fStore"></select>
   <label>Categoría</label><select id="fCat"></select>
-  <label>Ubicación stock</label><select id="fLoc"></select>
-  <label>Clase ABC</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
-  <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…" size="18">
-  <button class="fbtn" type="button" id="btnExport">Exportar CSV</button>
-  <button class="fbtn" type="button" id="btnReset" style="background:var(--s3);color:var(--tx);border:1px solid var(--brd)">Limpiar filtros</button>
+  <label>Stock en</label><select id="fLoc"></select>
+  <label>Clase</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+  <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…" size="16">
+  <button class="fbtn" type="button" id="btnExport">CSV</button>
+  <button class="fbtn" type="button" id="btnReset" style="background:var(--s3);color:var(--tx);border:1px solid var(--brd)">Limpiar</button>
 </div>
 <div class="tabs">
-  <button class="tab active" data-tab="resumen" onclick="AbcDashboard.st('resumen')">Resumen ABC</button>
-  <button class="tab" data-tab="skus" onclick="AbcDashboard.st('skus')">Por SKU</button>
-  <button class="tab" data-tab="modelos" onclick="AbcDashboard.st('modelos')">Por modelo</button>
-  <button class="tab" data-tab="evolucion" onclick="AbcDashboard.st('evolucion')">Evolución mensual</button>
-  <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas A→C</button>
+  <button class="tab active" data-tab="resumen" onclick="AbcDashboard.st('resumen')">Resumen</button>
+  <button class="tab" data-tab="clasificacion" onclick="AbcDashboard.st('clasificacion')">Clasificación ABC</button>
+  <button class="tab" data-tab="catalogo" onclick="AbcDashboard.st('catalogo')">Catálogo</button>
+  <button class="tab" data-tab="evolucion" onclick="AbcDashboard.st('evolucion')">Migración mensual</button>
+  <button class="tab" data-tab="capital" onclick="AbcDashboard.st('capital')">Capital e inventario</button>
+  <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas</button>
 </div>
 <div class="content">
   <section class="sec active" id="sec-resumen">
     <div class="g2">
-      <div class="card"><h3>SKUs por clase</h3><div class="sub">Distribución del catálogo activo en el período</div><div class="cw"><canvas id="cDonutSku"></canvas></div></div>
-      <div class="card"><h3>Margen por clase</h3><div class="sub">Participación del margen de contribución</div><div class="cw"><canvas id="cDonutMarg"></canvas></div></div>
+      <div class="card">
+        <h3>SKUs por clase</h3><div class="sub">Solo productos con margen positivo en el período</div>
+        <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
+      </div>
+      <div class="card">
+        <h3>Margen por clase</h3><div class="sub">Participación del margen de contribución</div>
+        <div class="chart-row"><div class="cw"><canvas id="cDonutMarg"></canvas></div><div class="side-legend" id="legendMarg"></div></div>
+      </div>
     </div>
     <div class="g2">
-      <div class="card"><h3>Curva de Pareto</h3><div class="sub">Margen acumulado — cortes 80% / 95%</div><div class="cw t"><canvas id="cPareto"></canvas></div></div>
-      <div class="card"><h3>Premisas vs resultado</h3><div class="sub">Objetivo del cuadro de control (20/30/50 SKUs · 80/15/5 margen)</div><div id="premisaCompare"></div></div>
+      <div class="card">
+        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación del margen — lectura directa vs curva Pareto</div>
+        <div class="cw s"><canvas id="cMarginBar"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Premisas vs resultado</h3><div class="sub">Cuadro de control acordado</div>
+        <div id="premisaCompare"></div>
+      </div>
     </div>
   </section>
-  <section class="sec" id="sec-skus">
+  <section class="sec" id="sec-clasificacion">
     <div class="card">
-      <h3>Detalle por SKU</h3>
-      <div class="sub">Margen neto del período · stock actual (ubicaciones filtradas)</div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>#</th><th>ABC</th><th>Modelo</th><th>SKU</th><th>Margen $</th><th>% margen</th><th>Qty vendida</th><th>Stock</th><th>Señal</th></tr></thead><tbody id="skuBody"></tbody></table></div>
-      <p class="sub" id="skuFootnote"></p>
+      <h3>Clasificación ABC — productos</h3>
+      <div class="sub" id="classTableSub"></div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th>#</th><th>Producto</th><th>Clase</th><th>Ingresos</th><th>Margen</th><th>% margen</th><th>% acum.</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
+      </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
-  <section class="sec" id="sec-modelos">
+  <section class="sec" id="sec-catalogo">
     <div class="card">
-      <h3>Detalle por modelo</h3>
-      <div class="sub">ABC calculada sobre margen agregado del modelo · mix de SKUs A/B/C</div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>#</th><th>ABC</th><th>Modelo</th><th>SKUs</th><th>Margen $</th><th>Qty</th><th>Mix SKU</th></tr></thead><tbody id="modelBody"></tbody></table></div>
+      <h3>Catálogo por modelo</h3>
+      <div class="sub">Expandir fila para ver variantes (SKU). Sin margen ≤ 0.</div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th></th><th>Clase</th><th>Modelo / variante</th><th>Margen</th><th>%</th><th>Und.</th><th>Stock</th>
+      </tr></thead><tbody id="catalogBody"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-evolucion">
-    <div class="g1 card"><h3>Conteo de SKUs por clase — mes a mes</h3><div class="sub">Misma lógica ABC aplicada independientemente en cada mes (respeta filtros tienda/categoría)</div><div class="cw t"><canvas id="cMonthly"></canvas></div></div>
-    <div class="g1 card"><h3>Heatmap — productos con más cambios de clase</h3><div class="sub">Filas = SKUs inestables · columnas = meses consecutivos en la data</div><div class="cscroll" id="abcHeatmap"></div></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <h3>Migración ABC por producto</h3>
+        <div class="sub" id="migLegend" style="margin:0">
+          <span class="mig-dot A">A</span> Intocable &nbsp;
+          <span class="mig-dot B">B</span> Media &nbsp;
+          <span class="mig-dot C">C</span> Lastre &nbsp;
+          <span class="mig-dot -">—</span> Sin venta
+        </div>
+      </div>
+      <div class="sub" id="migSub"></div>
+      <div class="cscroll"><table class="ct" id="migTable"><thead id="migHead"></thead><tbody id="migBody"></tbody></table></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-capital">
+    <div class="g3" id="capitalCards"></div>
+    <div class="g2">
+      <div class="card">
+        <h3>Distribución de stock por clase</h3>
+        <div class="sub">Unidades físicas en inventario (según filtro ubicación)</div>
+        <div id="stockBar"></div>
+      </div>
+      <div class="card">
+        <h3>Distribución de valor estimado</h3>
+        <div class="sub">Stock × costo unitario promedio del período</div>
+        <div id="valueBar"></div>
+        <div id="capitalDiag"></div>
+      </div>
+    </div>
   </section>
   <section class="sec" id="sec-alertas">
     <div class="card">
-      <h3>Movimientos de clase entre meses consecutivos</h3>
+      <h3>Cambios de clase — acción sugerida</h3>
       <div class="sub" id="alertCount"></div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>Sev</th><th>Modelo</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción sugerida</th></tr></thead><tbody id="alertBody"></tbody></table></div>
+      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción</th></tr></thead><tbody id="alertBody"></tbody></table></div>
     </div>
   </section>
 </div>
-<div class="footer">Matriz ABC · Margen de contribución (ventas netas − costo) · Devoluciones incluidas como valores negativos</div>
+<div class="footer">ABC · margen de contribución · excluye SKUs sin margen positivo en vistas de ranking</div>
 <script src="abc_dashboard.js"></script>
 <script>
 (function(){
   function start() {
-    if (window.__ABC_DATA__) {
-      AbcDashboard.loadData(window.__ABC_DATA__);
-      return;
-    }
-    fetch('abc_dashboard_data.json')
-      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    if (window.__ABC_DATA__) { AbcDashboard.loadData(window.__ABC_DATA__); return; }
+    fetch('abc_dashboard_data.json').then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
       .then(function(d){ AbcDashboard.loadData(d); })
       .catch(function(){
-        var el = document.getElementById('loadErr');
-        el.style.display = 'block';
-        el.innerHTML = 'No se pudo cargar la data. Abrí <strong>abc_inventario_completo.html</strong> (un solo archivo, sin dependencias).';
+        var el=document.getElementById('loadErr'); el.style.display='block';
+        el.innerHTML='Abrí <strong>abc_inventario_completo.html</strong> (archivo único con data).';
       });
   }
-  if (typeof AbcDashboard === 'undefined') {
-    document.getElementById('loadErr').style.display = 'block';
-    document.getElementById('loadErr').innerHTML = 'Falta el script del dashboard. Usá <strong>abc_inventario_completo.html</strong>.';
+  if (typeof AbcDashboard==='undefined') {
+    document.getElementById('loadErr').style.display='block';
+    document.getElementById('loadErr').textContent='Usá abc_inventario_completo.html';
     return;
   }
   start();
