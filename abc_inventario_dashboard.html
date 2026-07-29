@@ -6,7 +6,6 @@
 <title>Matriz ABC · Inventario & Ventas</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
 :root{
   --bg:#0a0b10;--surf:#12131a;--s2:#1a1b24;--s3:#22232e;--brd:#2e3040;
@@ -207,25 +206,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   </section>
 </div>
 <div class="footer">ABC · margen de contribución · excluye SKUs sin margen positivo en vistas de ranking</div>
-<script src="abc_dashboard.js"></script>
-<script>
-(function(){
-  function start() {
-    if (window.__ABC_DATA__) { AbcDashboard.loadData(window.__ABC_DATA__); return; }
-    fetch('abc_dashboard_data.json').then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function(d){ AbcDashboard.loadData(d); })
-      .catch(function(){
-        var el=document.getElementById('loadErr'); el.style.display='block';
-        el.innerHTML='Abrí <strong>abc_inventario_completo.html</strong> (archivo único con data).';
-      });
-  }
-  if (typeof AbcDashboard==='undefined') {
-    document.getElementById('loadErr').style.display='block';
-    document.getElementById('loadErr').textContent='Usá abc_inventario_completo.html';
-    return;
-  }
-  start();
-})();
-</script>
+<!--INJECT_APP-->
 </body>
 </html>

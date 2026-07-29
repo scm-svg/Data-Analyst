@@ -25,7 +25,11 @@
   let filtersInitialized = false;
 
   if (typeof Chart !== "undefined" && Chart.register && global.ChartDataLabels) {
-    Chart.register(global.ChartDataLabels);
+    try {
+      Chart.register(global.ChartDataLabels);
+    } catch (e) {
+      /* plugin opcional */
+    }
   }
 
   function $(id) {
@@ -321,6 +325,7 @@
   }
 
   function donutLabels() {
+    if (!global.ChartDataLabels) return {};
     return {
       color: "#eef0f8",
       font: { weight: "bold", size: 11 },
@@ -374,7 +379,9 @@
       B: "rgba(251,191,36,.85)",
       C: "rgba(244,114,182,.85)",
     };
-    const dl = global.ChartDataLabels ? { datalabels: donutLabels() } : {};
+    const dl = global.ChartDataLabels
+      ? { datalabels: donutLabels() }
+      : {};
     const base = {
       maintainAspectRatio: false,
       cutout: "62%",

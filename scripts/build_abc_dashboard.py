@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-Procesa ventas + inventario Odoo y genera abc_dashboard_data.json para el dashboard ABC.
-Clasificación Pareto por margen de contribución (80 / 15 / 5).
+Genera UN solo HTML autocontenido (JS + JSON embebido) para Matriz ABC.
 """
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +12,16 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 OUT_JSON = ROOT / "abc_dashboard_data.json"
+TEMPLATE = ROOT / "abc_inventario_dashboard.html"
+JS_PATH = ROOT / "abc_dashboard.js"
+INJECT_MARKER = "<!--INJECT_APP-->"
+
+# Nombre principal que debe abrir el usuario (un solo archivo)
+OUTPUT_NAMES = (
+    "Matriz_ABC_Inventario.html",
+    "abc_inventario_completo.html",
+    "abc_inventario_standalone.html",
+)
 
 MES_MAP = {
     "ENERO": 1,
@@ -45,7 +53,7 @@ MES_LABEL = {
     12: "Diciembre",
 }
 
-ABC_THRESHOLDS = {"A": 0.80, "B": 0.95}  # acumulado margen positivo
+ABC_THRESHOLDS = {"A": 0.80, "B": 0.95}
 
 
 def load_sales() -> pd.DataFrame:
@@ -55,9 +63,6 @@ def load_sales() -> pd.DataFrame:
     df["SKU"] = df["SKU"].astype(str).str.strip()
     df["Mes"] = df["Mes"].astype(str).str.strip().str.upper()
     df["mnum"] = df["Mes"].map(MES_MAP)
-    if df["mnum"].isna().any():
-        bad = df.loc[df["mnum"].isna(), "Mes"].unique()
-        raise ValueError(f"Meses no mapeados: {bad}")
     df["Año"] = df["Año"].astype(int)
     df["period"] = (
         df["Año"].astype(str)
@@ -67,10 +72,7 @@ def load_sales() -> pd.DataFrame:
     df["tienda"] = df["tienda / ubicación"].fillna("SIN TIENDA").astype(str).str.strip()
     df["categoria"] = df["Categoría del producto"].fillna("Sin categoría").astype(str)
     df["producto"] = df["Producto"].fillna("").astype(str).str.strip()
-    df["variante"] = df["Variante del producto"].fillna("").astype(str)
     df["genero"] = df["GENERO"].fillna("").astype(str)
-    df["color"] = df["COLOR"].fillna("").astype(str)
-    df["talla"] = df["TALLA"].fillna("").astype(str)
     df["qty"] = pd.to_numeric(df["Cant. ordenada"], errors="coerce").fillna(0)
     df["revenue"] = pd.to_numeric(df["TOTAL ($)"], errors="coerce").fillna(0)
     df["cost"] = pd.to_numeric(df["COSTO ($) TOTAL"], errors="coerce").fillna(0)
@@ -134,7 +136,6 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     cat_idx = {c: i for i, c in enumerate(categories)}
     period_idx = {p["key"]: i for i, p in enumerate(period_meta)}
 
-    # Filas compactas: [pi, si, ti, ci, qty, revenue, cost, margin]
     rows = []
     g = sales.groupby(
         ["period", "SKU", "tienda", "categoria"], as_index=False
@@ -167,14 +168,10 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
 
     stats = {
         "lineas_ventas": int(len(sales)),
-        "lineas_neg_qty": int((sales["qty"] < 0).sum()),
-        "lineas_neg_revenue": int((sales["revenue"] < 0).sum()),
-        "lineas_neg_margin": int((sales["margin"] < 0).sum()),
         "skus_unicos": len(skus),
         "periodos": len(periods),
         "rango": f"{period_meta[0]['label']} → {period_meta[-1]['label']}",
         "margen_neto_total": round(float(sales["margin"].sum()), 2),
-        "ingresos_neto_total": round(float(sales["revenue"].sum()), 2),
     }
 
     return {
@@ -187,12 +184,6 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
                 "B": {"margen_pct": 15, "sku_pct_objetivo": 30},
                 "C": {"margen_pct": 5, "sku_pct_objetivo": 50},
             },
-            "notas": [
-                "ABC por margen de contribución (TOTAL $ − COSTO TOTAL $), neto de devoluciones.",
-                "Cantidades/importes negativos: devoluciones o notas; se incluyen en el neto del período.",
-                "Clasificación Pareto: A ≤80% margen acumulado (positivo), B hasta 95%, resto C.",
-                "SKUs sin margen positivo en el período filtrado se clasifican C.",
-            ],
             "stats": stats,
         },
         "periods": period_meta,
@@ -206,39 +197,60 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     }
 
 
-def build_standalone() -> None:
-    html_path = ROOT / "abc_inventario_dashboard.html"
-    js_path = ROOT / "abc_dashboard.js"
-    html = html_path.read_text(encoding="utf-8")
-    js = js_path.read_text(encoding="utf-8")
-    data = OUT_JSON.read_text(encoding="utf-8")
-    marker = '<script src="abc_dashboard.js"></script>'
-    if marker not in html:
-        raise RuntimeError("Marcador HTML no encontrado para standalone")
-    replacement = (
+BOOT_SCRIPT = """
+<script>
+(function(){
+  function boot(){
+    var errEl=document.getElementById('loadErr');
+    try{
+      var raw=document.getElementById('abc-embedded-data');
+      if(!raw) throw new Error('Datos no embebidos — regenerá con build_abc_dashboard.py');
+      var payload=JSON.parse(raw.textContent);
+      if(typeof AbcDashboard==='undefined') throw new Error('Motor del dashboard no cargó (revisá bloqueo de scripts)');
+      AbcDashboard.loadData(payload);
+      if(errEl) errEl.style.display='none';
+    }catch(e){
+      console.error(e);
+      if(errEl){ errEl.style.display='block'; errEl.textContent='Error al cargar: '+e.message; }
+      var sub=document.getElementById('subtitle');
+      if(sub) sub.textContent='No se pudo cargar la data.';
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+"""
+
+
+def build_unified_html(template: str, js: str, data_json: str) -> str:
+    if INJECT_MARKER not in template:
+        raise RuntimeError(f"Falta marcador {INJECT_MARKER} en plantilla")
+    block = (
         f"<script>\n{js}\n</script>\n"
-        f"<script>window.__ABC_DATA__={data};</script>"
+        f'<script type="application/json" id="abc-embedded-data">\n{data_json}\n</script>\n'
+        f"{BOOT_SCRIPT.strip()}\n"
     )
-    standalone = html.replace(marker, replacement)
-    for name in (
-        "abc_inventario_completo.html",
-        "abc_inventario_standalone.html",
-    ):
-        out_path = ROOT / name
-        out_path.write_text(standalone, encoding="utf-8")
-        size_mb = out_path.stat().st_size / (1024 * 1024)
-        print(f"OK → {out_path} ({size_mb:.2f} MB)")
+    return template.replace(INJECT_MARKER, block)
 
 
 def main() -> None:
     sales = load_sales()
     inv = load_inventory()
     payload = build_indexes(sales, inv)
-    OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    size_mb = OUT_JSON.stat().st_size / (1024 * 1024)
-    print(f"OK → {OUT_JSON} ({size_mb:.2f} MB)")
+    data_json = json.dumps(payload, ensure_ascii=False)
+    OUT_JSON.write_text(data_json, encoding="utf-8")
+
+    template = TEMPLATE.read_text(encoding="utf-8")
+    js = JS_PATH.read_text(encoding="utf-8")
+    unified = build_unified_html(template, js, data_json)
+
+    for name in OUTPUT_NAMES:
+        out = ROOT / name
+        out.write_text(unified, encoding="utf-8")
+        print(f"OK → {out} ({out.stat().st_size / (1024*1024):.2f} MB)")
+
     print(json.dumps(payload["meta"]["stats"], indent=2, ensure_ascii=False))
-    build_standalone()
 
 
 if __name__ == "__main__":
