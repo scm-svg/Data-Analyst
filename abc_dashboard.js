@@ -753,7 +753,7 @@
             cap[k].models.size +
             " modelos · " +
             fmtUsd(cap[k].v) +
-            " est.</div><div class="sub">' +
+            " est.</div><div class='sub'>" +
             pct(pU) +
             " del stock físico</div></div>"
           );
