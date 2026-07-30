@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+from pathlib import Path
 
 from build_spotssports_data import MODEL_CORTA, MODEL_LARGA, build
 
@@ -97,6 +98,69 @@ html = html.replace(
     "function aTab(){var t=document.querySelector('.tab.active');if(!t)return'resumen';var tx=t.textContent;if(tx.indexOf('Resumen')>=0)return'resumen';if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Talla')>=0)return'tallas';if(tx.indexOf('Tienda')>=0)return'tiendas';if(tx.indexOf('Inventario')>=0)return'inventario';return'decisiones';}",
 )
 
+# ── Inventario (pestaña + sección + render) ──
+INV_CSS = """
+.inv-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+@media(max-width:780px){.inv-summary{grid-template-columns:1fr}}
+.inv-sum-card{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:20px 16px;text-align:center}
+.inv-sum-card .num{font-family:var(--fh);font-size:2rem;font-weight:800;line-height:1;color:var(--ac)}
+.inv-sum-card .lbl{font-size:0.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:0.6px;margin-top:6px}
+.inv-sum-card.tiendas .num{color:#00bcd4}
+.inv-sum-card.taller{border-color:#f9731644;background:rgba(249,115,22,.06)}
+.inv-sum-card.taller .num{color:#f97316}
+.inv-loc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
+.inv-loc-card{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px 16px}
+.inv-loc-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px}
+.inv-loc-hdr h4{font-family:var(--fh);font-size:0.82rem;font-weight:800;margin:0}
+.inv-loc-hdr .sub2{font-size:0.64rem;color:var(--mu);margin-top:2px}
+.inv-loc-tot{font-family:var(--fh);font-size:0.9rem;font-weight:800;color:var(--ac);white-space:nowrap}
+.inv-matrix-wrap{overflow-x:auto;padding-bottom:4px}
+.inv-matrix{border-collapse:separate;border-spacing:3px;width:100%}
+.inv-matrix th{font-size:0.62rem;color:var(--mu);padding:2px 5px;text-align:center;font-weight:600;white-space:nowrap}
+.inv-matrix .color-cell{text-align:left;font-size:0.71rem;white-space:nowrap;padding-right:8px;color:var(--tx);font-weight:500}
+.inv-matrix .qty-pill{display:inline-block;background:var(--ac);color:#fff;border-radius:5px;padding:3px 8px;font-size:0.7rem;font-weight:700;min-width:24px;text-align:center}
+.inv-matrix .qty-empty{color:var(--mu2);font-size:0.65rem}
+"""
+html = html.replace(
+    '.tkpi .ts{font-size:0.68rem;color:var(--mu2);margin-top:1px}\n.nodata{',
+    '.tkpi .ts{font-size:0.68rem;color:var(--mu2);margin-top:1px}\n' + INV_CSS + '.nodata{',
+)
+html = html.replace(
+    '  <button class="tab" onclick="st(\'tiendas\')">🏪 Tiendas</button>\n'
+    '  <button class="tab" onclick="st(\'decisiones\')">💡 Decisiones</button>',
+    '  <button class="tab" onclick="st(\'tiendas\')">🏪 Tiendas</button>\n'
+    '  <button class="tab" onclick="st(\'inventario\')">📦 Inventario</button>\n'
+    '  <button class="tab" onclick="st(\'decisiones\')">💡 Decisiones</button>',
+)
+html = html.replace(
+    '</div>\n\n<!-- DECISIONES -->',
+    '</div>\n\n<div class="sec" id="sec-inventario">\n'
+    '  <div class="inv-summary" id="invSummary"></div>\n'
+    '  <div class="inv-loc-grid" id="invLocGrid"></div>\n'
+    '</div>\n\n<!-- DECISIONES -->',
+)
+html = html.replace(
+    "var TABS=['resumen','colores','tallas','tiendas','decisiones'];",
+    "var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];",
+)
+html = html.replace(
+    "else if(n==='tiendas')rTiendas();else if(n==='decisiones')rDecisiones();",
+    "else if(n==='tiendas')rTiendas();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();",
+)
+html = html.replace(
+    f"var MODELO_ID={{'{MODEL_CORTA}':'SMC','{MODEL_LARGA}':'SML'}};",
+    f"var MODELO_ID={{'{MODEL_CORTA}':'SMC','{MODEL_LARGA}':'SML'}};\n"
+    "var TALLA_ORDER=['XS','S','M','L','XL','2XL','3XL','4XL'];\n"
+    "function tallaIdx(t){var i=TALLA_ORDER.indexOf(t);return i>=0?i:999;}\n"
+    "function sortTallaKeys(keys){return keys.slice().sort(function(a,b){return tallaIdx(a)-tallaIdx(b);});}",
+)
+inv_js = Path(__file__).parent.joinpath('spotssports_inventario.js').read_text(encoding='utf-8')
+html = html.replace(
+    '\n\n// ── DECISIONES ──',
+    '\n\n' + inv_js + '\n\n// ── DECISIONES ──',
+    1,
+)
+
 # No ocultar botones de línea por género
 html = html.replace(
     "      if(m===''||m==='MIKA SPORT LITE'||m==='MAYA SPORT LITE')b.style.display='';else b.style.display='none';",
@@ -149,21 +213,6 @@ html = re.sub(
     html,
     count=1,
 )
-
-# Inventario: totales netos (como Daily)
-html = html.replace(
-    "  invRows.forEach(function(r){\n    if(r.qty<=0)return;\n    tot+=r.qty;",
-    "  invRows.forEach(function(r){\n    tot+=r.qty;",
-)
-html = html.replace(
-    "    byLoc[r.ubicacion].total+=r.qty;\n    if(!byLoc[r.ubicacion].colors[r.color])",
-    "    if(!byLoc[r.ubicacion].colors[r.color])",
-)
-html = html.replace(
-    "    byLoc[r.ubicacion].colors[r.color][r.talla]=(byLoc[r.ubicacion].colors[r.color][r.talla]||0)+r.qty;\n  });\n  document.getElementById('invSummary')",
-    "    byLoc[r.ubicacion].colors[r.color][r.talla]=(byLoc[r.ubicacion].colors[r.color][r.talla]||0)+r.qty;\n  });\n  Object.keys(byLoc).forEach(function(loc){\n    var ld=byLoc[loc],lt=0;\n    Object.keys(ld.colors).forEach(function(col){\n      Object.keys(ld.colors[col]).forEach(function(t){lt+=(ld.colors[col][t]||0);});\n    });\n    ld.total=lt;\n  });\n  document.getElementById('invSummary')",
-)
-html = html.replace('<div class="kl">Stock PT</div>', '<div class="kl">Stock Total</div>')
 
 with open(DST, 'w', encoding='utf-8') as f:
     f.write(html)

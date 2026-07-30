@@ -91,6 +91,26 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
 .tkpi .tv{font-family:var(--fh);font-size:1.15rem;font-weight:800;color:var(--ac)}
 .tkpi .tl{font-size:0.66rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
 .tkpi .ts{font-size:0.68rem;color:var(--mu2);margin-top:1px}
+.inv-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+@media(max-width:780px){.inv-summary{grid-template-columns:1fr}}
+.inv-sum-card{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:20px 16px;text-align:center}
+.inv-sum-card .num{font-family:var(--fh);font-size:2rem;font-weight:800;line-height:1;color:var(--ac)}
+.inv-sum-card .lbl{font-size:0.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:0.6px;margin-top:6px}
+.inv-sum-card.tiendas .num{color:#00bcd4}
+.inv-sum-card.taller{border-color:#f9731644;background:rgba(249,115,22,.06)}
+.inv-sum-card.taller .num{color:#f97316}
+.inv-loc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
+.inv-loc-card{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px 16px}
+.inv-loc-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px}
+.inv-loc-hdr h4{font-family:var(--fh);font-size:0.82rem;font-weight:800;margin:0}
+.inv-loc-hdr .sub2{font-size:0.64rem;color:var(--mu);margin-top:2px}
+.inv-loc-tot{font-family:var(--fh);font-size:0.9rem;font-weight:800;color:var(--ac);white-space:nowrap}
+.inv-matrix-wrap{overflow-x:auto;padding-bottom:4px}
+.inv-matrix{border-collapse:separate;border-spacing:3px;width:100%}
+.inv-matrix th{font-size:0.62rem;color:var(--mu);padding:2px 5px;text-align:center;font-weight:600;white-space:nowrap}
+.inv-matrix .color-cell{text-align:left;font-size:0.71rem;white-space:nowrap;padding-right:8px;color:var(--tx);font-weight:500}
+.inv-matrix .qty-pill{display:inline-block;background:var(--ac);color:#fff;border-radius:5px;padding:3px 8px;font-size:0.7rem;font-weight:700;min-width:24px;text-align:center}
+.inv-matrix .qty-empty{color:var(--mu2);font-size:0.65rem}
 .nodata{text-align:center;color:var(--mu);padding:28px;font-size:0.8rem}
 .footer{text-align:center;color:var(--mu);font-size:0.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 .expand-btn{position:absolute;top:8px;right:8px;background:var(--s2);border:1px solid var(--brd);color:var(--mu);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:0.76rem;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;z-index:5}
@@ -133,6 +153,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <button class="tab" onclick="st('colores')">🎨 Colores</button>
   <button class="tab" onclick="st('tallas')">📐 Tallas</button>
   <button class="tab" onclick="st('tiendas')">🏪 Tiendas</button>
+  <button class="tab" onclick="st('inventario')">📦 Inventario</button>
   <button class="tab" onclick="st('decisiones')">💡 Decisiones</button>
 </div>
 <div class="content">
@@ -165,6 +186,11 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
     <div class="card"><h3>Género por Tienda</h3><div class="sub">CAB vs DAMA por punto de venta</div><div class="cw t"><canvas id="cGenTienda"></canvas></div></div>
   </div>
   <div class="g1 card"><h3>Color × Tienda</h3><div class="sub">Heatmap de volumen por color y tienda</div><div class="hmw" style="margin-top:4px" id="tiendaColorHM"></div></div>
+</div>
+
+<div class="sec" id="sec-inventario">
+  <div class="inv-summary" id="invSummary"></div>
+  <div class="inv-loc-grid" id="invLocGrid"></div>
 </div>
 
 <!-- DECISIONES -->
@@ -209,6 +235,9 @@ var REAL_STORES=DATA.all_stores;
 var NEW_STORES=['MARGARITA','TOLON'];
 var NEW_STORE_CAPS={'MARGARITA':{base:'GRIE',mult:2,label:'2× capacidad GRIE'},'TOLON':{base:'CHACAO',mult:1,label:'1× capacidad CHACAO'}};
 var MODELO_ID={'SPOTS MANGA CORTA':'SMC','SPOTS MANGA LARGA':'SML'};
+var TALLA_ORDER=['XS','S','M','L','XL','2XL','3XL','4XL'];
+function tallaIdx(t){var i=TALLA_ORDER.indexOf(t);return i>=0?i:999;}
+function sortTallaKeys(keys){return keys.slice().sort(function(a,b){return tallaIdx(a)-tallaIdx(b);});}
 
 function cn(n){
   var s=n.toLowerCase();
@@ -352,9 +381,9 @@ function filterModelButtons(){
 }
 
 function aTab(){var t=document.querySelector('.tab.active');if(!t)return'resumen';var tx=t.textContent;if(tx.indexOf('Resumen')>=0)return'resumen';if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Talla')>=0)return'tallas';if(tx.indexOf('Tienda')>=0)return'tiendas';if(tx.indexOf('Inventario')>=0)return'inventario';return'decisiones';}
-var TABS=['resumen','colores','tallas','tiendas','decisiones'];
+var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];
 function st(name){TABS.forEach(function(t,i){document.getElementById('sec-'+t).classList.toggle('active',t===name);document.querySelectorAll('.tab')[i].classList.toggle('active',t===name);});rs(name);}
-function rs(n){if(n==='resumen')rResumen();else if(n==='colores')rColores();else if(n==='tallas')rTallas();else if(n==='tiendas')rTiendas();else if(n==='decisiones')rDecisiones();setTimeout(addExpandBtns,120);}
+function rs(n){if(n==='resumen')rResumen();else if(n==='colores')rColores();else if(n==='tallas')rTallas();else if(n==='tiendas')rTiendas();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();setTimeout(addExpandBtns,120);}
 function bRT(el,items,colorFn){if(!items.length){el.innerHTML='<div class="nodata">Sin datos</div>';return;}var h='<table class="rt"><thead><tr><th>#</th><th>Nombre</th><th style="min-width:60px">Barra</th><th>Und</th><th>%</th></tr></thead><tbody>';items.forEach(function(x,i){h+='<tr><td><span class="rk">#'+(i+1)+'</span></td><td>'+(colorFn?'<span class="chip" style="background:'+colorFn(x.k)+'"></span>':'')+x.k+'</td><td><div class="rb"><div class="rf" style="width:'+Math.min(x.pct,100)+'%"></div></div></td><td class="rn">'+x.v.toLocaleString()+'</td><td class="rp">'+x.pct+'%</td></tr>';});h+='</tbody></table>';el.innerHTML=h;}
 
 function updateKPIs(){
@@ -453,6 +482,75 @@ function rTiendas(){
   var byColor=ag(rows,'color');var topC12=byColor.slice(0,12).map(function(x){return x.k;});var m2colt=ag2(rows,'color','tienda');var mxHM=0;topC12.forEach(function(c){tiendas.forEach(function(t){var v=(m2colt[c]&&m2colt[c][t])||0;if(v>mxHM)mxHM=v;});});
   var hh='<table class="hmt"><thead><tr><th></th>'+tiendas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';topC12.forEach(function(c){hh+='<tr><td class="rl"><span class="chip" style="background:'+cn(c)+'"></span>'+c+'</td>'+tiendas.map(function(t){var v=(m2colt[c]&&m2colt[c][t])||0;return'<td style="background:'+hb(v,mxHM)+';color:'+ht(v,mxHM)+'" title="'+c+' · '+t+': '+v+' und">'+v+'</td>';}).join('')+'</tr>';});
   document.getElementById('tiendaColorHM').innerHTML=hh+'</tbody></table>';
+}
+
+function getFilteredInvRows(){
+  var f=gf();
+  return (DATA.inv_rows||[]).filter(function(r){
+    return(!_modelo||r.modelo===_modelo)&&(!f.tienda||r.ubicacion===f.tienda)&&(!f.genero||r.genero===f.genero)&&(!f.color||r.color===f.color);
+  });
+}
+
+function rInventario(){
+  var invRows=getFilteredInvRows();
+  if(!invRows.length){
+    document.getElementById('invSummary').innerHTML='<div class="nodata" style="grid-column:1/-1">Sin datos de inventario para los filtros seleccionados</div>';
+    document.getElementById('invLocGrid').innerHTML='';
+    return;
+  }
+  var tot=0,enTiendas=0,enTaller=0,byLoc={};
+  invRows.forEach(function(r){
+    tot+=r.qty;
+    if(r.ubicacion==='TALLER')enTaller+=r.qty;else enTiendas+=r.qty;
+    if(!byLoc[r.ubicacion])byLoc[r.ubicacion]={total:0,rows:{}};
+    var rowKey=r.genero+' · '+r.color;
+    if(!byLoc[r.ubicacion].rows[rowKey])byLoc[r.ubicacion].rows[rowKey]={genero:r.genero,color:r.color,tallas:{}};
+    byLoc[r.ubicacion].rows[rowKey].tallas[r.talla]=(byLoc[r.ubicacion].rows[rowKey].tallas[r.talla]||0)+r.qty;
+  });
+  Object.keys(byLoc).forEach(function(loc){
+    var ld=byLoc[loc],lt=0;
+    Object.keys(ld.rows).forEach(function(rk){
+      var rt=Object.values(ld.rows[rk].tallas).reduce(function(a,b){return a+b;},0);
+      lt+=rt;
+    });
+    ld.total=lt;
+  });
+  document.getElementById('invSummary').innerHTML=
+    '<div class="inv-sum-card"><div class="num">'+tot.toLocaleString()+'</div><div class="lbl">Stock Total</div></div>'+
+    '<div class="inv-sum-card tiendas"><div class="num">'+enTiendas.toLocaleString()+'</div><div class="lbl">En Tiendas</div></div>'+
+    '<div class="inv-sum-card taller"><div class="num">'+enTaller.toLocaleString()+'</div><div class="lbl">En Taller</div></div>';
+  var locArr=Object.keys(byLoc).sort(function(a,b){
+    if(a==='TALLER')return 1;if(b==='TALLER')return-1;
+    return byLoc[b].total-byLoc[a].total;
+  });
+  var allTallas=sortTallaKeys(invRows.reduce(function(acc,r){if(acc.indexOf(r.talla)<0)acc.push(r.talla);return acc;},[]));
+  var h='';
+  locArr.forEach(function(loc){
+    var ld=byLoc[loc];
+    var rowKeys=Object.keys(ld.rows).sort(function(a,b){
+      var sa=Object.values(ld.rows[a].tallas).reduce(function(x,y){return x+y;},0);
+      var sb=Object.values(ld.rows[b].tallas).reduce(function(x,y){return x+y;},0);
+      return sb-sa;
+    });
+    var isTaller=loc==='TALLER';
+    h+='<div class="inv-loc-card"'+(isTaller?' style="border-color:#f9731644"':'')+'>'+
+      '<div class="inv-loc-hdr">'+
+      '<div><h4>'+(isTaller?'🏭 ':'🏬 ')+loc+'</h4><div class="sub2">Stock por género, color y talla</div></div>'+
+      '<div class="inv-loc-tot" style="'+(isTaller?'color:#f97316':'')+'">'+ld.total+' und</div></div>'+
+      '<div class="inv-matrix-wrap"><table class="inv-matrix"><thead><tr><th></th>'+
+      allTallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';
+    rowKeys.forEach(function(rk){
+      var rd=ld.rows[rk];
+      h+='<tr><td class="color-cell"><span class="chip" style="background:'+cn(rd.color)+'"></span>'+(GICO[rd.genero]||'')+' '+rd.genero+' · '+rd.color+'</td>';
+      allTallas.forEach(function(t){
+        var v=rd.tallas[t]||0;
+        h+='<td style="text-align:center">'+(v>0?'<span class="qty-pill">'+v+'</span>':'<span class="qty-empty">·</span>')+'</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div></div>';
+  });
+  document.getElementById('invLocGrid').innerHTML=h;
 }
 
 
