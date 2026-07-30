@@ -119,6 +119,9 @@ INV_CSS = """
 .inv-matrix th{font-size:0.62rem;color:var(--mu);padding:2px 5px;text-align:center;font-weight:600;white-space:nowrap}
 .inv-matrix .color-cell{text-align:left;font-size:0.71rem;white-space:nowrap;padding-right:8px;color:var(--tx);font-weight:500}
 .inv-matrix .qty-pill{display:inline-block;background:var(--ac);color:#fff;border-radius:5px;padding:3px 8px;font-size:0.7rem;font-weight:700;min-width:24px;text-align:center}
+.inv-matrix .qty-pill.nomove{background:rgba(239,68,68,.12);border:1px solid #ef444466;color:#ef4444}
+.inv-matrix .qty-ventas{font-size:0.58rem;display:block;margin-top:2px;line-height:1}
+.inv-matrix .qty-ventas.zero{color:#ef4444;font-weight:700}
 .inv-matrix .qty-empty{color:var(--mu2);font-size:0.65rem}
 """
 html = html.replace(
@@ -160,6 +163,8 @@ html = html.replace(
     '\n\n' + inv_js + '\n\n// ── DECISIONES ──',
     1,
 )
+if R_TALLAS_OLD in html:
+    html = html.replace(R_TALLAS_OLD, R_TALLAS_NEW)
 
 # No ocultar botones de línea por género
 html = html.replace(

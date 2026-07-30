@@ -12,6 +12,7 @@ function rInventario(){
     document.getElementById('invLocGrid').innerHTML='';
     return;
   }
+  var salesMap=salesTallaMap();
   var tot=0,enTiendas=0,enTaller=0,byLoc={};
   invRows.forEach(function(r){
     tot+=r.qty;
@@ -37,7 +38,10 @@ function rInventario(){
     if(a==='TALLER')return 1;if(b==='TALLER')return-1;
     return byLoc[b].total-byLoc[a].total;
   });
-  var allTallas=sortTallaKeys(invRows.reduce(function(acc,r){if(acc.indexOf(r.talla)<0)acc.push(r.talla);return acc;},[]));
+  var genSet={};invRows.forEach(function(r){genSet[r.genero]=1;});
+  var allTallas=[];
+  Object.keys(genSet).forEach(function(g){tallasScope(g).forEach(function(t){if(allTallas.indexOf(t)<0)allTallas.push(t);});});
+  allTallas=sortTallaKeys(allTallas);
   var h='';
   locArr.forEach(function(loc){
     var ld=byLoc[loc];
@@ -49,7 +53,7 @@ function rInventario(){
     var isTaller=loc==='TALLER';
     h+='<div class="inv-loc-card"'+(isTaller?' style="border-color:#f9731644"':'')+'>'+
       '<div class="inv-loc-hdr">'+
-      '<div><h4>'+(isTaller?'🏭 ':'🏬 ')+loc+'</h4><div class="sub2">Stock por género, color y talla</div></div>'+
+      '<div><h4>'+(isTaller?'🏭 ':'🏬 ')+loc+'</h4><div class="sub2">Stock · ventas del período · <span style="color:#ef4444">rojo = sin movimiento</span></div></div>'+
       '<div class="inv-loc-tot" style="'+(isTaller?'color:#f97316':'')+'">'+ld.total+' und</div></div>'+
       '<div class="inv-matrix-wrap"><table class="inv-matrix"><thead><tr><th></th>'+
       allTallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';
@@ -58,7 +62,17 @@ function rInventario(){
       h+='<tr><td class="color-cell"><span class="chip" style="background:'+cn(rd.color)+'"></span>'+(GICO[rd.genero]||'')+' '+rd.genero+' · '+rd.color+'</td>';
       allTallas.forEach(function(t){
         var v=rd.tallas[t]||0;
-        h+='<td style="text-align:center">'+(v>0?'<span class="qty-pill">'+v+'</span>':'<span class="qty-empty">·</span>')+'</td>';
+        var sv=salesMap[rd.genero+'|'+rd.color+'|'+t]||0;
+        if(v>0){
+          var nomove=sv===0;
+          h+='<td style="text-align:center" title="Stock '+v+' · '+sv+' ventas'+(nomove?' — talla sin movimiento':'')+'">'+
+            '<span class="qty-pill'+(nomove?' nomove':'')+'">'+v+'</span>'+
+            '<span class="qty-ventas'+(nomove?' zero':'')+'">'+(sv>0?(sv+'v'):'0v')+'</span></td>';
+        }else if(sv===0){
+          h+='<td style="text-align:center" title="Sin stock · sin ventas"><span class="qty-empty">0</span></td>';
+        }else{
+          h+='<td style="text-align:center" title="'+sv+' ventas · sin stock"><span class="qty-empty">·</span><span class="qty-ventas">'+sv+'v</span></td>';
+        }
       });
       h+='</tr>';
     });

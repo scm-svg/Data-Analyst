@@ -110,6 +110,10 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
 .inv-matrix th{font-size:0.62rem;color:var(--mu);padding:2px 5px;text-align:center;font-weight:600;white-space:nowrap}
 .inv-matrix .color-cell{text-align:left;font-size:0.71rem;white-space:nowrap;padding-right:8px;color:var(--tx);font-weight:500}
 .inv-matrix .qty-pill{display:inline-block;background:var(--ac);color:#fff;border-radius:5px;padding:3px 8px;font-size:0.7rem;font-weight:700;min-width:24px;text-align:center}
+.inv-matrix .qty-pill.nomove{background:rgba(239,68,68,.12);border:1px solid #ef444466;color:#ef4444}
+.inv-matrix .qty-ventas{font-size:0.58rem;display:block;margin-top:2px;line-height:1}
+.inv-matrix .qty-ventas.zero{color:#ef4444;font-weight:700}
+.inv-matrix th.th-nomove{color:#ef4444}
 .inv-matrix .qty-empty{color:var(--mu2);font-size:0.65rem}
 .nodata{text-align:center;color:var(--mu);padding:28px;font-size:0.8rem}
 .footer{text-align:center;color:var(--mu);font-size:0.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
@@ -238,6 +242,37 @@ var MODELO_ID={'SPOTS MANGA CORTA':'SMC','SPOTS MANGA LARGA':'SML'};
 var TALLA_ORDER=['XS','S','M','L','XL','2XL','3XL','4XL'];
 function tallaIdx(t){var i=TALLA_ORDER.indexOf(t);return i>=0?i:999;}
 function sortTallaKeys(keys){return keys.slice().sort(function(a,b){return tallaIdx(a)-tallaIdx(b);});}
+function tallasScope(genero){
+  var f=gf(),mA=getMesesActivos(),set={};
+  (DATA.inv_rows||[]).forEach(function(r){
+    if(_modelo&&r.modelo!==_modelo)return;
+    if(genero&&r.genero!==genero)return;
+    if(f.color&&r.color!==f.color)return;
+    set[r.talla]=1;
+  });
+  DATA.raw_rows.forEach(function(r){
+    if(_modelo&&r.modelo!==_modelo)return;
+    if(genero&&r.genero!==genero)return;
+    if(f.color&&r.color!==f.color)return;
+    if(f.tienda&&r.tienda!==f.tienda)return;
+    if(mA.indexOf(r.mes)<0)return;
+    set[r.talla]=1;
+  });
+  return sortTallaKeys(Object.keys(set));
+}
+function salesTallaMap(){
+  var f=gf(),mA=getMesesActivos(),map={};
+  DATA.raw_rows.forEach(function(r){
+    if(_modelo&&r.modelo!==_modelo)return;
+    if(f.tienda&&r.tienda!==f.tienda)return;
+    if(f.genero&&r.genero!==f.genero)return;
+    if(f.color&&r.color!==f.color)return;
+    if(mA.indexOf(r.mes)<0)return;
+    var k=r.genero+'|'+r.color+'|'+r.talla;
+    map[k]=(map[k]||0)+r.v;
+  });
+  return map;
+}
 
 function cn(n){
   var s=n.toLowerCase();
@@ -458,14 +493,25 @@ function rColores(){
 
 function rTallas(){
   var rows=fr();var generos=ag(rows,'genero').map(function(x){return x.k;});
+  if(!generos.length)generos=sortTallaKeys(Object.keys((DATA.inv_rows||[]).reduce(function(a,r){if(!_modelo||r.modelo===_modelo)a[r.genero]=1;return a;},{})));
   var grid=document.getElementById('tallasGrid');var cols=generos.length===1?'1fr':generos.length===2?'1fr 1fr':'1fr 1fr 1fr';
   grid.style.cssText='display:grid;grid-template-columns:'+cols+';gap:14px;margin-bottom:14px';
-  grid.innerHTML=generos.map(function(g){return'<div class="card"><h3 style="color:'+gcol(g)+'">'+(GICO[g]||'')+' '+g+' — Tallas</h3><div class="sub">Distribución de tallas vendidas</div><div class="cw"><canvas id="cTalla_'+g+'"></canvas></div></div>';}).join('');
-  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=ag(gRows,'talla');var col=gcol(g);
-    mc('cTalla_'+g,'bar',{labels:byT.map(function(x){return x.k;}),datasets:[{data:byT.map(function(x){return x.pct;}),backgroundColor:col+'bb',borderColor:col,borderWidth:1,borderRadius:5,_units:byT.map(function(x){return x.v;})}]},Object.assign(bo(),{plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%  ('+ctx.dataset._units[ctx.dataIndex]+' und)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:12},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v){return v.toFixed(1)+'%';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:Math.min(100,Math.ceil((byT[0]?byT[0].pct:100)*1.3/5)*5)}}}));
+  grid.innerHTML=generos.map(function(g){return'<div class="card"><h3 style="color:'+gcol(g)+'">'+(GICO[g]||'')+' '+g+' — Tallas</h3><div class="sub">Incluye tallas sin ventas (0 und)</div><div class="cw"><canvas id="cTalla_'+g+'"></canvas></div></div>';}).join('');
+  generos.forEach(function(g){
+    var gRows=rows.filter(function(r){return r.genero===g;});
+    var tallaList=tallasScope(g);
+    var byTMap={};ag(gRows,'talla').forEach(function(x){byTMap[x.k]=x;});
+    var units=tallaList.map(function(t){return byTMap[t]?byTMap[t].v:0;});
+    var tot=units.reduce(function(a,b){return a+b;},0)||1;
+    var pcts=units.map(function(v){return Math.round(v/tot*1000)/10;});
+    var col=gcol(g);
+    mc('cTalla_'+g,'bar',{labels:tallaList,datasets:[{data:pcts,backgroundColor:tallaList.map(function(t,u){return(units[u]===0?'#ef4444':col)+'bb';}),borderColor:tallaList.map(function(t,u){return units[u]===0?'#ef4444':col;}),borderWidth:1,borderRadius:5,_units:units}]},Object.assign(bo(),{plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){var u=ctx.dataset._units[ctx.dataIndex];return u>0?(' '+ctx.parsed.y.toFixed(1)+'%  ('+u+' und)'):' Sin ventas (0 und)';}}},datalabels:{display:true,color:function(ctx){return ctx.dataset._units[ctx.dataIndex]===0?'#ef4444':'#fff';},font:{family:'Syne',weight:'bold',size:11},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v,ctx){var u=ctx.dataset._units[ctx.dataIndex];return u>0?v.toFixed(1)+'%':'0';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:Math.min(100,Math.ceil((Math.max.apply(null,pcts.concat([0]))||100)*1.3/5)*5)||100}}}));
   });
-  var byColor=ag(rows,'color').slice(0,12),tallas=ag(rows,'talla').map(function(x){return x.k;});var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
-  var h='<table class="hmt"><thead><tr><th></th>'+tallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';byColor.forEach(function(x){h+='<tr><td class="rl"><span class="chip" style="background:'+cn(x.k)+'"></span>'+x.k+'</td>'+tallas.map(function(t){var v=(m2[x.k]&&m2[x.k][t])||0;return'<td style="background:'+hb(v,mx)+';color:'+ht(v,mx)+'" title="'+x.k+' T'+t+': '+v+'">'+v+'</td>';}).join('')+'</tr>';});
+  var byColor=ag(rows,'color').slice(0,12);
+  var tallas=[];generos.forEach(function(g){tallasScope(g).forEach(function(t){if(tallas.indexOf(t)<0)tallas.push(t);});});
+  tallas=sortTallaKeys(tallas);
+  var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
+  var h='<table class="hmt"><thead><tr><th></th>'+tallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';byColor.forEach(function(x){h+='<tr><td class="rl"><span class="chip" style="background:'+cn(x.k)+'"></span>'+x.k+'</td>'+tallas.map(function(t){var v=(m2[x.k]&&m2[x.k][t])||0;return'<td style="background:'+(v?hb(v,mx):'#16171f')+';color:'+(v?ht(v,mx):'#ef4444')+'" title="'+x.k+' T'+t+': '+(v||0)+' und'+(v?'':' — sin ventas')+'">'+(v||'0')+'</td>';}).join('')+'</tr>';});
   document.getElementById('colTallaHM').innerHTML=h+'</tbody></table>';
 }
 
@@ -498,6 +544,7 @@ function rInventario(){
     document.getElementById('invLocGrid').innerHTML='';
     return;
   }
+  var salesMap=salesTallaMap();
   var tot=0,enTiendas=0,enTaller=0,byLoc={};
   invRows.forEach(function(r){
     tot+=r.qty;
@@ -523,7 +570,10 @@ function rInventario(){
     if(a==='TALLER')return 1;if(b==='TALLER')return-1;
     return byLoc[b].total-byLoc[a].total;
   });
-  var allTallas=sortTallaKeys(invRows.reduce(function(acc,r){if(acc.indexOf(r.talla)<0)acc.push(r.talla);return acc;},[]));
+  var genSet={};invRows.forEach(function(r){genSet[r.genero]=1;});
+  var allTallas=[];
+  Object.keys(genSet).forEach(function(g){tallasScope(g).forEach(function(t){if(allTallas.indexOf(t)<0)allTallas.push(t);});});
+  allTallas=sortTallaKeys(allTallas);
   var h='';
   locArr.forEach(function(loc){
     var ld=byLoc[loc];
@@ -535,7 +585,7 @@ function rInventario(){
     var isTaller=loc==='TALLER';
     h+='<div class="inv-loc-card"'+(isTaller?' style="border-color:#f9731644"':'')+'>'+
       '<div class="inv-loc-hdr">'+
-      '<div><h4>'+(isTaller?'🏭 ':'🏬 ')+loc+'</h4><div class="sub2">Stock por género, color y talla</div></div>'+
+      '<div><h4>'+(isTaller?'🏭 ':'🏬 ')+loc+'</h4><div class="sub2">Stock · ventas del período · <span style="color:#ef4444">rojo = sin movimiento</span></div></div>'+
       '<div class="inv-loc-tot" style="'+(isTaller?'color:#f97316':'')+'">'+ld.total+' und</div></div>'+
       '<div class="inv-matrix-wrap"><table class="inv-matrix"><thead><tr><th></th>'+
       allTallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';
@@ -544,7 +594,17 @@ function rInventario(){
       h+='<tr><td class="color-cell"><span class="chip" style="background:'+cn(rd.color)+'"></span>'+(GICO[rd.genero]||'')+' '+rd.genero+' · '+rd.color+'</td>';
       allTallas.forEach(function(t){
         var v=rd.tallas[t]||0;
-        h+='<td style="text-align:center">'+(v>0?'<span class="qty-pill">'+v+'</span>':'<span class="qty-empty">·</span>')+'</td>';
+        var sv=salesMap[rd.genero+'|'+rd.color+'|'+t]||0;
+        if(v>0){
+          var nomove=sv===0;
+          h+='<td style="text-align:center" title="Stock '+v+' · '+sv+' ventas'+(nomove?' — talla sin movimiento':'')+'">'+
+            '<span class="qty-pill'+(nomove?' nomove':'')+'">'+v+'</span>'+
+            '<span class="qty-ventas'+(nomove?' zero':'')+'">'+(sv>0?(sv+'v'):'0v')+'</span></td>';
+        }else if(sv===0){
+          h+='<td style="text-align:center" title="Sin stock · sin ventas"><span class="qty-empty">0</span></td>';
+        }else{
+          h+='<td style="text-align:center" title="'+sv+' ventas · sin stock"><span class="qty-empty">·</span><span class="qty-ventas">'+sv+'v</span></td>';
+        }
       });
       h+='</tr>';
     });
