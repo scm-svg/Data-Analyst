@@ -84,6 +84,17 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 .diag.r{background:rgba(244,114,182,.1);border:1px solid rgba(244,114,182,.25)}
 .diag.g{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25)}
 .diag.m{background:rgba(120,120,140,.1);border:1px solid var(--brd)}
+.mx-grid{display:grid;grid-template-columns:72px 1fr 1fr 1fr;gap:4px;font-size:0.68rem}
+.mx-h{font-weight:700;text-align:center;padding:6px 4px;color:var(--mu)}
+.mx-cell{border-radius:8px;padding:8px 6px;text-align:center;min-height:64px;border:1px solid var(--brd)}
+.mx-cell .n{font-family:var(--fh);font-size:1.1rem;font-weight:800}
+.mx-cell .v{font-size:0.62rem;color:var(--mu);margin-top:2px}
+.mx-AA{background:rgba(34,211,238,.18)}.mx-AB,.mx-BA{background:rgba(255,255,255,.04)}
+.mx-BB{background:rgba(251,191,36,.12)}.mx-BC,.mx-CB{background:rgba(244,114,182,.1)}
+.mx-CA{background:rgba(251,191,36,.08)}.mx-CC{background:rgba(244,114,182,.16)}
+.qcard{padding:10px;border-radius:8px;border:1px solid var(--brd);margin-bottom:8px;background:var(--s2);font-size:0.72rem;line-height:1.45}
+.qcard h4{font-family:var(--fh);font-size:0.78rem;margin-bottom:4px}
+.qcard .ex{font-size:0.65rem;color:var(--a);margin-top:4px}
 #loadErr{display:none;background:rgba(244,114,182,.12);border:1px solid var(--c);margin:10px 32px;padding:10px;border-radius:8px}
 #periodWarn{display:none;margin:0 32px 10px;padding:8px;background:rgba(251,191,36,.1);border:1px solid var(--b);border-radius:8px;color:var(--b);font-size:0.76rem}
 .footer{text-align:center;color:var(--mu2);font-size:0.62rem;padding:12px;border-top:1px solid var(--brd)}
@@ -123,6 +134,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <button class="tab" data-tab="catalogo" onclick="AbcDashboard.st('catalogo')">Catálogo</button>
   <button class="tab" data-tab="evolucion" onclick="AbcDashboard.st('evolucion')">Migración mensual</button>
   <button class="tab" data-tab="capital" onclick="AbcDashboard.st('capital')">Capital e inventario</button>
+  <button class="tab" data-tab="matriz" onclick="AbcDashboard.st('matriz')">Matriz cruzada</button>
   <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas</button>
 </div>
 <div class="content">
@@ -153,7 +165,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Clasificación ABC — productos</h3>
       <div class="sub" id="classTableSub"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>#</th><th>Producto</th><th>Clase</th><th>Ingresos</th><th>Margen</th><th>% margen</th><th>% acum.</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
+        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos</th><th>Margen $</th><th>% margen</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
       </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
@@ -162,7 +174,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Catálogo por modelo</h3>
       <div class="sub">Expandir fila para ver variantes (SKU). Sin margen ≤ 0.</div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th></th><th>Clase</th><th>Modelo / variante</th><th>Margen</th><th>%</th><th>Und.</th><th>Stock</th>
+        <th></th><th>Clase</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
     </div>
   </section>
@@ -183,17 +195,27 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   </section>
   <section class="sec" id="sec-capital">
     <div class="g3" id="capitalCards"></div>
+    <div class="g1 card">
+      <h3>Capital retenido vs stock productivo</h3>
+      <div class="sub">Unidades y valor estimado (stock × costo unitario) por clase ABC</div>
+      <div class="g2" style="margin-top:10px">
+        <div><div class="sub">Stock físico (unidades)</div><div id="stockBar"></div></div>
+        <div><div class="sub">Valor en inventario ($)</div><div id="valueBar"></div></div>
+      </div>
+      <div id="capitalDiag" style="margin-top:12px"></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-matriz">
     <div class="g2">
       <div class="card">
-        <h3>Distribución de stock por clase</h3>
-        <div class="sub">Unidades físicas en inventario (según filtro ubicación)</div>
-        <div id="stockBar"></div>
+        <h3>Matriz cruzada: Margen × Rotación</h3>
+        <div class="sub">ABC margen (ingresos netos − costo) vs ABC rotación (unidades vendidas) — independientes</div>
+        <div id="crossMatrix"></div>
       </div>
       <div class="card">
-        <h3>Distribución de valor estimado</h3>
-        <div class="sub">Stock × costo unitario promedio del período</div>
-        <div id="valueBar"></div>
-        <div id="capitalDiag"></div>
+        <h3>¿Cómo leer cada cuadrante?</h3>
+        <div class="sub">Acciones sugeridas por combinación</div>
+        <div id="crossAnalysis" class="cscroll" style="max-height:520px"></div>
       </div>
     </div>
   </section>
@@ -201,7 +223,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
     <div class="card">
       <h3>Cambios de clase — acción sugerida</h3>
       <div class="sub" id="alertCount"></div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción</th></tr></thead><tbody id="alertBody"></tbody></table></div>
+      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>Género</th><th>Color</th><th>Talla</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción</th></tr></thead><tbody id="alertBody"></tbody></table></div>
     </div>
   </section>
 </div>

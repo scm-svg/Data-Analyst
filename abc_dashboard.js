@@ -44,10 +44,16 @@
     });
   }
 
-  function fmtUsd(n) {
+  function fmtMoney(n) {
     if (n == null || isNaN(n)) return "—";
-    if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "K";
-    return "$" + fmt(n, 2);
+    const abs = Math.abs(n);
+    if (abs >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+    if (abs >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+    return "$" + fmt(n, 0);
+  }
+
+  function fmtUsd(n) {
+    return fmtMoney(n);
   }
 
   function pct(n) {
@@ -118,7 +124,20 @@
     refresh();
   }
 
-  function aggregateSales(periodKeys) {
+  function variantInfo(sku) {
+    const m = skuMeta(sku);
+    return {
+      modelo: m.modelo || m.producto || sku,
+      genero: m.genero || "—",
+      color: m.color || "—",
+      talla: m.talla || "—",
+      label: [m.modelo || m.producto, m.genero, m.color, m.talla]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+
+  function aggregateSalesScope(periodKeys) {
     const skuMap = new Map();
     const periodSet = new Set(periodKeys);
     const skus = DATA.skus;
@@ -128,7 +147,6 @@
       if (state.store && DATA.stores[r[2]] !== state.store) continue;
       if (state.category && DATA.categories[r[3]] !== state.category) continue;
       const sku = skus[r[1]];
-      if (!passesSkuFilter(sku)) continue;
       if (!skuMap.has(sku)) {
         const m = skuMeta(sku);
         skuMap.set(sku, {
@@ -136,6 +154,9 @@
           producto: m.producto || sku,
           modelo: m.modelo || m.producto || sku,
           categoria: m.categoria || "",
+          genero: m.genero || "",
+          color: m.color || "",
+          talla: m.talla || "",
           qty: 0,
           revenue: 0,
           cost: 0,
@@ -151,14 +172,92 @@
     return skuMap;
   }
 
-  function inventoryBySku() {
+  function aggregateSales(periodKeys) {
+    const map = aggregateSalesScope(periodKeys);
+    if (!state.modelo) return map;
+    const out = new Map();
+    map.forEach((v, sku) => {
+      if (passesSkuFilter(sku)) out.set(sku, v);
+    });
+    return out;
+  }
+
+  function assignAbcPareto(items, valueKey, classKey, extra) {
+    const pos = items
+      .filter((x) => x[valueKey] > 0)
+      .sort((a, b) => b[valueKey] - a[valueKey]);
+    const total = pos.reduce((s, x) => s + x[valueKey], 0);
+    let cum = 0;
+    pos.forEach((it, idx) => {
+      cum += it[valueKey];
+      const cumPct = total > 0 ? cum / total : 1;
+      let cls = "C";
+      if (cumPct <= TH.A) cls = "A";
+      else if (cumPct <= TH.B) cls = "B";
+      it[classKey] = cls;
+      if (extra) {
+        extra.rank && (it[extra.rank] = idx + 1);
+        extra.share && (it[extra.share] = total > 0 ? it[valueKey] / total : 0);
+        extra.cum && (it[extra.cum] = cumPct);
+      }
+    });
+    items.forEach((it) => {
+      if (!it[classKey]) it[classKey] = "C";
+    });
+  }
+
+  function buildModelIndex(scopeSkuMap) {
+    const models = new Map();
+    scopeSkuMap.forEach((it, sku) => {
+      if (it.margin <= 0) return;
+      const key = it.modelo || it.producto;
+      if (!models.has(key)) {
+        models.set(key, {
+          modelo: key,
+          skus: [],
+          qty: 0,
+          revenue: 0,
+          margin: 0,
+        });
+      }
+      const m = models.get(key);
+      m.skus.push({ ...it, sku });
+      m.qty += it.qty;
+      m.revenue += it.revenue;
+      m.margin += it.margin;
+    });
+    const list = [...models.values()];
+    assignAbcPareto(list, "margin", "abcClass", {
+      rank: "rank",
+      share: "marginShare",
+      cum: "cumPct",
+    });
+    list.sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
+    assignAbcPareto(list, "qty", "rotClass", {});
+    list.forEach((m) => {
+      m.matrix = m.abcClass + m.rotClass;
+      m.marginPctProd = m.revenue > 0 ? m.margin / m.revenue : 0;
+    });
+    return list.sort((a, b) => b.margin - a.margin);
+  }
+
+  function filterModels(models) {
+    return models.filter((m) => {
+      if (state.modelo && m.modelo !== state.modelo) return false;
+      if (state.abcClass && m.abcClass !== state.abcClass) return false;
+      if (!matchesSearch(m.modelo)) return false;
+      return true;
+    });
+  }
+
+  function inventoryBySku(scopeOnly) {
     const map = new Map();
     DATA.skus.forEach((sku) => map.set(sku, { total: 0 }));
     for (let i = 0; i < DATA.invRows.length; i++) {
       const r = DATA.invRows[i];
       const sku = DATA.skus[r[0]];
-      if (!passesSkuFilter(sku)) continue;
       if (state.location && DATA.locations[r[1]] !== state.location) continue;
+      if (!scopeOnly && state.modelo && !passesSkuFilter(sku)) continue;
       map.get(sku).total += r[2];
     }
     return map;
@@ -210,50 +309,15 @@
     };
   }
 
-  function aggregateByModel(skuMap, abc) {
-    const models = new Map();
-    skuMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
-      const key = it.modelo || it.producto;
-      if (!models.has(key)) {
-        models.set(key, {
-          modelo: key,
-          skus: [],
-          qty: 0,
-          revenue: 0,
-          margin: 0,
-        });
-      }
-      const m = models.get(key);
-      m.skus.push({ ...it, abc: abc.get(sku) });
-      m.qty += it.qty;
-      m.revenue += it.revenue;
-      m.margin += it.margin;
-    });
-    const list = [...models.values()].sort((a, b) => b.margin - a.margin);
-    const totalPos = list.reduce((s, x) => s + x.margin, 0);
-    let cum = 0;
-    list.forEach((m, idx) => {
-      cum += m.margin;
-      m.cumPct = totalPos > 0 ? cum / totalPos : 1;
-      m.rank = idx + 1;
-      m.marginShare = totalPos > 0 ? m.margin / totalPos : 0;
-      m.marginPctProd = m.revenue > 0 ? m.margin / m.revenue : 0;
-      if (m.cumPct <= TH.A) m.abcClass = "A";
-      else if (m.cumPct <= TH.B) m.abcClass = "B";
-      else m.abcClass = "C";
-      m.rotClass =
-        m.qty >= 500 ? "A" : m.qty >= 100 ? "B" : "C";
-    });
-    return list;
+  function aggregateByModel(scopeSkuMap) {
+    return buildModelIndex(scopeSkuMap);
   }
 
   function modelClassByPeriod() {
     const track = {};
     DATA.periods.forEach((p) => {
-      const map = aggregateSales([p.key]);
-      const { abc } = computeAbc(map);
-      aggregateByModel(map, abc).forEach((m) => {
+      const map = aggregateSalesScope([p.key]);
+      buildModelIndex(map).forEach((m) => {
         if (!track[m.modelo]) track[m.modelo] = {};
         track[m.modelo][p.key] = m.abcClass;
       });
@@ -264,7 +328,7 @@
   function skuClassByPeriod() {
     const result = {};
     DATA.periods.forEach((p) => {
-      const map = aggregateSales([p.key]);
+      const map = aggregateSalesScope([p.key]);
       const { abc } = computeAbc(map);
       map.forEach((it, sku) => {
         if (it.margin <= 0) return;
@@ -292,9 +356,13 @@
         const to = tr[periods[i]];
         if (!from || !to || from === to) continue;
         const m = skuMeta(sku);
+        const v = variantInfo(sku);
         alerts.push({
           sku,
-          modelo: m.modelo || sku,
+          modelo: v.modelo,
+          genero: v.genero,
+          color: v.color,
+          talla: v.talla,
           from,
           to,
           period: DATA.periods[i].label,
@@ -471,15 +539,15 @@
     renderSideLegend("legendMarg", summary, "marg");
   }
 
-  function renderKpis(summary, skuMap, invMap, plabel) {
+  function renderKpis(summary, scopeSkuMap, invMap, plabel) {
     const el = $("kpiBar");
     if (!el) return;
-    let posMargin = 0;
-    skuMap.forEach((it) => {
-      if (it.margin > 0) posMargin += it.margin;
+    let netRev = 0;
+    scopeSkuMap.forEach((it) => {
+      if (it.margin > 0) netRev += it.revenue;
     });
     let stock = 0;
-    skuMap.forEach((it, sku) => {
+    scopeSkuMap.forEach((it, sku) => {
       if (it.margin > 0) stock += invMap.get(sku)?.total || 0;
     });
     el.innerHTML =
@@ -490,8 +558,8 @@
       pct(summary.marginPct.A) +
       '</div><div class="kl">Margen A</div></div>' +
       '<div class="kpib"><div class="kv">' +
-      fmtUsd(posMargin) +
-      '</div><div class="kl">Margen +</div><div class="ksub">' +
+      fmtMoney(netRev) +
+      '</div><div class="kl">Ingresos netos</div><div class="ksub">' +
       esc(plabel) +
       "</div></div>" +
       '<div class="kpib"><div class="kv">' +
@@ -524,15 +592,12 @@
       "</tbody></table>";
   }
 
-  function renderClassTable(models) {
+  function renderClassTable(allModels) {
     const body = $("classBody");
     const sub = $("classTableSub");
     if (!body) return;
-    let rows = models.filter((m) => m.margin > 0);
-    if (state.abcClass)
-      rows = rows.filter((m) => m.abcClass === state.abcClass);
-    rows = rows.filter((m) => matchesSearch(m.modelo));
-    if (sub) sub.textContent = rows.length + " productos con margen positivo";
+    const rows = filterModels(allModels);
+    if (sub) sub.textContent = rows.length + " productos (clase ABC fija al catálogo completo del período)";
     body.innerHTML = rows
       .slice(0, 250)
       .map(
@@ -544,13 +609,13 @@
           "</td><td>" +
           badge(m.abcClass) +
           "</td><td>" +
-          fmtUsd(m.revenue) +
+          badge(m.matrix) +
           "</td><td>" +
-          fmtUsd(m.margin) +
+          fmtMoney(m.revenue) +
+          "</td><td>" +
+          fmtMoney(m.margin) +
           "</td><td>" +
           pct(m.marginShare) +
-          "</td><td>" +
-          pct(m.cumPct) +
           "</td><td>" +
           fmt(m.qty, 0) +
           "</td><td>" +
@@ -562,44 +627,36 @@
       .join("");
   }
 
-  function renderCatalog(skuMap, abc, invMap) {
+  function renderCatalog(scopeSkuMap, globalAbc, invMap) {
     const body = $("catalogBody");
     if (!body) return;
     const byModel = new Map();
-    skuMap.forEach((it, sku) => {
+    scopeSkuMap.forEach((it, sku) => {
       if (it.margin <= 0) return;
-      const a = abc.get(sku);
+      const a = globalAbc.get(sku);
       if (state.abcClass && a.class !== state.abcClass) return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
+      if (state.modelo && it.modelo !== state.modelo) return;
       const k = it.modelo;
-      if (!byModel.has(k)) byModel.set(k, { items: [], margin: 0, qty: 0, stock: 0 });
+      if (!byModel.has(k)) byModel.set(k, { items: [], revenue: 0, qty: 0, stock: 0 });
       const g = byModel.get(k);
       g.items.push({ ...it, abc: a, stock: invMap.get(sku)?.total || 0 });
-      g.margin += it.margin;
+      g.revenue += it.revenue;
       g.qty += it.qty;
       g.stock += g.items[g.items.length - 1].stock;
     });
     const models = [...byModel.entries()]
       .map(([modelo, g]) => {
-        g.items.sort((a, b) => b.margin - a.margin);
-        const totalM = g.margin;
-        let cum = 0;
-        g.items.forEach((it) => {
-          cum += it.margin;
-          it.share = totalM > 0 ? it.margin / totalM : 0;
-        });
-        const rep = g.items[0].abc;
-        return { modelo, ...g, abcClass: rep.class };
+        g.items.sort((a, b) => b.revenue - a.revenue);
+        return { modelo, ...g, abcClass: g.items[0].abc.class };
       })
-      .sort((a, b) => b.margin - a.margin);
+      .sort((a, b) => b.revenue - a.revenue);
 
     let html = "";
     models.slice(0, 120).forEach((m) => {
       const open = state.expandedModels.has(m.modelo);
       html +=
-        '<tr class="row-model" data-model="' +
-        esc(m.modelo) +
-        '"><td><span class="expander" data-toggle="' +
+        '<tr class="row-model"><td><span class="expander" data-toggle="' +
         esc(m.modelo) +
         '">' +
         (open ? "▼" : "▶") +
@@ -608,23 +665,22 @@
         '</td><td class="rn">' +
         esc(m.modelo) +
         "</td><td>" +
-        fmtUsd(m.margin) +
-        "</td><td>100%</td><td>" +
+        fmtMoney(m.revenue) +
+        "</td><td>" +
         fmt(m.qty, 0) +
         "</td><td>" +
         fmt(m.stock, 0) +
         "</td></tr>";
       if (open) {
         m.items.forEach((v) => {
+          const vi = variantInfo(v.sku);
           html +=
             '<tr class="row-variant"><td></td><td>' +
             badge(v.abc.class) +
             "</td><td>" +
-            esc(v.sku) +
+            esc(vi.label) +
             "</td><td>" +
-            fmtUsd(v.margin) +
-            "</td><td>" +
-            pct(v.share) +
+            fmtMoney(v.revenue) +
             "</td><td>" +
             fmt(v.qty, 0) +
             "</td><td>" +
@@ -639,7 +695,7 @@
         const mod = el.getAttribute("data-toggle");
         if (state.expandedModels.has(mod)) state.expandedModels.delete(mod);
         else state.expandedModels.add(mod);
-        renderCatalog(skuMap, abc, invMap);
+        renderCatalog(scopeSkuMap, globalAbc, invMap);
       };
     });
   }
@@ -695,6 +751,7 @@
     body.innerHTML = rows
       .slice(0, 100)
       .filter((r) => matchesSearch(r.modelo))
+      .filter((r) => !state.modelo || r.modelo === state.modelo)
       .map((r) => {
         let tr = '<tr><td class="rn">' + esc(r.modelo) + "</td>";
         periods.forEach((p) => {
@@ -735,8 +792,127 @@
     return { cap, totalU, totalV };
   }
 
-  function renderCapital(skuMap, abc, invMap, summary) {
-    const { cap, totalU, totalV } = computeCapital(skuMap, abc, invMap);
+  function renderCrossMatrix(allModels) {
+    const gridEl = $("crossMatrix");
+    const analEl = $("crossAnalysis");
+    if (!gridEl) return;
+    const models = filterModels(allModels);
+    const totalMargin = models.reduce((s, m) => s + m.margin, 0) || 1;
+    const cells = {};
+    ["A", "B", "C"].forEach((mr) => {
+      ["A", "B", "C"].forEach((rr) => {
+        cells[mr + rr] = { n: 0, margin: 0, list: [] };
+      });
+    });
+    models.forEach((m) => {
+      const k = m.abcClass + m.rotClass;
+      if (!cells[k]) return;
+      cells[k].n++;
+      cells[k].margin += m.margin;
+      cells[k].list.push(m.modelo);
+    });
+    const rotLbl = { A: "Alta rot.", B: "Media", C: "Baja" };
+    const marLbl = { A: "Mar. A", B: "Mar. B", C: "Mar. C" };
+    let html = '<div class="mx-grid"><div></div>';
+    ["A", "B", "C"].forEach((r) => {
+      html += '<div class="mx-h">Rot. ' + r + "<br>" + rotLbl[r] + "</div>";
+    });
+    ["A", "B", "C"].forEach((mr) => {
+      html += '<div class="mx-h">' + marLbl[mr] + "</div>";
+      ["A", "B", "C"].forEach((rr) => {
+        const c = cells[mr + rr];
+        const p = c.margin / totalMargin;
+        html +=
+          '<div class="mx-cell mx-' +
+          mr +
+          rr +
+          '"><div class="n">' +
+          c.n +
+          '</div><div class="v">' +
+          fmtMoney(c.margin) +
+          "<br>" +
+          pct(p) +
+          "</div></div>";
+      });
+    });
+    html += "</div>";
+    gridEl.innerHTML = html;
+
+    const Q = {
+      AA: {
+        t: "⭐ Estrellas",
+        d: "Alto margen + alta rotación. Bestsellers.",
+        a: "Tolerancia cero al desabasto. Prioridad máxima de reposición.",
+      },
+      AB: {
+        t: "💎 Joyas dormidas",
+        d: "Alto margen, rotación media. Mucho $ por unidad.",
+        a: "Marketing, mejor exhibición o combos.",
+      },
+      AC: {
+        t: "🐢 Premium lentos",
+        d: "Alto margen, baja rotación.",
+        a: "Evaluar si el precio limita volumen o si hay sobre-stock.",
+      },
+      BA: {
+        t: "🚦 Generadores de tráfico",
+        d: "Margen medio, alta rotación.",
+        a: "Mantener stock; evaluar subir margen sin perder volumen.",
+      },
+      BB: {
+        t: "⚖️ El medio",
+        d: "Margen y rotación medios. Estables.",
+        a: "Control intermedio; evitar caída a C.",
+      },
+      BC: {
+        t: "⚠️ Volumen sin renta",
+        d: "Rotan pero aportan poco margen.",
+        a: "Revisar costo, precio o descuentos excesivos.",
+      },
+      CA: {
+        t: "📦 Alto movimiento / bajo aporte",
+        d: "Se mueven pero casi no dejan margen.",
+        a: "Promoción para liquidar o renegociar costo.",
+      },
+      CB: {
+        t: "😴 Inventario lento",
+        d: "Poco margen y rotación media-baja.",
+        a: "Candidatos a bundle o reubicación.",
+      },
+      CC: {
+        t: "🧊 Lastre",
+        d: "Bajo margen + baja rotación. Capital congelado.",
+        a: "Liquidar, no recomprar, revisar si descontinuar.",
+      },
+    };
+    if (analEl) {
+      analEl.innerHTML = ["AA", "AB", "BA", "BB", "BC", "CC"]
+        .map((k) => {
+          const c = cells[k];
+          const q = Q[k];
+          return (
+            '<div class="qcard"><h4>' +
+            k +
+            " — " +
+            q.t +
+            " (" +
+            c.n +
+            ')</h4><p>' +
+            q.d +
+            "</p><p><em>" +
+            q.a +
+            '</em></p><div class="ex">' +
+            esc(c.list.slice(0, 5).join(" · ")) +
+            (c.list.length > 5 ? " …" : "") +
+            "</div></div>"
+          );
+        })
+        .join("");
+    }
+  }
+
+  function renderCapital(scopeSkuMap, abc, invMap, summary) {
+    const { cap, totalU, totalV } = computeCapital(scopeSkuMap, abc, invMap);
     const cards = $("capitalCards");
     if (cards) {
       const defs = [
@@ -805,18 +981,19 @@
     const diag = $("capitalDiag");
     if (diag) {
       diag.innerHTML =
-        '<div class="diag r"><strong>$' +
-        fmt(cap.C.v, 0) +
-        '</strong> en clase C (~' +
+        '<div class="g2">' +
+        '<div class="diag r"><strong>' +
+        fmtMoney(cap.C.v) +
+        "</strong> en clase C (~" +
         pct(summary.marginPct.C) +
         " del margen). Revisar promoción o bajar recompra.</div>" +
-        '<div class="diag g"><strong>$' +
-        fmt(cap.A.v, 0) +
-        '</strong> en clase A (~' +
+        '<div class="diag g"><strong>' +
+        fmtMoney(cap.A.v) +
+        "</strong> en clase A (~" +
         pct(summary.marginPct.A) +
-        " del margen). Proteger abastecimiento.</div>" +
+        " del margen). Proteger abastecimiento.</div></div>" +
         (cap.X.u > 0
-          ? '<div class="diag m">' +
+          ? '<div class="diag m" style="margin-top:8px">' +
             fmt(cap.X.u, 0) +
             " und. con stock sin venta positiva en el período.</div>"
           : "");
@@ -836,6 +1013,12 @@
           r.sev +
           '</td><td class="rn">' +
           esc(r.modelo) +
+          "</td><td>" +
+          esc(r.genero || "—") +
+          "</td><td>" +
+          esc(r.color || "—") +
+          "</td><td>" +
+          esc(r.talla || "—") +
           "</td><td>" +
           esc(r.sku) +
           "</td><td>" +
@@ -941,21 +1124,22 @@
         return;
       }
       $("periodWarn").style.display = "none";
-      const skuMap = aggregateSales(keys);
-      const { abc } = computeAbc(skuMap);
-      const summary = summarizePositive(abc, skuMap);
-      const invMap = inventoryBySku();
-      const models = aggregateByModel(skuMap, abc);
+      const scopeMap = aggregateSalesScope(keys);
+      const { abc: globalAbc } = computeAbc(scopeMap);
+      const summary = summarizePositive(globalAbc, scopeMap);
+      const invMap = inventoryBySku(true);
+      const allModels = buildModelIndex(scopeMap);
       const modelTrack = modelClassByPeriod();
       const alerts = detectTransitions(skuClassByPeriod());
 
-      renderKpis(summary, skuMap, invMap, periodLabel());
+      renderKpis(summary, scopeMap, invMap, periodLabel());
       renderPremisaCard(summary);
       if (typeof Chart !== "undefined") renderCharts(summary);
-      renderClassTable(models);
-      renderCatalog(skuMap, abc, invMap);
+      renderClassTable(allModels);
+      renderCatalog(scopeMap, globalAbc, invMap);
       renderMigration(modelTrack);
-      renderCapital(skuMap, abc, invMap, summary);
+      renderCapital(scopeMap, globalAbc, invMap, summary);
+      renderCrossMatrix(allModels);
       renderAlerts(alerts, invMap);
 
       $("subtitle").textContent = periodLabel();
@@ -975,19 +1159,25 @@
   }
 
   function exportCsv() {
-    const skuMap = aggregateSales(activePeriodKeys());
-    const { abc } = computeAbc(skuMap);
-    const invMap = inventoryBySku();
-    const lines = ["modelo,sku,clase,margen,qty,stock"];
-    skuMap.forEach((it, sku) => {
+    const scopeMap = aggregateSalesScope(activePeriodKeys());
+    const { abc } = computeAbc(scopeMap);
+    const invMap = inventoryBySku(true);
+    const lines = ["modelo,sku,genero,color,talla,clase,margen,ingresos_netos,qty,stock"];
+    scopeMap.forEach((it, sku) => {
       if (it.margin <= 0) return;
+      if (state.modelo && it.modelo !== state.modelo) return;
       const a = abc.get(sku);
+      const v = variantInfo(sku);
       lines.push(
         [
           it.modelo,
           sku,
+          v.genero,
+          v.color,
+          v.talla,
           a.class,
           a.margin.toFixed(2),
+          it.revenue.toFixed(2),
           it.qty,
           invMap.get(sku)?.total || 0,
         ].join(",")

@@ -73,6 +73,8 @@ def load_sales() -> pd.DataFrame:
     df["categoria"] = df["Categoría del producto"].fillna("Sin categoría").astype(str)
     df["producto"] = df["Producto"].fillna("").astype(str).str.strip()
     df["genero"] = df["GENERO"].fillna("").astype(str)
+    df["color"] = df["COLOR"].fillna("").astype(str)
+    df["talla"] = df["TALLA"].fillna("").astype(str)
     df["qty"] = pd.to_numeric(df["Cant. ordenada"], errors="coerce").fillna(0)
     df["revenue"] = pd.to_numeric(df["TOTAL ($)"], errors="coerce").fillna(0)
     df["cost"] = pd.to_numeric(df["COSTO ($) TOTAL"], errors="coerce").fillna(0)
@@ -118,16 +120,23 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
             producto=("producto", "first"),
             categoria=("categoria", "first"),
             genero=("genero", "first"),
+            color=("color", "first"),
+            talla=("talla", "first"),
         )
         .to_dict("index")
     )
     inv_model = inv.groupby("SKU")["modelo"].first().to_dict()
+    inv_gen = inv.groupby("SKU")["GENERO"].first().to_dict() if "GENERO" in inv.columns else {}
+    inv_col = inv.groupby("SKU")["COLOR"].first().to_dict() if "COLOR" in inv.columns else {}
+    inv_tal = inv.groupby("SKU")["TALLA"].first().to_dict() if "TALLA" in inv.columns else {}
     for sku in skus:
         info = sales_info.get(sku, {})
         sku_master[sku] = {
             "producto": info.get("producto") or inv_model.get(sku, sku),
             "categoria": info.get("categoria", "Sin ventas / solo stock"),
-            "genero": info.get("genero", ""),
+            "genero": info.get("genero") or inv_gen.get(sku, ""),
+            "color": info.get("color") or inv_col.get(sku, ""),
+            "talla": info.get("talla") or inv_tal.get(sku, ""),
             "modelo": inv_model.get(sku) or info.get("producto") or sku,
         }
 
