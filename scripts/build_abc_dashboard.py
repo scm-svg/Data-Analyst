@@ -5,6 +5,7 @@ Genera UN solo HTML autocontenido (JS + JSON embebido) para Matriz ABC.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +55,37 @@ MES_LABEL = {
 }
 
 ABC_THRESHOLDS = {"A": 0.80, "B": 0.95}
+
+
+def clean_str(val, default: str = "") -> str:
+    if val is None:
+        return default
+    try:
+        if pd.isna(val):
+            return default
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return default
+    s = str(val).strip()
+    return s if s and s.lower() != "nan" else default
+
+
+def sanitize_for_json(obj):
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    try:
+        if pd.isna(obj):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return obj
 
 
 def load_sales() -> pd.DataFrame:
@@ -132,12 +164,12 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     for sku in skus:
         info = sales_info.get(sku, {})
         sku_master[sku] = {
-            "producto": info.get("producto") or inv_model.get(sku, sku),
-            "categoria": info.get("categoria", "Sin ventas / solo stock"),
-            "genero": info.get("genero") or inv_gen.get(sku, ""),
-            "color": info.get("color") or inv_col.get(sku, ""),
-            "talla": info.get("talla") or inv_tal.get(sku, ""),
-            "modelo": inv_model.get(sku) or info.get("producto") or sku,
+            "producto": clean_str(info.get("producto") or inv_model.get(sku, sku), sku),
+            "categoria": clean_str(info.get("categoria"), "Sin ventas / solo stock"),
+            "genero": clean_str(info.get("genero") or inv_gen.get(sku, "")),
+            "color": clean_str(info.get("color") or inv_col.get(sku, "")),
+            "talla": clean_str(info.get("talla") or inv_tal.get(sku, "")),
+            "modelo": clean_str(inv_model.get(sku) or info.get("producto") or sku, sku),
         }
 
     sku_idx = {s: i for i, s in enumerate(skus)}
@@ -247,7 +279,8 @@ def main() -> None:
     sales = load_sales()
     inv = load_inventory()
     payload = build_indexes(sales, inv)
-    data_json = json.dumps(payload, ensure_ascii=False)
+    payload = sanitize_for_json(payload)
+    data_json = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     OUT_JSON.write_text(data_json, encoding="utf-8")
 
     template = TEMPLATE.read_text(encoding="utf-8")
