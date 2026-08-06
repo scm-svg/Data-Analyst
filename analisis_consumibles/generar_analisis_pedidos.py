@@ -25,17 +25,23 @@ from openpyxl.chart import BarChart, Reference
 # ---------------------------------------------------------------------------
 OUT_DIR = Path(__file__).resolve().parent
 TIENDAS_PATH = OUT_DIR / "fuente_tiendas_2meses.xlsx"
-TALLER_PATH = OUT_DIR / "fuente_taller_2meses.xlsx"
+TALLER_SOLIC_PATH = OUT_DIR / "fuente_taller_2meses.xlsx"  # solicitudes CRECO (incompleto para Taller)
+TALLER_MOV_PATH = OUT_DIR / "fuente_movimientos_taller.xlsx"  # movimientos Taller (fuente completa)
 # fallback a uploads del agente si no estan las copias locales
 if not TIENDAS_PATH.exists():
     TIENDAS_PATH = Path(
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
         "_Solicitudes__TIENDAS__consumibles_2meses_09b9.xlsx"
     )
-if not TALLER_PATH.exists():
-    TALLER_PATH = Path(
+if not TALLER_SOLIC_PATH.exists():
+    TALLER_SOLIC_PATH = Path(
         "/home/ubuntu/.cursor/projects/workspace/uploads/"
         "solicitudes_taller_2_meses_4432.xlsx"
+    )
+if not TALLER_MOV_PATH.exists():
+    TALLER_MOV_PATH = Path(
+        "/home/ubuntu/.cursor/projects/workspace/uploads/"
+        "movimientos_taller_actualizado_30c9.xlsx"
     )
 OUT_XLSX = OUT_DIR / "Analisis_Pedidos_Consumibles_2meses.xlsx"
 ARTIFACT_XLSX = Path("/opt/cursor/artifacts/Analisis_Pedidos_Consumibles_2meses.xlsx")
@@ -109,6 +115,8 @@ def classify_estado(e) -> str:
         "ENTREGADO",
         "PROCESO",
         "EN PROCESO",
+        "MOVIMIENTO SALIDA",
+        "MOVIMIENTO_SALIDA",
     }:
         return "ATENDIDO"
     return e
@@ -186,7 +194,85 @@ def ceil_pos(x: float) -> int:
 # ---------------------------------------------------------------------------
 # Carga
 # ---------------------------------------------------------------------------
-def load_all() -> tuple[pd.DataFrame, pd.DataFrame]:
+def parse_movimientos_taller(path: Path) -> pd.DataFrame:
+    """Salidas de inventario de Taller (movimientos negativos -> demanda en und)."""
+    raw = pd.read_excel(path)
+    raw.columns = [str(c).strip() for c in raw.columns]
+    # normalizar nombres de columnas
+    colmap = {}
+    for c in raw.columns:
+        cn = norm_text(c)
+        if cn == "FECHA":
+            colmap[c] = "FECHA"
+        elif cn in {"CODIGO", "CÓDIGO"} or "CODIGO" in cn:
+            colmap[c] = "CODIGO"
+        elif "MOVIMIEN" in cn:
+            colmap[c] = "MOVIMIENTO"
+        elif cn == "PRODUCTO":
+            colmap[c] = "PRODUCTO"
+        elif "CATEGOR" in cn:
+            colmap[c] = "CATEGORIA_SRC"
+        elif cn == "UND":
+            colmap[c] = "UOM"
+        elif cn == "SUCURSAL":
+            colmap[c] = "SUCURSAL"
+    df = raw.rename(columns=colmap)
+    need = {"FECHA", "MOVIMIENTO", "PRODUCTO"}
+    if not need.issubset(df.columns):
+        raise ValueError(f"Movimientos taller sin columnas esperadas: {df.columns.tolist()}")
+
+    df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
+    df["MOVIMIENTO"] = pd.to_numeric(df["MOVIMIENTO"], errors="coerce")
+    df = df[df["FECHA"].notna() & df["MOVIMIENTO"].notna() & df["PRODUCTO"].notna()].copy()
+    # Solo salidas (consumo). Valor absoluto = unidades movidas
+    df = df[df["MOVIMIENTO"] < 0].copy()
+    df["CANTIDAD"] = df["MOVIMIENTO"].abs()
+    df["ARTICULO"] = df["PRODUCTO"]
+    df["NOMBRE"] = ""
+    df["CARACTER_ADICIONAL"] = df["UOM"] if "UOM" in df.columns else ""
+    df["ESTADO"] = "MOVIMIENTO_SALIDA"  # consumo ejecutado en inventario
+    if "SUCURSAL" not in df.columns:
+        df["SUCURSAL"] = "TALLER"
+    df["SUCURSAL"] = df["SUCURSAL"].fillna("TALLER")
+    df["NOTAS"] = df.apply(
+        lambda r: f"CODIGO={r['CODIGO']}" if "CODIGO" in df.columns and pd.notna(r.get("CODIGO")) else "",
+        axis=1,
+    )
+    df["HOJA_ORIGEN"] = "MOVIMIENTOS TALLER"
+    df["ARCHIVO"] = "MOVIMIENTOS_TALLER"
+    df["GRUPO"] = "TALLER"
+    df["FUENTE_TIPO"] = "MOVIMIENTO"
+    if "CATEGORIA_SRC" in df.columns:
+        df["CATEGORIA_SRC"] = df["CATEGORIA_SRC"].map(norm_text)
+    else:
+        df["CATEGORIA_SRC"] = ""
+    if "UOM" in df.columns:
+        df["UOM"] = df["UOM"].map(norm_text)
+    else:
+        df["UOM"] = "UND"
+    keep = [
+        "FECHA",
+        "NOMBRE",
+        "ARTICULO",
+        "CARACTER_ADICIONAL",
+        "CANTIDAD",
+        "ESTADO",
+        "SUCURSAL",
+        "NOTAS",
+        "HOJA_ORIGEN",
+        "ARCHIVO",
+        "GRUPO",
+        "FUENTE_TIPO",
+        "CATEGORIA_SRC",
+        "UOM",
+        "CODIGO",
+    ]
+    keep = [c for c in keep if c in df.columns]
+    return df[keep].reset_index(drop=True)
+
+
+def load_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Retorna (all_df principal, inventario, solicitudes_taller_incompletas_ref)."""
     xl = pd.ExcelFile(TIENDAS_PATH)
     store_sheets = [s for s in xl.sheet_names if s != "INVENTARIO DE CONSUMIBLES"]
     frames = []
@@ -196,20 +282,39 @@ def load_all() -> tuple[pd.DataFrame, pd.DataFrame]:
         if len(p):
             p["ARCHIVO"] = "TIENDAS"
             p["GRUPO"] = "TIENDAS"
+            p["FUENTE_TIPO"] = "SOLICITUD"
+            p["CATEGORIA_SRC"] = ""
+            p["UOM"] = "UND"
+            p["CODIGO"] = ""
             frames.append(p)
 
     inv = pd.read_excel(TIENDAS_PATH, sheet_name="INVENTARIO DE CONSUMIBLES")
     inv["PRODUCTO_NORM"] = inv["PRODUNTOS"].map(norm_product)
     inv["CATEGORIA"] = inv["CATEGORIA"].map(norm_text)
 
-    raw_t = pd.read_excel(TALLER_PATH, sheet_name="CRECO SOLICITUDES", header=None)
-    taller = parse_solicitudes_sheet(raw_t, "CRECO SOLICITUDES")
-    if len(taller):
-        taller["ARCHIVO"] = "TALLER_CRECO"
-        # Subgrupo: TALLER puro vs otras areas del archivo CRECO
-        suc = taller["SUCURSAL"].map(norm_text)
-        taller["GRUPO"] = np.where(suc.eq("TALLER"), "TALLER", "CRECO_OTRAS_AREAS")
-        frames.append(taller)
+    # TALLER completo = movimientos actualizados (reemplaza solicitudes incompletas de Taller)
+    if TALLER_MOV_PATH.exists():
+        frames.append(parse_movimientos_taller(TALLER_MOV_PATH))
+
+    # Solicitudes CRECO: conservar SOLO otras areas (I+D, Almacen, etc.).
+    # Las lineas SUCURSAL=TALLER del archivo viejo se dejan fuera del principal
+    # (incompletas) y se devuelven aparte como referencia de fill rate historico.
+    taller_solic_ref = pd.DataFrame()
+    if TALLER_SOLIC_PATH.exists():
+        raw_t = pd.read_excel(TALLER_SOLIC_PATH, sheet_name=0, header=None)
+        taller_solic = parse_solicitudes_sheet(raw_t, "CRECO SOLICITUDES")
+        if len(taller_solic):
+            taller_solic["ARCHIVO"] = "TALLER_CRECO_SOLICITUDES"
+            suc = taller_solic["SUCURSAL"].map(norm_text)
+            taller_solic["GRUPO"] = np.where(suc.eq("TALLER"), "TALLER", "CRECO_OTRAS_AREAS")
+            taller_solic["FUENTE_TIPO"] = "SOLICITUD"
+            taller_solic["CATEGORIA_SRC"] = ""
+            taller_solic["UOM"] = "UND"
+            taller_solic["CODIGO"] = ""
+            otras = taller_solic[taller_solic["GRUPO"] == "CRECO_OTRAS_AREAS"].copy()
+            if len(otras):
+                frames.append(otras)
+            taller_solic_ref = taller_solic[taller_solic["GRUPO"] == "TALLER"].copy()
 
     all_df = pd.concat(frames, ignore_index=True)
     all_df["FECHA"] = pd.to_datetime(all_df["FECHA"], errors="coerce")
@@ -229,6 +334,11 @@ def load_all() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     all_df["ESTADO_RAW"] = all_df["ESTADO"].map(norm_text)
     all_df["ESTADO_CAT"] = all_df["ESTADO"].map(classify_estado)
+    # Movimientos de salida = consumo ejecutado => cuentan como atendidos para fill rate
+    mov_mask = all_df["FUENTE_TIPO"].eq("MOVIMIENTO")
+    all_df.loc[mov_mask, "ESTADO_CAT"] = "ATENDIDO"
+    all_df.loc[mov_mask, "ESTADO_RAW"] = "MOVIMIENTO_SALIDA"
+
     all_df["SUCURSAL"] = all_df["SUCURSAL"].map(norm_text)
     miss = all_df["SUCURSAL"].eq("")
     all_df.loc[miss, "SUCURSAL"] = all_df.loc[miss, "HOJA_ORIGEN"].map(norm_text)
@@ -237,24 +347,51 @@ def load_all() -> tuple[pd.DataFrame, pd.DataFrame]:
     all_df["CANT_ATENDIDA"] = np.where(all_df["ATENDIDO_FLAG"], all_df["CANTIDAD"], 0.0)
     all_df["CANT_NO_DISP"] = np.where(all_df["NO_DISP_FLAG"], all_df["CANTIDAD"], 0.0)
 
-    # Categoria desde inventario
+    # Categoria: preferir la del movimiento; si no, catalogo inventario
     cat_map = (
         inv.dropna(subset=["PRODUCTO_NORM"])
         .drop_duplicates("PRODUCTO_NORM")
         .set_index("PRODUCTO_NORM")["CATEGORIA"]
         .to_dict()
     )
-    all_df["CATEGORIA"] = all_df["ARTICULO_NORM"].map(cat_map).fillna("SIN CATEGORIA")
+    if "CATEGORIA_SRC" in all_df.columns:
+        all_df["CATEGORIA"] = all_df["CATEGORIA_SRC"].where(
+            all_df["CATEGORIA_SRC"].astype(str).str.len() > 0
+        )
+        all_df["CATEGORIA"] = all_df["CATEGORIA"].fillna(
+            all_df["ARTICULO_NORM"].map(cat_map)
+        )
+    else:
+        all_df["CATEGORIA"] = all_df["ARTICULO_NORM"].map(cat_map)
+    all_df["CATEGORIA"] = all_df["CATEGORIA"].fillna("SIN CATEGORIA").map(norm_text)
 
-    # Semana ISO y quincena
     all_df["SEMANA"] = all_df["FECHA"].dt.to_period("W-SUN").astype(str)
     all_df["MES"] = all_df["FECHA"].dt.to_period("M").astype(str)
     all_df["DIA"] = all_df["FECHA"].dt.day
     all_df["QUINCENA"] = all_df.apply(
-        lambda r: f"{r['MES']}-Q1" if r["DIA"] <= 15 else f"{r['MES']}-Q2", axis=1
+        lambda r: f"{r['MES']}-Q1" if r['DIA'] <= 15 else f"{r['MES']}-Q2", axis=1
     )
 
-    return all_df, inv
+    # Normalizar referencia incompleta de solicitudes taller (si existe)
+    if len(taller_solic_ref):
+        taller_solic_ref["FECHA"] = pd.to_datetime(taller_solic_ref["FECHA"], errors="coerce")
+        taller_solic_ref["CANTIDAD"] = pd.to_numeric(taller_solic_ref["CANTIDAD"], errors="coerce")
+        taller_solic_ref = taller_solic_ref[
+            taller_solic_ref["CANTIDAD"].notna() & (taller_solic_ref["CANTIDAD"] > 0)
+        ].copy()
+        taller_solic_ref["ARTICULO_NORM"] = taller_solic_ref["ARTICULO"].map(norm_product)
+        taller_solic_ref["ESTADO_CAT"] = taller_solic_ref["ESTADO"].map(classify_estado)
+        taller_solic_ref["ATENDIDO_FLAG"] = taller_solic_ref["ESTADO_CAT"].eq("ATENDIDO")
+        taller_solic_ref["NO_DISP_FLAG"] = taller_solic_ref["ESTADO_CAT"].eq("NO_DISPONIBLE")
+        taller_solic_ref["CANT_ATENDIDA"] = np.where(
+            taller_solic_ref["ATENDIDO_FLAG"], taller_solic_ref["CANTIDAD"], 0.0
+        )
+        taller_solic_ref["CANT_NO_DISP"] = np.where(
+            taller_solic_ref["NO_DISP_FLAG"], taller_solic_ref["CANTIDAD"], 0.0
+        )
+        taller_solic_ref["SUCURSAL"] = taller_solic_ref["SUCURSAL"].map(norm_text)
+
+    return all_df, inv, taller_solic_ref
 
 
 # ---------------------------------------------------------------------------
@@ -589,42 +726,160 @@ def add_notes(ws, row: int, notes: list[str], title="Notas / metodologia"):
 # ---------------------------------------------------------------------------
 # Construccion del libro
 # ---------------------------------------------------------------------------
-def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
+def build_excel(
+    all_df: pd.DataFrame,
+    inv: pd.DataFrame,
+    taller_solic_ref: pd.DataFrame | None = None,
+):
     stats = period_stats(all_df)
     # Grupos
     df_tiendas = all_df[all_df["GRUPO"] == "TIENDAS"].copy()
-    df_taller = all_df[all_df["GRUPO"] == "TALLER"].copy()
+    df_taller = all_df[all_df["GRUPO"] == "TALLER"].copy()  # movimientos completos
     df_creco_otras = all_df[all_df["GRUPO"] == "CRECO_OTRAS_AREAS"].copy()
-    # Archivo taller completo (TALLER + otras areas CRECO)
-    df_taller_archivo = all_df[all_df["ARCHIVO"] == "TALLER_CRECO"].copy()
+    # Operaciones CRECO = Taller (movimientos) + otras areas (solicitudes)
+    df_ops_creco = all_df[all_df["GRUPO"].isin(["TALLER", "CRECO_OTRAS_AREAS"])].copy()
     df_unificado = all_df.copy()
+    taller_solic_ref = taller_solic_ref if taller_solic_ref is not None else pd.DataFrame()
 
     stats_t = period_stats(df_tiendas) if len(df_tiendas) else stats
-    stats_ta = period_stats(df_taller_archivo) if len(df_taller_archivo) else stats
+    stats_taller = period_stats(df_taller) if len(df_taller) else stats
+    stats_ops = period_stats(df_ops_creco) if len(df_ops_creco) else stats
     stats_u = stats
 
     prod_tiendas = agg_producto(df_tiendas, "TIENDAS", stats_t) if len(df_tiendas) else pd.DataFrame()
-    prod_taller = agg_producto(df_taller, "TALLER", stats_ta) if len(df_taller) else pd.DataFrame()
+    prod_taller = agg_producto(df_taller, "TALLER", stats_taller) if len(df_taller) else pd.DataFrame()
     prod_creco_otras = (
-        agg_producto(df_creco_otras, "CRECO_OTRAS_AREAS", stats_ta)
+        agg_producto(df_creco_otras, "CRECO_OTRAS_AREAS", stats_ops)
         if len(df_creco_otras)
         else pd.DataFrame()
     )
-    prod_taller_arch = (
-        agg_producto(df_taller_archivo, "TALLER_CRECO_ARCHIVO", stats_ta)
-        if len(df_taller_archivo)
+    prod_ops_creco = (
+        agg_producto(df_ops_creco, "TALLER_Y_CRECO_OPS", stats_ops)
+        if len(df_ops_creco)
         else pd.DataFrame()
     )
-    prod_unif = agg_producto(df_unificado, "UNIFICADO", stats_u)
+
+    # Unificado: sumar demandas por grupo (cada uno con su propio horizonte)
+    # y recalcular tasas sobre 60 dias de referencia (= 2 meses), para no diluir
+    # tiendas cuando el calendario de movimientos empieza antes.
+    def build_unificado_from_groups(frames: list[pd.DataFrame]) -> pd.DataFrame:
+        parts = [f for f in frames if f is not None and len(f)]
+        if not parts:
+            return pd.DataFrame()
+        keys = ["ARTICULO_NORM", "CATEGORIA"]
+        base = parts[0][keys].copy()
+        for p in parts[1:]:
+            base = base.merge(p[keys], on=keys, how="outer")
+        base["CATEGORIA"] = base["CATEGORIA"].fillna("SIN CATEGORIA")
+        sum_cols = [
+            "n_solicitudes",
+            "und_solicitadas",
+            "und_atendidas",
+            "und_no_disponible",
+            "n_atendidas",
+            "n_no_disponible",
+            "n_sin_estado",
+        ]
+        out = base.copy()
+        for c in sum_cols:
+            out[c] = 0.0
+            for p in parts:
+                tmp = p[keys + [c]].copy()
+                out = out.merge(tmp, on=keys, how="left", suffixes=("", "_x"))
+                out[c] = out[c] + out[c + "_x"].fillna(0)
+                out = out.drop(columns=[c + "_x"])
+        # max pico semanal entre grupos; sucursales approx sum
+        out["demanda_sem_max"] = 0.0
+        out["n_sucursales"] = 0.0
+        for p in parts:
+            tmp = p[keys + ["demanda_sem_max", "n_sucursales"]].copy()
+            out = out.merge(tmp, on=keys, how="left", suffixes=("", "_x"))
+            out["demanda_sem_max"] = np.maximum(
+                out["demanda_sem_max"], out["demanda_sem_max_x"].fillna(0)
+            )
+            out["n_sucursales"] = out["n_sucursales"] + out["n_sucursales_x"].fillna(0)
+            out = out.drop(columns=["demanda_sem_max_x", "n_sucursales_x"])
+        # horizonte de referencia 2 meses
+        dias, semanas, quincenas, meses = 60.0, 60 / 7.0, 60 / 15.0, 2.0
+        out["und_por_dia"] = out["und_solicitadas"] / dias
+        out["und_por_semana"] = out["und_solicitadas"] / semanas
+        out["und_por_quincena"] = out["und_solicitadas"] / quincenas
+        out["und_por_mes"] = out["und_solicitadas"] / meses
+        out["pct_lineas_atendidas"] = np.where(
+            out["n_solicitudes"] > 0, out["n_atendidas"] / out["n_solicitudes"], 0
+        )
+        out["pct_lineas_no_disponible"] = np.where(
+            out["n_solicitudes"] > 0, out["n_no_disponible"] / out["n_solicitudes"], 0
+        )
+        out["pct_und_atendidas"] = np.where(
+            out["und_solicitadas"] > 0, out["und_atendidas"] / out["und_solicitadas"], 0
+        )
+        out["pct_und_no_disponible"] = np.where(
+            out["und_solicitadas"] > 0, out["und_no_disponible"] / out["und_solicitadas"], 0
+        )
+        out["senal_ruptura"] = np.where(
+            out["pct_lineas_no_disponible"] >= 0.25,
+            "ALTA",
+            np.where(out["pct_lineas_no_disponible"] >= 0.10, "MEDIA", "BAJA"),
+        )
+        dem_sem = out["und_por_semana"]
+        dem_sem_max = out["demanda_sem_max"].fillna(dem_sem)
+        out["pedido_semanal_sugerido"] = np.where(
+            out["senal_ruptura"].eq("ALTA"),
+            np.maximum(dem_sem * 1.35, dem_sem_max),
+            dem_sem * 1.20,
+        )
+        out["pedido_quincenal_sugerido"] = np.where(
+            out["senal_ruptura"].eq("ALTA"),
+            np.maximum(out["und_por_quincena"] * 1.35, dem_sem_max * 1.5),
+            out["und_por_quincena"] * 1.20,
+        )
+        out["pedido_mensual_sugerido"] = np.where(
+            out["senal_ruptura"].eq("ALTA"),
+            np.maximum(out["und_por_mes"] * 1.35, dem_sem_max * 2.0),
+            out["und_por_mes"] * 1.20,
+        )
+        out["MIN_und"] = np.maximum(dem_sem, dem_sem_max * 0.5)
+        out["MAX_und"] = np.maximum(out["pedido_mensual_sugerido"], dem_sem_max * 2)
+        out["ROP_und"] = dem_sem * 1.20
+        out["Q_pedido_ref_mensual"] = out["pedido_mensual_sugerido"]
+        for col in [
+            "pedido_semanal_sugerido",
+            "pedido_quincenal_sugerido",
+            "pedido_mensual_sugerido",
+            "MIN_und",
+            "MAX_und",
+            "ROP_und",
+            "Q_pedido_ref_mensual",
+        ]:
+            out[col] = out[col].map(ceil_pos)
+        out["GRUPO"] = "UNIFICADO"
+        out["demanda_sem_std"] = np.nan
+        out["demanda_sem_prom"] = out["und_por_semana"]
+        out["demanda_sem_mediana"] = out["und_por_semana"]
+        return out.sort_values(["und_solicitadas", "n_solicitudes"], ascending=False)
+
+    prod_unif = build_unificado_from_groups([prod_tiendas, prod_taller, prod_creco_otras])
 
     # Resumen fill rate
     fill_rows = [
-        fill_rate_summary(df_tiendas, "TIENDAS"),
-        fill_rate_summary(df_taller, "TALLER (solo area Taller)"),
-        fill_rate_summary(df_creco_otras, "CRECO otras areas (I+D, Almacen, Mant., etc.)"),
-        fill_rate_summary(df_taller_archivo, "ARCHIVO TALLER/CRECO (completo)"),
-        fill_rate_summary(df_unificado, "UNIFICADO (Tiendas + Taller/CRECO)"),
+        fill_rate_summary(df_tiendas, "TIENDAS (solicitudes)"),
+        fill_rate_summary(
+            df_taller,
+            "TALLER (movimientos salidas — demanda completa)",
+        ),
+        fill_rate_summary(df_creco_otras, "CRECO otras areas (solicitudes I+D/Almacen/Mant./etc.)"),
+        fill_rate_summary(df_ops_creco, "TALLER + CRECO OPS (combinado)"),
+        fill_rate_summary(df_unificado, "UNIFICADO (Tiendas + Taller mov. + CRECO ops)"),
     ]
+    if len(taller_solic_ref):
+        # Referencia: solicitudes incompletas previas de Taller (NO usar para pedido)
+        fill_rows.append(
+            fill_rate_summary(
+                taller_solic_ref,
+                "REF — Taller solicitudes viejas (INCOMPLETO, solo fill rate historico)",
+            )
+        )
     fill_df = pd.DataFrame(fill_rows)
 
     # Pedido scenarios from unified + separate
@@ -766,28 +1021,32 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
     )
 
     # Detalle limpio
-    detalle = all_df[
-        [
-            "FECHA",
-            "ARCHIVO",
-            "GRUPO",
-            "SUCURSAL",
-            "NOMBRE",
-            "ARTICULO_ORIG",
-            "ARTICULO_NORM",
-            "CARACTER_NORM",
-            "CATEGORIA",
-            "CANTIDAD",
-            "ESTADO_RAW",
-            "ESTADO_CAT",
-            "ATENDIDO_FLAG",
-            "NO_DISP_FLAG",
-            "NOTAS",
-            "SEMANA",
-            "QUINCENA",
-            "MES",
-        ]
-    ].sort_values(["FECHA", "GRUPO", "SUCURSAL", "ARTICULO_NORM"])
+    det_cols = [
+        "FECHA",
+        "ARCHIVO",
+        "FUENTE_TIPO",
+        "GRUPO",
+        "SUCURSAL",
+        "NOMBRE",
+        "ARTICULO_ORIG",
+        "ARTICULO_NORM",
+        "CARACTER_NORM",
+        "UOM",
+        "CATEGORIA",
+        "CANTIDAD",
+        "ESTADO_RAW",
+        "ESTADO_CAT",
+        "ATENDIDO_FLAG",
+        "NO_DISP_FLAG",
+        "NOTAS",
+        "SEMANA",
+        "QUINCENA",
+        "MES",
+    ]
+    det_cols = [c for c in det_cols if c in all_df.columns]
+    detalle = all_df[det_cols].sort_values(
+        ["FECHA", "GRUPO", "SUCURSAL", "ARTICULO_NORM"]
+    )
 
     # Catalogo
     catalog = inv[["ID", "PRODUNTOS", "CATEGORIA", "PRODUCTO_NORM"]].copy()
@@ -814,13 +1073,14 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
 
     bullets = [
         ("Periodo analizado", f"{stats['fecha_min'].date()} a {stats['fecha_max'].date()} ({stats['dias']} dias ≈ {stats['semanas']:.1f} semanas ≈ {stats['meses']:.2f} meses)"),
-        ("Fuentes", "1) Solicitudes TIENDAS consumibles 2 meses  |  2) Solicitudes TALLER/CRECO 2 meses"),
-        ("Alcance", "Exclusivamente estas dos datas. Inventario de catalogo usado solo para categorizar (stock vacio)."),
-        ("Unidad de analisis", "UNIDADES solicitadas (no dinero). Lead time puede variar; no se fija LT unico."),
-        ("Atendido", "RECIBIDO + SOLICITADO + ENVIADO + ENTREGADO/ENTRGADO (ciclo activo o cumplido)"),
-        ("No atendido", "NO DISPONIBLE"),
+        ("Fuentes", "1) Solicitudes TIENDAS  |  2) MOVIMIENTOS TALLER actualizados (salidas)  |  3) Solicitudes CRECO otras areas"),
+        ("Ajuste Taller", "La data previa de solicitudes de Taller estaba incompleta. Se reemplazo por movimientos de inventario (salidas = demanda real)."),
+        ("Alcance", "Solo estas fuentes. Catalogo de inventario solo para categorizar (stock vacio en origen)."),
+        ("Unidad de analisis", "UNIDADES de demanda (solicitudes en tiendas; |movimientos| en taller). Lead time variable; no se fija LT unico."),
+        ("Atendido", "Tiendas/CRECO: RECIBIDO+SOLICITADO+ENVIADO+ENTREGADO. Taller movimientos: toda salida cuenta como ejecutada/atendida."),
+        ("No atendido", "NO DISPONIBLE (aplica a solicitudes; en movimientos de taller no hay este estado)."),
         ("Objetivo", "Cuantificar demanda, fill rate, min/max y 3 opciones de pedido: Semanal / Quincenal / Mensual"),
-        ("Grupos", "TIENDAS | TALLER (area) | CRECO otras areas | UNIFICADO"),
+        ("Grupos", "TIENDAS | TALLER (movimientos) | CRECO otras areas | UNIFICADO"),
     ]
     ws["A3"] = "RESUMEN EJECUTIVO DEL ARCHIVO"
     ws["A3"].font = FONT_SUB
@@ -839,18 +1099,21 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
     sheets_help = [
         ("00_LEEME", "Esta guia: alcance, definiciones y como usar el archivo"),
-        ("01_KPIs_FillRate", "% solicitudes atendidas vs no disponible (lineas y unidades), por grupo"),
+        ("01_KPIs_FillRate", "% atendidas vs no disponible (lineas y und), por grupo + ref. solicitudes taller incompletas"),
         ("02_Pedido_UNIFICADO", "Catalogo de pedido unificado con MIN/MAX/ROP y 3 opciones"),
-        ("03_Pedido_TIENDAS", "Mismo analisis solo tiendas"),
-        ("04_Pedido_TALLER_CRECO", "Analisis del archivo taller/CRECO (Taller + otras areas)"),
+        ("03_Pedido_TIENDAS", "Mismo analisis solo tiendas (solicitudes)"),
+        ("04_Pedido_TALLER", "Pedido Taller basado en MOVIMIENTOS (salidas) — fuente completa"),
+        ("04b_Pedido_CRECO_ops", "Taller movimientos + CRECO otras areas combinado"),
+        ("04c_Pedido_CRECO_otras", "Solo CRECO otras areas (solicitudes)"),
+        ("04d_Taller_viejo_vs_nuevo", "Contraste solicitudes incompletas vs movimientos actualizados"),
         ("05_Comparativo_3_Opciones", "Semanal vs Quincenal vs Mensual + frecuencia recomendada por SKU"),
         ("06_Por_Sucursal_Area", "Demanda y fill rate por sucursal/area"),
-        ("07_Top_No_Disponible", "Productos con mas ruptura de stock (prioridad de compra)"),
-        ("08_Tendencia_Semanal", "Evolucion semanal de und solicitadas/atendidas"),
+        ("07_Top_No_Disponible", "Productos con mas ruptura (prioridad compra; tipicamente tiendas/CRECO)"),
+        ("08_Tendencia_Semanal", "Evolucion semanal de und de demanda"),
         ("09_Matriz_Prod_x_Sucursal", "Mapa producto x sucursal (unidades)"),
         ("10_Detalle_Limpio", "Base transaccional normalizada (auditoria)"),
-        ("11_Catalogo_vs_Uso", "Catalogo de consumibles vs lo realmente solicitado"),
-        ("12_Metodologia", "Formulas, supuestos de buffer, min/max y recomendaciones de uso"),
+        ("11_Catalogo_vs_Uso", "Catalogo de consumibles vs uso real"),
+        ("12_Metodologia", "Formulas, supuestos de buffer, min/max y recomendaciones"),
     ]
     r += 2
     ws.cell(row=r, column=1, value="Hoja").font = FONT_HEADER
@@ -870,7 +1133,7 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         "2) Ir a 05_Comparativo_3_Opciones: elegir politica global (semanal/quincenal/mensual) o usar Frecuencia_recomendada por producto.",
         "3) Usar 02_Pedido_UNIFICADO como lista maestra de compra (columnas Pedido_*_sugerido_und).",
         "4) Priorizar SKUs de 07_Top_No_Disponible (alta ruptura = comprar primero / subir MAX).",
-        "5) Si opera separado: usar 03 para tiendas y 04 para taller/CRECO.",
+        "5) Si opera separado: usar 03 para tiendas y 04 para taller (movimientos).",
         "6) Validar picos en 08_Tendencia_Semanal y concentracion por punto en 06/09.",
         "7) Ajustar MIN/MAX si el lead time de un producto es largo: subir ROP proporcional al LT en semanas.",
     ]
@@ -884,7 +1147,9 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
     ws.cell(row=r, column=1).fill = FILL_HEADER2
     key_stats = [
         ("Lineas totales", len(all_df)),
-        ("Unidades solicitadas", int(all_df["CANTIDAD"].sum())),
+        ("Und demanda (tiendas+taller+creco)", int(all_df["CANTIDAD"].sum())),
+        ("Und Taller (movimientos)", int(df_taller["CANTIDAD"].sum()) if len(df_taller) else 0),
+        ("Und Tiendas (solicitudes)", int(df_tiendas["CANTIDAD"].sum()) if len(df_tiendas) else 0),
         ("Unidades atendidas", int(all_df["CANT_ATENDIDA"].sum())),
         ("Unidades no disponibles", int(all_df["CANT_NO_DISP"].sum())),
         ("% lineas atendidas", f"{all_df['ATENDIDO_FLAG'].mean():.1%}"),
@@ -893,6 +1158,7 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         ("% und no disponibles", f"{all_df['CANT_NO_DISP'].sum()/all_df['CANTIDAD'].sum():.1%}"),
         ("SKUs distintos", all_df["ARTICULO_NORM"].nunique()),
         ("Tiendas / areas", all_df["SUCURSAL"].nunique()),
+        ("Lineas movimientos Taller", len(df_taller)),
     ]
     rr = r + 2
     for k, v in key_stats:
@@ -968,7 +1234,9 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         13 + len(estado_break) + 2,
         [
             "Un % alto de NO DISPONIBLE implica demanda reprimida: el pedido debe cubrir al menos la demanda solicitada + buffer.",
-            "SOLICITADO se cuenta como atendido/en ciclo porque el usuario pidio incluirlo junto con RECIBIDO.",
+            "SOLICITADO se cuenta como atendido/en ciclo (junto con RECIBIDO).",
+            "Taller usa MOVIMIENTOS (salidas): no tiene NO DISPONIBLE; cada salida cuenta como demanda ejecutada/atendida.",
+            "La fila REF de solicitudes Taller viejas es solo historica/incompleta: no usar para armar pedido.",
             "Lineas sin estado se excluyen del numerador atendido y del no disponible; revisar en Detalle.",
         ],
     )
@@ -1089,26 +1357,24 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
 
     write_pedido_sheet(
         "02_Pedido_UNIFICADO",
-        "PEDIDO UNIFICADO (TIENDAS + TALLER/CRECO) — cantidades en UND",
+        "PEDIDO UNIFICADO (TIENDAS + TALLER movimientos + CRECO ops) — cantidades en UND",
         prod_unif,
     )
     write_pedido_sheet(
         "03_Pedido_TIENDAS",
-        "PEDIDO SOLO TIENDAS — cantidades en UND",
+        "PEDIDO SOLO TIENDAS (solicitudes) — cantidades en UND",
         prod_tiendas,
     )
     write_pedido_sheet(
-        "04_Pedido_TALLER_CRECO",
-        "PEDIDO ARCHIVO TALLER/CRECO (Taller + I+D + Almacen + Mant. + RRHH + Oficinas) — UND",
-        prod_taller_arch,
+        "04_Pedido_TALLER",
+        "PEDIDO TALLER — basado en MOVIMIENTOS/SALIDAS (fuente completa) — UND",
+        prod_taller,
     )
-
-    # Sub hojas taller vs otras dentro de metodologia already; add thin sheet for TALLER only if data
-    if not prod_taller.empty:
+    if not prod_ops_creco.empty:
         write_pedido_sheet(
-            "04b_Pedido_solo_TALLER",
-            "PEDIDO SOLO AREA TALLER — UND",
-            prod_taller,
+            "04b_Pedido_CRECO_ops",
+            "PEDIDO TALLER (movimientos) + CRECO OTRAS AREAS — UND",
+            prod_ops_creco,
         )
     if not prod_creco_otras.empty:
         write_pedido_sheet(
@@ -1116,6 +1382,115 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
             "PEDIDO CRECO OTRAS AREAS (I+D, Almacen, Mant., etc.) — UND",
             prod_creco_otras,
         )
+
+    # ========== 04d contraste taller viejo vs nuevo ==========
+    ws = wb.create_sheet("04d_Taller_viejo_vs_nuevo")
+    ws["A1"] = "CONTRASTE: SOLICITUDES TALLER INCOMPLETAS vs MOVIMIENTOS ACTUALIZADOS"
+    ws["A1"].font = FONT_TITLE
+    ws["A1"].fill = FILL_TITLE
+    ws.merge_cells("A1:H1")
+    ws["A2"] = (
+        "Las solicitudes previas de Taller NO se usan para armar el pedido. "
+        "Quedan solo como referencia de fill rate / cobertura incompleta. "
+        "La demanda de pedido de Taller sale de movimientos (salidas)."
+    )
+    ws.merge_cells("A2:H2")
+
+    if len(taller_solic_ref):
+        old_agg = (
+            taller_solic_ref.groupby("ARTICULO_NORM")
+            .agg(
+                und_solicitudes_viejas=("CANTIDAD", "sum"),
+                lineas_viejas=("CANTIDAD", "size"),
+                und_atendidas_viejas=("CANT_ATENDIDA", "sum"),
+                und_no_disp_viejas=("CANT_NO_DISP", "sum"),
+            )
+            .reset_index()
+        )
+    else:
+        old_agg = pd.DataFrame(
+            columns=[
+                "ARTICULO_NORM",
+                "und_solicitudes_viejas",
+                "lineas_viejas",
+                "und_atendidas_viejas",
+                "und_no_disp_viejas",
+            ]
+        )
+
+    if len(df_taller):
+        new_agg = (
+            df_taller.groupby("ARTICULO_NORM")
+            .agg(
+                und_movimientos=("CANTIDAD", "sum"),
+                lineas_movimientos=("CANTIDAD", "size"),
+            )
+            .reset_index()
+        )
+    else:
+        new_agg = pd.DataFrame(
+            columns=["ARTICULO_NORM", "und_movimientos", "lineas_movimientos"]
+        )
+
+    contrast = old_agg.merge(new_agg, on="ARTICULO_NORM", how="outer").fillna(0)
+    contrast["delta_und_mov_menos_solic"] = (
+        contrast["und_movimientos"] - contrast["und_solicitudes_viejas"]
+    )
+    contrast["en_movimientos"] = contrast["und_movimientos"] > 0
+    contrast["en_solicitudes_viejas"] = contrast["und_solicitudes_viejas"] > 0
+    contrast = contrast.sort_values("und_movimientos", ascending=False).rename(
+        columns={"ARTICULO_NORM": "Producto"}
+    )
+    # resumen
+    resumen_c = pd.DataFrame(
+        [
+            {
+                "Metrica": "Lineas solicitudes Taller (viejo/incompleto)",
+                "Valor": int(len(taller_solic_ref)),
+            },
+            {
+                "Metrica": "Und solicitudes Taller (viejo/incompleto)",
+                "Valor": int(taller_solic_ref["CANTIDAD"].sum()) if len(taller_solic_ref) else 0,
+            },
+            {
+                "Metrica": "Lineas movimientos Taller (nuevo/completo)",
+                "Valor": int(len(df_taller)),
+            },
+            {
+                "Metrica": "Und movimientos Taller (nuevo/completo)",
+                "Valor": int(df_taller["CANTIDAD"].sum()) if len(df_taller) else 0,
+            },
+            {
+                "Metrica": "SKUs solo en movimientos (no estaban en solicitudes)",
+                "Valor": int(
+                    ((contrast["und_movimientos"] > 0) & (contrast["und_solicitudes_viejas"] == 0)).sum()
+                ),
+            },
+            {
+                "Metrica": "SKUs solo en solicitudes viejas (no salieron en movimientos)",
+                "Valor": int(
+                    ((contrast["und_solicitudes_viejas"] > 0) & (contrast["und_movimientos"] == 0)).sum()
+                ),
+            },
+        ]
+    )
+    write_df(ws, resumen_c, start_row=4, int_cols={"Valor"})
+    ws.cell(row=12, column=1, value="Detalle por producto").font = FONT_BOLD
+    write_df(
+        ws,
+        contrast,
+        start_row=13,
+        int_cols={
+            "und_solicitudes_viejas",
+            "lineas_viejas",
+            "und_atendidas_viejas",
+            "und_no_disp_viejas",
+            "und_movimientos",
+            "lineas_movimientos",
+            "delta_und_mov_menos_solic",
+        },
+    )
+    autosize(ws)
 
     # ========== 05 Comparativo ==========
     ws = wb.create_sheet("05_Comparativo_3_Opciones")
@@ -1394,11 +1769,13 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         ("Demanda semanal", "Suma und / (dias/7). Tambien se calcula pico semanal observado."),
         ("Demanda quincenal", "Suma und / (dias/15)."),
         ("Demanda mensual", "Suma und / (dias/30). Es la base del pedido mensual de consumibles."),
-        ("Atendido (si)", "Estados: RECIBIDO, SOLICITADO, ENVIADO, ENTREGADO/ENTRGADO."),
-        ("No atendido (no)", "Estado: NO DISPONIBLE."),
+        ("Fuente Taller", "MOVIMIENTOS actualizados (salidas de inventario). Reemplaza solicitudes incompletas de Taller."),
+        ("Demanda Taller", "Cantidad = valor absoluto del movimiento negativo (salida). UOM puede ser UND/PACK/GAL/ROLLO."),
+        ("Atendido (si)", "Solicitudes: RECIBIDO/SOLICITADO/ENVIADO/ENTREGADO. Movimientos Taller: toda salida = ejecutada."),
+        ("No atendido (no)", "Estado NO DISPONIBLE en solicitudes. No aplica a movimientos de Taller."),
         ("% lineas atendidas", "Lineas con estado atendido / total lineas del grupo."),
-        ("% und atendidas", "Suma und de lineas atendidas / suma und solicitadas."),
-        ("% no disponible", "Analogamente sobre lineas o und con estado NO DISPONIBLE."),
+        ("% und atendidas", "Suma und atendidas / suma und de demanda del grupo."),
+        ("% no disponible", "Analogamente sobre lineas o und con estado NO DISPONIBLE (solicitudes)."),
         ("Buffer normal", "+20% sobre demanda del ciclo (variabilidad corta + redondeo operativo)."),
         ("Buffer ruptura alta", "Si ≥25% de lineas del SKU fueron NO DISPONIBLE: demanda×1.35, con piso = pico semanal (semanal), 1.5×pico (quincenal) o 2×pico (mensual). Evita extrapolar un spike a todo el mes."),
         ("MIN_und", "Piso ≈ demanda de 1 semana (seguridad minima en punto de uso/bodega)."),
@@ -1410,8 +1787,9 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         ("Frecuencia recomendada", "ALTA rotacion o ruptura ALTA → semanal; media → quincenal; baja → mensual."),
         ("Lead time", "No hay LT por producto en la data. Las cantidades son en UND de demanda; ajustar ROP si LT > 7 dias."),
         ("Limitacion", "Solo 2 meses de historia: estacionalidad anual no visible. Revisar en 1-2 ciclos y recalibrar."),
-        ("Separacion", "Tiendas y Taller/CRECO se analizan aparte y unificados para pedidos centrales o por canal."),
-        ("Notas de envio parcial", "Algunas notas indican envios parciales; la cantidad registrada es la solicitada, no necesariamente la enviada."),
+        ("Separacion", "Tiendas (solicitudes), Taller (movimientos) y CRECO otras areas se analizan aparte y unificados."),
+        ("Solicitudes Taller viejas", "Quedan en hoja 04d solo como referencia; NO alimentan el pedido."),
+        ("Notas de envio parcial", "En tiendas, algunas notas indican envios parciales; la cantidad registrada es la solicitada."),
     ]
     ws.cell(row=3, column=1, value="Concepto").font = FONT_HEADER
     ws.cell(row=3, column=1).fill = FILL_HEADER
@@ -1435,7 +1813,7 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         f"Equivalente si se pidiera semanal todo: {int(comp['Equiv_mensual_si_semanal'].sum())} und/mes.",
         f"Equivalente si se pidiera quincenal todo: {int(comp['Equiv_mensual_si_quincenal'].sum())} und/mes.",
         "Recomendacion practica: politica MENSUAL como default + excepcion SEMANAL/QUINCENAL para SKUs con Senal_ruptura=ALTA o alta rotacion (ver columna Frecuencia_recomendada).",
-        "Separar compras si la logistica lo exige: hoja 03 (tiendas) y 04 (taller/CRECO).",
+        "Separar compras si la logistica lo exige: hoja 03 (tiendas) y 04 (taller movimientos).",
     ]
     for i, a in enumerate(advice):
         ws.cell(row=r + 1 + i, column=1, value=a)
@@ -1454,22 +1832,30 @@ def build_excel(all_df: pd.DataFrame, inv: pd.DataFrame):
         "fill_df": fill_df,
         "comp": comp,
         "n_tiendas": len(df_tiendas),
-        "n_taller_arch": len(df_taller_archivo),
+        "n_ops_creco": len(df_ops_creco),
         "n_taller": len(df_taller),
         "n_creco_otras": len(df_creco_otras),
         "n_total": len(all_df),
         "skus": all_df["ARTICULO_NORM"].nunique(),
+        "und_taller": float(df_taller["CANTIDAD"].sum()) if len(df_taller) else 0,
     }
 
 
 def main():
-    all_df, inv = load_all()
+    all_df, inv, taller_solic_ref = load_all()
     print("Cargado:", len(all_df), "lineas")
     print(all_df["GRUPO"].value_counts().to_dict())
     print(all_df["ARCHIVO"].value_counts().to_dict())
+    print(all_df["FUENTE_TIPO"].value_counts().to_dict())
     print("Estados:", all_df["ESTADO_CAT"].value_counts().to_dict())
     print("Fecha:", all_df["FECHA"].min(), "->", all_df["FECHA"].max())
-    summary = build_excel(all_df, inv)
+    print(
+        "Taller movimientos und:",
+        int(all_df.loc[all_df["GRUPO"] == "TALLER", "CANTIDAD"].sum()),
+        "| ref solicitudes incompletas lineas:",
+        len(taller_solic_ref),
+    )
+    summary = build_excel(all_df, inv, taller_solic_ref)
     print("Excel:", OUT_XLSX)
     print("Artifact:", ARTIFACT_XLSX)
     print(summary["fill_df"].to_string(index=False))
