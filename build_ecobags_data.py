@@ -2,8 +2,11 @@
 """Generate DATA JSON for Eco Bag dashboard."""
 import json
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
+
+DESIGN_IMAGES_JSON = Path(__file__).parent / 'ecobags_design_images.json'
 
 VENTAS_XLSX = '/home/ubuntu/.cursor/projects/workspace/uploads/ventas_ecobags_9b8d.xlsx'
 INVENTARIO_XLSX = '/home/ubuntu/.cursor/projects/workspace/uploads/inventaio_actual_ecobags_5ac0.xlsx'
@@ -191,6 +194,12 @@ def compute_summary_prod(prod_curve):
     return summary
 
 
+def load_design_images():
+    if DESIGN_IMAGES_JSON.exists():
+        return json.loads(DESIGN_IMAGES_JSON.read_text(encoding='utf-8'))
+    return {}
+
+
 def build():
     raw_rows = read_ventas()
     stock, stock_by_loc, inv_rows = read_inventario()
@@ -236,6 +245,7 @@ def build():
             f"{meses_order[0].split('-')[0].capitalize()} {meses_order[0].split('-')[1]} — "
             f"{meses_order[-1].split('-')[0].capitalize()} {meses_order[-1].split('-')[1]}"
         ),
+        'design_images': load_design_images(),
     }
 
 

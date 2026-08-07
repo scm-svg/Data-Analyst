@@ -25,7 +25,7 @@ function rTallas(){
   colors.forEach(function(c){tiendas.forEach(function(t){var v=(m2[c]&&m2[c][t])||0;if(v>mx)mx=v;});});
   var h='<table class="hmt"><thead><tr><th></th>'+tiendas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';
   colors.forEach(function(c){
-    h+='<tr><td class="rl"><span class="chip" style="background:'+cn(c)+'"></span>'+c+'</td>'+
+    h+='<tr><td class="rl"><span class="chip" style="background:'+cn(c)+'"></span>'+dLbl(c,c)+'</td>'+
       tiendas.map(function(t){var v=(m2[c]&&m2[c][t])||0;return'<td style="background:'+(v?hb(v,mx):'#16171f')+';color:'+(v?ht(v,mx):'#ef4444')+'" title="'+c+' · '+t+': '+(v||0)+' und">'+(v||'0')+'</td>';}).join('')+'</tr>';
   });
   document.getElementById('colTallaHM').innerHTML=h+'</tbody></table>';

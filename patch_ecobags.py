@@ -3,12 +3,16 @@
 import json
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 from build_ecobags_data import MODEL, build
 
 SRC = '/workspace/sportlite.html'
 DST = '/workspace/ecobags.html'
+
+# Extract design preview images from COMPRAS xlsx
+subprocess.run(['python3', str(Path(__file__).parent / 'extract_ecobags_images.py')], check=True)
 
 shutil.copy(SRC, DST)
 
@@ -125,6 +129,11 @@ INV_CSS = """
 .inv-matrix .qty-ventas{font-size:0.62rem;display:block;margin-top:2px;line-height:1}
 .inv-matrix .qty-ventas.zero{color:#ef4444;font-weight:700}
 .inv-matrix .qty-empty{color:var(--mu2);font-size:0.65rem}
+.dhp{cursor:help;border-bottom:1px dotted var(--mu);transition:color .15s}
+.dhp:hover{color:var(--ac)}
+#designPreview{position:fixed;display:none;pointer-events:none;z-index:10000;background:var(--surf);border:2px solid var(--ac);border-radius:12px;padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+#designPreview img{display:block;max-width:260px;max-height:320px;border-radius:8px;object-fit:contain}
+#designPreview .dp-title{font-family:var(--fh);font-size:0.72rem;font-weight:700;margin-top:6px;text-align:center;color:var(--tx)}
 """
 html = html.replace(
     '.tkpi .ts{font-size:0.68rem;color:var(--mu2);margin-top:1px}\n.nodata{',
@@ -178,10 +187,32 @@ new_rtallas = Path(__file__).parent.joinpath('ecobags_tallas.js').read_text(enco
 html = html.replace(old_rtallas, new_rtallas)
 
 inv_js = Path(__file__).parent.joinpath('ecobags_inventario.js').read_text(encoding='utf-8')
+hover_js = Path(__file__).parent.joinpath('ecobags_hover.js').read_text(encoding='utf-8')
 html = html.replace(
     '\n\n// ── DECISIONES ──',
-    '\n\n' + inv_js + '\n\n// ── DECISIONES ──',
+    '\n\n' + hover_js + '\n\n' + inv_js + '\n\n// ── DECISIONES ──',
     1,
+)
+
+# Hover preview on design names in ranking tables (Colores ranking)
+html = html.replace(
+    "colorFn(x.k)+'\"></span>':'')+x.k+'</td><td><div class=\"rb\">",
+    "colorFn(x.k)+'\"></span>':'')+dLbl(x.k,x.k)+'</td><td><div class=\"rb\">",
+)
+
+html = html.replace(
+    "return'<tr><td><span style=\"font-family:var(--fh);font-weight:800;color:var(--ac);font-size:0.82rem\">#'+(i+1)+'</span></td><td><span class=\"chip\" style=\"background:'+cn(col)+'\"></span>'+kv[0]+'</td><td style=\"font-weight:700;font-family:var(--fh)\">'+kv[1]+'</td><td style=\"color:var(--ac);font-size:0.7rem;font-weight:700\">'+pct+'%</td></tr>';",
+    "var rest=kv[0].slice(col.length);return'<tr><td><span style=\"font-family:var(--fh);font-weight:800;color:var(--ac);font-size:0.82rem\">#'+(i+1)+'</span></td><td><span class=\"chip\" style=\"background:'+cn(col)+'\"></span>'+dLbl(col,col)+rest+'</td><td style=\"font-weight:700;font-family:var(--fh)\">'+kv[1]+'</td><td style=\"color:var(--ac);font-size:0.7rem;font-weight:700\">'+pct+'%</td></tr>';",
+)
+
+html = html.replace(
+    "h+='<tr><td class=\"rl\"><span class=\"chip\" style=\"background:'+cn(c)+'\"></span>'+c+'</td>'+tiendas.map(function(t){var v=(m2ct[c]&&m2ct[c][t])||0;return'<td style=\"background:'+hb(v,mxCT)+';color:'+ht(v,mxCT)+'\" title=\"'+c+' · '+t+': '+v+' und\">'+v+'</td>';}).join('')+'</tr>';",
+    "h+='<tr><td class=\"rl\"><span class=\"chip\" style=\"background:'+cn(c)+'\"></span>'+dLbl(c,c)+'</td>'+tiendas.map(function(t){var v=(m2ct[c]&&m2ct[c][t])||0;return'<td style=\"background:'+hb(v,mxCT)+';color:'+ht(v,mxCT)+'\" title=\"'+c+' · '+t+': '+v+' und\">'+v+'</td>';}).join('')+'</tr>';",
+)
+
+html = html.replace(
+    "updateColorFilter();filterModelButtons();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();rResumen();",
+    "updateColorFilter();filterModelButtons();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();initDesignPreview();rResumen();",
 )
 
 html = re.sub(
