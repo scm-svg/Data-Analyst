@@ -136,6 +136,14 @@ def base_months(meses_order, es_parcial):
     return m[-3:]
 
 
+def parse_variant_key(k):
+    """Parse stock key modelo/genero/color/talla when color may contain slashes."""
+    parts = k.split('/')
+    if len(parts) < 4:
+        return None
+    return parts[0], parts[1], '/'.join(parts[2:-1]), parts[-1]
+
+
 def compute_prod_curve(raw_rows, stock, stock_by_loc, meses_order, es_parcial):
     base = base_months(meses_order, es_parcial)
     sales = defaultdict(int)
@@ -148,8 +156,9 @@ def compute_prod_curve(raw_rows, stock, stock_by_loc, meses_order, es_parcial):
     curve = []
     keys = set(sales.keys())
     for k in stock:
-        parts = k.split('/')
-        keys.add((parts[0], parts[1], parts[2], parts[3]))
+        parsed = parse_variant_key(k)
+        if parsed:
+            keys.add(parsed)
 
     n_base = max(len(base), 1)
     for modelo, genero, color, talla in sorted(keys):
@@ -158,8 +167,11 @@ def compute_prod_curve(raw_rows, stock, stock_by_loc, meses_order, es_parcial):
         key = f'{modelo}/{genero}/{color}/{talla}'
         stk_total = stock.get(key, 0)
         stk_pt = stk_taller.get(key, 0)
-        cobertura = round(stk_total / v_mes, 1) if v_mes > 0 else (99 if stk_total > 0 else 0)
-        need = lambda n, vm=v_mes, st=stk_total: max(0, round(vm * n - st))
+        if v_mes > 0:
+            cobertura = round(stk_total / v_mes, 1)
+        else:
+            cobertura = 0
+        need = lambda n, vm=v_mes, st=stk_total: max(0, round(vm * n - st)) if vm > 0 else 0
         curve.append({
             'modelo': modelo,
             'genero': genero,

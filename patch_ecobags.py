@@ -93,7 +93,15 @@ html = html.replace(
 
 html = html.replace(
     'Sugerencia proporcional por color y talla · Clic en color para detalle',
+    'Cobertura y compra neta por diseño',
+)
+html = html.replace(
     'Cobertura y producción neta por diseño',
+    'Cobertura y compra neta por diseño',
+)
+html = html.replace(
+    '<h3>🏭 Curva de Producción por Modelo</h3>',
+    '<h3>🛒 Curva de Compra por Modelo</h3>',
 )
 html = html.replace(
     '🆕 MARGARITA proyectada: 2× velocidad GRIE · CERRO VERDE excluida de reabastecimiento',
@@ -185,6 +193,10 @@ html = html.replace(
 old_rtallas = html[html.index('function rTallas'):html.index('function rTiendas')]
 new_rtallas = Path(__file__).parent.joinpath('ecobags_tallas.js').read_text(encoding='utf-8') + '\n\n'
 html = html.replace(old_rtallas, new_rtallas)
+
+old_rdec = html[html.index('function rDecisiones'):html.index('function renderReabast')]
+new_rdec = Path(__file__).parent.joinpath('ecobags_decisiones.js').read_text(encoding='utf-8') + '\n\n'
+html = html.replace(old_rdec, new_rdec)
 
 inv_js = Path(__file__).parent.joinpath('ecobags_inventario.js').read_text(encoding='utf-8')
 hover_js = Path(__file__).parent.joinpath('ecobags_hover.js').read_text(encoding='utf-8')
