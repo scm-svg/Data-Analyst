@@ -131,6 +131,10 @@ html = html.replace(
     1,
 )
 
+old_rtallas = html[html.index('function rTallas'):html.index('function rTiendas')]
+new_rtallas = Path(__file__).parent.joinpath('advancegeo_tallas.js').read_text(encoding='utf-8') + '\n\n'
+html = html.replace(old_rtallas, new_rtallas)
+
 html = html.replace(
     "        +'<div style=\"font-size:.67rem;color:var(--mu2);margin-bottom:8px\">📦 PT global: '+smry.stk_pt+' und &nbsp;·&nbsp; Velocidad base: Feb–Mar–Abr 2026</div>'",
     "        +'<div style=\"font-size:.67rem;color:var(--mu2);margin-bottom:8px\">📦 PT taller: '+smry.stk_pt+' und &nbsp;·&nbsp; Velocidad: últimos meses cerrados</div>'",
