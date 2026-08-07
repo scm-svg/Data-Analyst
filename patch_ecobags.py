@@ -211,6 +211,16 @@ html = html.replace(
 )
 
 html = html.replace(
+    "  if(DATA.es_parcial)alerts.push({type:'info',text:'📅 Mayo 2026 con datos parciales'});\n",
+    "",
+)
+
+html = html.replace(
+    "  mc('cCol','doughnut',{labels:byColor.map(function(x){return x.k;}),datasets:[{data:byColor.map(function(x){return x.v;}),backgroundColor:byColor.map(function(x){return cn(x.k)+'cc';}),borderColor:byColor.map(function(x){return cn(x.k);}),borderWidth:1.5,hoverOffset:8}]},pieOpts());",
+    "  bindChartDesignPreview(mc('cCol','doughnut',{labels:byColor.map(function(x){return x.k;}),datasets:[{data:byColor.map(function(x){return x.v;}),backgroundColor:byColor.map(function(x){return cn(x.k)+'cc';}),borderColor:byColor.map(function(x){return cn(x.k);}),borderWidth:1.5,hoverOffset:8}]},pieOpts()));",
+)
+
+html = html.replace(
     "updateColorFilter();filterModelButtons();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();rResumen();",
     "updateColorFilter();filterModelButtons();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();initDesignPreview();rResumen();",
 )
