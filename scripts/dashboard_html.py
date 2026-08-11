@@ -1,13 +1,14 @@
-"""Dashboard HTML ejecutivo — Tela Jabón Microfibra."""
+"""Dashboard HTML — estilo planificación tela jabón microfibra."""
 
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 
 def _esc(text) -> str:
+    if text is None:
+        return ""
     return (
         str(text)
         .replace("&", "&amp;")
@@ -17,210 +18,290 @@ def _esc(text) -> str:
     )
 
 
+COLOR_HEX = {
+    "NEGRO": "#1C1C1C",
+    "BLANCO": "#FDFDFD",
+    "AZUL MARINO": "#1E3A5F",
+    "VERDE MILITAR": "#4E5B3C",
+    "AZUL LAVANDA": "#A9B7E6",
+    "LILA": "#C9A6E4",
+    "AZUL REY": "#2B4BD7",
+    "ROJO": "#D63031",
+    "PÚRPURA": "#7D3FB0",
+    "PURPURA": "#7D3FB0",
+    "GRIS CLARO": "#CFCFCF",
+    "AGUAMARINA": "#6FD8C8",
+    "VINOTINTO": "#722F37",
+    "AMARILLO NEÓN": "#EEF25A",
+    "AMARILLO NEON": "#EEF25A",
+    "ROSADO PASTEL": "#F4B8C8",
+    "FUCSIA": "#E91E8C",
+    "AZUL CIELO": "#87CEEB",
+}
+
+
+def _swatch(color: str) -> str:
+    key = color.upper().replace("Ó", "O").replace("É", "E").replace("Ú", "U")
+    hex_c = COLOR_HEX.get(key, "#CCCCCC")
+    return f'<span class="sw" style="background:{hex_c}"></span>'
+
+
+def _sku_code(producto: str) -> str:
+    if not producto:
+        return "—"
+    text = str(producto)
+    if text.startswith("[") and "]" in text:
+        return text[1 : text.index("]")]
+    return text
+
+
 def generate_dashboard_html(ctx: dict, output_path: Path) -> None:
-    kpis = ctx["kpis"]
+    meta = ctx["meta"]
     top5 = ctx["top5"]
     pedidos = ctx["pedidos"]
-    acciones = ctx["acciones"]
-    modelos = ctx["modelos"]
-    alertas = ctx["alertas"]
-    chart_labels = ctx["chart_labels"]
-    chart_values = ctx["chart_values"]
-    hoy = date.today().strftime("%d/%m/%Y")
+    cubiertos = ctx["cubiertos"]
+    semaforo = ctx["semaforo"]
+    lila = ctx["lila"]
+    pendientes = ctx["pendientes"]
 
-    top5_cards = ""
-    for i, row in enumerate(top5, 1):
-        top5_cards += f"""
-        <div class="color-card">
-          <div class="rank">#{i}</div>
-          <h3>{_esc(row['Color'])}</h3>
-          <p class="stat">{row['Venta prom (u/mes)']:.0f} uds/mes · {row['% Total']:.1f}% ventas</p>
-          <p class="why">{_esc(row.get('Justificación', ''))}</p>
-        </div>"""
+    top5_chips = "".join(
+        f'<span class="cchip">{_swatch(c["Color"])} {_esc(c["Color"])}</span>' for c in top5
+    )
 
-    pedido_cards = ""
+    pedido_pills = ""
+    for i, p in enumerate(pedidos):
+        cls = "p-bad" if i == 0 else ("p-warn" if i < 4 else "p-n")
+        pedido_pills += f'<span class="pill {cls}">{_esc(p["Color"])} {p["kg"]:.0f} kg</span> '
+
+    pedido_rows = ""
+    total_kg = 0
     for p in pedidos:
-        pedido_cards += f"""
-        <div class="action-card urgent">
-          <div class="action-head">
-            <span class="badge">Pedir tela</span>
-            <strong>{p['Pedido sugerido (kg)']:.0f} kg</strong>
-          </div>
-          <h3>{_esc(p['Color'])}</h3>
-          <ul>
-            <li>Producir <strong>{p['Prod. requerida (u)']:.0f}</strong> unidades</li>
-            <li>Tela actual: {p['Tela actual (kg)']:.0f} kg</li>
-            <li>{_esc(p.get('Acción sugerida', ''))}</li>
-          </ul>
-        </div>"""
+        total_kg += p["kg"]
+        sku = p.get("sku") or "—"
+        sku_html = f'<span class="pill p-bad">crear código</span>' if p.get("sin_codigo") else _esc(_sku_code(sku))
+        pedido_rows += f"""
+      <tr><td>{_swatch(p['Color'])}<b>{_esc(p['Color'])}</b></td><td>{sku_html}</td>
+      <td class="num">{p['kg']:.0f}</td><td>{_esc(p['motivo'])}</td></tr>"""
 
-    accion_cards = ""
-    for a in acciones:
-        cls = "warn" if a.get("tipo") == "validar" else "info"
-        accion_cards += f"""
-        <div class="action-card {cls}">
-          <div class="action-head"><span class="badge">{_esc(a['tipo_label'])}</span></div>
-          <h3>{_esc(a['titulo'])}</h3>
-          <p>{_esc(a['texto'])}</p>
-        </div>"""
+    pedido_rows += f"""
+      <tr class="total"><td colspan="2">TOTAL</td><td class="num">{total_kg:.0f}</td>
+      <td>≈ {total_kg / meta['inv_tela'] * 100:.0f}% del inventario de tela actual ({meta['inv_tela']:,.0f} kg)</td></tr>"""
 
-    modelo_rows = ""
-    for m in modelos:
-        modelo_rows += f"""
-        <tr>
-          <td>{_esc(m['Modelo'])}</td>
-          <td class="num">{m['Prod. requerida']:.0f}</td>
-          <td class="num">{m['Inv PT']:.0f}</td>
-          <td class="num">{m['Cob. PT (meses)']:.1f}</td>
-        </tr>"""
+    cubiertos_html = "".join(
+        f'<span class="cchip">{_swatch(c["Color"])} {_esc(c["Color"])}<small>{_esc(c["nota"])}</small></span>'
+        for c in cubiertos
+    )
 
-    alerta_items = "".join(f"<li>{_esc(a)}</li>" for a in alertas)
+    tags_html = ""
+    for i, c in enumerate(top5, 1):
+        checks = "".join(f'<div><span class="c">✓</span>{_esc(line)}</div>' for line in c.get("checks", []))
+        tags_html += f"""
+    <div class="tag"><span class="rank">Nº{i}</span>
+      <h3>{_esc(c['Color'])}</h3><div class="chip" style="background:{COLOR_HEX.get(c['Color'].upper(), '#ccc')}"></div>
+      <div class="facts">{c['ventas_mes']:.0f} prendas/mes · {c['pct']:.0f}% de la venta</div>
+      <div class="checks">{checks}</div>
+    </div>"""
+
+    alt = ctx.get("alterno")
+    if alt:
+        tags_html += f"""
+    <div class="tag" style="border-style:dashed"><span class="rank">Alt.</span>
+      <h3>{_esc(alt['Color'])} <span class="pill p-n" style="margin-left:4px">suplente</span></h3>
+      <div class="chip" style="background:{COLOR_HEX.get(alt['Color'].upper(), '#ccc')}"></div>
+      <div class="facts">{alt['ventas_mes']:.0f} prendas/mes</div>
+      <div class="checks"><div><span class="c">✓</span>{_esc(alt.get('nota', ''))}</div></div>
+    </div>"""
+
+    def bucket(name, cls, title, desc, items):
+        chips = "".join(
+            f'<span class="cchip">{_swatch(it["Color"])} {_esc(it["Color"])}<small>{_esc(it.get("nota",""))}</small></span>'
+            for it in items
+        )
+        if not chips:
+            return ""
+        return f"""
+  <div class="bucket {cls}">
+    <h3>{title}</h3><p>{desc}</p><div class="crow">{chips}</div>
+  </div>"""
+
+    sem_html = (
+        bucket("pedir", "b-bad", "🔴 Pedir tela ya", semaforo["pedir"]["desc"], semaforo["pedir"]["items"])
+        + bucket("vigilar", "b-warn", "🟠 Vigilar — tela justa", semaforo["vigilar"]["desc"], semaforo["vigilar"]["items"])
+        + bucket("ok", "b-ok", "🟢 No comprar más tela", semaforo["ok"]["desc"], semaforo["ok"]["items"])
+        + bucket("decidir", "b-n", "⚪ Decidir si siguen en catálogo", semaforo["decidir"]["desc"], semaforo["decidir"]["items"])
+    )
+
+    pend_html = "".join(f" {_esc(p)}" for p in pendientes)
 
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planificación Tela Jabón Microfibra</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<title>Tela Jabón Microfibra · Planificación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Expanded:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-:root {{
-  --bg:#f4f6fb; --card:#fff; --text:#1a2340; --muted:#5c6478; --line:#dde3ef;
-  --blue:#2563eb; --blue-soft:#eff6ff; --green:#059669; --green-soft:#ecfdf5;
-  --amber:#d97706; --amber-soft:#fffbeb; --red:#dc2626; --red-soft:#fef2f2;
+:root{{
+  --paper:#FBFBF9; --ink:#16150F; --muted:#6E6A60; --line:#E4E1DA; --card:#FFFFFF;
+  --ok:#2E7D4F; --ok-bg:#EAF4EE; --warn:#B07A1E; --warn-bg:#FBF3E2; --bad:#C0392B; --bad-bg:#FAECE9;
+  --neutral-bg:#F1F0EC;
 }}
-* {{ box-sizing:border-box; margin:0; padding:0; }}
-body {{ font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }}
-.wrap {{ max-width:1180px; margin:0 auto; padding:24px 20px 48px; }}
-.hero {{
-  background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 55%,#3b82f6 100%);
-  color:#fff; border-radius:20px; padding:28px 32px; margin-bottom:24px;
-  box-shadow:0 10px 30px rgba(37,99,235,.25);
-}}
-.hero h1 {{ font-family:'Syne',sans-serif; font-size:1.85rem; font-weight:800; }}
-.hero p {{ opacity:.9; margin-top:8px; max-width:720px; }}
-.hero .meta {{ margin-top:14px; font-size:.85rem; opacity:.8; }}
-.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:24px; }}
-.kpi {{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }}
-.kpi .label {{ font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }}
-.kpi .value {{ font-family:'Syne',sans-serif; font-size:1.55rem; font-weight:800; color:var(--blue); margin-top:4px; }}
-.kpi .sub {{ font-size:.78rem; color:var(--muted); margin-top:2px; }}
-.section {{ margin-bottom:28px; }}
-.section h2 {{ font-family:'Syne',sans-serif; font-size:1.15rem; margin-bottom:6px; }}
-.section .lead {{ color:var(--muted); font-size:.92rem; margin-bottom:16px; }}
-.grid-2 {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
-.grid-3 {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }}
-@media(max-width:800px) {{ .grid-2 {{ grid-template-columns:1fr; }} }}
-.color-card, .action-card {{
-  background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px;
-}}
-.color-card .rank {{
-  display:inline-block; background:var(--blue-soft); color:var(--blue);
-  font-weight:700; font-size:.75rem; padding:2px 8px; border-radius:999px; margin-bottom:8px;
-}}
-.color-card h3 {{ font-size:1.05rem; margin-bottom:4px; }}
-.color-card .stat {{ color:var(--muted); font-size:.85rem; }}
-.color-card .why {{ margin-top:10px; font-size:.88rem; }}
-.action-card.urgent {{ border-color:#86efac; background:var(--green-soft); }}
-.action-card.warn {{ border-color:#fcd34d; background:var(--amber-soft); }}
-.action-card.info {{ border-color:#93c5fd; background:var(--blue-soft); }}
-.action-head {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }}
-.badge {{
-  font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
-  background:#fff; border:1px solid var(--line); padding:3px 8px; border-radius:999px;
-}}
-.action-card ul {{ margin-top:8px; padding-left:18px; font-size:.88rem; }}
-.action-card li {{ margin-bottom:4px; }}
-.chart-box {{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }}
-table {{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }}
-th {{ background:#eef2ff; color:#3730a3; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:10px 12px; }}
-td {{ padding:10px 12px; border-top:1px solid var(--line); font-size:.88rem; }}
-td.num {{ text-align:right; font-weight:600; }}
-.note-box {{ background:var(--amber-soft); border:1px solid #fcd34d; border-radius:14px; padding:16px 18px; }}
-.note-box h3 {{ font-size:.95rem; margin-bottom:8px; color:#92400e; }}
-.note-box ul {{ padding-left:18px; color:#78350f; font-size:.88rem; }}
-.note-box li {{ margin-bottom:6px; }}
-.footer {{ text-align:center; color:var(--muted); font-size:.78rem; margin-top:32px; }}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Archivo',system-ui,sans-serif;background:var(--paper);color:var(--ink);line-height:1.45;font-size:15px}}
+.wrap{{max-width:1080px;margin:0 auto;padding:0 18px 60px}}
+header{{padding:30px 0 18px;border-bottom:2px solid var(--ink)}}
+.eyebrow{{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}}
+h1{{font-family:'Archivo Expanded',sans-serif;font-weight:800;font-size:clamp(21px,4vw,30px);line-height:1.1}}
+.sub{{color:var(--muted);margin-top:6px;font-size:13.5px}}
+nav{{display:flex;gap:4px;overflow-x:auto;margin:16px 0 26px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:10;padding-top:6px}}
+nav button{{font-family:'Archivo',sans-serif;font-size:13.5px;font-weight:600;padding:10px 14px;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}}
+nav button.active{{color:var(--ink);border-bottom-color:var(--ink)}}
+nav button:focus-visible{{outline:2px solid var(--ink);outline-offset:2px}}
+section{{display:none}}section.show{{display:block;animation:fade .25s ease}}
+@keyframes fade{{from{{opacity:0;transform:translateY(4px)}}to{{opacity:1;transform:none}}}}
+@media (prefers-reduced-motion:reduce){{section.show{{animation:none}}}}
+h2{{font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:17px;margin:26px 0 12px}}
+h2:first-child{{margin-top:0}}
+.note{{font-size:12.5px;color:var(--muted);margin-top:8px}}
+.sw{{display:inline-block;width:15px;height:15px;border-radius:4px;vertical-align:-2px;margin-right:7px;border:1px solid rgba(0,0,0,.14);flex:none}}
+.grid{{display:grid;gap:14px}}
+.g2{{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}}
+.g3{{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
+.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}}
+.big{{font-family:'Archivo Expanded',sans-serif;font-weight:800;font-size:30px;line-height:1}}
+.big small{{font-size:14px;font-weight:600;color:var(--muted)}}
+.kicker{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}}
+.pill{{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;margin:2px 3px 2px 0}}
+.p-ok{{background:var(--ok-bg);color:var(--ok)}} .p-warn{{background:var(--warn-bg);color:var(--warn)}}
+.p-bad{{background:var(--bad-bg);color:var(--bad)}} .p-n{{background:var(--neutral-bg);color:var(--muted)}}
+.tags{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}}
+.tag{{background:var(--card);border:1px solid var(--line);border-radius:10px 10px 14px 14px;padding:16px 15px 14px;position:relative;box-shadow:0 1px 3px rgba(20,20,15,.05)}}
+.tag::before{{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:9px;height:9px;border-radius:50%;background:var(--paper);border:1.5px solid var(--line)}}
+.tag .rank{{position:absolute;top:8px;right:11px;font-family:'Archivo Expanded';font-weight:800;font-size:13px;color:var(--muted)}}
+.tag .chip{{width:100%;height:52px;border-radius:8px;border:1px solid rgba(0,0,0,.12);margin:12px 0 10px}}
+.tag h3{{font-family:'Archivo Expanded';font-weight:700;font-size:15px}}
+.tag .facts{{font-size:12.5px;color:var(--muted);margin-top:4px}}
+.checks{{margin-top:9px;font-size:12.5px}}
+.checks div{{display:flex;gap:6px;align-items:baseline;padding:1.5px 0}}
+.checks .c{{color:var(--ok);font-weight:700}}
+table{{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}}
+th{{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1.5px solid var(--ink);background:#F6F5F1}}
+td{{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}}
+tr:last-child td{{border-bottom:none}}
+td.num{{font-variant-numeric:tabular-nums;font-weight:600;text-align:right;white-space:nowrap}}
+.tblwrap{{overflow-x:auto;border-radius:12px}}
+.total td{{background:#F6F5F1;font-weight:700}}
+.tl{{display:flex;align-items:flex-start;margin:14px 0 4px}}
+.tl .step{{flex:1;text-align:center;position:relative;padding-top:16px}}
+.tl .step::before{{content:'';position:absolute;top:5px;left:50%;transform:translateX(-50%);width:11px;height:11px;border-radius:50%;background:var(--ink)}}
+.tl .step::after{{content:'';position:absolute;top:10px;left:calc(50% + 8px);right:calc(-50% + 8px);height:1.5px;background:var(--line)}}
+.tl .step:last-child::after{{display:none}}
+.tl b{{display:block;font-size:12.5px}}
+.tl span{{font-size:11.5px;color:var(--muted)}}
+.tl .hot::before{{background:var(--bad)}}
+.bucket{{border-radius:12px;padding:16px 18px;margin-bottom:14px;border:1px solid var(--line)}}
+.bucket h3{{font-family:'Archivo Expanded';font-size:14.5px;font-weight:700;margin-bottom:3px}}
+.bucket p{{font-size:13px;color:var(--muted);margin-bottom:10px}}
+.b-bad{{background:var(--bad-bg);border-color:#EDCFC9}}.b-bad h3{{color:var(--bad)}}
+.b-warn{{background:var(--warn-bg);border-color:#EBDCBB}}.b-warn h3{{color:var(--warn)}}
+.b-ok{{background:var(--ok-bg);border-color:#CBE2D3}}.b-ok h3{{color:var(--ok)}}
+.b-n{{background:var(--neutral-bg)}}.b-n h3{{color:var(--muted)}}
+.crow{{display:flex;flex-wrap:wrap;gap:8px}}
+.cchip{{display:inline-flex;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600}}
+.cchip small{{font-weight:500;color:var(--muted);margin-left:6px}}
+.callout{{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:10px;padding:14px 16px;font-size:13.5px;margin-top:16px}}
+.callout b{{display:block;margin-bottom:6px;font-family:'Archivo Expanded'}}
+.callout.lila{{border-left-color:#9B59B6;background:#FAF5FF}}
+footer{{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}}
+@media(max-width:640px){{.g2{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="hero">
-    <h1>Planificación Tela Jabón Microfibra</h1>
-    <p>Resumen ejecutivo para decidir qué colores mantener, cuánta tela pedir y qué producir antes del pico Nov–Dic.</p>
-    <div class="meta">Datos: Oct 2025 – Jul 2026 · Actualizado {_esc(hoy)} · Lead time tela: 45 días</div>
-  </div>
+<header>
+  <div class="eyebrow">Somos Cuadro · Logística e Inventarios</div>
+  <h1>Tela Jabón Microfibra — Plan de compra y colores</h1>
+  <div class="sub">Datos al {_esc(meta['fecha'])} · {meta['meses']} meses de venta (oct-25 a jul-26) · Lead time de la tela: 45 días</div>
+</header>
 
-  <div class="kpis">
-    <div class="kpi"><div class="label">Ventas analizadas</div><div class="value">{kpis['ventas']:,.0f}</div><div class="sub">uds en 10 meses</div></div>
-    <div class="kpi"><div class="label">Inventario PT</div><div class="value">{kpis['inv_pt']:,.0f}</div><div class="sub">≈ {kpis['meses_pt']:.1f} meses</div></div>
-    <div class="kpi"><div class="label">Tela en almacén</div><div class="value">{kpis['inv_tela']:,.0f}</div><div class="sub">kg disponibles</div></div>
-    <div class="kpi"><div class="label">Pedido sugerido</div><div class="value" style="color:var(--green)">{kpis['pedido_kg']:,.0f}</div><div class="sub">kg de tela a comprar</div></div>
-    <div class="kpi"><div class="label">Producción PT</div><div class="value">{kpis['prod_pt']:,.0f}</div><div class="sub">uds a montar (Ago–Dic)</div></div>
-  </div>
+<nav id="tabs" role="tablist">
+  <button class="active" data-t="t1">Resumen</button>
+  <button data-t="t2">Los 5 colores</button>
+  <button data-t="t3">Pedido de tela</button>
+  <button data-t="t4">Semáforo por color</button>
+</nav>
 
-  <div class="section">
-    <h2>Qué hacer ahora</h2>
-    <p class="lead">Acciones concretas derivadas del inventario, la demanda proyectada y el lead time de 45 días.</p>
-    <div class="grid-2">{pedido_cards}{accion_cards}</div>
-  </div>
-
-  <div class="section">
-    <h2>Top 5 colores — visión Logística</h2>
-    <p class="lead">Colores con mejor rotación y menor riesgo de quedar inmovilizados en inventario (venden parejo, en todo el catálogo).</p>
-    <div class="grid-3">{top5_cards}</div>
-    <p style="margin-top:12px;font-size:.85rem;color:var(--muted)">
-      <strong>Nota:</strong> Lila no entra en este top 5 porque tuvo un pico puntual (lanzamiento moda), pero sí requiere pedido urgente de tela.
-    </p>
-  </div>
-
-  <div class="section grid-2">
-    <div class="chart-box">
-      <h2 style="margin-bottom:12px">Ventas por color (top 8)</h2>
-      <canvas id="chartColores" height="220"></canvas>
+<section id="t1" class="show">
+  <div class="grid g2">
+    <div class="card">
+      <div class="kicker">Decisión 1 · Colores que nunca pueden faltar</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">{top5_chips}</div>
+      <div class="note">Son los que venden mucho, venden <b>todos los meses</b>, están en todo el catálogo y su inventario no se estanca. Detalle en la pestaña "Los 5 colores".</div>
     </div>
-    <div>
-      <h2 style="margin-bottom:12px">Modelos a producir (prioridad)</h2>
-      <table>
-        <thead><tr><th>Modelo</th><th>Prod. req.</th><th>Inv PT</th><th>Meses cob.</th></tr></thead>
-        <tbody>{modelo_rows}</tbody>
-      </table>
+    <div class="card">
+      <div class="kicker">Decisión 2 · Pedido de tela a montar</div>
+      <div class="big">{total_kg:,.0f} <small>kg · {len(pedidos)} colores</small></div>
+      <div style="margin-top:8px">{pedido_pills}</div>
+      <div class="note">Montado esta semana, llega a <b>fin de septiembre</b>: justo a tiempo para la temporada Nov–Dic. <b>Lila es la prioridad #1</b> aunque no esté en el top 5 permanente.</div>
     </div>
   </div>
 
-  <div class="section">
-    <div class="note-box">
-      <h3>Puntos a tener en cuenta</h3>
-      <ul>{alerta_items}</ul>
+  <h2>Por qué ahora</h2>
+  <div class="card">
+    <div class="tl">
+      <div class="step"><b>Hoy</b><span>Se monta el pedido</span></div>
+      <div class="step"><b>Fin de septiembre</b><span>Llega la tela (45 días)</span></div>
+      <div class="step"><b>Octubre</b><span>Se corta · abre tienda nueva (+10%)</span></div>
+      <div class="step hot"><b>Nov – Dic</b><span>Temporada alta: diciembre vende ~2× un mes normal</span></div>
     </div>
+    <div class="note">Rojo y Púrpura hoy tienen <b>cero tela</b>: sin pedido no hay capacidad de reacción ante cualquier faltante.</div>
   </div>
 
-  <div class="footer">Generado automáticamente · analisis_microfibra_jabon.xlsx contiene el detalle técnico</div>
+  <div class="callout"><b>Tres pendientes antes de emitir la orden</b>{pend_html}</div>
+</section>
+
+<section id="t2">
+  <h2>Los 5 colores que no se negocian</h2>
+  <p style="font-size:13.5px;color:var(--muted);max-width:760px">Para entrar a esta lista un color tiene que cumplir <b>las 4 pruebas</b>: vender mucho, vender todos los meses (no a golpes), venderse en todo el catálogo (caballero, dama y kids) y que su inventario fluya sin acumularse.</p>
+  <div class="tags" style="margin-top:14px">{tags_html}</div>
+
+  <div class="callout lila"><b>¿Y el Lila? Vende muchísimo, pero no entra — y esta es la razón</b>
+  El Lila vendió <b>{lila['ventas_total']:,.0f} prendas</b>, que lo pondrían de 4º… pero
+  <b>el {lila['pct_mes_pico']:.0f}% de esa venta ocurrió en un solo mes</b>
+  (el lanzamiento de MAFE Lila en marzo) y el <b>{lila['pct_dama']:.0f}% es solo dama</b>.
+  Es un color de <b>moda</b>: hoy explota, mañana puede girar la tendencia y dejar el inventario varado — exactamente el riesgo que esta lista debe evitar.
+  La recomendación es tratarlo como color de temporada con compras puntuales. Eso sí:
+  <b>para el pedido de tela de HOY es la prioridad número 1</b>, porque está agotado y la demanda sigue viva.</div>
+</section>
+
+<section id="t3">
+  <h2>Pedido de tela sugerido — {total_kg:,.0f} kg</h2>
+  <p style="font-size:13.5px;color:var(--muted);max-width:780px">Solo se pide lo que la producción va a necesitar de aquí a diciembre y que la tela en almacén no alcanza a cubrir. Negro, Blanco y Azul Marino <b>no aparecen</b> porque sus cortes ya están cubiertos con la tela en almacén.</p>
+  <div class="tblwrap" style="margin-top:12px"><table>
+    <thead><tr><th>Color</th><th>Código Odoo</th><th style="text-align:right">Kg a pedir</th><th>Por qué</th></tr></thead>
+    <tbody>{pedido_rows}</tbody>
+  </table></div>
+
+  <h2>Lo que ya está cubierto (y por eso no se pide)</h2>
+  <div class="crow">{cubiertos_html}</div>
+  <div class="note" style="margin-top:10px">El cálculo considera temporada Nov–Dic, tienda nueva (+10% desde octubre), 5% de merma y stock de seguridad. Detalle técnico en <b>analisis_microfibra_jabon.xlsx</b>.</div>
+</section>
+
+<section id="t4">
+  <h2>Qué hacer con cada color</h2>
+  {sem_html}
+</section>
+
+<footer>Fuente: ventas Odoo oct-25 a jul-26 ({meta['ventas_total']:,.0f} u) · inventario PT ({meta['inv_pt']:,.0f} u) · tela MP ({meta['inv_tela']:,.0f} kg). Respaldo técnico: analisis_microfibra_jabon.xlsx.</footer>
 </div>
 <script>
-const labels = {json.dumps(chart_labels, ensure_ascii=False)};
-const values = {json.dumps(chart_values)};
-new Chart(document.getElementById('chartColores'), {{
-  type: 'bar',
-  data: {{
-    labels,
-    datasets: [{{
-      label: 'Unidades vendidas',
-      data: values,
-      backgroundColor: ['#2563eb','#3b82f6','#60a5fa','#818cf8','#6366f1','#4f46e5','#4338ca','#3730a3'],
-      borderRadius: 8
-    }}]
-  }},
-  options: {{
-    responsive: true,
-    plugins: {{ legend: {{ display: false }} }},
-    scales: {{
-      y: {{ beginAtZero: true, grid: {{ color: '#eef2ff' }} }},
-      x: {{ grid: {{ display: false }} }}
-    }}
-  }}
-}});
+const tabs=document.querySelectorAll('#tabs button'),secs=document.querySelectorAll('section');
+tabs.forEach(b=>b.addEventListener('click',()=>{{
+  tabs.forEach(x=>x.classList.remove('active'));secs.forEach(s=>s.classList.remove('show'));
+  b.classList.add('active');document.getElementById(b.dataset.t).classList.add('show');
+  window.scrollTo({{top:0}});
+}}));
 </script>
 </body>
 </html>"""

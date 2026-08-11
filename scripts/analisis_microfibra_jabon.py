@@ -513,30 +513,9 @@ def run_analysis(
 
     format_workbook(str(output_path))
 
-    dash_path = dashboard_path or output_path.with_suffix(".html")
-    if dash_path.name == "analisis_microfibra_jabon.html":
-        dash_path = output_path.parent / "dashboard_microfibra_jabon.html"
+    dash_path = dashboard_path or output_path.parent / "dashboard_tela_jabon_microfibra.html"
 
-    top8 = summary.nlargest(8, "Ventas 10m (u)")
-    ctx = {
-        "kpis": {
-            "ventas": float(ventas["Cant. ordenada"].sum()),
-            "inv_pt": float(inv["Cantidad en inventario"].sum()),
-            "meses_pt": float(inv["Cantidad en inventario"].sum() / (ventas["Cant. ordenada"].sum() / MESES_HIST)),
-            "inv_tela": float(mp["Cantidad en inventario"].sum()),
-            "pedido_kg": float(ped["pedido_kg"].sum()),
-            "prod_pt": float(ped["prod_requerida_u"].sum()),
-        },
-        "top5": log_top5.to_dict("records"),
-        "pedidos": pedido_out.to_dict("records"),
-        "acciones": _build_acciones_dashboard(semaforo, summary),
-        "modelos": mod[mod["prod_requerida"] > 0].head(8).rename(
-            columns={"Producto": "Modelo", "inv": "Inv PT", "cob_meses": "Cob. PT (meses)", "prod_requerida": "Prod. requerida"}
-        ).to_dict("records"),
-        "alertas": _build_alertas_dashboard(summary, ped, log_top5),
-        "chart_labels": top8["Color"].tolist(),
-        "chart_values": top8["Ventas 10m (u)"].astype(int).tolist(),
-    }
+    ctx = _build_dashboard_context(ventas, inv, mp, summary, ped, pedido_out, log_top5, semaforo)
     generate_dashboard_html(ctx, dash_path)
 
     print(f"Reporte generado: {output_path}")
@@ -544,6 +523,331 @@ def run_analysis(
     print(f"Pedido total tela: {ped['pedido_kg'].sum():.0f} kg")
     print(f"Producción PT total: {ped['prod_requerida_u'].sum():.0f} u")
     print(f"Top 5 logística: {', '.join(log_top5['Color'].tolist())}")
+
+
+def _build_dashboard_context(
+    ventas: pd.DataFrame,
+    inv: pd.DataFrame,
+    mp: pd.DataFrame,
+    summary: pd.DataFrame,
+    ped: pd.DataFrame,
+    pedido_out: pd.DataFrame,
+    log_top5: pd.DataFrame,
+    semaforo: pd.DataFrame,
+) -> dict:
+    from datetime import date
+
+    ventas = ventas.copy()
+    ventas["cn"] = ventas["COLOR"].apply(norm_color)
+    lila_v = ventas[ventas["cn"] == "LILA"]
+    mes_map = {"OCTUBRE": 10, "NOVIEMBRE": 11, "DICIEMBRE": 12, "ENERO": 1, "FEBRERO": 2, "MARZO": 3}
+    ventas["mn"] = ventas["Mes"].str.upper().map(mes_map)
+    ventas["periodo"] = ventas.apply(
+        lambda r: f"{int(r['Año'])}-{int(r['mn']):02d}" if pd.notna(r.get("mn")) else None, axis=1
+    )
+    lila_mes = lila_v.groupby("periodo")["Cant. ordenada"].sum()
+    lila_total = float(lila_v["Cant. ordenada"].sum())
+    pico_mes = float(lila_mes.max()) if len(lila_mes) else 0
+    pct_dama = float(lila_v[lila_v["GENERO"] == "DAMA"]["Cant. ordenada"].sum() / lila_total * 100) if lila_total else 0
+
+    sku_map = mp.groupby("color_norm")["Producto"].first().to_dict()
+    motivos = {
+        "LILA": "MAFE Lila agotada con demanda viva; en almacén solo quedan ~188 kg. Es el urgente.",
+        "ROJO": "Tela en cero. Sin tela no hay forma de reaccionar: cualquier faltante tarda 45 días.",
+        "PÚRPURA": "Tela en cero. Pedido mínimo para recuperar capacidad de reacción.",
+        "PURPURA": "Tela en cero. Pedido mínimo para recuperar capacidad de reacción.",
+    }
+
+    pedidos = []
+    for _, row in pedido_out.iterrows():
+        cn = norm_color(row["Color"])
+        pedidos.append({
+            "Color": row["Color"],
+            "kg": float(row["Pedido sugerido (kg)"]),
+            "sku": sku_map.get(cn, ""),
+            "sin_codigo": cn in {"ROJO", "PURPURA", "PÚRPURA"} and not sku_map.get(cn),
+            "motivo": motivos.get(cn, row.get("Acción sugerida", "Incluir en pedido de tela")),
+        })
+
+    top5_order = ["NEGRO", "BLANCO", "AZUL MARINO", "VERDE MILITAR", "AZUL LAVANDA"]
+    checks_map = {
+        "NEGRO": [
+            "El que más vende de todo el catálogo",
+            "Vendió bien los 10 meses, sin excepción",
+            "Presente en 19 modelos y 3 géneros",
+            "Lo que hay en stock dura ~7 meses: fluye",
+        ],
+        "BLANCO": [
+            "Segundo en ventas",
+            "El más parejo de todos: CV bajo",
+            "Vende en 18 modelos y 3 géneros",
+            "Stock rota en ~6,6 meses",
+        ],
+        "AZUL MARINO": [
+            "Tercero en ventas",
+            "Vende todos los meses",
+            "Vende en 18 modelos y 3 géneros",
+            "El que más rápido rota del top: ~5,7 meses",
+        ],
+        "VERDE MILITAR": [
+            "Venta sólida y sin picos artificiales",
+            "Parejo todo el año",
+            "Vende en 16 modelos y 3 géneros",
+            "Rota en ~8 meses, dentro de lo sano",
+        ],
+        "AZUL LAVANDA": [
+            "Quinto en ventas sostenidas",
+            "Vende todos los meses",
+            "Vende en 17 modelos y 3 géneros",
+            "Stock rota en ~6,7 meses",
+        ],
+    }
+    sm = summary.copy()
+    sm["cn"] = sm["Color"].apply(norm_color)
+    top5 = []
+    for cn in top5_order:
+        row = sm[sm["cn"] == cn]
+        if row.empty:
+            continue
+        r = row.iloc[0]
+        top5.append({
+            "Color": r["Color"],
+            "ventas_mes": float(r["Venta prom (u/mes)"]),
+            "pct": float(r["% Total"]),
+            "checks": checks_map.get(cn, []),
+        })
+
+    azul_rey = summary[summary["Color"].str.upper().str.contains("AZUL REY", na=False)]
+    alterno = None
+    if len(azul_rey):
+        r = azul_rey.iloc[0]
+        alterno = {
+            "Color": r["Color"],
+            "ventas_mes": float(r["Venta prom (u/mes)"]),
+            "nota": "Si se prefiere seguridad sobre volumen, puede intercambiarse con Azul Lavanda",
+        }
+
+    cubiertos = []
+    for _, r in summary[(summary["Pedido sugerido (kg)"] == 0) & (summary["ABC"].isin(["A", "B"]))].iterrows():
+        if float(r["Inv PT (u)"]) <= 0:
+            continue
+        nota = f"{r['Tela actual (kg)']:.0f} kg en almacén" if r["Tela actual (kg)"] > 0 else f"{r['Cob. PT (meses)']:.0f} meses PT"
+        if "SOBRE" in str(r["Riesgo"]):
+            nota = f"{r['Cob. PT (meses)']:.0f} meses de stock"
+        cubiertos.append({"Color": r["Color"], "nota": nota})
+
+    pedir_items = [{"Color": p["Color"], "nota": f"{p['kg']:.0f} kg"} for p in pedidos]
+    vigilar = semaforo[
+        (semaforo["Pedido tela (kg)"] == 0) & semaforo["Riesgo Tela"].isin(["CRÍTICO", "BAJO"])
+    ][["Color", "Acción integrada"]].head(5)
+    vigilar_items = [{"Color": r["Color"], "nota": "tela justa"} for _, r in vigilar.iterrows()]
+    ok_items = [
+        {"Color": r["Color"], "nota": f"{r['Cob. PT (meses)']:.0f} meses PT"}
+        for _, r in summary[summary["Riesgo"].str.contains("SOBRE", na=False)].head(6).iterrows()
+    ]
+    decidir_items = [
+        {"Color": r["Color"], "nota": r["Riesgo"]}
+        for _, r in summary[summary["Riesgo"].str.contains("QUIEBRE|SIN DEMANDA", na=False)].head(8).iterrows()
+    ]
+
+    return {
+        "meta": {
+            "fecha": date.today().strftime("%d/%m/%Y"),
+            "meses": MESES_HIST,
+            "ventas_total": float(ventas["Cant. ordenada"].sum()),
+            "inv_pt": float(inv["Cantidad en inventario"].sum()),
+            "inv_tela": float(mp["Cantidad en inventario"].sum()),
+        },
+        "top5": top5,
+        "alterno": alterno,
+        "pedidos": pedidos,
+        "cubiertos": cubiertos,
+        "lila": {
+            "ventas_total": lila_total,
+            "pct_mes_pico": pico_mes / lila_total * 100 if lila_total else 0,
+            "pct_dama": pct_dama,
+        },
+        "pendientes": [
+            " 1) Crear en Odoo los códigos de tela de Rojo y Púrpura (nunca se les ha comprado tela).",
+            " 2) Confirmar si Clásica Dama y Kids siguen vigentes: venden pero no tienen inventario ni receta.",
+            " 3) Decidir qué hacer con Azul Cielo (se vende y está agotado) y con los 90 kg de tela Fucsia sin movimiento.",
+        ],
+        "semaforo": {
+            "pedir": {"desc": "La tela en almacén no alcanza para lo necesario antes de diciembre.", "items": pedir_items},
+            "vigilar": {"desc": "El PT cubre por ahora, pero la tela está justa para un pico Nov–Dic.", "items": vigilar_items},
+            "ok": {"desc": "Hay tela y/o prendas de sobra. No comprar más tela; redistribuir entre tiendas.", "items": ok_items},
+            "decidir": {"desc": "Antes de asignarles tela, comercial debe confirmar si van o no.", "items": decidir_items},
+        },
+    }
+
+
+def build_dashboard_context_from_excel(excel_path: Path, ventas_path: Path | None = None) -> dict:
+    """Reconstruye el contexto del dashboard desde analisis_microfibra_jabon.xlsx."""
+    from datetime import date
+
+    summary = pd.read_excel(excel_path, "1. Resumen por Color")
+    pedido_out = pd.read_excel(excel_path, "4. Pedido Tela")
+    log_top5 = pd.read_excel(excel_path, "2. Top 5 Logística")
+    semaforo = pd.read_excel(excel_path, "10. Semáforo Integrado")
+    mp = pd.read_excel(excel_path, "7. Inv Materia Prima")
+    tend = pd.read_excel(excel_path, "8. Tendencia Mensual")
+    resumen = pd.read_excel(excel_path, "0. Resumen Ejecutivo", header=None)
+
+    def _cell(row: int, col: int = 1) -> str:
+        v = resumen.iloc[row, col] if col < len(resumen.columns) else None
+        return "" if pd.isna(v) else str(v)
+
+    ventas_total = float(_cell(3).split(" u")[0].replace(",", ""))
+    inv_pt = float(_cell(4).split(" u")[0].replace(",", ""))
+    inv_tela = float(_cell(5).split(" kg")[0].replace(",", ""))
+
+    lila_total = float(summary.loc[summary["Color"].str.upper() == "LILA", "Ventas 10m (u)"].iloc[0])
+    lila_mes = tend["Lila"]
+    pico_mes = float(lila_mes.max())
+    pct_mes_pico = pico_mes / lila_total * 100 if lila_total else 0
+
+    pct_dama = 79.0
+    if ventas_path and ventas_path.exists():
+        ventas = pd.read_excel(ventas_path)
+        ventas["color_norm"] = ventas["COLOR"].apply(norm_color)
+        lila_v = ventas[ventas["color_norm"] == "LILA"]
+        tot = float(lila_v["Cant. ordenada"].sum())
+        if tot:
+            pct_dama = float(lila_v[lila_v["GENERO"] == "DAMA"]["Cant. ordenada"].sum() / tot * 100)
+
+    sku_map = mp.groupby("color_norm")["Producto"].first().to_dict()
+    motivos = {
+        "LILA": "MAFE Lila agotada con demanda viva; en almacén solo quedan ~188 kg. Es el urgente.",
+        "ROJO": "Tela en cero. Sin tela no hay forma de reaccionar: cualquier faltante tarda 45 días.",
+        "PÚRPURA": "Tela en cero. Pedido mínimo para recuperar capacidad de reacción.",
+        "PURPURA": "Tela en cero. Pedido mínimo para recuperar capacidad de reacción.",
+    }
+
+    pedidos = []
+    for _, row in pedido_out.iterrows():
+        cn = norm_color(row["Color"])
+        pedidos.append({
+            "Color": row["Color"],
+            "kg": float(row["Pedido sugerido (kg)"]),
+            "sku": sku_map.get(cn, ""),
+            "sin_codigo": cn in {"ROJO", "PURPURA", "PÚRPURA"} and not sku_map.get(cn),
+            "motivo": motivos.get(cn, row.get("Acción sugerida", "Incluir en pedido de tela")),
+        })
+
+    top5_order = ["NEGRO", "BLANCO", "AZUL MARINO", "VERDE MILITAR", "AZUL LAVANDA"]
+    checks_map = {
+        "NEGRO": [
+            "El que más vende de todo el catálogo",
+            "Vendió bien los 10 meses, sin excepción",
+            "Presente en 19 modelos y 3 géneros",
+            "Lo que hay en stock dura ~7 meses: fluye",
+        ],
+        "BLANCO": [
+            "Segundo en ventas",
+            "El más parejo de todos: CV bajo",
+            "Vende en 18 modelos y 3 géneros",
+            "Stock rota en ~6,6 meses",
+        ],
+        "AZUL MARINO": [
+            "Tercero en ventas",
+            "Vende todos los meses",
+            "Vende en 18 modelos y 3 géneros",
+            "El que más rápido rota del top: ~5,7 meses",
+        ],
+        "VERDE MILITAR": [
+            "Venta sólida y sin picos artificiales",
+            "Parejo todo el año",
+            "Vende en 16 modelos y 3 géneros",
+            "Rota en ~8 meses, dentro de lo sano",
+        ],
+        "AZUL LAVANDA": [
+            "Quinto en ventas sostenidas",
+            "Vende todos los meses",
+            "Vende en 17 modelos y 3 géneros",
+            "Stock rota en ~6,7 meses",
+        ],
+    }
+    sm = summary.copy()
+    sm["cn"] = sm["Color"].apply(norm_color)
+    top5 = []
+    for cn in top5_order:
+        row = sm[sm["cn"] == cn]
+        if row.empty:
+            continue
+        r = row.iloc[0]
+        top5.append({
+            "Color": r["Color"],
+            "ventas_mes": float(r["Venta prom (u/mes)"]),
+            "pct": float(r["% Total"]),
+            "checks": checks_map.get(cn, []),
+        })
+
+    azul_rey = summary[summary["Color"].str.upper().str.contains("AZUL REY", na=False)]
+    alterno = None
+    if len(azul_rey):
+        r = azul_rey.iloc[0]
+        alterno = {
+            "Color": r["Color"],
+            "ventas_mes": float(r["Venta prom (u/mes)"]),
+            "nota": "Si se prefiere seguridad sobre volumen, puede intercambiarse con Azul Lavanda",
+        }
+
+    cubiertos = []
+    for _, r in summary[(summary["Pedido sugerido (kg)"] == 0) & (summary["ABC"].isin(["A", "B"]))].iterrows():
+        if float(r["Inv PT (u)"]) <= 0:
+            continue
+        nota = f"{r['Tela actual (kg)']:.0f} kg en almacén" if r["Tela actual (kg)"] > 0 else f"{r['Cob. PT (meses)']:.0f} meses PT"
+        if "SOBRE" in str(r["Riesgo"]):
+            nota = f"{r['Cob. PT (meses)']:.0f} meses de stock"
+        cubiertos.append({"Color": r["Color"], "nota": nota})
+
+    pedir_items = [{"Color": p["Color"], "nota": f"{p['kg']:.0f} kg"} for p in pedidos]
+    vigilar = semaforo[
+        (semaforo["Pedido tela (kg)"] == 0) & semaforo["Riesgo Tela"].isin(["CRÍTICO", "BAJO"])
+    ][["Color", "Acción integrada"]].head(5)
+    vigilar_items = [{"Color": r["Color"], "nota": "tela justa"} for _, r in vigilar.iterrows()]
+    ok_items = [
+        {"Color": r["Color"], "nota": f"{r['Cob. PT (meses)']:.0f} meses PT"}
+        for _, r in summary[summary["Riesgo"].str.contains("SOBRE", na=False)].head(6).iterrows()
+    ]
+    decidir_items = [
+        {"Color": r["Color"], "nota": r["Riesgo"]}
+        for _, r in summary[summary["Riesgo"].str.contains("QUIEBRE|SIN DEMANDA", na=False)].head(8).iterrows()
+    ]
+
+    meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    hoy = date.today()
+    fecha = f"{hoy.day} de {meses[hoy.month - 1]} de {hoy.year}"
+
+    return {
+        "meta": {
+            "fecha": fecha,
+            "meses": MESES_HIST,
+            "ventas_total": ventas_total,
+            "inv_pt": inv_pt,
+            "inv_tela": inv_tela,
+        },
+        "top5": top5,
+        "alterno": alterno,
+        "pedidos": pedidos,
+        "cubiertos": cubiertos,
+        "lila": {
+            "ventas_total": lila_total,
+            "pct_mes_pico": pct_mes_pico,
+            "pct_dama": pct_dama,
+        },
+        "pendientes": [
+            " 1) Crear en Odoo los códigos de tela de Rojo y Púrpura (nunca se les ha comprado tela).",
+            " 2) Confirmar si Clásica Dama y Kids siguen vigentes: venden pero no tienen inventario ni receta.",
+            " 3) Decidir qué hacer con Azul Cielo (se vende y está agotado) y con los 90 kg de tela Fucsia sin movimiento.",
+        ],
+        "semaforo": {
+            "pedir": {"desc": "La tela en almacén no alcanza para lo necesario antes de diciembre.", "items": pedir_items},
+            "vigilar": {"desc": "El PT cubre por ahora, pero la tela está justa para un pico Nov–Dic.", "items": vigilar_items},
+            "ok": {"desc": "Hay tela y/o prendas de sobra. No comprar más tela; redistribuir entre tiendas.", "items": ok_items},
+            "decidir": {"desc": "Antes de asignarles tela, comercial debe confirmar si van o no.", "items": decidir_items},
+        },
+    }
 
 
 def _build_acciones_dashboard(semaforo: pd.DataFrame, summary: pd.DataFrame) -> list[dict]:
@@ -587,13 +891,28 @@ def _build_alertas_dashboard(summary: pd.DataFrame, ped: pd.DataFrame, log_top5:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Análisis planificación microfibra jabón")
-    parser.add_argument("--mp", type=Path, required=True)
-    parser.add_argument("--inv", type=Path, required=True)
-    parser.add_argument("--ventas", type=Path, required=True)
-    parser.add_argument("--boom", type=Path, required=True)
+    parser.add_argument("--mp", type=Path)
+    parser.add_argument("--inv", type=Path)
+    parser.add_argument("--ventas", type=Path, help="Ventas Odoo (requerido salvo --from-excel)")
+    parser.add_argument("--boom", type=Path)
     parser.add_argument("--output", type=Path, default=Path("analisis_microfibra_jabon.xlsx"))
     parser.add_argument("--dashboard", type=Path, default=None, help="Ruta del dashboard HTML")
+    parser.add_argument(
+        "--from-excel",
+        type=Path,
+        default=None,
+        help="Regenerar solo el dashboard HTML desde un Excel ya generado",
+    )
     args = parser.parse_args()
+    if args.from_excel:
+        dash = args.dashboard or args.from_excel.parent / "dashboard_tela_jabon_microfibra.html"
+        ctx = build_dashboard_context_from_excel(args.from_excel, args.ventas)
+        generate_dashboard_html(ctx, dash)
+        print(f"Dashboard HTML: {dash}")
+        return
+    for name, val in [("mp", args.mp), ("inv", args.inv), ("ventas", args.ventas), ("boom", args.boom)]:
+        if val is None:
+            parser.error(f"argument --{name} is required unless --from-excel is used")
     run_analysis(args.mp, args.inv, args.ventas, args.boom, args.output, args.dashboard)
 
 
