@@ -51,6 +51,143 @@ def classify(row: pd.Series) -> tuple[str, str]:
     return rotacion, riesgo
 
 
+def _penalizacion_sobrestock(dias_cobertura: float) -> float:
+    if dias_cobertura <= 60:
+        return 0
+    if dias_cobertura <= 90:
+        return 10
+    if dias_cobertura <= 120:
+        return 25
+    if dias_cobertura <= 180:
+        return 45
+    return 65
+
+
+def _riesgo_inmovilizacion(dias_cobertura: float) -> str:
+    if dias_cobertura <= 90:
+        return "Bajo — equilibrado"
+    if dias_cobertura <= 150:
+        return "Moderado — vigilar niveles"
+    return "Elevado — capital inmovilizado"
+
+
+def build_logistica_analysis(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Ranking logístico: mejor rotación con menor riesgo de inmovilización."""
+    active = df[df["ventas_mensual"] >= 50].copy()
+    active["rotacion_inventario"] = active["ventas_unidades"] / np.maximum(active["inv_fg_unidades"], 1)
+    active["giro_anual_estimado"] = active["rotacion_inventario"] * (12 / MESES)
+
+    for col in ("ventas_mensual", "rotacion_inventario"):
+        min_val, max_val = active[col].min(), active[col].max()
+        active[f"n_{col}"] = (active[col] - min_val) / (max_val - min_val) * 100 if max_val > min_val else 50
+
+    active["penal_sobrestock"] = active["dias_cobertura_fg"].apply(_penalizacion_sobrestock)
+    active["score_logistica"] = (
+        active["n_ventas_mensual"] * 0.55 + active["n_rotacion_inventario"] * 0.45 - active["penal_sobrestock"]
+    )
+    active["riesgo_inmovilizacion"] = active["dias_cobertura_fg"].apply(_riesgo_inmovilizacion)
+    active = active.sort_values("score_logistica", ascending=False).reset_index(drop=True)
+    active["ranking_logistica"] = active.index + 1
+    active["recomendacion"] = np.where(
+        active["ranking_logistica"] <= 5,
+        "TOP 5 — Mantener/ampliar",
+        np.where(active["dias_cobertura_fg"] > 180, "Evitar ampliación inicial", "Evaluar caso por caso"),
+    )
+
+    justificaciones = {
+        "LILA": "Mejor equilibrio rotación/stock; giro más alto del portafolio",
+        "AZUL MARINO": "Tercer mayor volumen con giro sólido y demanda transversal",
+        "BLANCO": "Segundo mayor volumen (13.1%); rotación constante",
+        "NEGRO": "Mayor rotación absoluta (16.1%); esencial por volumen estratégico",
+        "AZUL LAVANDA": "Top 5 en ventas con giro saludable y demanda estable",
+        "GRIS CLARO": "Buen giro de inventario, pero volumen por debajo del umbral estratégico (5%)",
+    }
+
+    top5_candidates = active[active["pct_ventas"] >= 5].sort_values("score_logistica", ascending=False).head(5)
+    top5 = top5_candidates[
+        [
+            "Color",
+            "ventas_unidades",
+            "pct_ventas",
+            "ventas_mensual",
+            "inv_fg_unidades",
+            "dias_cobertura_fg",
+            "rotacion_inventario",
+            "giro_anual_estimado",
+            "score_logistica",
+            "riesgo_inmovilizacion",
+        ]
+    ].copy()
+    top5.insert(0, "Ranking Top 5", range(1, len(top5) + 1))
+    top5["Recomendación"] = "TOP 5 — Mantener/ampliar"
+    top5["Justificación"] = top5["Color"].str.upper().apply(
+        lambda c: justificaciones.get(
+            c.replace("Ó", "O").replace("É", "E"),
+            "Alto volumen con balance favorable rotación/inventario",
+        )
+    )
+    top5.columns = [
+        "Ranking Top 5",
+        "Color",
+        "Ventas Total (uds)",
+        "% del Total",
+        "Ventas/Mes (uds)",
+        "Inv FG (uds)",
+        "Días Cobertura FG",
+        "Giro Inventario (10m)",
+        "Giro Anual Estimado",
+        "Score Logística",
+        "Riesgo Inmovilización",
+        "Recomendación",
+        "Justificación",
+    ]
+
+    ranking = active[
+        [
+            "ranking_logistica",
+            "Color",
+            "ventas_unidades",
+            "pct_ventas",
+            "ventas_mensual",
+            "inv_fg_unidades",
+            "dias_cobertura_fg",
+            "rotacion_inventario",
+            "giro_anual_estimado",
+            "score_logistica",
+            "riesgo_inmovilizacion",
+            "recomendacion",
+        ]
+    ].copy()
+    ranking.columns = [
+        "Ranking",
+        "Color",
+        "Ventas Total (uds)",
+        "% del Total",
+        "Ventas/Mes (uds)",
+        "Inv FG (uds)",
+        "Días Cobertura FG",
+        "Giro Inventario (10m)",
+        "Giro Anual Estimado",
+        "Score Logística",
+        "Riesgo Inmovilización",
+        "Recomendación",
+    ]
+
+    evitar = ranking[ranking["Días Cobertura FG"] > 180].copy()
+    evitar["Motivo Exclusión"] = (
+        "Sobrestock: "
+        + evitar["Días Cobertura FG"].round(0).astype(int).astype(str)
+        + " días de cobertura con solo "
+        + evitar["% del Total"].round(1).astype(str)
+        + "% de ventas"
+    )
+    evitar = evitar[
+        ["Color", "Ventas/Mes (uds)", "Inv FG (uds)", "Días Cobertura FG", "% del Total", "Motivo Exclusión"]
+    ]
+
+    return top5, ranking, evitar
+
+
 def run_analysis(
     mp_path: Path,
     inv_path: Path,
@@ -177,6 +314,7 @@ def run_analysis(
 
     ped = df[df["necesidad_produccion_kg"] > 0].sort_values("necesidad_produccion_kg", ascending=False)
     crit = df[df["riesgo"].str.contains("CRÍTICO|URGENTE|ALTO|SIN TELA", na=False)]
+    log_top5, log_ranking, log_evitar = build_logistica_analysis(df)
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         summary = df[
@@ -199,6 +337,16 @@ def run_analysis(
         mcs_top.to_excel(writer, sheet_name="6. Detalle Modelo-Color-Talla", index=False)
         mp.to_excel(writer, sheet_name="7. Inv Materia Prima", index=False)
         ventas_trend.to_excel(writer, sheet_name="8. Tendencia Mensual Color")
+
+        log_top5.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=0)
+        start_evitar = len(log_top5) + 3
+        log_evitar.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=start_evitar)
+        start_ranking = start_evitar + len(log_evitar) + 3
+        log_ranking.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=start_ranking)
+
+        ws = writer.sheets["9. Respuesta Logística"]
+        ws.cell(row=start_evitar, column=1, value="Colores a evitar por riesgo de inmovilización")
+        ws.cell(row=start_ranking, column=1, value="Ranking completo (rotación + riesgo inmovilización)")
 
     print(f"Reporte generado: {output_path}")
     print(f"Pedido total tela: {ped['necesidad_produccion_kg'].sum():.1f} kg")
