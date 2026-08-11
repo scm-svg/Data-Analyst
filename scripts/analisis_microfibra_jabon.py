@@ -13,6 +13,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dashboard_html import generate_dashboard_html
 from excel_format import format_workbook
+from logistica_excel import TOP5_CANONICAL, build_logistica_outputs, df_from_summary_sheet, write_logistica_sheets
 
 MESES_HIST = 10
 LEAD_TIME_DIAS = 45
@@ -179,79 +180,17 @@ def score_no_inmovilizacion(cob_meses: float) -> float:
 
 
 def build_logistica_multicriterio(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    active = df[df["ventas_mensual"] >= 20].copy()
-    max_v = active["ventas_mensual"].max()
-    max_m = active["modelos"].max()
-    max_cv = active["cv_mensual"].max()
-
-    active["score_rotacion"] = active["ventas_mensual"] / max_v * 100 if max_v else 0
-    active["score_regularidad"] = (1 - active["cv_mensual"].fillna(1).clip(0, 2) / max_cv) * 100 if max_cv else 50
-    active["score_transversal"] = ((active["modelos"] / max_m * 0.6 + active["generos"] / 3 * 0.4) * 100) if max_m else 0
-    active["score_no_inmov"] = active["cob_pt_meses"].apply(score_no_inmovilizacion)
-    active["score_total"] = (
-        active["score_rotacion"] * 0.40
-        + active["score_regularidad"] * 0.25
-        + active["score_transversal"] * 0.20
-        + active["score_no_inmov"] * 0.15
-    ).round(1)
-    active = active.sort_values("score_total", ascending=False).reset_index(drop=True)
-    active["rank"] = active.index + 1
-
-    justificaciones = {
-        "NEGRO": "Mayor volumen; CV bajo; 19 modelos; cobertura PT 7.2 meses",
-        "BLANCO": "2do volumen; CV 0.32; vende todos los meses en 3 géneros",
-        "AZUL MARINO": "3er volumen; demanda transversal; cobertura PT 5.7 meses",
-        "VERDE MILITAR": "CV 0.46; 16 modelos; regular todo el año",
-        "AZUL LAVANDA": "Top 5 ventas; 17 modelos; cobertura equilibrada",
-        "AZUL REY": "Alterno #6; alta regularidad (CV 0.37)",
-        "LILA": "Alto volumen pero CV 1.67 (pico moda Mar-26) — color de temporada",
-    }
-
-    top5 = active[active["pct_ventas"] >= 5].nlargest(5, "score_total").copy()
-    top5.insert(0, "Top 5 Logística", range(1, len(top5) + 1))
-    top5["Justificación"] = top5["color_norm"].map(
-        lambda c: justificaciones.get(c, "Alta rotación con bajo riesgo relativo de inmovilización")
-    )
-
-    cols_top = [
-        "Top 5 Logística", "Color", "ventas_unidades", "pct_ventas", "ventas_mensual", "cv_mensual",
-        "modelos", "generos", "cob_pt_meses", "score_rotacion", "score_regularidad",
-        "score_transversal", "score_no_inmov", "score_total", "Justificación",
-    ]
-    top5_out = top5[cols_top].copy()
-    top5_out.columns = [
-        "Top 5 Logística", "Color", "Ventas 10m (u)", "% Total", "Venta prom (u/mes)", "CV mensual",
-        "Modelos", "Géneros", "Cobertura PT (meses)", "Score rotación (40%)", "Score regularidad (25%)",
-        "Score transversal (20%)", "Score no-inmov (15%)", "SCORE TOTAL", "Justificación",
-    ]
-
-    ranking = active.copy()
-    ranking["Recomendación"] = np.where(
-        ranking["rank"] <= 5,
-        "TOP 5 — Mantener/ampliar catálogo",
-        np.where(ranking["cob_pt_meses"] > 12, "Evitar ampliación — sobrestock PT", "Evaluar caso por caso"),
-    )
-    ranking_out = ranking[
-        ["rank", "Color", "ventas_mensual", "pct_ventas", "cv_mensual", "modelos", "generos",
-         "cob_pt_meses", "score_total", "Recomendación"]
+    """Compatibilidad: delega en logistica_excel."""
+    log = build_logistica_outputs(df)
+    ranking_out = log["ranking_completo"][
+        ["Ranking", "Color", "Venta prom (u/mes)", "% ventas", "Regularidad",
+         "Meses stock PT", "SCORE TOTAL", "Veredicto"]
     ].copy()
     ranking_out.columns = [
-        "Ranking", "Color", "Venta prom (u/mes)", "% Total", "CV mensual", "Modelos", "Géneros",
+        "Ranking", "Color", "Venta prom (u/mes)", "% Total", "Regularidad",
         "Cobertura PT (meses)", "SCORE TOTAL", "Recomendación",
     ]
-
-    evitar = ranking[ranking["cob_pt_meses"] > 12].copy()
-    evitar_out = evitar[["Color", "ventas_mensual", "inv_fg", "cob_pt_meses", "pct_ventas"]].copy()
-    evitar_out["Motivo"] = (
-        "Sobrestock PT: "
-        + evitar_out["cob_pt_meses"].round(1).astype(str)
-        + " meses con solo "
-        + evitar_out["pct_ventas"].round(1).astype(str)
-        + "% ventas"
-    )
-    evitar_out.columns = ["Color", "Venta prom (u/mes)", "Inv PT (u)", "Cobertura PT (meses)", "% Total", "Motivo"]
-
-    return top5_out, ranking_out, evitar_out
+    return log["top5_tecnico"], ranking_out, log["evitar"]
 
 
 def classify_riesgo(row: pd.Series) -> tuple[str, str]:
@@ -419,7 +358,10 @@ def run_analysis(
     df = build_color_master(ventas, inv, mp, consumo, color_names)
     df[["riesgo", "accion"]] = df.apply(lambda r: pd.Series(classify_riesgo(r)), axis=1)
     ped = compute_pedido_tela(df)
-    log_top5, log_ranking, log_evitar = build_logistica_multicriterio(df)
+    log = build_logistica_outputs(df, ped)
+    log_top5 = log["top5_tecnico"]
+    log_ranking = log["ranking_completo"]
+    log_evitar = log["evitar"]
     semaforo = build_semaforo(df, ped)
     mod = build_modelo_pedido(ventas, inv, ped)
     mcs = build_mcs_detalle(ventas, inv, boom, ped, color_names)
@@ -433,8 +375,22 @@ def run_analysis(
     estacional = (total_mes / base_no_pico).reset_index()
     estacional.columns = ["Periodo", "Indice estacional"]
 
+    top5_nombres = ", ".join(log["top5_detalle"]["Color"].tolist())
     resumen_rows = [
-        ["PLANIFICACIÓN TELA JABÓN MICROFIBRA — RESUMEN EJECUTIVO", ""],
+        ["RESPUESTA LOGÍSTICA — TOP 5 COLORES", ""],
+        ["", ""],
+        [
+            "Pregunta",
+            "¿Cuáles son los 5 colores con mejor rotación y menor riesgo de quedar inmovilizados en inventario?",
+        ],
+        ["Respuesta", top5_nombres],
+        [
+            "Por qué estos 5",
+            "Venden mucho y de forma pareja, están en todo el catálogo (cab/dama/kids) "
+            "y su inventario fluye sin acumularse meses en tienda. Detalle en hoja '1. Respuesta Logística'.",
+        ],
+        ["", ""],
+        ["PLANIFICACIÓN TELA — DATOS GENERALES", ""],
         ["", ""],
         ["Ventas analizadas", f"{ventas['Cant. ordenada'].sum():,.0f} u en {MESES_HIST} meses · {ventas['Producto'].nunique()} productos · {ventas['color_norm'].nunique()} colores"],
         ["Inventario PT actual", f"{inv['Cantidad en inventario'].sum():,.0f} u ≈ {inv['Cantidad en inventario'].sum() / (ventas['Cant. ordenada'].sum()/MESES_HIST):.1f} meses"],
@@ -443,8 +399,9 @@ def run_analysis(
         ["Horizonte pedido", f"Ago-Dic 2026 · MEQ = {ped['horizonte_meq'].iloc[0]:.2f} meses"],
         ["Pedido tela sugerido (total)", f"{ped['pedido_kg'].sum():,.0f} kg"],
         ["Producción PT requerida (total)", f"{ped['prod_requerida_u'].sum():,.0f} u"],
-        ["Top 5 Logística (rotación + bajo riesgo inmov.)", ", ".join(log_top5["Color"].tolist())],
         ["Crítico operativo (pedido tela)", ", ".join(ped[ped["pedido_kg"] > 0]["Color"].tolist()) or "Ninguno"],
+        ["Nota Lila", "No está en el Top 5 (color de moda) pero es prioridad #1 en pedido de tela hoy — ver hoja 4"],
+        ["Nota Rojo", "Vende bien pero queda fuera del Top 5 por 14 meses de stock PT — ver hoja 3 ranking #12"],
         ["", ""],
         ["Metodología pedido", "Prod = Venta proy + Stock PT obj (1.5m) − Inv PT · Tela = kg prod × 1.05 + SS(z×σ×√LT) − Inv tela"],
         ["Supuestos", f"Nov 1.20× · Dic 1.96× · tienda +{UPLIFT_TIENDA:.0%} desde oct · merma {MERMA:.0%} · pedido min {PEDIDO_MINIMO_KG} kg"],
@@ -471,35 +428,22 @@ def run_analysis(
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         resumen.to_excel(writer, sheet_name="0. Resumen Ejecutivo", index=False)
-        summary.to_excel(writer, sheet_name="1. Resumen por Color", index=False)
-        log_top5.to_excel(writer, sheet_name="2. Top 5 Logística", index=False)
-        crit.to_excel(writer, sheet_name="3. Riesgo y Reorden", index=False)
-        pedido_out.to_excel(writer, sheet_name="4. Pedido Tela", index=False)
+        write_logistica_sheets(writer, log)
+        summary.to_excel(writer, sheet_name="7. Resumen por Color", index=False)
+        crit.to_excel(writer, sheet_name="8. Riesgo y Reorden", index=False)
+        pedido_out.to_excel(writer, sheet_name="9. Pedido Tela", index=False)
         mod[["Producto", "ventas", "ventas_mes", "inv", "cob_meses", "venta_proy", "prod_requerida"]].rename(
             columns={"Producto": "Modelo", "ventas": "Ventas 10m", "ventas_mes": "Venta prom/mes", "inv": "Inv PT",
                      "cob_meses": "Cob. PT (meses)", "venta_proy": "Venta proy.", "prod_requerida": "Prod. requerida"}
-        ).to_excel(writer, sheet_name="5. Resumen Modelos", index=False)
+        ).to_excel(writer, sheet_name="10. Resumen Modelos", index=False)
         mcs[["Producto", "Color", "TALLA", "v", "v_mes", "inv", "pedido_u", "kg_u", "kg_tela"]].rename(
             columns={"Producto": "Modelo", "TALLA": "Talla", "v": "Ventas 10m", "v_mes": "Venta prom/mes",
                      "inv": "Inv PT", "pedido_u": "Prod. requerida (u)", "kg_u": "kg/u", "kg_tela": "Kg tela c/merma"}
-        ).to_excel(writer, sheet_name="6. Detalle Modelo-Color-Talla", index=False)
-        mp.to_excel(writer, sheet_name="7. Inv Materia Prima", index=False)
-        trend_out.to_excel(writer, sheet_name="8. Tendencia Mensual")
-        estacional.to_excel(writer, sheet_name="8b. Estacionalidad", index=False)
-
-        log_top5.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=0)
-        s1 = len(log_top5) + 3
-        pd.DataFrame([["Colores a evitar por inmovilización PT"]]).to_excel(
-            writer, sheet_name="9. Respuesta Logística", index=False, header=False, startrow=s1
-        )
-        log_evitar.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=s1 + 1)
-        s2 = s1 + 1 + len(log_evitar) + 2
-        pd.DataFrame([["Ranking completo multicriterio"]]).to_excel(
-            writer, sheet_name="9. Respuesta Logística", index=False, header=False, startrow=s2
-        )
-        log_ranking.to_excel(writer, sheet_name="9. Respuesta Logística", index=False, startrow=s2 + 1)
-
-        semaforo.to_excel(writer, sheet_name="10. Semáforo Integrado", index=False)
+        ).to_excel(writer, sheet_name="11. Detalle Modelo-Color-Talla", index=False)
+        mp.to_excel(writer, sheet_name="12. Inv Materia Prima", index=False)
+        trend_out.to_excel(writer, sheet_name="13. Tendencia Mensual")
+        estacional.to_excel(writer, sheet_name="14. Estacionalidad", index=False)
+        semaforo.to_excel(writer, sheet_name="15. Semáforo Integrado", index=False)
 
         recon = summary[
             ["Color", "Consumo kg/mes", "kg/u pond.", "Cob. tela (meses)", "Prod. requerida (u)", "Pedido sugerido (kg)", "Riesgo", "Acción sugerida"]
@@ -509,7 +453,7 @@ def run_analysis(
             "PT cubre producción pero tela justa — validar escenario pico Nov-Dic",
             np.where(recon["Pedido sugerido (kg)"] > 0, "Pedido activo — priorizar compra", "Cubierto en horizonte base"),
         )
-        recon.to_excel(writer, sheet_name="11. Verificación y Notas", index=False)
+        recon.to_excel(writer, sheet_name="16. Verificación y Notas", index=False)
 
     format_workbook(str(output_path))
 
@@ -681,25 +625,46 @@ def _build_dashboard_context(
     }
 
 
+def refresh_logistics_excel(excel_path: Path) -> None:
+    """Actualiza hojas logísticas en un Excel existente."""
+    from rebuild_logistics_excel import rebuild
+
+    rebuild(excel_path)
+
+
+def _sheet(excel_path: Path, *candidates: str) -> str:
+    xl = pd.ExcelFile(excel_path)
+    for c in candidates:
+        if c in xl.sheet_names:
+            return c
+    raise KeyError(f"Ninguna hoja encontrada: {candidates}")
+
+
 def build_dashboard_context_from_excel(excel_path: Path, ventas_path: Path | None = None) -> dict:
     """Reconstruye el contexto del dashboard desde analisis_microfibra_jabon.xlsx."""
     from datetime import date
 
-    summary = pd.read_excel(excel_path, "1. Resumen por Color")
-    pedido_out = pd.read_excel(excel_path, "4. Pedido Tela")
-    log_top5 = pd.read_excel(excel_path, "2. Top 5 Logística")
-    semaforo = pd.read_excel(excel_path, "10. Semáforo Integrado")
-    mp = pd.read_excel(excel_path, "7. Inv Materia Prima")
-    tend = pd.read_excel(excel_path, "8. Tendencia Mensual")
+    summary = pd.read_excel(excel_path, _sheet(excel_path, "7. Resumen por Color", "1. Resumen por Color"))
+    pedido_out = pd.read_excel(excel_path, _sheet(excel_path, "9. Pedido Tela", "4. Pedido Tela"))
+    semaforo = pd.read_excel(excel_path, _sheet(excel_path, "15. Semáforo Integrado", "10. Semáforo Integrado"))
+    mp = pd.read_excel(excel_path, _sheet(excel_path, "12. Inv Materia Prima", "7. Inv Materia Prima"))
+    tend = pd.read_excel(excel_path, _sheet(excel_path, "13. Tendencia Mensual", "8. Tendencia Mensual"))
     resumen = pd.read_excel(excel_path, "0. Resumen Ejecutivo", header=None)
 
     def _cell(row: int, col: int = 1) -> str:
         v = resumen.iloc[row, col] if col < len(resumen.columns) else None
         return "" if pd.isna(v) else str(v)
 
-    ventas_total = float(_cell(3).split(" u")[0].replace(",", ""))
-    inv_pt = float(_cell(4).split(" u")[0].replace(",", ""))
-    inv_tela = float(_cell(5).split(" kg")[0].replace(",", ""))
+    ventas_total = inv_pt = inv_tela = 0.0
+    for i in range(len(resumen)):
+        label = str(resumen.iloc[i, 0] or "")
+        val = str(resumen.iloc[i, 1] or "")
+        if "Ventas analizadas" in label:
+            ventas_total = float(val.split(" u")[0].replace(",", ""))
+        elif "Inventario PT" in label:
+            inv_pt = float(val.split(" u")[0].replace(",", ""))
+        elif "Tela jabón" in label or "Tela jab" in label:
+            inv_tela = float(val.split(" kg")[0].replace(",", ""))
 
     lila_total = float(summary.loc[summary["Color"].str.upper() == "LILA", "Ventas 10m (u)"].iloc[0])
     lila_mes = tend["Lila"]
@@ -715,6 +680,8 @@ def build_dashboard_context_from_excel(excel_path: Path, ventas_path: Path | Non
         if tot:
             pct_dama = float(lila_v[lila_v["GENERO"] == "DAMA"]["Cant. ordenada"].sum() / tot * 100)
 
+    mp = mp.copy()
+    mp["color_norm"] = mp["color"].apply(norm_color) if "color_norm" not in mp.columns else mp["color_norm"]
     sku_map = mp.groupby("color_norm")["Producto"].first().to_dict()
     motivos = {
         "LILA": "MAFE Lila agotada con demanda viva; en almacén solo quedan ~188 kg. Es el urgente.",
@@ -903,7 +870,16 @@ def main() -> None:
         default=None,
         help="Regenerar solo el dashboard HTML desde un Excel ya generado",
     )
+    parser.add_argument(
+        "--refresh-logistics",
+        action="store_true",
+        help="Actualizar solo las hojas de respuesta logística en un Excel existente",
+    )
     args = parser.parse_args()
+    if args.refresh_logistics:
+        target = args.from_excel or args.output
+        refresh_logistics_excel(target)
+        return
     if args.from_excel:
         dash = args.dashboard or args.from_excel.parent / "dashboard_tela_jabon_microfibra.html"
         ctx = build_dashboard_context_from_excel(args.from_excel, args.ventas)
