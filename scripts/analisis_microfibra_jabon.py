@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dashboard_html import generate_dashboard_html
+from excel_format import format_workbook
 
 MESES_HIST = 10
 LEAD_TIME_DIAS = 45
@@ -396,7 +401,14 @@ def build_mcs_detalle(ventas: pd.DataFrame, inv: pd.DataFrame, boom: pd.DataFram
     return m[m["pedido_u"] > 0].sort_values("kg_tela", ascending=False)
 
 
-def run_analysis(mp_path: Path, inv_path: Path, ventas_path: Path, boom_path: Path, output_path: Path) -> None:
+def run_analysis(
+    mp_path: Path,
+    inv_path: Path,
+    ventas_path: Path,
+    boom_path: Path,
+    output_path: Path,
+    dashboard_path: Path | None = None,
+) -> None:
     mp = pd.read_excel(mp_path)
     inv = pd.read_excel(inv_path)
     ventas = pd.read_excel(ventas_path)
@@ -499,10 +511,78 @@ def run_analysis(mp_path: Path, inv_path: Path, ventas_path: Path, boom_path: Pa
         )
         recon.to_excel(writer, sheet_name="11. Verificación y Notas", index=False)
 
+    format_workbook(str(output_path))
+
+    dash_path = dashboard_path or output_path.with_suffix(".html")
+    if dash_path.name == "analisis_microfibra_jabon.html":
+        dash_path = output_path.parent / "dashboard_microfibra_jabon.html"
+
+    top8 = summary.nlargest(8, "Ventas 10m (u)")
+    ctx = {
+        "kpis": {
+            "ventas": float(ventas["Cant. ordenada"].sum()),
+            "inv_pt": float(inv["Cantidad en inventario"].sum()),
+            "meses_pt": float(inv["Cantidad en inventario"].sum() / (ventas["Cant. ordenada"].sum() / MESES_HIST)),
+            "inv_tela": float(mp["Cantidad en inventario"].sum()),
+            "pedido_kg": float(ped["pedido_kg"].sum()),
+            "prod_pt": float(ped["prod_requerida_u"].sum()),
+        },
+        "top5": log_top5.to_dict("records"),
+        "pedidos": pedido_out.to_dict("records"),
+        "acciones": _build_acciones_dashboard(semaforo, summary),
+        "modelos": mod[mod["prod_requerida"] > 0].head(8).rename(
+            columns={"Producto": "Modelo", "inv": "Inv PT", "cob_meses": "Cob. PT (meses)", "prod_requerida": "Prod. requerida"}
+        ).to_dict("records"),
+        "alertas": _build_alertas_dashboard(summary, ped, log_top5),
+        "chart_labels": top8["Color"].tolist(),
+        "chart_values": top8["Ventas 10m (u)"].astype(int).tolist(),
+    }
+    generate_dashboard_html(ctx, dash_path)
+
     print(f"Reporte generado: {output_path}")
+    print(f"Dashboard HTML: {dash_path}")
     print(f"Pedido total tela: {ped['pedido_kg'].sum():.0f} kg")
     print(f"Producción PT total: {ped['prod_requerida_u'].sum():.0f} u")
     print(f"Top 5 logística: {', '.join(log_top5['Color'].tolist())}")
+
+
+def _build_acciones_dashboard(semaforo: pd.DataFrame, summary: pd.DataFrame) -> list[dict]:
+    acciones = []
+    watch = semaforo[
+        (semaforo["Pedido tela (kg)"] == 0)
+        & semaforo["Riesgo Tela"].isin(["CRÍTICO", "SIN TELA"])
+    ].head(3)
+    for _, r in watch.iterrows():
+        acciones.append({
+            "tipo": "validar",
+            "tipo_label": "Validar",
+            "titulo": f"{r['Color']} — tela justa",
+            "texto": r["Acción integrada"],
+        })
+    clasic = summary[summary["Color"].str.contains("CLASICA", case=False, na=False)]
+    if len(clasic):
+        acciones.append({
+            "tipo": "info",
+            "tipo_label": "Confirmar",
+            "titulo": "Clásica DAMA/KIDS",
+            "texto": "Venden sin inventario ni BOOM vigente. Confirmar con producción si siguen activos.",
+        })
+    return acciones
+
+
+def _build_alertas_dashboard(summary: pd.DataFrame, ped: pd.DataFrame, log_top5: pd.DataFrame) -> list[str]:
+    alertas = [
+        "Diciembre vende casi el doble del mes promedio — planificar con índice 1,96×.",
+        "Noviembre 2025 fue bajo (0,85×) probablemente por falta de stock; se planifica Nov-26 al 1,20×.",
+        f"Top 5 catálogo permanente: {', '.join(log_top5['Color'].tolist())}.",
+    ]
+    crit = ped[ped["pedido_kg"] > 0]["Color"].tolist()
+    if crit:
+        alertas.insert(0, f"Pedido de tela prioritario: {', '.join(crit)}.")
+    sob = summary[summary["Riesgo"].str.contains("SOBRE", na=False)]["Color"].head(3).tolist()
+    if sob:
+        alertas.append(f"Sobrestock PT (no producir): {', '.join(sob)}.")
+    return alertas
 
 
 def main() -> None:
@@ -512,8 +592,9 @@ def main() -> None:
     parser.add_argument("--ventas", type=Path, required=True)
     parser.add_argument("--boom", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("analisis_microfibra_jabon.xlsx"))
+    parser.add_argument("--dashboard", type=Path, default=None, help="Ruta del dashboard HTML")
     args = parser.parse_args()
-    run_analysis(args.mp, args.inv, args.ventas, args.boom, args.output)
+    run_analysis(args.mp, args.inv, args.ventas, args.boom, args.output, args.dashboard)
 
 
 if __name__ == "__main__":

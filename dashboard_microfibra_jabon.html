@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planificación Tela Jabón Microfibra</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f4f6fb; --card:#fff; --text:#1a2340; --muted:#5c6478; --line:#dde3ef;
+  --blue:#2563eb; --blue-soft:#eff6ff; --green:#059669; --green-soft:#ecfdf5;
+  --amber:#d97706; --amber-soft:#fffbeb; --red:#dc2626; --red-soft:#fef2f2;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+.wrap { max-width:1180px; margin:0 auto; padding:24px 20px 48px; }
+.hero {
+  background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 55%,#3b82f6 100%);
+  color:#fff; border-radius:20px; padding:28px 32px; margin-bottom:24px;
+  box-shadow:0 10px 30px rgba(37,99,235,.25);
+}
+.hero h1 { font-family:'Syne',sans-serif; font-size:1.85rem; font-weight:800; }
+.hero p { opacity:.9; margin-top:8px; max-width:720px; }
+.hero .meta { margin-top:14px; font-size:.85rem; opacity:.8; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:24px; }
+.kpi { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+.kpi .label { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.kpi .value { font-family:'Syne',sans-serif; font-size:1.55rem; font-weight:800; color:var(--blue); margin-top:4px; }
+.kpi .sub { font-size:.78rem; color:var(--muted); margin-top:2px; }
+.section { margin-bottom:28px; }
+.section h2 { font-family:'Syne',sans-serif; font-size:1.15rem; margin-bottom:6px; }
+.section .lead { color:var(--muted); font-size:.92rem; margin-bottom:16px; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.grid-3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+@media(max-width:800px) { .grid-2 { grid-template-columns:1fr; } }
+.color-card, .action-card {
+  background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px;
+}
+.color-card .rank {
+  display:inline-block; background:var(--blue-soft); color:var(--blue);
+  font-weight:700; font-size:.75rem; padding:2px 8px; border-radius:999px; margin-bottom:8px;
+}
+.color-card h3 { font-size:1.05rem; margin-bottom:4px; }
+.color-card .stat { color:var(--muted); font-size:.85rem; }
+.color-card .why { margin-top:10px; font-size:.88rem; }
+.action-card.urgent { border-color:#86efac; background:var(--green-soft); }
+.action-card.warn { border-color:#fcd34d; background:var(--amber-soft); }
+.action-card.info { border-color:#93c5fd; background:var(--blue-soft); }
+.action-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.badge {
+  font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  background:#fff; border:1px solid var(--line); padding:3px 8px; border-radius:999px;
+}
+.action-card ul { margin-top:8px; padding-left:18px; font-size:.88rem; }
+.action-card li { margin-bottom:4px; }
+.chart-box { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+th { background:#eef2ff; color:#3730a3; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:10px 12px; }
+td { padding:10px 12px; border-top:1px solid var(--line); font-size:.88rem; }
+td.num { text-align:right; font-weight:600; }
+.note-box { background:var(--amber-soft); border:1px solid #fcd34d; border-radius:14px; padding:16px 18px; }
+.note-box h3 { font-size:.95rem; margin-bottom:8px; color:#92400e; }
+.note-box ul { padding-left:18px; color:#78350f; font-size:.88rem; }
+.note-box li { margin-bottom:6px; }
+.footer { text-align:center; color:var(--muted); font-size:.78rem; margin-top:32px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>Planificación Tela Jabón Microfibra</h1>
+    <p>Resumen ejecutivo para decidir qué colores mantener, cuánta tela pedir y qué producir antes del pico Nov–Dic.</p>
+    <div class="meta">Datos: Oct 2025 – Jul 2026 · Actualizado 11/08/2026 · Lead time tela: 45 días</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">Ventas analizadas</div><div class="value">26,427</div><div class="sub">uds en 10 meses</div></div>
+    <div class="kpi"><div class="label">Inventario PT</div><div class="value">21,202</div><div class="sub">≈ 8.0 meses</div></div>
+    <div class="kpi"><div class="label">Tela en almacén</div><div class="value">4,158</div><div class="sub">kg disponibles</div></div>
+    <div class="kpi"><div class="label">Pedido sugerido</div><div class="value" style="color:var(--green)">390</div><div class="sub">kg de tela a comprar</div></div>
+    <div class="kpi"><div class="label">Producción PT</div><div class="value">2,507</div><div class="sub">uds a montar (Ago–Dic)</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Qué hacer ahora</h2>
+    <p class="lead">Acciones concretas derivadas del inventario, la demanda proyectada y el lead time de 45 días.</p>
+    <div class="grid-2">
+        <div class="action-card urgent">
+          <div class="action-head">
+            <span class="badge">Pedir tela</span>
+            <strong>290 kg</strong>
+          </div>
+          <h3>Lila</h3>
+          <ul>
+            <li>Producir <strong>732</strong> unidades</li>
+            <li>Tela actual: 188 kg</li>
+            <li>Incluir en pedido o priorizar consumo</li>
+          </ul>
+        </div>
+        <div class="action-card urgent">
+          <div class="action-head">
+            <span class="badge">Pedir tela</span>
+            <strong>50 kg</strong>
+          </div>
+          <h3>Rojo</h3>
+          <ul>
+            <li>Producir <strong>0</strong> unidades</li>
+            <li>Tela actual: 0 kg</li>
+            <li>Incluir en pedido — sin capacidad de reacción</li>
+          </ul>
+        </div>
+        <div class="action-card urgent">
+          <div class="action-head">
+            <span class="badge">Pedir tela</span>
+            <strong>50 kg</strong>
+          </div>
+          <h3>Púrpura</h3>
+          <ul>
+            <li>Producir <strong>0</strong> unidades</li>
+            <li>Tela actual: 0 kg</li>
+            <li>Incluir en pedido — sin capacidad de reacción</li>
+          </ul>
+        </div>
+        <div class="action-card warn">
+          <div class="action-head"><span class="badge">Validar</span></div>
+          <h3>Azul Lavanda — tela justa</h3>
+          <p>Producir 143 u PT</p>
+        </div>
+        <div class="action-card warn">
+          <div class="action-head"><span class="badge">Validar</span></div>
+          <h3>Verde Militar — tela justa</h3>
+          <p>Validar tela de reserva (PT cubre pero tela justa)</p>
+        </div>
+        <div class="action-card warn">
+          <div class="action-head"><span class="badge">Validar</span></div>
+          <h3>Rosado Pastel — tela justa</h3>
+          <p>Validar tela de reserva (PT cubre pero tela justa) · Redistribuir, no producir</p>
+        </div></div>
+  </div>
+
+  <div class="section">
+    <h2>Top 5 colores — visión Logística</h2>
+    <p class="lead">Colores con mejor rotación y menor riesgo de quedar inmovilizados en inventario (venden parejo, en todo el catálogo).</p>
+    <div class="grid-3">
+        <div class="color-card">
+          <div class="rank">#1</div>
+          <h3>Negro</h3>
+          <p class="stat">426 uds/mes · 16.1% ventas</p>
+          <p class="why">Mayor volumen; CV bajo; 19 modelos; cobertura PT 7.2 meses</p>
+        </div>
+        <div class="color-card">
+          <div class="rank">#2</div>
+          <h3>Blanco</h3>
+          <p class="stat">345 uds/mes · 13.1% ventas</p>
+          <p class="why">2do volumen; CV 0.32; vende todos los meses en 3 géneros</p>
+        </div>
+        <div class="color-card">
+          <div class="rank">#3</div>
+          <h3>Azul Marino</h3>
+          <p class="stat">321 uds/mes · 12.2% ventas</p>
+          <p class="why">3er volumen; demanda transversal; cobertura PT 5.7 meses</p>
+        </div>
+        <div class="color-card">
+          <div class="rank">#4</div>
+          <h3>Azul Lavanda</h3>
+          <p class="stat">220 uds/mes · 8.3% ventas</p>
+          <p class="why">Top 5 ventas; 17 modelos; cobertura equilibrada</p>
+        </div>
+        <div class="color-card">
+          <div class="rank">#5</div>
+          <h3>Verde Militar</h3>
+          <p class="stat">199 uds/mes · 7.5% ventas</p>
+          <p class="why">CV 0.46; 16 modelos; regular todo el año</p>
+        </div></div>
+    <p style="margin-top:12px;font-size:.85rem;color:var(--muted)">
+      <strong>Nota:</strong> Lila no entra en este top 5 porque tuvo un pico puntual (lanzamiento moda), pero sí requiere pedido urgente de tela.
+    </p>
+  </div>
+
+  <div class="section grid-2">
+    <div class="chart-box">
+      <h2 style="margin-bottom:12px">Ventas por color (top 8)</h2>
+      <canvas id="chartColores" height="220"></canvas>
+    </div>
+    <div>
+      <h2 style="margin-bottom:12px">Modelos a producir (prioridad)</h2>
+      <table>
+        <thead><tr><th>Modelo</th><th>Prod. req.</th><th>Inv PT</th><th>Meses cob.</th></tr></thead>
+        <tbody>
+        <tr>
+          <td>MAR ORIGINAL DAMA</td>
+          <td class="num">1226</td>
+          <td class="num">2228</td>
+          <td class="num">4.8</td>
+        </tr>
+        <tr>
+          <td>CLASICA ORIGINAL DAMA</td>
+          <td class="num">1000</td>
+          <td class="num">0</td>
+          <td class="num">0.0</td>
+        </tr>
+        <tr>
+          <td>MAFE ORIGINAL DAMA</td>
+          <td class="num">902</td>
+          <td class="num">744</td>
+          <td class="num">3.3</td>
+        </tr>
+        <tr>
+          <td>MAR ORIGINAL CAB</td>
+          <td class="num">707</td>
+          <td class="num">3046</td>
+          <td class="num">6.0</td>
+        </tr>
+        <tr>
+          <td>CLASICA ORIGINAL CAB</td>
+          <td class="num">504</td>
+          <td class="num">1125</td>
+          <td class="num">5.1</td>
+        </tr>
+        <tr>
+          <td>CLASICA ORIGINAL KIDS</td>
+          <td class="num">322</td>
+          <td class="num">0</td>
+          <td class="num">0.0</td>
+        </tr>
+        <tr>
+          <td>ANDRE ORIGINAL DAMA</td>
+          <td class="num">239</td>
+          <td class="num">0</td>
+          <td class="num">0.0</td>
+        </tr>
+        <tr>
+          <td>BANDANA PET</td>
+          <td class="num">131</td>
+          <td class="num">0</td>
+          <td class="num">0.0</td>
+        </tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="note-box">
+      <h3>Puntos a tener en cuenta</h3>
+      <ul><li>Pedido de tela prioritario: Lila, Rojo, Púrpura.</li><li>Diciembre vende casi el doble del mes promedio — planificar con índice 1,96×.</li><li>Noviembre 2025 fue bajo (0,85×) probablemente por falta de stock; se planifica Nov-26 al 1,20×.</li><li>Top 5 catálogo permanente: Negro, Blanco, Azul Marino, Azul Lavanda, Verde Militar.</li><li>Sobrestock PT (no producir): Aguamarina, Vinotinto.</li></ul>
+    </div>
+  </div>
+
+  <div class="footer">Generado automáticamente · analisis_microfibra_jabon.xlsx contiene el detalle técnico</div>
+</div>
+<script>
+const labels = ["Negro", "Blanco", "Azul Marino", "Lila", "Azul Lavanda", "Verde Militar", "Azul Rey", "Aguamarina"];
+const values = [4256, 3450, 3214, 2275, 2199, 1987, 1467, 1372];
+new Chart(document.getElementById('chartColores'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Unidades vendidas',
+      data: values,
+      backgroundColor: ['#2563eb','#3b82f6','#60a5fa','#818cf8','#6366f1','#4f46e5','#4338ca','#3730a3'],
+      borderRadius: 8
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#eef2ff' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+</script>
+</body>
+</html>
