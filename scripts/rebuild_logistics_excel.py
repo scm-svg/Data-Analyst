@@ -107,6 +107,17 @@ def rebuild(src: Path, dst: Path | None = None) -> Path:
 
     format_workbook(str(tmp))
     tmp.replace(dst)
+
+    try:
+        from ranking_dashboard import build_ranking_dashboard_context
+        from dashboard_html import generate_ranking_dashboard_html
+
+        ctx = build_ranking_dashboard_context(dst)
+        generate_ranking_dashboard_html(ctx, dst.parent / "dashboard_ranking_colores.html")
+        generate_ranking_dashboard_html(ctx, dst.parent / "dashboard_tela_jabon_microfibra.html")
+    except Exception as exc:
+        print(f"Aviso: no se pudo regenerar dashboard ({exc})")
+
     return dst
 
 

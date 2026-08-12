@@ -11,9 +11,10 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dashboard_html import generate_dashboard_html
+from dashboard_html import generate_ranking_dashboard_html
 from excel_format import format_workbook
 from logistica_excel import TOP5_CANONICAL, build_logistica_outputs, df_from_summary_sheet, write_logistica_sheets
+from ranking_dashboard import build_ranking_dashboard_context
 
 MESES_HIST = 10
 LEAD_TIME_DIAS = 45
@@ -457,13 +458,17 @@ def run_analysis(
 
     format_workbook(str(output_path))
 
-    dash_path = dashboard_path or output_path.parent / "dashboard_tela_jabon_microfibra.html"
+    dash_path = dashboard_path or output_path.parent / "dashboard_ranking_colores.html"
 
-    ctx = _build_dashboard_context(ventas, inv, mp, summary, ped, pedido_out, log_top5, semaforo)
-    generate_dashboard_html(ctx, dash_path)
+    ctx = build_ranking_dashboard_context(output_path)
+    generate_ranking_dashboard_html(ctx, dash_path)
+    # compatibilidad nombre anterior
+    legacy = output_path.parent / "dashboard_tela_jabon_microfibra.html"
+    if legacy != dash_path:
+        generate_ranking_dashboard_html(ctx, legacy)
 
     print(f"Reporte generado: {output_path}")
-    print(f"Dashboard HTML: {dash_path}")
+    print(f"Dashboard ranking: {dash_path}")
     print(f"Pedido total tela: {ped['pedido_kg'].sum():.0f} kg")
     print(f"Producción PT total: {ped['prod_requerida_u'].sum():.0f} u")
     print(f"Top 5 logística: {', '.join(log_top5['Color'].tolist())}")
@@ -879,12 +884,15 @@ def main() -> None:
     if args.refresh_logistics:
         target = args.from_excel or args.output
         refresh_logistics_excel(target)
+        ctx = build_ranking_dashboard_context(target)
+        dash = args.dashboard or target.parent / "dashboard_ranking_colores.html"
+        generate_ranking_dashboard_html(ctx, dash)
         return
     if args.from_excel:
-        dash = args.dashboard or args.from_excel.parent / "dashboard_tela_jabon_microfibra.html"
-        ctx = build_dashboard_context_from_excel(args.from_excel, args.ventas)
-        generate_dashboard_html(ctx, dash)
-        print(f"Dashboard HTML: {dash}")
+        dash = args.dashboard or args.from_excel.parent / "dashboard_ranking_colores.html"
+        ctx = build_ranking_dashboard_context(args.from_excel)
+        generate_ranking_dashboard_html(ctx, dash)
+        print(f"Dashboard ranking: {dash}")
         return
     for name, val in [("mp", args.mp), ("inv", args.inv), ("ventas", args.ventas), ("boom", args.boom)]:
         if val is None:
