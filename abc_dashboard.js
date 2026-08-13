@@ -530,6 +530,14 @@
     return track;
   }
 
+  function stableHint(cls) {
+    if (cls === "A")
+      return "Se mantiene en A — sigue en el top de venta acumulada.";
+    if (cls === "B")
+      return "Se mantiene en B — participación media sin cambio.";
+    return "Se mantiene en C — sin cambio vs mes anterior.";
+  }
+
   function detectModelTransitions(modelTrack, scopeSkuMap, invMap, periodKeys) {
     const alerts = [];
     const cmp = alertComparisonPeriods(periodKeys || activePeriodKeys());
@@ -540,43 +548,49 @@
     scopeSkuMap.forEach((it) => {
       if (it.revenue > 0 && it.margin > 0) totalPeriodRev += it.revenue;
     });
-    const minCumulativeRev = 5000;
-    const minShare = 0.0015;
 
     Object.keys(modelTrack).forEach((modelo) => {
       if (isExcludedAlertModel(modelo)) return;
       const tr = modelTrack[modelo];
       const from = tr[prevKey];
       const to = tr[lastKey];
-      if (!from || !to || from === to) return;
-      if (from === "C" && to === "C") return;
+      if (!from || !to) return;
 
       const cumulative = modelRevenueInPeriodKeys(modelo, periodKeys || activePeriodKeys());
       if (cumulative.revenue <= 0 || cumulative.margin <= 0) return;
-      if (cumulative.revenue < minCumulativeRev) return;
 
-      const revenueShare = totalPeriodRev > 0 ? cumulative.revenue / totalPeriodRev : 0;
-      if (revenueShare < minShare) return;
-
+      const changed = from !== to;
       const lastMonth = modelRevenueInPeriodKeys(modelo, [lastKey]);
       const stock = modelStock(modelo, invMap);
+      const revenueShare = totalPeriodRev > 0 ? cumulative.revenue / totalPeriodRev : 0;
 
       alerts.push({
         modelo,
         from,
         to,
+        changed,
         period: lastPeriod.label,
         prevPeriod: prevPeriod.label,
         revenue: cumulative.revenue,
         revenueShare,
         lastMonthRevenue: lastMonth.revenue,
         stock,
-        sev: alertSeverity(from, to, cumulative.revenue, revenueShare, lastMonth.revenue),
+        sev: changed
+          ? alertSeverity(from, to, cumulative.revenue, revenueShare, lastMonth.revenue)
+          : 0,
         skus: modelSkus(modelo, scopeSkuMap, invMap),
-        hint: transitionHint(from, to),
+        hint: changed ? transitionHint(from, to) : stableHint(to),
       });
     });
-    alerts.sort((a, b) => b.sev - a.sev || b.revenue - a.revenue);
+
+    alerts.sort((a, b) => {
+      if (a.changed !== b.changed) return a.changed ? -1 : 1;
+      if (a.changed && b.changed && b.sev !== a.sev) return b.sev - a.sev;
+      const ord = { A: 3, B: 2, C: 1 };
+      const co = (ord[b.to] || 0) - (ord[a.to] || 0);
+      if (co) return co;
+      return b.revenue - a.revenue;
+    });
     return alerts;
   }
 
@@ -1493,29 +1507,46 @@
     if (!body) return;
     let rows = alerts.filter((r) => matchesSearch(r.modelo));
     if (state.modelo) rows = rows.filter((r) => r.modelo === state.modelo);
+    const nChanged = rows.filter((r) => r.changed).length;
+    const nStable = rows.filter((r) => !r.changed).length;
     if (sub) {
       const cmp = alertComparisonPeriods(activePeriodKeys());
-      let msg = rows.length + " cambios con peso";
+      let msg =
+        rows.length +
+        " modelos evaluados · " +
+        nChanged +
+        " cambiaron · " +
+        nStable +
+        " sin cambio";
       if (cmp && cmp.prevPeriod && cmp.lastPeriod) {
         msg +=
           " · " +
           cmp.prevPeriod.short +
           " → " +
           cmp.lastPeriod.short +
-          " (clase actual al " +
+          " (clase al " +
           cmp.lastPeriod.label +
           ")";
       }
-      msg += " · excl. Refresh / Cuadro Band · expandir fila para SKUs";
+      msg += " · misma lógica que migración mensual · excl. Refresh / Cuadro Band";
       if (state.location) msg += " · stock en «" + state.location + "»";
       sub.textContent = msg;
     }
     let html = "";
-    rows.slice(0, 200).forEach((r) => {
+    rows.forEach((r) => {
       const open = state.expandedAlertModels.has(r.modelo);
+      const rowCls = r.changed ? "row-model" : "row-model row-stable";
+      const sevTxt = r.changed
+        ? String(r.sev)
+        : '<span style="color:var(--mu2)">·</span>';
+      const changeTxt = r.changed
+        ? badge(r.from) + "→" + badge(r.to)
+        : badge(r.to) + '<span style="color:var(--mu);font-size:.68rem;margin:0 4px">=</span>' + badge(r.to);
       html +=
-        '<tr class="row-model"><td>' +
-        r.sev +
+        '<tr class="' +
+        rowCls +
+        '"><td>' +
+        sevTxt +
         '</td><td><span class="expander" data-alert-toggle="' +
         esc(r.modelo) +
         '">' +
@@ -1523,9 +1554,11 @@
         '</span> <span class="rn">' +
         esc(r.modelo) +
         "</span></td><td>" +
-        badge(r.from) +
-        "→" +
-        badge(r.to) +
+        changeTxt +
+        "</td><td>" +
+        (r.changed
+          ? '<span style="color:var(--a);font-weight:600">Cambió</span>'
+          : '<span style="color:var(--mu)">Sin cambio</span>') +
         "</td><td>" +
         esc(r.prevPeriod) +
         " → " +
