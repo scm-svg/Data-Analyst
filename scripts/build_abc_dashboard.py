@@ -20,6 +20,7 @@ INJECT_MARKER = "<!--INJECT_APP-->"
 # Nombre principal que debe abrir el usuario (un solo archivo)
 OUTPUT_NAMES = (
     "Matriz_ABC_Inventario.html",
+    "Matriz_ABC_Inventario2.html",
     "abc_inventario_completo.html",
     "abc_inventario_standalone.html",
 )
