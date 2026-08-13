@@ -426,30 +426,34 @@
     });
   }
 
-  function computeAbc(skuMap, invMap, periodKeys) {
-    const keys = periodKeys || activePeriodKeys();
-    const allModels = buildModelIndex(skuMap, invMap, keys);
-    const modelByName = new Map();
-    allModels.forEach((m) => modelByName.set(m.modelo, m));
-
+  /** ABC por SKU: Pareto 80/15/5 solo por venta USD (donut, catálogo, capital). */
+  function computeAbc(skuMap, invMap) {
+    const pos = [...skuMap.entries()]
+      .filter(([, it]) => it.revenue > 0 && it.margin > 0)
+      .sort((a, b) => b[1].revenue - a[1].revenue);
+    const totalPos = pos.reduce((s, [, it]) => s + it.revenue, 0);
     const out = new Map();
+    let cum = 0;
+    pos.forEach(([sku, it], idx) => {
+      cum += it.revenue;
+      const cumPct = totalPos > 0 ? cum / totalPos : 1;
+      let cls = "C";
+      if (cumPct <= TH.A) cls = "A";
+      else if (cumPct <= TH.B) cls = "B";
+      out.set(sku, {
+        class: cls,
+        rank: idx + 1,
+        cumPct,
+        revenueShare: totalPos > 0 ? it.revenue / totalPos : 0,
+        revenue: it.revenue,
+        margin: it.margin,
+        segment: "venta",
+      });
+    });
     skuMap.forEach((it, sku) => {
+      if (out.has(sku)) return;
       if (hasNegativeNetIncome(it)) return;
       const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
-      const model = modelByName.get(it.modelo);
-
-      if (it.revenue > 0 && it.margin > 0 && model) {
-        out.set(sku, {
-          class: model.abcClass,
-          rank: model.rank,
-          cumPct: model.cumPct,
-          revenueShare: model.revenueShare,
-          revenue: it.revenue,
-          margin: it.margin,
-          segment: "venta",
-        });
-        return;
-      }
       if (!skuIsActive(it, stock)) return;
       out.set(sku, {
         class: "C",
@@ -461,7 +465,7 @@
         segment: "sin_venta",
       });
     });
-    return { abc: out, items: [...skuMap.values()], modelIndex: allModels };
+    return { abc: out, items: [...skuMap.values()], totalPosRevenue: totalPos };
   }
 
   function summarizeAbc(abc, skuMap, invMap) {
@@ -1752,7 +1756,8 @@
       const invAll = inventoryBySku(true, false);
       const invLoc = inventoryBySku(true, true);
       const scopeMap = fullActiveScope(keys, invAll);
-      const { abc: globalAbc, modelIndex: allModels } = computeAbc(scopeMap, invAll, keys);
+      const { abc: globalAbc } = computeAbc(scopeMap, invAll);
+      const allModels = buildModelIndex(scopeMap, invAll, keys);
       const summary = summarizeAbc(globalAbc, scopeMap, invAll);
       const modelTrack = modelClassByPeriod();
       const alerts = detectModelTransitions(modelTrack, scopeMap, invLoc, keys);
@@ -1791,7 +1796,7 @@
     const invAll = inventoryBySku(true, false);
     const invLoc = inventoryBySku(true, true);
     const scopeMap = fullActiveScope(activePeriodKeys(), invAll);
-    const { abc } = computeAbc(scopeMap, invAll, activePeriodKeys());
+    const { abc } = computeAbc(scopeMap, invAll);
     const lines = ["modelo,sku,genero,color,talla,clase_abc,demanda_xyz,cv,matriz,venta_usd,margen,qty,stock"];
     scopeMap.forEach((it, sku) => {
       const stock = invLoc.get(sku)?.total || 0;
