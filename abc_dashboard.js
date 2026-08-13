@@ -138,7 +138,12 @@
   }
 
   function skuIsActive(it, stock) {
-    return it.qty !== 0 || it.margin !== 0 || (stock || 0) > 0;
+    return (
+      it.qty !== 0 ||
+      it.revenue !== 0 ||
+      it.margin !== 0 ||
+      (stock || 0) > 0
+    );
   }
 
   function aggregateSalesScope(periodKeys) {
@@ -237,7 +242,8 @@
     });
   }
 
-  function buildModelIndex(scopeSkuMap, invMap) {
+  function buildModelIndex(scopeSkuMap, invMap, periodKeys) {
+    const keys = periodKeys || activePeriodKeys();
     const models = new Map();
     scopeSkuMap.forEach((it, sku) => {
       const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
@@ -256,33 +262,62 @@
       }
       const m = models.get(key);
       const meta = skuMeta(sku);
-      m.skus.push({ ...it, sku });
+      m.skus.push({ ...it, sku, xyz: meta.xyz || "Z" });
       m.qty += it.qty;
       m.revenue += it.revenue;
       m.margin += it.margin;
-      if (it.margin <= 0) m.activeLow = true;
+      if (it.revenue <= 0) m.activeLow = true;
       if (meta.p3) m.p3 = true;
     });
     const list = [...models.values()];
-    assignAbcPareto(list, "margin", "abcClass", {
+    assignAbcPareto(list, "revenue", "abcClass", {
       rank: "rank",
-      share: "marginShare",
+      share: "revenueShare",
       cum: "cumPct",
     });
     list.forEach((m) => {
-      if (m.margin <= 0) {
+      if (m.revenue <= 0) {
         m.abcClass = "C";
         m.activeLow = true;
       }
-    });
-    list.sort((a, b) => (a.rank || 99999) - (b.rank || 99999));
-    assignAbcPareto(list, "qty", "rotClass", {});
-    list.forEach((m) => {
-      if (!m.rotClass) m.rotClass = "C";
-      m.matrix = m.abcClass + m.rotClass;
+      const qtys = modelMonthlyQty(m.modelo, keys);
+      const { cv, xyz } = cvFromMonthly(qtys);
+      m.xyzClass = xyz;
+      m.cv = cv;
+      m.matrix = m.abcClass + m.xyzClass;
       m.marginPctProd = m.revenue > 0 ? m.margin / m.revenue : 0;
     });
-    return list.sort((a, b) => b.margin - a.margin);
+    list.sort((a, b) => (a.rank || 99999) - (b.rank || 99999));
+    return list.sort((a, b) => b.revenue - a.revenue);
+  }
+
+  function modelMonthlyQty(modelo, periodKeys) {
+    const periodSet = new Set(periodKeys);
+    const qtys = DATA.periods.map(() => 0);
+    for (let i = 0; i < DATA.salesRows.length; i++) {
+      const r = DATA.salesRows[i];
+      if (!periodSet.has(DATA.periods[r[0]].key)) continue;
+      if (state.store && DATA.stores[r[2]] !== state.store) continue;
+      if (state.category && DATA.categories[r[3]] !== state.category) continue;
+      const sku = DATA.skus[r[1]];
+      const m = skuMeta(sku);
+      if ((m.modelo || m.producto) !== modelo) continue;
+      qtys[r[0]] += r[4];
+    }
+    return qtys;
+  }
+
+  function cvFromMonthly(qtys) {
+    if (!qtys.length) return { cv: 0, xyz: "Z" };
+    const mean = qtys.reduce((a, b) => a + b, 0) / qtys.length;
+    if (mean <= 0) return { cv: 0, xyz: "Z" };
+    const variance = qtys.reduce((s, q) => s + (q - mean) ** 2, 0) / qtys.length;
+    const cv = Math.sqrt(variance) / mean;
+    const th = DATA.meta?.xyz_thresholds || { X: 0.5, Y: 1.0 };
+    let xyz = "Z";
+    if (cv <= th.X) xyz = "X";
+    else if (cv <= th.Y) xyz = "Y";
+    return { cv, xyz };
   }
 
   function filterModels(models) {
@@ -310,13 +345,13 @@
   function computeAbc(skuMap, invMap) {
     const items = [...skuMap.values()];
     const pos = items
-      .filter((x) => x.margin > 0)
-      .sort((a, b) => b.margin - a.margin);
-    const totalPos = pos.reduce((s, x) => s + x.margin, 0);
+      .filter((x) => x.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+    const totalPos = pos.reduce((s, x) => s + x.revenue, 0);
     const out = new Map();
     let cum = 0;
     pos.forEach((it, idx) => {
-      cum += it.margin;
+      cum += it.revenue;
       const cumPct = totalPos > 0 ? cum / totalPos : 1;
       let cls = "C";
       if (cumPct <= TH.A) cls = "A";
@@ -325,7 +360,9 @@
         class: cls,
         rank: idx + 1,
         cumPct,
-        marginShare: totalPos > 0 ? it.margin / totalPos : 0,
+        revenueShare: totalPos > 0 ? it.revenue / totalPos : 0,
+        marginShare: 0,
+        revenue: it.revenue,
         margin: it.margin,
         activeLow: false,
       });
@@ -338,12 +375,14 @@
         class: "C",
         rank: null,
         cumPct: 1,
+        revenueShare: 0,
         marginShare: 0,
+        revenue: it.revenue,
         margin: it.margin,
         activeLow: true,
       });
     });
-    return { abc: out, items, totalPosMargin: totalPos };
+    return { abc: out, items, totalPosRevenue: totalPos };
   }
 
   function summarizePositive(abc, skuMap, invMap) {
@@ -377,33 +416,19 @@
 
   function modelClassByPeriod() {
     const track = {};
-    DATA.periods.forEach((p) => {
-      const map = aggregateSalesScope([p.key]);
-      buildModelIndex(map, null).forEach((m) => {
+    const periods = DATA.periods;
+    for (let i = 0; i < periods.length; i++) {
+      const keys = periods.slice(0, i + 1).map((p) => p.key);
+      const map = aggregateSalesScope(keys);
+      buildModelIndex(map, null, keys).forEach((m) => {
         if (!track[m.modelo]) track[m.modelo] = {};
-        track[m.modelo][p.key] = m.abcClass;
+        track[m.modelo][periods[i].key] = m.abcClass;
       });
-    });
+    }
     return track;
   }
 
-  function skuClassByPeriod() {
-    const result = {};
-    DATA.periods.forEach((p) => {
-      const map = aggregateSalesScope([p.key]);
-      const { abc } = computeAbc(map, null);
-      map.forEach((it, sku) => {
-        if (it.qty === 0 && it.margin === 0) return;
-        const cls = abc.get(sku)?.class;
-        if (!cls) return;
-        if (!result[sku]) result[sku] = {};
-        result[sku][p.key] = cls;
-      });
-    });
-    return result;
-  }
-
-  function detectTransitions(classByPeriod) {
+  function detectModelTransitions(modelTrack) {
     const alerts = [];
     const periods = DATA.periods.map((p) => p.key);
     const sev = (f, t) => {
@@ -413,32 +438,30 @@
       if (t === "A" && f !== "A") return 2;
       return 1;
     };
-    Object.keys(classByPeriod).forEach((sku) => {
-      const tr = classByPeriod[sku];
+    Object.keys(modelTrack).forEach((modelo) => {
+      const tr = modelTrack[modelo];
       for (let i = 1; i < periods.length; i++) {
         const from = tr[periods[i - 1]];
         const to = tr[periods[i]];
         if (!from || !to || from === to) continue;
-        const m = skuMeta(sku);
-        const v = variantInfo(sku);
         alerts.push({
-          sku,
-          modelo: v.modelo,
-          genero: v.genero,
-          color: v.color,
-          talla: v.talla,
+          sku: "—",
+          modelo,
+          genero: "—",
+          color: "—",
+          talla: "—",
           from,
           to,
           period: DATA.periods[i].label,
           sev: sev(from, to),
           hint:
             from === "A" && (to === "B" || to === "C")
-              ? "Promo, marketing, reubicación en tienda, revisar stock."
+              ? "Caída acumulada en participación de venta — revisar promo, stock y exhibición."
               : from === "B" && to === "C"
-                ? "Riesgo inventario lento — bundle o liquidación."
+                ? "Pierde peso en el Pareto acumulado — evaluar bundle o liquidación."
                 : to === "A"
-                  ? "Escalar abastecimiento."
-                  : "Monitorear.",
+                  ? "Gana peso acumulado — escalar abastecimiento."
+                  : "Cambio acumulativo — monitorear tendencia.",
         });
       }
     });
@@ -669,7 +692,7 @@
     const sub = $("classTableSub");
     if (!body) return;
     const rows = filterModels(allModels);
-    if (sub) sub.textContent = rows.length + " productos activos (venta o stock; clase ABC fija al período seleccionado)";
+    if (sub) sub.textContent = rows.length + " modelos activos · ABC = Pareto venta valorizada (80/15/5) · agrupación normalizada";
     body.innerHTML = rows
       .slice(0, 250)
       .map(
@@ -689,13 +712,13 @@
           "</td><td>" +
           fmtMoney(m.margin) +
           "</td><td>" +
-          pct(m.marginShare || 0) +
+          pct(m.revenueShare || 0) +
           "</td><td>" +
           fmt(m.qty, 0) +
           "</td><td>" +
           pct(m.marginPctProd) +
           "</td><td>" +
-          badge(m.rotClass) +
+          badge(m.xyzClass) +
           "</td></tr>"
       )
       .join("");
@@ -822,7 +845,7 @@
         rows.length +
         " productos con cambios / " +
         total +
-        " con actividad de venta en algún mes (Pareto mensual; C si venta sin margen+)";
+        " con venta acumulada · ABC por venta valorizada acumulada (Planity)";
     head.innerHTML =
       "<tr><th>Producto</th>" +
       periods.map((p) => "<th>" + p.short + "</th>").join("") +
@@ -871,122 +894,167 @@
     return { cap, totalU, totalV };
   }
 
-  function renderCrossMatrix(allModels) {
+  function renderCrossMatrix(scopeSkuMap, globalAbc, invMap) {
     const gridEl = $("crossMatrix");
     const analEl = $("crossAnalysis");
+    const detailEl = $("crossDetail");
     if (!gridEl) return;
-    const models = filterModels(allModels);
-    const totalMargin = models.reduce((s, m) => s + m.margin, 0) || 1;
     const cells = {};
-    ["A", "B", "C"].forEach((mr) => {
-      ["A", "B", "C"].forEach((rr) => {
-        cells[mr + rr] = { n: 0, margin: 0, list: [] };
+    ["A", "B", "C"].forEach((a) => {
+      ["X", "Y", "Z"].forEach((x) => {
+        cells[a + x] = { n: 0, revenue: 0, margin: 0, skus: [], models: new Set() };
       });
     });
-    models.forEach((m) => {
-      const k = m.abcClass + m.rotClass;
-      if (!cells[k]) return;
-      cells[k].n++;
-      cells[k].margin += m.margin;
-      cells[k].list.push(m.modelo);
+    scopeSkuMap.forEach((it, sku) => {
+      const stock = invMap.get(sku)?.total || 0;
+      if (!skuIsActive(it, stock)) return;
+      const abc = globalAbc.get(sku);
+      if (!abc) return;
+      const xyz = skuMeta(sku).xyz || "Z";
+      const k = abc.class + xyz;
+      const c = cells[k];
+      c.n++;
+      c.revenue += it.revenue;
+      c.margin += it.margin;
+      c.skus.push({
+        sku,
+        modelo: it.modelo,
+        genero: it.genero,
+        color: it.color,
+        talla: it.talla,
+        revenue: it.revenue,
+        margin: it.margin,
+        stock,
+        abc: abc.class,
+        xyz,
+      });
+      c.models.add(it.modelo);
     });
-    const rotLbl = { A: "Alta rot.", B: "Media", C: "Baja" };
-    const marLbl = { A: "Mar. A", B: "Mar. B", C: "Mar. C" };
-    let html = '<div class="mx-grid"><div></div>';
-    ["A", "B", "C"].forEach((r) => {
-      html += '<div class="mx-h">Rot. ' + r + "<br>" + rotLbl[r] + "</div>";
+    const totalRev = Object.values(cells).reduce((s, c) => s + c.revenue, 0) || 1;
+    const xyzLbl = {
+      X: "Estable (CV≤0.5)",
+      Y: "Variable (CV≤1)",
+      Z: "Inestable",
+    };
+    let html = '<div class="mx-grid mx-xyz"><div></div>';
+    ["X", "Y", "Z"].forEach((x) => {
+      html += '<div class="mx-h">XYZ ' + x + "<br>" + xyzLbl[x] + "</div>";
     });
-    ["A", "B", "C"].forEach((mr) => {
-      html += '<div class="mx-h">' + marLbl[mr] + "</div>";
-      ["A", "B", "C"].forEach((rr) => {
-        const c = cells[mr + rr];
-        const p = c.margin / totalMargin;
+    ["A", "B", "C"].forEach((a) => {
+      html += '<div class="mx-h">ABC ' + a + "<br>" + ABC[a].label + "</div>";
+      ["X", "Y", "Z"].forEach((x) => {
+        const k = a + x;
+        const c = cells[k];
+        const p = c.revenue / totalRev;
         html +=
-          '<div class="mx-cell mx-' +
-          mr +
-          rr +
-          '"><div class="n">' +
+          '<div class="mx-cell mx-click mx-' +
+          k +
+          '" data-cell="' +
+          k +
+          '" title="Clic para ver detalle"><div class="n">' +
           c.n +
-          '</div><div class="v">' +
-          fmtMoney(c.margin) +
+          ' SKUs</div><div class="v">' +
+          fmtMoney(c.revenue) +
           "<br>" +
           pct(p) +
-          "</div></div>";
+          " venta</div></div>";
       });
     });
     html += "</div>";
     gridEl.innerHTML = html;
 
     const Q = {
-      AA: {
-        t: "⭐ Estrellas",
-        d: "Alto margen + alta rotación. Bestsellers.",
-        a: "Tolerancia cero al desabasto. Prioridad máxima de reposición.",
-      },
-      AB: {
-        t: "💎 Joyas dormidas",
-        d: "Alto margen, rotación media. Mucho $ por unidad.",
-        a: "Marketing, mejor exhibición o combos.",
-      },
-      AC: {
-        t: "🐢 Premium lentos",
-        d: "Alto margen, baja rotación.",
-        a: "Evaluar si el precio limita volumen o si hay sobre-stock.",
-      },
-      BA: {
-        t: "🚦 Generadores de tráfico",
-        d: "Margen medio, alta rotación.",
-        a: "Mantener stock; evaluar subir margen sin perder volumen.",
-      },
-      BB: {
-        t: "⚖️ El medio",
-        d: "Margen y rotación medios. Estables.",
-        a: "Control intermedio; evitar caída a C.",
-      },
-      BC: {
-        t: "⚠️ Volumen sin renta",
-        d: "Rotan pero aportan poco margen.",
-        a: "Revisar costo, precio o descuentos excesivos.",
-      },
-      CA: {
-        t: "📦 Alto movimiento / bajo aporte",
-        d: "Se mueven pero casi no dejan margen.",
-        a: "Promoción para liquidar o renegociar costo.",
-      },
-      CB: {
-        t: "😴 Inventario lento",
-        d: "Poco margen y rotación media-baja.",
-        a: "Candidatos a bundle o reubicación.",
-      },
-      CC: {
-        t: "🧊 Lastre",
-        d: "Bajo margen + baja rotación. Capital congelado.",
-        a: "Liquidar, no recomprar, revisar si descontinuar.",
-      },
+      AX: { t: "Core estable", d: "Alto valor + demanda predecible.", a: "Reposición automática; stock de seguridad bajo." },
+      AY: { t: "Estrella variable", d: "Alto valor, demanda fluctuante.", a: "Monitoreo mensual; buffer moderado." },
+      AZ: { t: "Estrella errática", d: "Alto valor, demanda impredecible.", a: "Evitar sobre-stock; revisar estacionalidad." },
+      BX: { t: "Medio estable", d: "Valor medio, demanda constante.", a: "Control intermedio; no sobre-comprar." },
+      BY: { t: "Medio variable", d: "Valor medio, picos irregulares.", a: "Compras flexibles; bundles con A." },
+      BZ: { t: "Medio inestable", d: "Valor medio, alta incertidumbre.", a: "Reducir exposición; promover en temporadas." },
+      CX: { t: "Cola estable", d: "Bajo valor, demanda constante.", a: "Mantener mínimo operativo o descontinuar." },
+      CY: { t: "Cola variable", d: "Bajo valor, demanda irregular.", a: "Liquidar excedente; no recomprar agresivo." },
+      CZ: { t: "Lastre inestable", d: "Bajo valor + impredecible.", a: "Liquidar; liberar capital congelado." },
     };
     if (analEl) {
-      analEl.innerHTML = ["AA", "AB", "BA", "BB", "BC", "CC"]
+      analEl.innerHTML = ["AX", "AY", "BX", "BY", "CZ"]
         .map((k) => {
           const c = cells[k];
           const q = Q[k];
           return (
-            '<div class="qcard"><h4>' +
+            '<div class="qcard mx-click" data-cell="' +
+            k +
+            '"><h4>' +
             k +
             " — " +
             q.t +
             " (" +
             c.n +
-            ')</h4><p>' +
+            ' SKUs)</h4><p>' +
             q.d +
             "</p><p><em>" +
             q.a +
             '</em></p><div class="ex">' +
-            esc(c.list.slice(0, 5).join(" · ")) +
-            (c.list.length > 5 ? " …" : "") +
+            esc([...c.models].slice(0, 5).join(" · ")) +
+            (c.models.size > 5 ? " …" : "") +
             "</div></div>"
           );
         })
         .join("");
+    }
+
+    function showCellDetail(k) {
+      if (!detailEl) return;
+      const c = cells[k];
+      if (!c || !c.n) {
+        detailEl.innerHTML = '<div class="sub">Sin SKUs en ' + k + "</div>";
+        return;
+      }
+      const sorted = c.skus.sort((a, b) => b.revenue - a.revenue);
+      detailEl.innerHTML =
+        "<h4>Cuadrante " +
+        k +
+        " — " +
+        c.n +
+        " SKUs · " +
+        c.models.size +
+        " modelos</h4>" +
+        '<div class="cscroll" style="max-height:280px"><table class="ct"><thead><tr><th>Modelo</th><th>SKU</th><th>Género</th><th>Color</th><th>Talla</th><th>Venta</th><th>Margen</th><th>Stock</th></tr></thead><tbody>' +
+        sorted
+          .slice(0, 120)
+          .map(
+            (r) =>
+              "<tr><td class=\"rn\">" +
+              esc(r.modelo) +
+              "</td><td>" +
+              esc(r.sku) +
+              "</td><td>" +
+              esc(r.genero || "—") +
+              "</td><td>" +
+              esc(r.color || "—") +
+              "</td><td>" +
+              esc(r.talla || "—") +
+              "</td><td>" +
+              fmtMoney(r.revenue) +
+              "</td><td>" +
+              fmtMoney(r.margin) +
+              "</td><td>" +
+              fmt(r.stock, 0) +
+              "</td></tr>"
+          )
+          .join("") +
+        "</tbody></table></div>";
+    }
+
+    gridEl.querySelectorAll(".mx-click").forEach((el) => {
+      el.onclick = () => showCellDetail(el.getAttribute("data-cell"));
+    });
+    if (analEl) {
+      analEl.querySelectorAll(".mx-click").forEach((el) => {
+        el.onclick = () => showCellDetail(el.getAttribute("data-cell"));
+      });
+    }
+    if (detailEl && !detailEl.dataset.init) {
+      detailEl.dataset.init = "1";
+      showCellDetail("AX");
     }
   }
 
@@ -1207,9 +1275,9 @@
       const scopeMap = fullActiveScope(keys, invMap);
       const { abc: globalAbc } = computeAbc(scopeMap, invMap);
       const summary = summarizePositive(globalAbc, scopeMap, invMap);
-      const allModels = buildModelIndex(scopeMap, invMap);
+      const allModels = buildModelIndex(scopeMap, invMap, keys);
       const modelTrack = modelClassByPeriod();
-      const alerts = detectTransitions(skuClassByPeriod());
+      const alerts = detectModelTransitions(modelTrack);
 
       renderKpis(summary, scopeMap, invMap, periodLabel());
       renderPremisaCard(summary);
@@ -1218,7 +1286,7 @@
       renderCatalog(scopeMap, globalAbc, invMap);
       renderMigration(modelTrack);
       renderCapital(scopeMap, globalAbc, invMap, summary);
-      renderCrossMatrix(allModels);
+      renderCrossMatrix(scopeMap, globalAbc, invMap);
       renderAlerts(alerts, invMap);
 
       $("subtitle").textContent = periodLabel();
@@ -1241,7 +1309,7 @@
     const invMap = inventoryBySku(true);
     const scopeMap = fullActiveScope(activePeriodKeys(), invMap);
     const { abc } = computeAbc(scopeMap, invMap);
-    const lines = ["modelo,sku,genero,color,talla,clase,margen,ingresos_netos,qty,stock,p3,sin_margen_positivo"];
+    const lines = ["modelo,sku,genero,color,talla,clase_abc,clase_xyz,matriz,venta_usd,margen,qty,stock,cv,p3,sin_venta_positiva"];
     scopeMap.forEach((it, sku) => {
       const stock = invMap.get(sku)?.total || 0;
       if (!skuIsActive(it, stock)) return;
@@ -1258,10 +1326,13 @@
           v.color,
           v.talla,
           a.class,
-          a.margin.toFixed(2),
+          meta.xyz || "Z",
+          a.class + (meta.xyz || "Z"),
           it.revenue.toFixed(2),
+          a.margin.toFixed(2),
           it.qty,
           stock,
+          meta.cv || 0,
           meta.p3 ? 1 : 0,
           a.activeLow ? 1 : 0,
         ].join(",")

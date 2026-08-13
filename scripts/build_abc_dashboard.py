@@ -55,6 +55,35 @@ MES_LABEL = {
 }
 
 ABC_THRESHOLDS = {"A": 0.80, "B": 0.95}
+XYZ_CV_X = 0.5
+XYZ_CV_Y = 1.0
+GENDER_SUFFIXES = (" CAB", " DAMA", " KIDS", " UNISEX", " NIÑO", " NIÑA", " NINO", " NINA")
+
+
+def strip_gender_suffix(name: str) -> str:
+    n = clean_str(name)
+    if not n:
+        return n
+    upper = n.upper()
+    for suf in GENDER_SUFFIXES:
+        if upper.endswith(suf):
+            return n[: -len(suf)].strip()
+    return n
+
+
+def normalize_modelo(producto: str, inv_modelo: str = "", genero: str = "") -> str:
+    """Agrupa variantes género (JACKET CAB + JACKET DAMA → JACKET)."""
+    prod = clean_str(producto)
+    im = clean_str(inv_modelo)
+    base = strip_gender_suffix(prod)
+    if im:
+        im_u, base_u, prod_u = im.upper(), base.upper(), prod.upper()
+        if im_u == base_u or im_u in prod_u or base_u.startswith(im_u):
+            return im
+        if strip_gender_suffix(im).upper() == base_u:
+            return strip_gender_suffix(im)
+        return im
+    return base or prod
 
 
 def clean_str(val, default: str = "") -> str:
@@ -175,6 +204,41 @@ def merge_p3_into_inventory(inv: pd.DataFrame, p3: tuple) -> pd.DataFrame:
     return merged
 
 
+def compute_xyz_by_sku(sales: pd.DataFrame, skus: list, periods: list) -> dict[str, dict]:
+    """CV de unidades mensuales — alineado con Planity (σ/μ sobre todos los meses)."""
+    monthly = (
+        sales.groupby(["SKU", "period"], as_index=False)["qty"]
+        .sum()
+        .pivot(index="SKU", columns="period", values="qty")
+        .fillna(0)
+    )
+    out: dict[str, dict] = {}
+    for sku in skus:
+        if sku in monthly.index:
+            qtys = [float(monthly.loc[sku].get(p, 0) or 0) for p in periods]
+        else:
+            qtys = [0.0] * len(periods)
+        mean = sum(qtys) / len(qtys) if qtys else 0.0
+        months_active = sum(1 for q in qtys if q > 0)
+        if mean <= 0 or months_active < 1:
+            out[sku] = {"xyz": "Z", "cv": 0.0, "monthsActive": months_active}
+            continue
+        variance = sum((q - mean) ** 2 for q in qtys) / len(qtys)
+        cv = (variance**0.5) / mean
+        if cv <= XYZ_CV_X:
+            xyz = "X"
+        elif cv <= XYZ_CV_Y:
+            xyz = "Y"
+        else:
+            xyz = "Z"
+        out[sku] = {
+            "xyz": xyz,
+            "cv": round(cv, 4),
+            "monthsActive": months_active,
+        }
+    return out
+
+
 def build_indexes(
     sales: pd.DataFrame, inv: pd.DataFrame, p3: tuple | None = None
 ) -> dict:
@@ -233,32 +297,39 @@ def build_indexes(
                 "en_inventario": "SI" in clean_str(r.get("En_Inventario"), "").upper(),
             }
 
+    xyz_map = compute_xyz_by_sku(sales, skus, periods)
+
     for sku in skus:
         info = sales_info.get(sku, {})
-        p3 = p3_meta.get(sku, {})
+        p3info = p3_meta.get(sku, {})
+        producto = clean_str(
+            info.get("producto") or p3info.get("producto") or inv_model.get(sku, sku),
+            sku,
+        )
+        genero = clean_str(
+            info.get("genero") or p3info.get("genero") or inv_gen.get(sku, "")
+        )
+        modelo = normalize_modelo(
+            producto,
+            inv_model.get(sku, "") or p3info.get("modelo", ""),
+            genero,
+        )
+        xyz = xyz_map.get(sku, {"xyz": "Z", "cv": 0.0, "monthsActive": 0})
         sku_master[sku] = {
-            "producto": clean_str(
-                info.get("producto") or p3.get("producto") or inv_model.get(sku, sku),
-                sku,
-            ),
+            "producto": producto,
             "categoria": clean_str(info.get("categoria"), "Sin ventas / solo stock"),
-            "genero": clean_str(
-                info.get("genero") or p3.get("genero") or inv_gen.get(sku, "")
-            ),
+            "genero": genero,
             "color": clean_str(
-                info.get("color") or p3.get("color") or inv_col.get(sku, "")
+                info.get("color") or p3info.get("color") or inv_col.get(sku, "")
             ),
             "talla": clean_str(
-                info.get("talla") or p3.get("talla") or inv_tal.get(sku, "")
+                info.get("talla") or p3info.get("talla") or inv_tal.get(sku, "")
             ),
-            "modelo": clean_str(
-                inv_model.get(sku)
-                or p3.get("modelo")
-                or info.get("producto")
-                or sku,
-                sku,
-            ),
+            "modelo": modelo,
             "p3": sku in p3_skus,
+            "xyz": xyz["xyz"],
+            "cv": xyz["cv"],
+            "monthsActive": xyz["monthsActive"],
         }
 
     sku_idx = {s: i for i, s in enumerate(skus)}
@@ -309,6 +380,10 @@ def build_indexes(
     return {
         "meta": {
             "generated": pd.Timestamp.now().isoformat(),
+            "abc_metric": "venta_valorizada",
+            "abc_metric_label": "Venta valorizada (USD)",
+            "migration_mode": "acumulativa",
+            "xyz_thresholds": {"X": XYZ_CV_X, "Y": XYZ_CV_Y},
             "metric": "margen_contribucion",
             "abc_thresholds": ABC_THRESHOLDS,
             "premisas": {

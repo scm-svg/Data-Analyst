@@ -87,9 +87,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 .mx-grid{display:grid;grid-template-columns:72px 1fr 1fr 1fr;gap:4px;font-size:0.68rem}
 .mx-h{font-weight:700;text-align:center;padding:6px 4px;color:var(--mu)}
 .mx-cell{border-radius:8px;padding:8px 6px;text-align:center;min-height:64px;border:1px solid var(--brd)}
+.mx-cell.mx-click{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.mx-cell.mx-click:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.qcard.mx-click{cursor:pointer}
+.qcard.mx-click:hover{border-color:var(--a)}
 .mx-cell .n{font-family:var(--fh);font-size:1.1rem;font-weight:800}
 .mx-cell .v{font-size:0.62rem;color:var(--mu);margin-top:2px}
-.mx-AA{background:rgba(34,211,238,.18)}.mx-AB,.mx-BA{background:rgba(255,255,255,.04)}
+.mx-AA,.mx-AX{background:rgba(34,211,238,.18)}.mx-AB,.mx-AY,.mx-BA,.mx-BX{background:rgba(255,255,255,.04)}
+.mx-AC,.mx-AZ{background:rgba(34,211,238,.08)}.mx-BB,.mx-BY{background:rgba(251,191,36,.08)}
+.mx-BC,.mx-BZ,.mx-CA,.mx-CX{background:rgba(244,114,182,.06)}.mx-CB,.mx-CY,.mx-CC,.mx-CZ{background:rgba(244,114,182,.14)}
 .mx-BB{background:rgba(251,191,36,.12)}.mx-BC,.mx-CB{background:rgba(244,114,182,.1)}
 .mx-CA{background:rgba(251,191,36,.08)}.mx-CC{background:rgba(244,114,182,.16)}
 .qcard{padding:10px;border-radius:8px;border:1px solid var(--brd);margin-bottom:8px;background:var(--s2);font-size:0.72rem;line-height:1.45}
@@ -165,7 +171,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Clasificación ABC — productos</h3>
       <div class="sub" id="classTableSub"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos</th><th>Margen $</th><th>% margen</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
+        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos</th><th>Margen $</th><th>% venta</th><th>Unidades</th><th>% mgn prod.</th><th>XYZ</th>
       </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
@@ -186,10 +192,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
           <span class="mig-dot A">A</span> Intocable &nbsp;
           <span class="mig-dot B">B</span> Media &nbsp;
           <span class="mig-dot C">C</span> Lastre &nbsp;
-          <span class="mig-dot -">—</span> Sin venta
+          <span class="mig-dot -">—</span> Sin venta acum.
         </div>
       </div>
-      <div class="sub" id="migSub"></div>
+      <div class="sub" id="migSub">ABC acumulativo: venta valorizada acumulada desde el inicio del período (Planity). No recalcula solo el mes aislado.</div>
       <div class="cscroll"><table class="ct" id="migTable"><thead id="migHead"></thead><tbody id="migBody"></tbody></table></div>
     </div>
   </section>
@@ -208,13 +214,14 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <section class="sec" id="sec-matriz">
     <div class="g2">
       <div class="card">
-        <h3>Matriz cruzada: Margen × Rotación</h3>
-        <div class="sub">ABC margen (ingresos netos − costo) vs ABC rotación (unidades vendidas) — independientes</div>
+        <h3>Matriz cruzada: ABC × XYZ</h3>
+        <div class="sub">Valor económico (venta USD, Pareto 80/15/5) × variabilidad de demanda (CV unidades mensuales). Clic en cuadrante para ver SKUs.</div>
         <div id="crossMatrix"></div>
+        <div id="crossDetail" class="card" style="margin-top:12px;background:var(--s2);padding:12px"></div>
       </div>
       <div class="card">
         <h3>¿Cómo leer cada cuadrante?</h3>
-        <div class="sub">Acciones sugeridas por combinación</div>
+        <div class="sub">Acciones sugeridas — alineado con Planity ABC-XYZ</div>
         <div id="crossAnalysis" class="cscroll" style="max-height:520px"></div>
       </div>
     </div>
@@ -227,7 +234,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
     </div>
   </section>
 </div>
-<div class="footer">ABC · margen de contribución · excluye SKUs sin margen positivo en vistas de ranking</div>
+<div class="footer">ABC por venta valorizada (Planity) · XYZ por CV demanda mensual · migración acumulativa · modelos normalizados (CAB/DAMA/KIDS → base)</div>
 <!--INJECT_APP-->
 </body>
 </html>
