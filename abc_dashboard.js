@@ -13,7 +13,9 @@
     Z: { color: "#f87171", label: "Impredecible", hint: "Demanda muy irregular — CV > 1.0" },
   };
   const TH = { A: 0.8, B: 0.95 };
-  /** Clase A exige peso real: mínimo en venta, ganancia o rotación (no solo Pareto acumulado). */
+  /** Pesos del score combinado ABC (venta + ganancia neta + rotación). */
+  const ABC_COMPOSITE = { REV: 0.4, MGN: 0.35, QTY: 0.25 };
+  /** Tras Pareto, clase A exige peso mínimo individual en al menos una dimensión. */
   const ABC_WEIGHT = {
     MIN_A_REV_SHARE: 0.015,
     MIN_A_MGN_SHARE: 0.015,
@@ -287,10 +289,8 @@
     });
   }
 
-  /** Degrada A→B si el ítem no aporta peso individual en venta, ganancia ni rotación. */
-  function applyAbcWeightGate(ranked, classKey) {
-    if (!ranked.length) return;
-    const ck = classKey || "abcClass";
+  /** Score 0–1 combinando participación en venta, ganancia neta y rotación (unidades). */
+  function computeCompositeShares(ranked) {
     let totalRev = 0;
     let totalMgn = 0;
     let totalQty = 0;
@@ -300,14 +300,27 @@
       totalQty += it.qty || 0;
     });
     ranked.forEach((it) => {
+      it.revenueShare = totalRev > 0 ? (it.revenue || 0) / totalRev : 0;
+      it.marginShare = totalMgn > 0 ? (it.margin || 0) / totalMgn : 0;
+      it.qtyShare = totalQty > 0 ? (it.qty || 0) / totalQty : 0;
+      it.compositeScore =
+        ABC_COMPOSITE.REV * it.revenueShare +
+        ABC_COMPOSITE.MGN * it.marginShare +
+        ABC_COMPOSITE.QTY * it.qtyShare;
+    });
+    return { totalRev, totalMgn, totalQty };
+  }
+
+  /** Degrada A→B si el ítem no aporta peso individual en venta, ganancia ni rotación. */
+  function applyAbcWeightGate(ranked, classKey) {
+    if (!ranked.length) return;
+    const ck = classKey || "abcClass";
+    ranked.forEach((it) => {
       if (it[ck] !== "A") return;
-      const rs = totalRev > 0 ? (it.revenue || 0) / totalRev : 0;
-      const ms = totalMgn > 0 ? (it.margin || 0) / totalMgn : 0;
-      const qs = totalQty > 0 ? (it.qty || 0) / totalQty : 0;
       if (
-        rs < ABC_WEIGHT.MIN_A_REV_SHARE &&
-        ms < ABC_WEIGHT.MIN_A_MGN_SHARE &&
-        qs < ABC_WEIGHT.MIN_A_QTY_SHARE
+        (it.revenueShare || 0) < ABC_WEIGHT.MIN_A_REV_SHARE &&
+        (it.marginShare || 0) < ABC_WEIGHT.MIN_A_MGN_SHARE &&
+        (it.qtyShare || 0) < ABC_WEIGHT.MIN_A_QTY_SHARE
       ) {
         it[ck] = "B";
       }
@@ -342,9 +355,10 @@
     });
     const all = [...models.values()].filter((m) => !hasNegativeNetIncome(m));
     const ranked = all.filter((m) => m.revenue > 0);
-    assignAbcPareto(ranked, "revenue", "abcClass", {
+    computeCompositeShares(ranked);
+    assignAbcPareto(ranked, "compositeScore", "abcClass", {
       rank: "rank",
-      share: "revenueShare",
+      share: "scoreShare",
       cum: "cumPct",
     });
     applyAbcWeightGate(ranked, "abcClass");
@@ -904,7 +918,7 @@
     if (sub) {
       let txt =
         rows.length +
-        " modelos · ABC Pareto 80/15/5 + peso mín. A (≥1,5% venta/ganancia o ≥2,5% rotación) · solo stock → C";
+        " modelos · Score 40% venta + 35% ganancia + 25% rotación → Pareto 80/15/5 · filtro peso A";
       if (summary && summary.sinVenta)
         txt += " · " + summary.sinVenta + " SKUs sin venta en C";
       sub.textContent = txt;
