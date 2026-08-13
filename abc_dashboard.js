@@ -26,6 +26,7 @@
     abcClass: "",
     search: "",
     expandedModels: new Set(),
+    expandedAlertModels: new Set(),
   };
   let filtersInitialized = false;
 
@@ -196,7 +197,7 @@
     return out;
   }
 
-  /** Ventas del período + SKUs con stock pero sin líneas de venta (P3 / solo inventario). */
+  /** Ventas del período + SKUs con stock (universo activo completo para ABC). */
   function fullActiveScope(periodKeys, invMap) {
     const map = aggregateSalesScope(periodKeys);
     DATA.skus.forEach((sku) => {
@@ -221,6 +222,33 @@
       });
     });
     return map;
+  }
+
+  function inventoryBySku(scopeOnly, applyLocationFilter) {
+    const useLoc = applyLocationFilter !== false;
+    const map = new Map();
+    DATA.skus.forEach((sku) => map.set(sku, { total: 0 }));
+    for (let i = 0; i < DATA.invRows.length; i++) {
+      const r = DATA.invRows[i];
+      const sku = DATA.skus[r[0]];
+      const loc = DATA.locations[r[1]];
+      if (useLoc && state.location && loc !== state.location) continue;
+      if (!scopeOnly && state.modelo && !passesSkuFilter(sku)) continue;
+      map.get(sku).total += r[2];
+    }
+    return map;
+  }
+
+  function locationsForFilter() {
+    const totals = {};
+    DATA.invRows.forEach((r) => {
+      const loc = DATA.locations[r[1]];
+      totals[loc] = (totals[loc] || 0) + r[2];
+    });
+    return DATA.locations.filter((loc) => {
+      if (loc === "Sin inventario") return false;
+      return (totals[loc] || 0) > 0;
+    });
   }
 
   function assignAbcPareto(items, valueKey, classKey, extra) {
@@ -251,7 +279,8 @@
     const keys = periodKeys || activePeriodKeys();
     const models = new Map();
     scopeSkuMap.forEach((it, sku) => {
-      if (it.revenue <= 0) return;
+      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      if (it.revenue <= 0 && stock <= 0) return;
       const key = it.modelo || it.producto;
       if (!models.has(key)) {
         models.set(key, {
@@ -260,31 +289,39 @@
           qty: 0,
           revenue: 0,
           margin: 0,
+          stock: 0,
         });
       }
       const m = models.get(key);
       const meta = skuMeta(sku);
-      m.skus.push({ ...it, sku, xyz: meta.xyz || "Z", cv: meta.cv || 0 });
+      m.skus.push({ ...it, sku, stock, xyz: meta.xyz || "Z", cv: meta.cv || 0 });
       m.qty += it.qty;
       m.revenue += it.revenue;
       m.margin += it.margin;
+      m.stock += stock;
     });
-    const list = [...models.values()];
-    assignAbcPareto(list, "revenue", "abcClass", {
+    const all = [...models.values()];
+    const ranked = all.filter((m) => m.revenue > 0);
+    assignAbcPareto(ranked, "revenue", "abcClass", {
       rank: "rank",
       share: "revenueShare",
       cum: "cumPct",
     });
-    list.forEach((m) => {
+    all.forEach((m) => {
       const qtys = modelMonthlyQty(m.modelo, keys);
       const { cv, xyz } = cvFromMonthly(qtys);
       m.xyzClass = xyz;
       m.cv = cv;
-      m.matrix = m.abcClass + m.xyzClass;
       m.marginPctProd = m.revenue > 0 ? m.margin / m.revenue : 0;
+      if (m.revenue <= 0) {
+        m.abcClass = "C";
+        m.revenueShare = 0;
+        m.rank = null;
+      }
+      m.matrix = m.abcClass + m.xyzClass;
     });
-    list.sort((a, b) => (a.rank || 99999) - (b.rank || 99999));
-    return list.sort((a, b) => b.revenue - a.revenue);
+    ranked.sort((a, b) => (a.rank || 99999) - (b.rank || 99999));
+    return all.sort((a, b) => b.revenue - a.revenue || b.stock - a.stock);
   }
 
   function modelMonthlyQty(modelo, periodKeys) {
@@ -325,19 +362,6 @@
     });
   }
 
-  function inventoryBySku(scopeOnly) {
-    const map = new Map();
-    DATA.skus.forEach((sku) => map.set(sku, { total: 0 }));
-    for (let i = 0; i < DATA.invRows.length; i++) {
-      const r = DATA.invRows[i];
-      const sku = DATA.skus[r[0]];
-      if (state.location && DATA.locations[r[1]] !== state.location) continue;
-      if (!scopeOnly && state.modelo && !passesSkuFilter(sku)) continue;
-      map.get(sku).total += r[2];
-    }
-    return map;
-  }
-
   function computeAbc(skuMap, invMap) {
     const items = [...skuMap.values()];
     const pos = items
@@ -359,22 +383,40 @@
         revenueShare: totalPos > 0 ? it.revenue / totalPos : 0,
         revenue: it.revenue,
         margin: it.margin,
+        segment: "venta",
+      });
+    });
+    skuMap.forEach((it, sku) => {
+      if (out.has(sku)) return;
+      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      if (!skuIsActive(it, stock)) return;
+      out.set(sku, {
+        class: "C",
+        rank: null,
+        cumPct: 1,
+        revenueShare: 0,
+        revenue: it.revenue,
+        margin: it.margin,
+        segment: "sin_venta",
       });
     });
     return { abc: out, items, totalPosRevenue: totalPos };
   }
 
-  function summarizeAbc(abc, skuMap) {
+  function summarizeAbc(abc, skuMap, invMap) {
     const counts = { A: 0, B: 0, C: 0 };
     const marginBy = { A: 0, B: 0, C: 0 };
     const revenueBy = { A: 0, B: 0, C: 0 };
     let n = 0;
+    let sinVenta = 0;
     skuMap.forEach((it, sku) => {
-      if (it.revenue <= 0) return;
+      const stock = invMap.get(sku)?.total || 0;
+      if (!skuIsActive(it, stock)) return;
       const a = abc.get(sku);
       if (!a) return;
       n++;
       const c = a.class;
+      if (a.segment === "sin_venta") sinVenta++;
       counts[c]++;
       marginBy[c] += it.margin;
       revenueBy[c] += it.revenue;
@@ -384,6 +426,7 @@
     return {
       counts,
       n,
+      sinVenta,
       skuPct: { A: counts.A / (n || 1), B: counts.B / (n || 1), C: counts.C / (n || 1) },
       marginPct: { A: marginBy.A / mt, B: marginBy.B / mt, C: marginBy.C / mt },
       revenuePct: { A: revenueBy.A / rt, B: revenueBy.B / rt, C: revenueBy.C / rt },
@@ -445,6 +488,7 @@
           revenue,
           stock,
           sev: sev(from, to, revenue),
+          skus: modelSkus(modelo, scopeSkuMap, invMap),
           hint:
             from === "A" && (to === "B" || to === "C")
               ? "Pierde peso acumulado en venta — revisar precio, promo y stock."
@@ -484,6 +528,40 @@
       info.label +
       "</span>"
     );
+  }
+
+  function modelSkus(modelo, scopeSkuMap, invMap) {
+    const items = [];
+    scopeSkuMap.forEach((it, sku) => {
+      if (it.modelo !== modelo) return;
+      const meta = skuMeta(sku);
+      items.push({
+        sku,
+        genero: meta.genero || "—",
+        color: meta.color || "—",
+        talla: meta.talla || "—",
+        revenue: it.revenue,
+        margin: it.margin,
+        stock: invMap.get(sku)?.total || 0,
+      });
+    });
+    DATA.skus.forEach((sku) => {
+      if (skuMeta(sku).modelo !== modelo) return;
+      if (items.some((x) => x.sku === sku)) return;
+      const stock = invMap.get(sku)?.total || 0;
+      if (stock <= 0) return;
+      const meta = skuMeta(sku);
+      items.push({
+        sku,
+        genero: meta.genero || "—",
+        color: meta.color || "—",
+        talla: meta.talla || "—",
+        revenue: 0,
+        margin: 0,
+        stock,
+      });
+    });
+    return items.sort((a, b) => b.revenue - a.revenue || b.stock - a.stock);
   }
 
   function modelStock(modelo, invMap) {
@@ -609,11 +687,11 @@
           labels: ["Clase A (obj. 80%)", "Clase B (obj. 15%)", "Clase C (obj. 5%)"],
           datasets: [
             {
-              label: "% margen real",
+              label: "% venta real",
               data: [
-                summary.marginPct.A * 100,
-                summary.marginPct.B * 100,
-                summary.marginPct.C * 100,
+                summary.revenuePct.A * 100,
+                summary.revenuePct.B * 100,
+                summary.revenuePct.C * 100,
               ],
               backgroundColor: [tex.A, tex.B, tex.C],
               borderRadius: 8,
@@ -698,12 +776,17 @@
       "</tbody></table>";
   }
 
-  function renderClassTable(allModels) {
+  function renderClassTable(allModels, summary) {
     const body = $("classBody");
     const sub = $("classTableSub");
     if (!body) return;
     const rows = filterModels(allModels);
-    if (sub) sub.textContent = rows.length + " modelos con venta · ABC = Pareto venta USD (80/15/5)";
+    if (sub) {
+      let txt = rows.length + " modelos · ABC venta USD (80/15/5) + solo stock como C";
+      if (summary && summary.sinVenta)
+        txt += " · " + summary.sinVenta + " SKUs sin venta en C";
+      sub.textContent = txt;
+    }
     body.innerHTML = rows
       .slice(0, 250)
       .map(
@@ -742,7 +825,7 @@
       if (!skuIsActive(it, stock)) return;
       const a = globalAbc.get(sku);
       if (state.abcClass && a && a.class !== state.abcClass) return;
-      if (state.abcClass && !a) return;
+      if (state.abcClass && !a && state.abcClass !== "C") return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
       if (state.modelo && it.modelo !== state.modelo) return;
       const k = it.modelo;
@@ -757,7 +840,11 @@
       .map(([modelo, g]) => {
         g.items.sort((a, b) => b.revenue - a.revenue);
         const lead = g.items.find((x) => x.abc) || g.items[0];
-        return { modelo, ...g, abcClass: lead.abc?.class || "-" };
+        return {
+          modelo,
+          ...g,
+          abcClass: lead.abc?.class || (g.revenue > 0 ? "-" : "C"),
+        };
       })
       .sort((a, b) => b.revenue - a.revenue);
 
@@ -794,7 +881,7 @@
           const meta = skuMeta(v.sku);
           html +=
             '<tr class="row-variant"><td></td><td>' +
-            (v.abc ? badge(v.abc.class) : badge("-")) +
+            (v.abc ? badge(v.abc.class) : badge("C")) +
             "</td><td>" +
             esc(vi.label) +
             "</td><td>" +
@@ -938,11 +1025,10 @@
     });
     scopeSkuMap.forEach((it, sku) => {
       const stock = invMap.get(sku)?.total || 0;
-      if (!skuIsActive(it, stock)) return;
-      const abc = globalAbc.get(sku);
-      if (!abc) return;
+      const abcEntry = globalAbc.get(sku);
+      if (!abcEntry || !skuIsActive(it, stock)) return;
       const xyz = skuMeta(sku).xyz || "Z";
-      const k = abc.class + xyz;
+      const k = abcEntry.class + xyz;
       const c = cells[k];
       c.n++;
       c.revenue += it.revenue;
@@ -956,8 +1042,9 @@
         revenue: it.revenue,
         margin: it.margin,
         stock,
-        abc: abc.class,
+        abc: abcEntry.class,
         xyz,
+        segment: abcEntry.segment,
       });
       c.models.add(it.modelo);
     });
@@ -1191,39 +1278,74 @@
     }
   }
 
-  function renderAlerts(alerts) {
+  function renderAlerts(alerts, scopeSkuMap, invMap, globalAbc) {
     const body = $("alertBody");
     const sub = $("alertCount");
     if (!body) return;
     let rows = alerts.filter((r) => matchesSearch(r.modelo));
     if (state.modelo) rows = rows.filter((r) => r.modelo === state.modelo);
-    if (sub)
-      sub.textContent =
+    if (sub) {
+      let msg =
         rows.length +
-        " cambios de clase (venta acumulada) · severidad 1–5 según impacto en venta y stock";
-    body.innerHTML = rows
-      .slice(0, 200)
-      .map(
-        (r) =>
-          "<tr><td>" +
-          r.sev +
-          '</td><td class="rn">' +
-          esc(r.modelo) +
-          "</td><td>" +
-          badge(r.from) +
-          "→" +
-          badge(r.to) +
-          "</td><td>" +
-          esc(r.period) +
-          "</td><td>" +
-          fmtMoney(r.revenue) +
-          "</td><td>" +
-          fmt(r.stock, 0) +
-          "</td><td>" +
-          esc(r.hint) +
-          "</td></tr>"
-      )
-      .join("");
+        " cambios ABC acumulativos · expandir fila para ver SKUs del modelo";
+      if (state.location)
+        msg += " · stock en «" + state.location + "»";
+      sub.textContent = msg;
+    }
+    let html = "";
+    rows.slice(0, 200).forEach((r) => {
+      const open = state.expandedAlertModels.has(r.modelo);
+      html +=
+        '<tr class="row-model"><td>' +
+        r.sev +
+        '</td><td><span class="expander" data-alert-toggle="' +
+        esc(r.modelo) +
+        '">' +
+        (open ? "▼" : "▶") +
+        '</span> <span class="rn">' +
+        esc(r.modelo) +
+        "</span></td><td>" +
+        badge(r.from) +
+        "→" +
+        badge(r.to) +
+        "</td><td>" +
+        esc(r.period) +
+        "</td><td>" +
+        fmtMoney(r.revenue) +
+        "</td><td>" +
+        fmt(r.stock, 0) +
+        "</td><td>" +
+        esc(r.hint) +
+        "</td></tr>";
+      if (open && r.skus && r.skus.length) {
+        r.skus.forEach((v) => {
+          const cls = globalAbc.get(v.sku);
+          html +=
+            '<tr class="row-variant"><td></td><td colspan="2">' +
+            esc(v.sku) +
+            " · " +
+            esc(v.color) +
+            " · " +
+            esc(v.talla) +
+            "</td><td>" +
+            (cls ? badge(cls.class) : badge("-")) +
+            "</td><td>" +
+            fmtMoney(v.revenue) +
+            "</td><td>" +
+            fmt(v.stock, 0) +
+            '</td><td style="font-size:.68rem;color:var(--mu)">variante</td></tr>';
+        });
+      }
+    });
+    body.innerHTML = html;
+    body.querySelectorAll("[data-alert-toggle]").forEach((el) => {
+      el.onclick = () => {
+        const mod = el.getAttribute("data-alert-toggle");
+        if (state.expandedAlertModels.has(mod)) state.expandedAlertModels.delete(mod);
+        else state.expandedAlertModels.add(mod);
+        renderAlerts(alerts, scopeSkuMap, invMap, globalAbc);
+      };
+    });
   }
 
   function buildPeriodFilters() {
@@ -1278,8 +1400,10 @@
       '<option value="">Todas</option>' +
       DATA.categories.map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
     $("fLoc").innerHTML =
-      '<option value="">Todas</option>' +
-      DATA.locations.map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
+      '<option value="">Todas las ubicaciones</option>' +
+      locationsForFilter()
+        .map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>")
+        .join("");
   }
 
   function periodLabel() {
@@ -1313,25 +1437,29 @@
         return;
       }
       $("periodWarn").style.display = "none";
-      const invMap = inventoryBySku(true);
-      const scopeMap = fullActiveScope(keys, invMap);
-      const { abc: globalAbc } = computeAbc(scopeMap, invMap);
-      const summary = summarizeAbc(globalAbc, scopeMap);
-      const allModels = buildModelIndex(scopeMap, invMap, keys);
+      const invAll = inventoryBySku(true, false);
+      const invLoc = inventoryBySku(true, true);
+      const scopeMap = fullActiveScope(keys, invAll);
+      const { abc: globalAbc } = computeAbc(scopeMap, invAll);
+      const summary = summarizeAbc(globalAbc, scopeMap, invAll);
+      const allModels = buildModelIndex(scopeMap, invAll, keys);
       const modelTrack = modelClassByPeriod();
-      const alerts = detectModelTransitions(modelTrack, scopeMap, invMap);
+      const alerts = detectModelTransitions(modelTrack, scopeMap, invLoc);
+      const plabel = periodLabel();
 
-      renderKpis(summary, scopeMap, invMap, periodLabel());
+      renderKpis(summary, scopeMap, invLoc, plabel);
       renderPremisaCard(summary);
       if (typeof Chart !== "undefined") renderCharts(summary);
-      renderClassTable(allModels);
-      renderCatalog(scopeMap, globalAbc, invMap);
+      renderClassTable(allModels, summary);
+      renderCatalog(scopeMap, globalAbc, invLoc);
       renderMigration(modelTrack);
-      renderCapital(scopeMap, globalAbc, invMap, summary);
-      renderCrossMatrix(scopeMap, globalAbc, invMap);
-      renderAlerts(alerts);
+      renderCapital(scopeMap, globalAbc, invLoc, summary);
+      renderCrossMatrix(scopeMap, globalAbc, invAll);
+      renderAlerts(alerts, scopeMap, invLoc, globalAbc);
 
-      $("subtitle").textContent = periodLabel();
+      let sub = periodLabel();
+      if (state.location) sub += " · stock en: " + state.location;
+      $("subtitle").textContent = sub;
     } catch (err) {
       console.error(err);
       showLoadError("Error: " + err.message);
@@ -1348,14 +1476,15 @@
   }
 
   function exportCsv() {
-    const invMap = inventoryBySku(true);
-    const scopeMap = fullActiveScope(activePeriodKeys(), invMap);
-    const { abc } = computeAbc(scopeMap, invMap);
+    const invAll = inventoryBySku(true, false);
+    const invLoc = inventoryBySku(true, true);
+    const scopeMap = fullActiveScope(activePeriodKeys(), invAll);
+    const { abc } = computeAbc(scopeMap, invAll);
     const lines = ["modelo,sku,genero,color,talla,clase_abc,demanda_xyz,cv,matriz,venta_usd,margen,qty,stock"];
     scopeMap.forEach((it, sku) => {
-      const stock = invMap.get(sku)?.total || 0;
+      const stock = invLoc.get(sku)?.total || 0;
       const a = abc.get(sku);
-      if (!a && it.revenue <= 0 && stock <= 0) return;
+      if (!a && !skuIsActive(it, stock)) return;
       if (state.modelo && it.modelo !== state.modelo) return;
       const v = variantInfo(sku);
       const meta = skuMeta(sku);
@@ -1366,7 +1495,7 @@
           v.genero,
           v.color,
           v.talla,
-          a ? a.class : "-",
+          a ? a.class : "C",
           meta.xyz || "Z",
           meta.cv || 0,
           (a ? a.class : "-") + (meta.xyz || "Z"),
@@ -1418,6 +1547,7 @@
       state.timePreset = "all";
       state.customPeriodKeys.clear();
       state.expandedModels.clear();
+      state.expandedAlertModels.clear();
       ["fModel", "fStore", "fCat", "fLoc", "fAbc"].forEach((id) => ($(id).value = ""));
       $("fSearch").value = "";
       buildPeriodFilters();

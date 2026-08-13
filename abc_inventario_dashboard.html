@@ -132,7 +132,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <label>Modelo</label><select id="fModel"></select>
   <label>Tienda</label><select id="fStore"></select>
   <label>Categoría</label><select id="fCat"></select>
-  <label>Stock en</label><select id="fLoc"></select>
+  <label>Ubicación stock</label><select id="fLoc" title="Filtra stock y capital por almacén. La clasificación ABC no cambia."></select>
   <label>Clase</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
   <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…" size="16">
   <button class="fbtn" type="button" id="btnExport">CSV</button>
@@ -151,7 +151,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <section class="sec active" id="sec-resumen">
     <div class="g2">
       <div class="card">
-        <h3>SKUs por clase</h3><div class="sub">Solo productos con margen positivo en el período</div>
+        <h3>SKUs por clase</h3><div class="sub">Universo activo: venta en el período (Pareto A/B/C) + activos solo con stock → C</div>
         <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
       </div>
       <div class="card">
@@ -161,7 +161,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
     </div>
     <div class="g2">
       <div class="card">
-        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación del margen — lectura directa vs curva Pareto</div>
+        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación de la venta valorizada por clase ABC</div>
         <div class="cw s"><canvas id="cMarginBar"></canvas></div>
       </div>
       <div class="card">
@@ -182,7 +182,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <section class="sec" id="sec-catalogo">
     <div class="card">
       <h3>Catálogo por modelo</h3>
-      <div class="sub">Expandir fila → variantes (SKU). ABC solo si hubo venta en el período; sin venta muestra «—».</div>
+      <div class="sub">Expandir fila → variantes (SKU). Clase C incluye activos con stock sin venta en el período.</div>
       <div class="cscroll"><table class="ct"><thead><tr>
         <th></th><th>ABC</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th><th>Demanda</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
