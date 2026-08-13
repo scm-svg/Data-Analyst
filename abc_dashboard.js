@@ -13,6 +13,12 @@
     Z: { color: "#f87171", label: "Impredecible", hint: "Demanda muy irregular — CV > 1.0" },
   };
   const TH = { A: 0.8, B: 0.95 };
+  /** Clase A exige peso real: mínimo en venta, ganancia o rotación (no solo Pareto acumulado). */
+  const ABC_WEIGHT = {
+    MIN_A_REV_SHARE: 0.015,
+    MIN_A_MGN_SHARE: 0.015,
+    MIN_A_QTY_SHARE: 0.025,
+  };
 
   let DATA = null;
   let charts = {};
@@ -281,6 +287,33 @@
     });
   }
 
+  /** Degrada A→B si el ítem no aporta peso individual en venta, ganancia ni rotación. */
+  function applyAbcWeightGate(ranked, classKey) {
+    if (!ranked.length) return;
+    const ck = classKey || "abcClass";
+    let totalRev = 0;
+    let totalMgn = 0;
+    let totalQty = 0;
+    ranked.forEach((it) => {
+      totalRev += it.revenue || 0;
+      totalMgn += it.margin || 0;
+      totalQty += it.qty || 0;
+    });
+    ranked.forEach((it) => {
+      if (it[ck] !== "A") return;
+      const rs = totalRev > 0 ? (it.revenue || 0) / totalRev : 0;
+      const ms = totalMgn > 0 ? (it.margin || 0) / totalMgn : 0;
+      const qs = totalQty > 0 ? (it.qty || 0) / totalQty : 0;
+      if (
+        rs < ABC_WEIGHT.MIN_A_REV_SHARE &&
+        ms < ABC_WEIGHT.MIN_A_MGN_SHARE &&
+        qs < ABC_WEIGHT.MIN_A_QTY_SHARE
+      ) {
+        it[ck] = "B";
+      }
+    });
+  }
+
   function buildModelIndex(scopeSkuMap, invMap, periodKeys) {
     const keys = periodKeys || activePeriodKeys();
     const models = new Map();
@@ -314,6 +347,7 @@
       share: "revenueShare",
       cum: "cumPct",
     });
+    applyAbcWeightGate(ranked, "abcClass");
     all.forEach((m) => {
       const qtys = modelMonthlyQty(m.modelo, keys);
       const { cv, xyz } = cvFromMonthly(qtys);
@@ -369,34 +403,30 @@
     });
   }
 
-  function computeAbc(skuMap, invMap) {
-    const items = [...skuMap.values()];
-    const pos = items
-      .filter((x) => x.revenue > 0 && x.margin > 0)
-      .sort((a, b) => b.revenue - a.revenue);
-    const totalPos = pos.reduce((s, x) => s + x.revenue, 0);
+  function computeAbc(skuMap, invMap, periodKeys) {
+    const keys = periodKeys || activePeriodKeys();
+    const allModels = buildModelIndex(skuMap, invMap, keys);
+    const modelByName = new Map();
+    allModels.forEach((m) => modelByName.set(m.modelo, m));
+
     const out = new Map();
-    let cum = 0;
-    pos.forEach((it, idx) => {
-      cum += it.revenue;
-      const cumPct = totalPos > 0 ? cum / totalPos : 1;
-      let cls = "C";
-      if (cumPct <= TH.A) cls = "A";
-      else if (cumPct <= TH.B) cls = "B";
-      out.set(it.sku, {
-        class: cls,
-        rank: idx + 1,
-        cumPct,
-        revenueShare: totalPos > 0 ? it.revenue / totalPos : 0,
-        revenue: it.revenue,
-        margin: it.margin,
-        segment: "venta",
-      });
-    });
     skuMap.forEach((it, sku) => {
-      if (out.has(sku)) return;
       if (hasNegativeNetIncome(it)) return;
       const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      const model = modelByName.get(it.modelo);
+
+      if (it.revenue > 0 && it.margin > 0 && model) {
+        out.set(sku, {
+          class: model.abcClass,
+          rank: model.rank,
+          cumPct: model.cumPct,
+          revenueShare: model.revenueShare,
+          revenue: it.revenue,
+          margin: it.margin,
+          segment: "venta",
+        });
+        return;
+      }
       if (!skuIsActive(it, stock)) return;
       out.set(sku, {
         class: "C",
@@ -408,7 +438,7 @@
         segment: "sin_venta",
       });
     });
-    return { abc: out, items, totalPosRevenue: totalPos };
+    return { abc: out, items: [...skuMap.values()], modelIndex: allModels };
   }
 
   function summarizeAbc(abc, skuMap, invMap) {
@@ -872,7 +902,9 @@
     if (!body) return;
     const rows = filterModels(allModels);
     if (sub) {
-      let txt = rows.length + " modelos · ABC venta USD (80/15/5) + solo stock como C";
+      let txt =
+        rows.length +
+        " modelos · ABC Pareto 80/15/5 + peso mín. A (≥1,5% venta/ganancia o ≥2,5% rotación) · solo stock → C";
       if (summary && summary.sinVenta)
         txt += " · " + summary.sinVenta + " SKUs sin venta en C";
       sub.textContent = txt;
@@ -1697,9 +1729,8 @@
       const invAll = inventoryBySku(true, false);
       const invLoc = inventoryBySku(true, true);
       const scopeMap = fullActiveScope(keys, invAll);
-      const { abc: globalAbc } = computeAbc(scopeMap, invAll);
+      const { abc: globalAbc, modelIndex: allModels } = computeAbc(scopeMap, invAll, keys);
       const summary = summarizeAbc(globalAbc, scopeMap, invAll);
-      const allModels = buildModelIndex(scopeMap, invAll, keys);
       const modelTrack = modelClassByPeriod();
       const alerts = detectModelTransitions(modelTrack, scopeMap, invLoc, keys);
       const plabel = periodLabel();
@@ -1737,7 +1768,7 @@
     const invAll = inventoryBySku(true, false);
     const invLoc = inventoryBySku(true, true);
     const scopeMap = fullActiveScope(activePeriodKeys(), invAll);
-    const { abc } = computeAbc(scopeMap, invAll);
+    const { abc } = computeAbc(scopeMap, invAll, activePeriodKeys());
     const lines = ["modelo,sku,genero,color,talla,clase_abc,demanda_xyz,cv,matriz,venta_usd,margen,qty,stock"];
     scopeMap.forEach((it, sku) => {
       const stock = invLoc.get(sku)?.total || 0;
