@@ -448,6 +448,74 @@
     return buildModelIndex(scopeSkuMap);
   }
 
+  /** Modelos de baja prioridad para alertas (líneas promocionales / accesorios band). */
+  function isExcludedAlertModel(modelo) {
+    const u = (modelo || "").toUpperCase().trim();
+    if (!u) return true;
+    if (u.startsWith("REFRESH")) return true;
+    if (u.includes("CUADRO BAND")) return true;
+    return false;
+  }
+
+  function modelRevenueInPeriodKeys(modelo, periodKeys) {
+    const periodSet = new Set(periodKeys);
+    let revenue = 0;
+    let margin = 0;
+    for (let i = 0; i < DATA.salesRows.length; i++) {
+      const r = DATA.salesRows[i];
+      if (!periodSet.has(DATA.periods[r[0]].key)) continue;
+      if (state.store && DATA.stores[r[2]] !== state.store) continue;
+      if (state.category && DATA.categories[r[3]] !== state.category) continue;
+      const sku = DATA.skus[r[1]];
+      const m = skuMeta(sku);
+      if ((m.modelo || m.producto) !== modelo) continue;
+      revenue += r[5];
+      margin += r[7];
+    }
+    return { revenue, margin };
+  }
+
+  /** Últimos dos meses consecutivos dentro del período activo (ej. Jun → Jul 2026). */
+  function alertComparisonPeriods(periodKeys) {
+    const ordered = DATA.periods.map((p) => p.key).filter((k) => periodKeys.includes(k));
+    if (ordered.length < 2) return null;
+    const lastKey = ordered[ordered.length - 1];
+    const prevKey = ordered[ordered.length - 2];
+    return {
+      lastKey,
+      prevKey,
+      lastPeriod: DATA.periods.find((p) => p.key === lastKey),
+      prevPeriod: DATA.periods.find((p) => p.key === prevKey),
+    };
+  }
+
+  function transitionHint(from, to) {
+    if (from === "A" && (to === "B" || to === "C"))
+      return "Perdió peso en venta acumulada — revisar precio, promo y stock.";
+    if (from === "B" && to === "C")
+      return "Bajó de categoría — conviene liquidar o armar combos.";
+    if (to === "A" && from !== "A")
+      return "Entró al top de venta — asegurar abastecimiento.";
+    if (from === "C" && (to === "B" || to === "A"))
+      return "Subió de categoría — monitorear si se sostiene.";
+    return "Cambio en participación acumulada — vigilar próximo mes.";
+  }
+
+  function alertSeverity(from, to, cumulativeRev, revenueShare, lastMonthRev) {
+    let s = 1;
+    if (from === "A" && to === "C") s = 5;
+    else if (from === "A" && to === "B") s = 4;
+    else if (from === "B" && to === "C") s = 3;
+    else if (to === "A" && from !== "A") s = 3;
+    else if (from === "C" && to === "B") s = 2;
+    else if (from === "C" && to === "A") s = 3;
+    if (cumulativeRev >= 50000) s += 2;
+    else if (cumulativeRev >= 15000) s += 1;
+    if (revenueShare >= 0.008) s += 1;
+    if (lastMonthRev >= 3000) s += 1;
+    return Math.max(1, Math.min(5, s));
+  }
+
   function modelClassByPeriod() {
     const track = {};
     const periods = DATA.periods;
@@ -462,52 +530,51 @@
     return track;
   }
 
-  function detectModelTransitions(modelTrack, scopeSkuMap, invMap) {
+  function detectModelTransitions(modelTrack, scopeSkuMap, invMap, periodKeys) {
     const alerts = [];
-    const periods = DATA.periods.map((p) => p.key);
-    const modelRev = {};
+    const cmp = alertComparisonPeriods(periodKeys || activePeriodKeys());
+    if (!cmp) return alerts;
+
+    const { lastKey, prevKey, lastPeriod, prevPeriod } = cmp;
+    let totalPeriodRev = 0;
     scopeSkuMap.forEach((it) => {
-      if (it.revenue <= 0) return;
-      modelRev[it.modelo] = (modelRev[it.modelo] || 0) + it.revenue;
+      if (it.revenue > 0 && it.margin > 0) totalPeriodRev += it.revenue;
     });
-    const sev = (f, t, rev) => {
-      let s = 1;
-      if (f === "A" && t === "C") s = 5;
-      else if (f === "A" && t === "B") s = 4;
-      else if (f === "B" && t === "C") s = 3;
-      else if (t === "A" && f !== "A") s = 2;
-      if (rev >= 50000) s += 1;
-      else if (rev < 5000) s -= 1;
-      return Math.max(1, Math.min(5, s));
-    };
+    const minCumulativeRev = 5000;
+    const minShare = 0.0015;
+
     Object.keys(modelTrack).forEach((modelo) => {
+      if (isExcludedAlertModel(modelo)) return;
       const tr = modelTrack[modelo];
-      const revenue = modelRev[modelo] || 0;
+      const from = tr[prevKey];
+      const to = tr[lastKey];
+      if (!from || !to || from === to) return;
+      if (from === "C" && to === "C") return;
+
+      const cumulative = modelRevenueInPeriodKeys(modelo, periodKeys || activePeriodKeys());
+      if (cumulative.revenue <= 0 || cumulative.margin <= 0) return;
+      if (cumulative.revenue < minCumulativeRev) return;
+
+      const revenueShare = totalPeriodRev > 0 ? cumulative.revenue / totalPeriodRev : 0;
+      if (revenueShare < minShare) return;
+
+      const lastMonth = modelRevenueInPeriodKeys(modelo, [lastKey]);
       const stock = modelStock(modelo, invMap);
-      for (let i = 1; i < periods.length; i++) {
-        const from = tr[periods[i - 1]];
-        const to = tr[periods[i]];
-        if (!from || !to || from === to) continue;
-        if (revenue < 3000 && stock <= 0) continue;
-        alerts.push({
-          modelo,
-          from,
-          to,
-          period: DATA.periods[i].label,
-          revenue,
-          stock,
-          sev: sev(from, to, revenue),
-          skus: modelSkus(modelo, scopeSkuMap, invMap),
-          hint:
-            from === "A" && (to === "B" || to === "C")
-              ? "Pierde peso acumulado en venta — revisar precio, promo y stock."
-              : from === "B" && to === "C"
-                ? "Bajó de categoría — conviene liquidar o armar combos."
-                : to === "A"
-                  ? "Entra al top de venta acumulada — asegurar abastecimiento."
-                  : "Ajuste en participación acumulada — monitorear 2–3 meses.",
-        });
-      }
+
+      alerts.push({
+        modelo,
+        from,
+        to,
+        period: lastPeriod.label,
+        prevPeriod: prevPeriod.label,
+        revenue: cumulative.revenue,
+        revenueShare,
+        lastMonthRevenue: lastMonth.revenue,
+        stock,
+        sev: alertSeverity(from, to, cumulative.revenue, revenueShare, lastMonth.revenue),
+        skus: modelSkus(modelo, scopeSkuMap, invMap),
+        hint: transitionHint(from, to),
+      });
     });
     alerts.sort((a, b) => b.sev - a.sev || b.revenue - a.revenue);
     return alerts;
@@ -1427,11 +1494,20 @@
     let rows = alerts.filter((r) => matchesSearch(r.modelo));
     if (state.modelo) rows = rows.filter((r) => r.modelo === state.modelo);
     if (sub) {
-      let msg =
-        rows.length +
-        " cambios ABC acumulativos · expandir fila para ver SKUs del modelo";
-      if (state.location)
-        msg += " · stock en «" + state.location + "»";
+      const cmp = alertComparisonPeriods(activePeriodKeys());
+      let msg = rows.length + " cambios con peso";
+      if (cmp && cmp.prevPeriod && cmp.lastPeriod) {
+        msg +=
+          " · " +
+          cmp.prevPeriod.short +
+          " → " +
+          cmp.lastPeriod.short +
+          " (clase actual al " +
+          cmp.lastPeriod.label +
+          ")";
+      }
+      msg += " · excl. Refresh / Cuadro Band · expandir fila para SKUs";
+      if (state.location) msg += " · stock en «" + state.location + "»";
       sub.textContent = msg;
     }
     let html = "";
@@ -1451,9 +1527,15 @@
         "→" +
         badge(r.to) +
         "</td><td>" +
+        esc(r.prevPeriod) +
+        " → " +
         esc(r.period) +
         "</td><td>" +
         fmtMoney(r.revenue) +
+        "<br><span style=\"color:var(--mu);font-size:.65rem\">" +
+        pct(r.revenueShare || 0) +
+        " del período</span></td><td>" +
+        fmtMoney(r.lastMonthRevenue || 0) +
         "</td><td>" +
         fmt(r.stock, 0) +
         "</td><td>" +
@@ -1463,7 +1545,7 @@
         r.skus.forEach((v) => {
           const cls = globalAbc.get(v.sku);
           html +=
-            '<tr class="row-variant"><td></td><td colspan="2">' +
+            '<tr class="row-variant"><td></td><td colspan="3">' +
             esc(v.sku) +
             " · " +
             esc(v.color) +
@@ -1473,7 +1555,7 @@
             (cls ? badge(cls.class) : badge("-")) +
             "</td><td>" +
             fmtMoney(v.revenue) +
-            "</td><td>" +
+            '</td><td style="color:var(--mu)">—</td><td>' +
             fmt(v.stock, 0) +
             '</td><td style="font-size:.68rem;color:var(--mu)">variante</td></tr>';
         });
@@ -1586,7 +1668,7 @@
       const summary = summarizeAbc(globalAbc, scopeMap, invAll);
       const allModels = buildModelIndex(scopeMap, invAll, keys);
       const modelTrack = modelClassByPeriod();
-      const alerts = detectModelTransitions(modelTrack, scopeMap, invLoc);
+      const alerts = detectModelTransitions(modelTrack, scopeMap, invLoc, keys);
       const plabel = periodLabel();
 
       renderKpis(summary, scopeMap, invLoc, plabel);
