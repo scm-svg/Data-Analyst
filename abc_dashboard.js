@@ -13,8 +13,8 @@
     Z: { color: "#f87171", label: "Impredecible", hint: "Demanda muy irregular — CV > 1.0" },
   };
   const TH = { A: 0.8, B: 0.95 };
-  /** Pesos del score combinado ABC (venta + ganancia neta + rotación). */
-  const ABC_COMPOSITE = { REV: 0.4, MGN: 0.35, QTY: 0.25 };
+  /** Pesos del score combinado ABC (venta + ganancia + rotación + rentabilidad). */
+  const ABC_COMPOSITE = { REV: 0.35, MGN: 0.3, QTY: 0.25, MGN_PCT: 0.1 };
   /** Tras Pareto, clase A exige peso mínimo individual en al menos una dimensión. */
   const ABC_WEIGHT = {
     MIN_A_REV_SHARE: 0.015,
@@ -289,7 +289,7 @@
     });
   }
 
-  /** Score 0–1 combinando participación en venta, ganancia neta y rotación (unidades). */
+  /** Score combinado: venta, ganancia neta, rotación y rentabilidad (% mgn vs promedio). */
   function computeCompositeShares(ranked) {
     let totalRev = 0;
     let totalMgn = 0;
@@ -298,17 +298,26 @@
       totalRev += it.revenue || 0;
       totalMgn += it.margin || 0;
       totalQty += it.qty || 0;
+      it.marginPctProd = it.revenue > 0 ? (it.margin || 0) / it.revenue : 0;
     });
+    const avgMarginPct =
+      ranked.length > 0
+        ? ranked.reduce((s, it) => s + (it.marginPctProd || 0), 0) / ranked.length
+        : 0;
     ranked.forEach((it) => {
       it.revenueShare = totalRev > 0 ? (it.revenue || 0) / totalRev : 0;
       it.marginShare = totalMgn > 0 ? (it.margin || 0) / totalMgn : 0;
       it.qtyShare = totalQty > 0 ? (it.qty || 0) / totalQty : 0;
+      const relProfit =
+        avgMarginPct > 0 ? Math.min((it.marginPctProd || 0) / avgMarginPct, 2) : 0;
+      it.profitabilityScore = relProfit / 2;
       it.compositeScore =
         ABC_COMPOSITE.REV * it.revenueShare +
         ABC_COMPOSITE.MGN * it.marginShare +
-        ABC_COMPOSITE.QTY * it.qtyShare;
+        ABC_COMPOSITE.QTY * it.qtyShare +
+        ABC_COMPOSITE.MGN_PCT * it.profitabilityScore;
     });
-    return { totalRev, totalMgn, totalQty };
+    return { totalRev, totalMgn, totalQty, avgMarginPct };
   }
 
   /** Degrada A→B si el ítem no aporta peso individual en venta, ganancia ni rotación. */
@@ -918,7 +927,7 @@
     if (sub) {
       let txt =
         rows.length +
-        " modelos · Score 40% venta + 35% ganancia + 25% rotación → Pareto 80/15/5 · filtro peso A";
+        " modelos · Score 35% venta + 30% ganancia + 25% rotación + 10% rentabilidad → Pareto 80/15/5";
       if (summary && summary.sinVenta)
         txt += " · " + summary.sinVenta + " SKUs sin venta en C";
       sub.textContent = txt;
