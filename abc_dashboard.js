@@ -7,6 +7,11 @@
     B: { color: "#fbbf24", label: "Clase media" },
     C: { color: "#f472b6", label: "Lastre" },
   };
+  const XYZ = {
+    X: { color: "#34d399", label: "Estable", hint: "Demanda predecible — CV ≤ 0.5" },
+    Y: { color: "#fbbf24", label: "Variable", hint: "Demanda moderada — CV ≤ 1.0" },
+    Z: { color: "#f87171", label: "Impredecible", hint: "Demanda muy irregular — CV > 1.0" },
+  };
   const TH = { A: 0.8, B: 0.95 };
 
   let DATA = null;
@@ -246,8 +251,7 @@
     const keys = periodKeys || activePeriodKeys();
     const models = new Map();
     scopeSkuMap.forEach((it, sku) => {
-      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
-      if (!skuIsActive(it, stock)) return;
+      if (it.revenue <= 0) return;
       const key = it.modelo || it.producto;
       if (!models.has(key)) {
         models.set(key, {
@@ -256,18 +260,14 @@
           qty: 0,
           revenue: 0,
           margin: 0,
-          activeLow: false,
-          p3: false,
         });
       }
       const m = models.get(key);
       const meta = skuMeta(sku);
-      m.skus.push({ ...it, sku, xyz: meta.xyz || "Z" });
+      m.skus.push({ ...it, sku, xyz: meta.xyz || "Z", cv: meta.cv || 0 });
       m.qty += it.qty;
       m.revenue += it.revenue;
       m.margin += it.margin;
-      if (it.revenue <= 0) m.activeLow = true;
-      if (meta.p3) m.p3 = true;
     });
     const list = [...models.values()];
     assignAbcPareto(list, "revenue", "abcClass", {
@@ -276,10 +276,6 @@
       cum: "cumPct",
     });
     list.forEach((m) => {
-      if (m.revenue <= 0) {
-        m.abcClass = "C";
-        m.activeLow = true;
-      }
       const qtys = modelMonthlyQty(m.modelo, keys);
       const { cv, xyz } = cvFromMonthly(qtys);
       m.xyzClass = xyz;
@@ -361,52 +357,38 @@
         rank: idx + 1,
         cumPct,
         revenueShare: totalPos > 0 ? it.revenue / totalPos : 0,
-        marginShare: 0,
         revenue: it.revenue,
         margin: it.margin,
-        activeLow: false,
-      });
-    });
-    skuMap.forEach((it, sku) => {
-      if (out.has(sku)) return;
-      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
-      if (!skuIsActive(it, stock)) return;
-      out.set(sku, {
-        class: "C",
-        rank: null,
-        cumPct: 1,
-        revenueShare: 0,
-        marginShare: 0,
-        revenue: it.revenue,
-        margin: it.margin,
-        activeLow: true,
       });
     });
     return { abc: out, items, totalPosRevenue: totalPos };
   }
 
-  function summarizePositive(abc, skuMap, invMap) {
+  function summarizeAbc(abc, skuMap) {
     const counts = { A: 0, B: 0, C: 0 };
     const marginBy = { A: 0, B: 0, C: 0 };
+    const revenueBy = { A: 0, B: 0, C: 0 };
     let n = 0;
-    let activeLow = 0;
     skuMap.forEach((it, sku) => {
+      if (it.revenue <= 0) return;
       const a = abc.get(sku);
       if (!a) return;
       n++;
       const c = a.class;
       counts[c]++;
       marginBy[c] += it.margin;
-      if (a.activeLow) activeLow++;
+      revenueBy[c] += it.revenue;
     });
     const mt = marginBy.A + marginBy.B + marginBy.C || 1;
+    const rt = revenueBy.A + revenueBy.B + revenueBy.C || 1;
     return {
       counts,
       n,
-      activeLow,
       skuPct: { A: counts.A / (n || 1), B: counts.B / (n || 1), C: counts.C / (n || 1) },
       marginPct: { A: marginBy.A / mt, B: marginBy.B / mt, C: marginBy.C / mt },
+      revenuePct: { A: revenueBy.A / rt, B: revenueBy.B / rt, C: revenueBy.C / rt },
       marginBy,
+      revenueBy,
     };
   }
 
@@ -428,44 +410,53 @@
     return track;
   }
 
-  function detectModelTransitions(modelTrack) {
+  function detectModelTransitions(modelTrack, scopeSkuMap, invMap) {
     const alerts = [];
     const periods = DATA.periods.map((p) => p.key);
-    const sev = (f, t) => {
-      if (f === "A" && t === "C") return 5;
-      if (f === "A" && t === "B") return 4;
-      if (f === "B" && t === "C") return 3;
-      if (t === "A" && f !== "A") return 2;
-      return 1;
+    const modelRev = {};
+    scopeSkuMap.forEach((it) => {
+      if (it.revenue <= 0) return;
+      modelRev[it.modelo] = (modelRev[it.modelo] || 0) + it.revenue;
+    });
+    const sev = (f, t, rev) => {
+      let s = 1;
+      if (f === "A" && t === "C") s = 5;
+      else if (f === "A" && t === "B") s = 4;
+      else if (f === "B" && t === "C") s = 3;
+      else if (t === "A" && f !== "A") s = 2;
+      if (rev >= 50000) s += 1;
+      else if (rev < 5000) s -= 1;
+      return Math.max(1, Math.min(5, s));
     };
     Object.keys(modelTrack).forEach((modelo) => {
       const tr = modelTrack[modelo];
+      const revenue = modelRev[modelo] || 0;
+      const stock = modelStock(modelo, invMap);
       for (let i = 1; i < periods.length; i++) {
         const from = tr[periods[i - 1]];
         const to = tr[periods[i]];
         if (!from || !to || from === to) continue;
+        if (revenue < 3000 && stock <= 0) continue;
         alerts.push({
-          sku: "—",
           modelo,
-          genero: "—",
-          color: "—",
-          talla: "—",
           from,
           to,
           period: DATA.periods[i].label,
-          sev: sev(from, to),
+          revenue,
+          stock,
+          sev: sev(from, to, revenue),
           hint:
             from === "A" && (to === "B" || to === "C")
-              ? "Caída acumulada en participación de venta — revisar promo, stock y exhibición."
+              ? "Pierde peso acumulado en venta — revisar precio, promo y stock."
               : from === "B" && to === "C"
-                ? "Pierde peso en el Pareto acumulado — evaluar bundle o liquidación."
+                ? "Sale del núcleo de venta — evaluar liquidación o bundle."
                 : to === "A"
-                  ? "Gana peso acumulado — escalar abastecimiento."
-                  : "Cambio acumulativo — monitorear tendencia.",
+                  ? "Entra al top de venta acumulada — asegurar abastecimiento."
+                  : "Ajuste en participación acumulada — monitorear 2–3 meses.",
         });
       }
     });
-    alerts.sort((a, b) => b.sev - a.sev);
+    alerts.sort((a, b) => b.sev - a.sev || b.revenue - a.revenue);
     return alerts;
   }
 
@@ -477,6 +468,32 @@
   function badge(cls) {
     if (cls === "-") return '<span class="abc abc-dash">—</span>';
     return '<span class="abc abc-' + cls + '">' + cls + "</span>";
+  }
+
+  function xyzBadge(x, cv) {
+    const info = XYZ[x] || XYZ.Z;
+    const cvTxt = cv != null && cv > 0 ? "CV " + Number(cv).toFixed(2) : "sin venta mensual";
+    return (
+      '<span class="xyz xyz-' +
+      x +
+      '" title="' +
+      esc(info.hint + " · " + cvTxt) +
+      '"><strong>' +
+      x +
+      "</strong> " +
+      info.label +
+      "</span>"
+    );
+  }
+
+  function modelStock(modelo, invMap) {
+    let total = 0;
+    DATA.skus.forEach((sku) => {
+      const m = skuMeta(sku);
+      if ((m.modelo || m.producto) !== modelo) return;
+      total += invMap.get(sku)?.total || 0;
+    });
+    return total;
   }
 
   function donutLabels() {
@@ -639,14 +656,13 @@
         stock += invMap.get(sku)?.total || 0;
       }
     });
-    const p3n = DATA.meta?.stats?.p3_integrados || (DATA.p3Skus || []).length || 0;
     el.innerHTML =
       '<div class="kpib"><div class="kv">' +
       summary.counts.A +
-      '</div><div class="kl">SKU A+</div></div>' +
+      '</div><div class="kl">Modelos A</div></div>' +
       '<div class="kpib"><div class="kv">' +
-      pct(summary.marginPct.A) +
-      '</div><div class="kl">Margen A</div></div>' +
+      pct(summary.revenuePct.A) +
+      '</div><div class="kl">Venta clase A</div></div>' +
       '<div class="kpib"><div class="kv">' +
       fmtMoney(netRev) +
       '</div><div class="kl">Ingresos netos</div><div class="ksub">' +
@@ -654,12 +670,7 @@
       "</div></div>" +
       '<div class="kpib"><div class="kv">' +
       fmt(stock, 0) +
-      '</div><div class="kl">Stock und.</div></div>' +
-      (p3n
-        ? '<div class="kpib"><div class="kv">' +
-          p3n +
-          '</div><div class="kl">P3 integrados</div><div class="ksub">Activos sin margen+</div></div>'
-        : "");
+      '</div><div class="kl">Stock und.</div></div>';
   }
 
   function renderPremisaCard(summary) {
@@ -692,7 +703,7 @@
     const sub = $("classTableSub");
     if (!body) return;
     const rows = filterModels(allModels);
-    if (sub) sub.textContent = rows.length + " modelos activos · ABC = Pareto venta valorizada (80/15/5) · agrupación normalizada";
+    if (sub) sub.textContent = rows.length + " modelos con venta · ABC = Pareto venta USD (80/15/5)";
     body.innerHTML = rows
       .slice(0, 250)
       .map(
@@ -701,12 +712,12 @@
           (m.rank || "—") +
           "</td><td class=\"rn\">" +
           esc(m.modelo) +
-          (m.p3 ? ' <span class="abc abc-C" title="P3">P3</span>' : "") +
-          (m.activeLow ? ' <span style="color:var(--mu);font-size:.72rem">sin mgn+</span>' : "") +
           "</td><td>" +
           badge(m.abcClass) +
-          "</td><td>" +
-          badge(m.matrix) +
+          '</td><td title="' +
+          esc(XYZ[m.xyzClass]?.hint || "") +
+          '">' +
+          xyzBadge(m.xyzClass, m.cv) +
           "</td><td>" +
           fmtMoney(m.revenue) +
           "</td><td>" +
@@ -717,8 +728,6 @@
           fmt(m.qty, 0) +
           "</td><td>" +
           pct(m.marginPctProd) +
-          "</td><td>" +
-          badge(m.xyzClass) +
           "</td></tr>"
       )
       .join("");
@@ -732,8 +741,8 @@
       const stock = invMap.get(sku)?.total || 0;
       if (!skuIsActive(it, stock)) return;
       const a = globalAbc.get(sku);
-      if (!a) return;
-      if (state.abcClass && a.class !== state.abcClass) return;
+      if (state.abcClass && a && a.class !== state.abcClass) return;
+      if (state.abcClass && !a) return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
       if (state.modelo && it.modelo !== state.modelo) return;
       const k = it.modelo;
@@ -747,7 +756,8 @@
     const models = [...byModel.entries()]
       .map(([modelo, g]) => {
         g.items.sort((a, b) => b.revenue - a.revenue);
-        return { modelo, ...g, abcClass: g.items[0].abc.class };
+        const lead = g.items.find((x) => x.abc) || g.items[0];
+        return { modelo, ...g, abcClass: lead.abc?.class || "-" };
       })
       .sort((a, b) => b.revenue - a.revenue);
 
@@ -769,13 +779,22 @@
         fmt(m.qty, 0) +
         "</td><td>" +
         fmt(m.stock, 0) +
+        "</td><td>" +
+        (() => {
+          const lead = m.items.find((x) => x.abc) || m.items[0];
+          const meta = lead ? skuMeta(lead.sku) : {};
+          return lead && lead.revenue > 0
+            ? xyzBadge(meta.xyz || "Z", meta.cv)
+            : '<span style="color:var(--mu);font-size:.72rem">—</span>';
+        })() +
         "</td></tr>";
       if (open) {
         m.items.forEach((v) => {
           const vi = variantInfo(v.sku);
+          const meta = skuMeta(v.sku);
           html +=
             '<tr class="row-variant"><td></td><td>' +
-            badge(v.abc.class) +
+            (v.abc ? badge(v.abc.class) : badge("-")) +
             "</td><td>" +
             esc(vi.label) +
             "</td><td>" +
@@ -784,6 +803,8 @@
             fmt(v.qty, 0) +
             "</td><td>" +
             fmt(v.stock, 0) +
+            "</td><td>" +
+            xyzBadge(meta.xyz || "Z", meta.cv) +
             "</td></tr>";
         });
       }
@@ -871,23 +892,33 @@
       .join("");
   }
 
-  function computeCapital(skuMap, abc, invMap) {
+  function computeCapital(scopeSkuMap, abc, invMap) {
     const cap = {
       A: { u: 0, v: 0, models: new Set() },
       B: { u: 0, v: 0, models: new Set() },
       C: { u: 0, v: 0, models: new Set() },
-      X: { u: 0, v: 0, models: new Set() },
+      X: { u: 0, v: 0, models: new Set(), skus: 0 },
     };
-    skuMap.forEach((it, sku) => {
+    DATA.skus.forEach((sku) => {
       const stock = invMap.get(sku)?.total || 0;
       if (stock <= 0) return;
+      if (state.modelo && !passesSkuFilter(sku)) return;
+      const it = scopeSkuMap.get(sku) || {
+        qty: 0,
+        cost: 0,
+        revenue: 0,
+        margin: 0,
+        modelo: skuMeta(sku).modelo || sku,
+      };
       const unitCost = it.qty > 0 ? it.cost / it.qty : 0;
       const val = stock * unitCost;
-      let cl = abc.get(sku)?.class || "X";
-      if (!abc.get(sku) && !skuIsActive(it, stock)) cl = "X";
+      const meta = skuMeta(sku);
+      let cl = "X";
+      if (it.revenue > 0 && abc.get(sku)) cl = abc.get(sku).class;
       cap[cl].u += stock;
       cap[cl].v += val;
-      cap[cl].models.add(it.modelo);
+      cap[cl].models.add(it.modelo || meta.modelo);
+      if (cl === "X") cap.X.skus++;
     });
     const totalU = cap.A.u + cap.B.u + cap.C.u + cap.X.u || 1;
     const totalV = cap.A.v + cap.B.v + cap.C.v + cap.X.v || 1;
@@ -932,13 +963,20 @@
     });
     const totalRev = Object.values(cells).reduce((s, c) => s + c.revenue, 0) || 1;
     const xyzLbl = {
-      X: "Estable (CV≤0.5)",
-      Y: "Variable (CV≤1)",
-      Z: "Inestable",
+      X: "Estable",
+      Y: "Variable",
+      Z: "Impredecible",
     };
     let html = '<div class="mx-grid mx-xyz"><div></div>';
     ["X", "Y", "Z"].forEach((x) => {
-      html += '<div class="mx-h">XYZ ' + x + "<br>" + xyzLbl[x] + "</div>";
+      html +=
+        '<div class="mx-h">Demanda ' +
+        xyzLbl[x] +
+        " (" +
+        x +
+        ")<br><span style=\"font-weight:400;color:var(--mu)\">" +
+        esc(XYZ[x].hint) +
+        "</span></div>";
     });
     ["A", "B", "C"].forEach((a) => {
       html += '<div class="mx-h">ABC ' + a + "<br>" + ABC[a].label + "</div>";
@@ -1089,11 +1127,15 @@
           );
         })
         .join("") +
-        '<div class="cap-card"><div class="lbl">Sin venta + en stock</div><div class="big">' +
+        '<div class="cap-card"><div class="lbl">Sin venta en período + stock</div><div class="big">' +
         fmt(cap.X.u, 0) +
         '</div><div class="sub">' +
+        cap.X.skus +
+        " SKUs · " +
         cap.X.models.size +
-        " modelos</div></div>";
+        " modelos · " +
+        fmtUsd(cap.X.v) +
+        " est.</div></div>";
     }
     function bar(id, cap, total, val) {
       const el = $(id);
@@ -1142,16 +1184,23 @@
         (cap.X.u > 0
           ? '<div class="diag m" style="margin-top:8px">' +
             fmt(cap.X.u, 0) +
-            " und. con stock sin venta positiva en el período.</div>"
+            " und. en stock sin venta en el período seleccionado (" +
+            cap.X.skus +
+            " SKUs). Revisar liquidación o activación comercial.</div>"
           : "");
     }
   }
 
-  function renderAlerts(alerts, invMap) {
+  function renderAlerts(alerts) {
     const body = $("alertBody");
+    const sub = $("alertCount");
     if (!body) return;
-    let rows = alerts.filter((r) => matchesSearch(r.modelo + r.sku));
+    let rows = alerts.filter((r) => matchesSearch(r.modelo));
     if (state.modelo) rows = rows.filter((r) => r.modelo === state.modelo);
+    if (sub)
+      sub.textContent =
+        rows.length +
+        " cambios de clase (venta acumulada) · severidad 1–5 según impacto en venta y stock";
     body.innerHTML = rows
       .slice(0, 200)
       .map(
@@ -1161,27 +1210,20 @@
           '</td><td class="rn">' +
           esc(r.modelo) +
           "</td><td>" +
-          esc(r.genero || "—") +
-          "</td><td>" +
-          esc(r.color || "—") +
-          "</td><td>" +
-          esc(r.talla || "—") +
-          "</td><td>" +
-          esc(r.sku) +
-          "</td><td>" +
           badge(r.from) +
           "→" +
           badge(r.to) +
           "</td><td>" +
           esc(r.period) +
           "</td><td>" +
-          fmt((invMap.get(r.sku) || {}).total || 0, 0) +
+          fmtMoney(r.revenue) +
+          "</td><td>" +
+          fmt(r.stock, 0) +
           "</td><td>" +
           esc(r.hint) +
           "</td></tr>"
       )
       .join("");
-    $("alertCount").textContent = rows.length + " movimientos";
   }
 
   function buildPeriodFilters() {
@@ -1274,10 +1316,10 @@
       const invMap = inventoryBySku(true);
       const scopeMap = fullActiveScope(keys, invMap);
       const { abc: globalAbc } = computeAbc(scopeMap, invMap);
-      const summary = summarizePositive(globalAbc, scopeMap, invMap);
+      const summary = summarizeAbc(globalAbc, scopeMap);
       const allModels = buildModelIndex(scopeMap, invMap, keys);
       const modelTrack = modelClassByPeriod();
-      const alerts = detectModelTransitions(modelTrack);
+      const alerts = detectModelTransitions(modelTrack, scopeMap, invMap);
 
       renderKpis(summary, scopeMap, invMap, periodLabel());
       renderPremisaCard(summary);
@@ -1287,7 +1329,7 @@
       renderMigration(modelTrack);
       renderCapital(scopeMap, globalAbc, invMap, summary);
       renderCrossMatrix(scopeMap, globalAbc, invMap);
-      renderAlerts(alerts, invMap);
+      renderAlerts(alerts);
 
       $("subtitle").textContent = periodLabel();
     } catch (err) {
@@ -1309,13 +1351,12 @@
     const invMap = inventoryBySku(true);
     const scopeMap = fullActiveScope(activePeriodKeys(), invMap);
     const { abc } = computeAbc(scopeMap, invMap);
-    const lines = ["modelo,sku,genero,color,talla,clase_abc,clase_xyz,matriz,venta_usd,margen,qty,stock,cv,p3,sin_venta_positiva"];
+    const lines = ["modelo,sku,genero,color,talla,clase_abc,demanda_xyz,cv,matriz,venta_usd,margen,qty,stock"];
     scopeMap.forEach((it, sku) => {
       const stock = invMap.get(sku)?.total || 0;
-      if (!skuIsActive(it, stock)) return;
-      if (state.modelo && it.modelo !== state.modelo) return;
       const a = abc.get(sku);
-      if (!a) return;
+      if (!a && it.revenue <= 0 && stock <= 0) return;
+      if (state.modelo && it.modelo !== state.modelo) return;
       const v = variantInfo(sku);
       const meta = skuMeta(sku);
       lines.push(
@@ -1325,16 +1366,14 @@
           v.genero,
           v.color,
           v.talla,
-          a.class,
+          a ? a.class : "-",
           meta.xyz || "Z",
-          a.class + (meta.xyz || "Z"),
+          meta.cv || 0,
+          (a ? a.class : "-") + (meta.xyz || "Z"),
           it.revenue.toFixed(2),
-          a.margin.toFixed(2),
+          it.margin.toFixed(2),
           it.qty,
           stock,
-          meta.cv || 0,
-          meta.p3 ? 1 : 0,
-          a.activeLow ? 1 : 0,
         ].join(",")
       );
     });

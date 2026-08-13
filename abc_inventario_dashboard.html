@@ -60,6 +60,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 .abc-A{background:rgba(34,211,238,.2);color:var(--a);border:1px solid rgba(34,211,238,.45)}
 .abc-B{background:rgba(251,191,36,.15);color:var(--b);border:1px solid rgba(251,191,36,.4)}
 .abc-C{background:rgba(244,114,182,.15);color:var(--c);border:1px solid rgba(244,114,182,.4)}
+.xyz{display:inline-block;font-size:.68rem;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.xyz-X{background:rgba(52,211,153,.15);color:#34d399}
+.xyz-Y{background:rgba(251,191,36,.12);color:#fbbf24}
+.xyz-Z{background:rgba(248,113,113,.12);color:#f87171}
 .abc-dash{background:rgba(120,120,140,.12);color:var(--mu);border:1px solid var(--brd)}
 .mig-cell{text-align:center;padding:4px!important}
 .mig-dot{display:inline-flex;width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800}
@@ -171,16 +175,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Clasificación ABC — productos</h3>
       <div class="sub" id="classTableSub"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos</th><th>Margen $</th><th>% venta</th><th>Unidades</th><th>% mgn prod.</th><th>XYZ</th>
+        <th>#</th><th>Producto</th><th>ABC</th><th>Demanda (XYZ)</th><th>Ingresos netos</th><th>Margen $</th><th>% venta</th><th>Unidades</th><th>% mgn prod.</th>
       </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-catalogo">
     <div class="card">
       <h3>Catálogo por modelo</h3>
-      <div class="sub">Expandir fila para ver variantes (SKU). Incluye activos P3 (venta o stock, sin margen positivo → C).</div>
+      <div class="sub">Expandir fila → variantes (SKU). ABC solo si hubo venta en el período; sin venta muestra «—».</div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th></th><th>Clase</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th>
+        <th></th><th>ABC</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th><th>Demanda</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
     </div>
   </section>
@@ -228,9 +232,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   </section>
   <section class="sec" id="sec-alertas">
     <div class="card">
-      <h3>Cambios de clase — acción sugerida</h3>
+      <h3>Cambios de clase ABC — por modelo</h3>
       <div class="sub" id="alertCount"></div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>Género</th><th>Color</th><th>Talla</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción</th></tr></thead><tbody id="alertBody"></tbody></table></div>
+      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>Cambio</th><th>Mes</th><th>Venta período</th><th>Stock und.</th><th>Acción sugerida</th></tr></thead><tbody id="alertBody"></tbody></table></div>
     </div>
   </section>
 </div>
