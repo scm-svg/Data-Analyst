@@ -1,0 +1,384 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cruce SKU-GLOBAL · Ventas · Inventario · ABC</title>
+<style>
+  :root{--bg:#f6f4ef;--card:#fff;--ink:#1c1a16;--muted:#5c574e;--line:#ddd6c8;--accent:#0f5c4c;--warn:#8a4b12;--danger:#8b1e1e;--info:#1f4e79}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+  h1{font-size:1.7rem;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:1.15rem;margin:28px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  h3{font-size:1rem;margin:18px 0 8px}
+  p,li{color:var(--muted)}
+  .lead{margin:0 0 16px;color:var(--muted);font-size:.95rem}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+  .pill{background:#ebe6db;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:.82rem}
+  .grid{display:grid;gap:12px}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  @media (max-width:900px){.g4,.g3,.g2{grid-template-columns:1fr 1fr}}
+  @media (max-width:560px){.g4,.g3,.g2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .stat .n{font-size:1.55rem;font-weight:700}
+  .stat .l{font-size:.8rem;color:var(--muted);margin-top:2px}
+  .callout{background:#fff8e8;border:1px solid #e4d1a8;border-left:4px solid var(--warn);border-radius:8px;padding:12px 14px;margin:12px 0 18px}
+  .callout strong{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:.82rem}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#efe9dc;font-weight:600;position:sticky;top:0}
+  tr:nth-child(even) td{background:#fbfaf7}
+  .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .note{font-size:.8rem;color:var(--muted);margin:6px 0 0}
+  .bar{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .bar .lab{width:160px;font-size:.8rem;flex-shrink:0}
+  .bar .track{flex:1;background:#ebe6db;height:10px;border-radius:99px;overflow:hidden}
+  .bar .fill{height:100%;background:var(--accent)}
+  .bar .val{width:54px;font-size:.8rem;text-align:right}
+  .chip{display:inline-block;background:#efe9dc;border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin:2px;font-size:.75rem;font-family:Consolas,monospace}
+  .meta{font-size:.78rem;color:var(--muted);margin-top:28px;padding-top:12px;border-top:1px solid var(--line)}
+  .tag{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:6px}
+  .t-p1{background:#f8d7d7;color:var(--danger)}
+  .t-p2{background:#f3e0c8;color:var(--warn)}
+  .t-p3{background:#d8e5f3;color:var(--info)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+  .btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:.85rem;border:0;cursor:pointer}
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  @media print{.actions{display:none}.scroll{max-height:none;overflow:visible}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cruce SKU-GLOBAL · Ventas · Inventario · ABC</h1>
+  <p class="lead">Reporte compacto del cruce de catálogo. Maestro = pestaña <b>SKU - Global</b>. Comparación por SKU (mayúsculas). Inventario = existencia &gt; 0. Fuente: <code>VENTAS-SKU-GLOBAL-ABC.xlsx</code>.</p>
+  <div class="pills">
+    <span class="pill">12,343 SKUs en catálogo</span>
+    <span class="pill">2,269 OK en los 3 sitios (18.4%)</span>
+    <span class="pill">10,073 con ≥1 faltante</span>
+    <span class="pill">8,826 inactivos (faltan en los 3)</span>
+  </div>
+  <div class="callout"><strong>Hallazgo principal:</strong> solo el <b>18.4%</b> del catálogo está completo en Ventas + Inventario + ABC. El <b>71.5%</b> (8,826 SKUs) no tiene venta, no tiene stock y no está en ABC: foco principal de limpieza maestra.</div>
+  <div class="actions">
+    <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+    <a class="btn secondary" href="01_RESUMEN_FALTANTES.csv">CSV resumen</a>
+    <a class="btn secondary" href="02_PRIO_Ventas_sin_Stock.csv">P1 CSV</a>
+    <a class="btn secondary" href="03_PRIO_Stock_sin_Ventas.csv">P2 CSV</a>
+    <a class="btn secondary" href="04_PRIO_Activos_sin_ABC.csv">P3 CSV</a>
+  </div>
+
+  <h2>1. Universo analizado</h2>
+  <div class="grid g4">
+    <div class="card stat"><div class="n">12,343</div><div class="l">SKU-GLOBAL (maestro)</div></div>
+    <div class="card stat"><div class="n">3,398</div><div class="l">SKUs con venta (95,078 líneas)</div></div>
+    <div class="card stat"><div class="n">2,647</div><div class="l">SKUs con existencia &gt; 0</div></div>
+    <div class="card stat"><div class="n">3,234</div><div class="l">SKUs en matriz ABC</div></div>
+  </div>
+
+  <h2>2. Resultado del cruce (desde SKU-GLOBAL)</h2>
+  <div class="grid g3">
+    <div class="card stat"><div class="n">9,049</div><div class="l">Sin movimiento de venta (73.3%)</div></div>
+    <div class="card stat"><div class="n">9,794</div><div class="l">Sin existencia en inventario (79.3%)</div></div>
+    <div class="card stat"><div class="n">9,207</div><div class="l">Fuera de matriz ABC (74.6%)</div></div>
+  </div>
+
+  <h2>3. Severidad de faltantes</h2>
+  <div class="card">
+    <div class="bar"><div class="lab">OK en los 3</div><div class="track"><div class="fill" style="width:18.4%"></div></div><div class="val">2,269</div></div>
+    <div class="bar"><div class="lab">Falta en 1</div><div class="track"><div class="fill" style="width:7.5%"></div></div><div class="val">922</div></div>
+    <div class="bar"><div class="lab">Faltan en 2</div><div class="track"><div class="fill" style="width:2.6%"></div></div><div class="val">325</div></div>
+    <div class="bar"><div class="lab">Faltan en los 3</div><div class="track"><div class="fill" style="width:71.5%"></div></div><div class="val">8,826</div></div>
+  </div>
+
+  <h2>4. Prioridades de acción</h2>
+  <div class="grid g3">
+    <div class="card"><span class="tag t-p1">P1</span><b>968</b> ventas sin stock<br/><span class="note">Riesgo de ruptura / reposición</span></div>
+    <div class="card"><span class="tag t-p2">P2</span><b>223</b> stock sin ventas<br/><span class="note">Capital inmovilizado / liquidación</span></div>
+    <div class="card"><span class="tag t-p3">P3</span><b>381</b> activos fuera de ABC<br/><span class="note">Clasificación incompleta</span></div>
+  </div>
+
+  <h3><span class="tag t-p1">P1</span> Muestra: SKUs con venta y sin existencia (50 de 968)</h3>
+  <div class="scroll"><table><thead><tr><th>SKU</th><th>Producto</th><th>Género</th><th>Color</th><th>Talla</th><th>Inventario</th><th>ABC</th></tr></thead><tbody>
+<tr><td>201STCA30TM</td><td>RETRO VZLA 2018</td><td>CAB</td><td>GRIS CLARO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STCA30TS</td><td>RETRO VZLA 2018</td><td>CAB</td><td>GRIS CLARO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STCA30TXL</td><td>RETRO VZLA 2018</td><td>CAB</td><td>GRIS CLARO</td><td>XL</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA30TM</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>GRIS CLARO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA30TS</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>GRIS CLARO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA30TXS</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>GRIS CLARO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA43TS</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>NEGRO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA43TXL</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>NEGRO</td><td>XL</td><td>NO</td><td>SI</td></tr>
+<tr><td>201STDA43TXS</td><td>RETRO VZLA 2018</td><td>DAMA</td><td>NEGRO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ACAMIDA120TM</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ACCMICA120TL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON AZUL</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ACDMIDA120TL</td><td>ACTIVE DANI</td><td>DAMA</td><td>GRIS CON AZUL</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ADUMMDA30TXL</td><td>ACTIVE DUO</td><td>DAMA</td><td>GRIS CLARO</td><td>XL</td><td>NO</td><td>NO</td></tr>
+<tr><td>ANDMIDA05TXL</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>XL</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA11TXS</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA12T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL MARINO</td><td>2XL</td><td>NO</td><td>NO</td></tr>
+<tr><td>ANDMIDA13TM</td><td>ANDRE</td><td>DAMA</td><td>AZUL REY</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA13TS</td><td>ANDRE</td><td>DAMA</td><td>AZUL REY</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA16TL</td><td>ANDRE</td><td>DAMA</td><td>BLANCO</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA16TM</td><td>ANDRE</td><td>DAMA</td><td>BLANCO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA16TS</td><td>ANDRE</td><td>DAMA</td><td>BLANCO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA30TM</td><td>ANDRE</td><td>DAMA</td><td>GRIS CLARO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA34TS</td><td>ANDRE</td><td>DAMA</td><td>LILA</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA34TXS</td><td>ANDRE</td><td>DAMA</td><td>LILA</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA39TM</td><td>ANDRE</td><td>DAMA</td><td>MORADO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA39TS</td><td>ANDRE</td><td>DAMA</td><td>MORADO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA39TXS</td><td>ANDRE</td><td>DAMA</td><td>MORADO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA48TM</td><td>ANDRE</td><td>DAMA</td><td>P&#218;RPURA</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA50TXS</td><td>ANDRE</td><td>DAMA</td><td>ROJO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA52TL</td><td>ANDRE</td><td>DAMA</td><td>ROSADO NE&#211;N</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA52TM</td><td>ANDRE</td><td>DAMA</td><td>ROSADO NE&#211;N</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA52TS</td><td>ANDRE</td><td>DAMA</td><td>ROSADO NE&#211;N</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA52TXS</td><td>ANDRE</td><td>DAMA</td><td>ROSADO NE&#211;N</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA70TL</td><td>ANDRE</td><td>DAMA</td><td>VINOTINTO</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDMIDA70TM</td><td>ANDRE</td><td>DAMA</td><td>VINOTINTO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANDSPDA13TXS</td><td>ANDRE SPORT LISO</td><td>DAMA</td><td>AZUL REY</td><td>XS</td><td>NO</td><td>NO</td></tr>
+<tr><td>ANDSPDA16TL</td><td>ANDRE SPORT LISO</td><td>DAMA</td><td>BLANCO</td><td>L</td><td>NO</td><td>NO</td></tr>
+<tr><td>ANDSPDA16TXS</td><td>ANDRE SPORT LISO</td><td>DAMA</td><td>BLANCO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANMSUDA151TL</td><td>MOTION ANDRE</td><td>DAMA</td><td>AZUL</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANMSUDA17TM</td><td>MOTION ANDRE</td><td>DAMA</td><td>BLUE</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>ANMSUDA43TL</td><td>MOTION ANDRE</td><td>DAMA</td><td>NEGRO</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTCA16TS</td><td>RETRO VZLA SQUARE</td><td>CAB</td><td>BLANCO</td><td>S</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTCA16TXL</td><td>RETRO VZLA SQUARE</td><td>CAB</td><td>BLANCO</td><td>XL</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTCA43TL</td><td>RETRO VZLA SQUARE</td><td>CAB</td><td>NEGRO</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTCA43TS</td><td>RETRO VZLA SQUARE</td><td>CAB</td><td>NEGRO</td><td>S</td><td>NO</td><td>NO</td></tr>
+<tr><td>AQUSTDA16TL</td><td>RETRO VZLA SQUARE</td><td>DAMA</td><td>BLANCO</td><td>L</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTDA16TM</td><td>RETRO VZLA SQUARE</td><td>DAMA</td><td>BLANCO</td><td>M</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTDA16TXL</td><td>RETRO VZLA SQUARE</td><td>DAMA</td><td>BLANCO</td><td>XL</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTDA16TXS</td><td>RETRO VZLA SQUARE</td><td>DAMA</td><td>BLANCO</td><td>XS</td><td>NO</td><td>SI</td></tr>
+<tr><td>AQUSTDA43TL</td><td>RETRO VZLA SQUARE</td><td>DAMA</td><td>NEGRO</td><td>L</td><td>NO</td><td>SI</td></tr>
+
+  </tbody></table></div>
+  <p class="note">Listado completo: 02_PRIO_Ventas_sin_Stock.csv</p>
+
+  <h3><span class="tag t-p2">P2</span> Muestra: SKUs con existencia y sin venta (50 de 223)</h3>
+  <div class="scroll"><table><thead><tr><th>SKU</th><th>Producto</th><th>Género</th><th>Color</th><th>Talla</th><th>Inventario</th><th>ABC</th></tr></thead><tbody>
+<tr><td>201STCA43T2XL</td><td>RETRO VZLA 2018</td><td>CAB</td><td>NEGRO</td><td>2XL</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>ACAMIDA120TS</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>S</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>ACCMICA121T2XL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON VERDE</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>ANDMIDA11T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>ANDMIDA11TXL</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>ANDMIDA13TXL</td><td>ANDRE</td><td>DAMA</td><td>AZUL REY</td><td>XL</td><td>SI (8)</td><td>NO</td></tr>
+<tr><td>ANDMIDA34TXL</td><td>ANDRE</td><td>DAMA</td><td>LILA</td><td>XL</td><td>SI (4)</td><td>NO</td></tr>
+<tr><td>ANMSUDA17TS</td><td>MOTION ANDRE</td><td>DAMA</td><td>BLUE</td><td>S</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>BLCTCCKI210T14</td><td>BASIC LINE CROP TEE TEENS</td><td>Kids</td><td>Ivory</td><td>14.0</td><td>SI (24)</td><td>NO</td></tr>
+<tr><td>CAP09DC</td><td>CAP DAD</td><td>65</td><td></td><td>25558</td><td>SI (386)</td><td>NO</td></tr>
+<tr><td>CLAMEKI63T8</td><td>CL&#193;SICA SPORT MESH</td><td>KIDS</td><td>VERDE AGUA</td><td>8.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMICA34T2XL</td><td>CL&#193;SICA</td><td>CAB</td><td>LILA</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIDA43T2XL</td><td>CL&#193;SICA</td><td>DAMA</td><td>NEGRO</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI01T10</td><td>CL&#193;SICA</td><td>KIDS</td><td>AGUAMARINA</td><td>10.0</td><td>SI (3)</td><td>NO</td></tr>
+<tr><td>CLAMIKI01T4</td><td>CL&#193;SICA</td><td>KIDS</td><td>AGUAMARINA</td><td>4.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>CLAMIKI30T2</td><td>CL&#193;SICA</td><td>KIDS</td><td>GRIS CLARO</td><td>2.0</td><td>SI (41)</td><td>NO</td></tr>
+<tr><td>CLAMIKI30T6</td><td>CL&#193;SICA</td><td>KIDS</td><td>GRIS CLARO</td><td>6.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI34T14</td><td>CL&#193;SICA</td><td>KIDS</td><td>LILA</td><td>14.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI34T4</td><td>CL&#193;SICA</td><td>KIDS</td><td>LILA</td><td>4.0</td><td>SI (5)</td><td>NO</td></tr>
+<tr><td>CLAMIKI50T2</td><td>CL&#193;SICA</td><td>KIDS</td><td>ROJO</td><td>2.0</td><td>SI (3)</td><td>NO</td></tr>
+<tr><td>CLAMIKI50T4</td><td>CL&#193;SICA</td><td>KIDS</td><td>ROJO</td><td>4.0</td><td>SI (3)</td><td>NO</td></tr>
+<tr><td>CLAMIKI50T6</td><td>CL&#193;SICA</td><td>KIDS</td><td>ROJO</td><td>6.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI53T8</td><td>CL&#193;SICA</td><td>KIDS</td><td>ROSADO PASTEL</td><td>8.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI70T10</td><td>CL&#193;SICA</td><td>KIDS</td><td>VINOTINTO</td><td>10.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>CLAMIKI70T12</td><td>CL&#193;SICA</td><td>KIDS</td><td>VINOTINTO</td><td>12.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CLAMIKI70T6</td><td>CL&#193;SICA</td><td>KIDS</td><td>VINOTINTO</td><td>6.0</td><td>SI (13)</td><td>NO</td></tr>
+<tr><td>CLAMIKI70T8</td><td>CL&#193;SICA</td><td>KIDS</td><td>VINOTINTO</td><td>8.0</td><td>SI (3)</td><td>NO</td></tr>
+<tr><td>CLASTKI43T4</td><td>CL&#193;SICA ALGOD&#211;N STRETCH</td><td>KIDS</td><td>NEGRO</td><td>4.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CRESTCA16T2XL</td><td>RETRO VZLA CREW</td><td>CAB</td><td>BLANCO</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>CRESTCA30T2XL</td><td>RETRO VZLA CREW</td><td>CAB</td><td>GRIS CLARO</td><td>2XL</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>CRESTDA16TXL</td><td>RETRO VZLA CREW</td><td>DAMA</td><td>BLANCO</td><td>XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DACSTKI43T12</td><td>DAILY CL&#193;SICA</td><td>KIDS</td><td>NEGRO</td><td>12.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTCA16T2XL</td><td>DAILY MANGA LARGA 2.0</td><td>CAB</td><td>BLANCO</td><td>2XL</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTCA16TL</td><td>DAILY MANGA LARGA 2.0</td><td>CAB</td><td>BLANCO</td><td>L</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTCA16TXL</td><td>DAILY MANGA LARGA 2.0</td><td>CAB</td><td>BLANCO</td><td>XL</td><td>SI (3)</td><td>NO</td></tr>
+<tr><td>DALSSTCA43TXL</td><td>DAILY MANGA LARGA 2.0</td><td>CAB</td><td>NEGRO</td><td>XL</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTDA30TXL</td><td>DAILY MANGA LARGA 2.0</td><td>DAMA</td><td>GRIS CLARO</td><td>XL</td><td>SI (5)</td><td>NO</td></tr>
+<tr><td>DALSSTDA43TL</td><td>DAILY MANGA LARGA 2.0</td><td>DAMA</td><td>NEGRO</td><td>L</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTKI16T10</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>BLANCO</td><td>10.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTKI16T12</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>BLANCO</td><td>12.0</td><td>SI (5)</td><td>NO</td></tr>
+<tr><td>DALSSTKI16T2</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>BLANCO</td><td>2.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTKI16T8</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>BLANCO</td><td>8.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTKI30T10</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>GRIS CLARO</td><td>10.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTKI30T12</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>GRIS CLARO</td><td>12.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTKI30T2</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>GRIS CLARO</td><td>2.0</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSSTKI30T8</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>GRIS CLARO</td><td>8.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTKI43T12</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>NEGRO</td><td>12.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSSTKI43T8</td><td>DAILY MANGA LARGA 2.0</td><td>KIDS</td><td>NEGRO</td><td>8.0</td><td>SI (2)</td><td>NO</td></tr>
+<tr><td>DALSTCA16TS</td><td>DAILY CL&#193;SICA 2.0</td><td>CAB</td><td>BLANCO</td><td>S</td><td>SI (1)</td><td>NO</td></tr>
+<tr><td>DALSTCA16TXL</td><td>DAILY CL&#193;SICA 2.0</td><td>CAB</td><td>BLANCO</td><td>XL</td><td>SI (1)</td><td>NO</td></tr>
+
+  </tbody></table></div>
+  <p class="note">Listado completo: 03_PRIO_Stock_sin_Ventas.csv</p>
+
+  <h3><span class="tag t-p3">P3</span> Muestra: activos (venta o stock) fuera de ABC (50 de 381)</h3>
+  <div class="scroll"><table><thead><tr><th>SKU</th><th>Producto</th><th>Género</th><th>Color</th><th>Talla</th><th>Ventas</th><th>Inventario</th></tr></thead><tbody>
+<tr><td>201STCA43T2XL</td><td>RETRO VZLA 2018</td><td>CAB</td><td>NEGRO</td><td>2XL</td><td>NO</td><td>SI (2)</td></tr>
+<tr><td>ACAMIDA120TS</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>S</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>ACCMICA121T2XL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON VERDE</td><td>2XL</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>ACCMICA121TS</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON VERDE</td><td>S</td><td>SI</td><td>SI (2)</td></tr>
+<tr><td>ACDMIDA121TL</td><td>ACTIVE DANI</td><td>DAMA</td><td>GRIS CON VERDE</td><td>L</td><td>SI</td><td>SI (2)</td></tr>
+<tr><td>ADUMMDA30TXL</td><td>ACTIVE DUO</td><td>DAMA</td><td>GRIS CLARO</td><td>XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>ANDMIDA11T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>2XL</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>ANDMIDA11TXL</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>XL</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>ANDMIDA12T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL MARINO</td><td>2XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>ANDMIDA13TXL</td><td>ANDRE</td><td>DAMA</td><td>AZUL REY</td><td>XL</td><td>NO</td><td>SI (8)</td></tr>
+<tr><td>ANDMIDA34TXL</td><td>ANDRE</td><td>DAMA</td><td>LILA</td><td>XL</td><td>NO</td><td>SI (4)</td></tr>
+<tr><td>ANDSPDA13TXS</td><td>ANDRE SPORT LISO</td><td>DAMA</td><td>AZUL REY</td><td>XS</td><td>SI</td><td>NO</td></tr>
+<tr><td>ANDSPDA16TL</td><td>ANDRE SPORT LISO</td><td>DAMA</td><td>BLANCO</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>ANMSUDA17TS</td><td>MOTION ANDRE</td><td>DAMA</td><td>BLUE</td><td>S</td><td>NO</td><td>SI (2)</td></tr>
+<tr><td>AQUSTCA43TS</td><td>RETRO VZLA SQUARE</td><td>CAB</td><td>NEGRO</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>BACCCDA12TL</td><td>BASIC LINE CROP TEE</td><td>Dama</td><td>Azul Marino</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>BAN164CC</td><td>CUADRO BAND</td><td>25990</td><td></td><td>25991</td><td>SI</td><td>NO (qty=-1997)</td></tr>
+<tr><td>BLCTCCKI210T14</td><td>BASIC LINE CROP TEE TEENS</td><td>Kids</td><td>Ivory</td><td>14.0</td><td>NO</td><td>SI (24)</td></tr>
+<tr><td>CAP09DC</td><td>CAP DAD</td><td>65</td><td></td><td>25558</td><td>NO</td><td>SI (386)</td></tr>
+<tr><td>CBCC03EQ</td><td>Cuadro Band</td><td>2086</td><td></td><td>26071</td><td>SI</td><td>NO</td></tr>
+<tr><td>CGCSCA16T2XL</td><td>CLASICA GC SUBLIMADO</td><td>CAB</td><td>Blanco</td><td>2XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLADFCA70TS</td><td>ADVANCE CL&#193;SICA</td><td>CAB</td><td>VINOTINTO</td><td>S</td><td>SI</td><td>SI (9)</td></tr>
+<tr><td>CLAMECA12TM</td><td>CL&#193;SICA SPORT MESH</td><td>CAB</td><td>AZUL MARINO</td><td>M</td><td>SI</td><td>NO (qty=0)</td></tr>
+<tr><td>CLAMEKI63T8</td><td>CL&#193;SICA SPORT MESH</td><td>KIDS</td><td>VERDE AGUA</td><td>8.0</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>CLAMICA09TS</td><td>CL&#193;SICA</td><td>CAB</td><td>AZUL CIELO</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA11TL</td><td>CL&#193;SICA</td><td>CAB</td><td>AZUL LAVANDA</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA11TXL</td><td>CL&#193;SICA</td><td>CAB</td><td>AZUL LAVANDA</td><td>XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA28TL</td><td>CL&#193;SICA</td><td>CAB</td><td>FUCSIA</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA34T2XL</td><td>CL&#193;SICA</td><td>CAB</td><td>LILA</td><td>2XL</td><td>NO</td><td>SI (1)</td></tr>
+<tr><td>CLAMICA34TXL</td><td>CL&#193;SICA</td><td>CAB</td><td>LILA</td><td>XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA48TM</td><td>CL&#193;SICA</td><td>CAB</td><td>P&#218;RPURA</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA50TL</td><td>CL&#193;SICA</td><td>CAB</td><td>ROJO</td><td>L</td><td>SI</td><td>SI (1)</td></tr>
+<tr><td>CLAMICA52TM</td><td>CL&#193;SICA</td><td>CAB</td><td>ROSADO NE&#211;N</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA52TS</td><td>CL&#193;SICA</td><td>CAB</td><td>ROSADO NE&#211;N</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMICA53TM</td><td>CL&#193;SICA</td><td>CAB</td><td>ROSADO PASTEL</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA01TL</td><td>CL&#193;SICA</td><td>DAMA</td><td>AGUAMARINA</td><td>L</td><td>SI</td><td>SI (1)</td></tr>
+<tr><td>CLAMIDA01TM</td><td>CL&#193;SICA</td><td>DAMA</td><td>AGUAMARINA</td><td>M</td><td>SI</td><td>SI (1)</td></tr>
+<tr><td>CLAMIDA01TS</td><td>CL&#193;SICA</td><td>DAMA</td><td>AGUAMARINA</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA01TXL</td><td>CL&#193;SICA</td><td>DAMA</td><td>AGUAMARINA</td><td>XL</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA01TXS</td><td>CL&#193;SICA</td><td>DAMA</td><td>AGUAMARINA</td><td>XS</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA09TL</td><td>CL&#193;SICA</td><td>DAMA</td><td>AZUL CIELO</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA09TM</td><td>CL&#193;SICA</td><td>DAMA</td><td>AZUL CIELO</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA09TS</td><td>CL&#193;SICA</td><td>DAMA</td><td>AZUL CIELO</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA09TXS</td><td>CL&#193;SICA</td><td>DAMA</td><td>AZUL CIELO</td><td>XS</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA16T2XL</td><td>CL&#193;SICA</td><td>DAMA</td><td>BLANCO</td><td>2XL</td><td>SI</td><td>SI (1)</td></tr>
+<tr><td>CLAMIDA28TM</td><td>CL&#193;SICA</td><td>DAMA</td><td>FUCSIA</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA28TS</td><td>CL&#193;SICA</td><td>DAMA</td><td>FUCSIA</td><td>S</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA34TL</td><td>CL&#193;SICA</td><td>DAMA</td><td>LILA</td><td>L</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA34TM</td><td>CL&#193;SICA</td><td>DAMA</td><td>LILA</td><td>M</td><td>SI</td><td>NO</td></tr>
+<tr><td>CLAMIDA39TM</td><td>CL&#193;SICA</td><td>DAMA</td><td>MORADO</td><td>M</td><td>SI</td><td>NO</td></tr>
+
+  </tbody></table></div>
+  <p class="note">Listado completo: 04_PRIO_Activos_sin_ABC.csv</p>
+
+  <h2>5. Concentración de faltantes</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="margin-top:0">Por género</h3>
+      <div class="bar"><div class="lab">DAMA</div><div class="track"><div class="fill" style="width:100%"></div></div><div class="val">4,686</div></div>
+      <div class="bar"><div class="lab">KIDS</div><div class="track"><div class="fill" style="width:63%"></div></div><div class="val">2,957</div></div>
+      <div class="bar"><div class="lab">CAB</div><div class="track"><div class="fill" style="width:42%"></div></div><div class="val">1,964</div></div>
+      <div class="bar"><div class="lab">GENERAL</div><div class="track"><div class="fill" style="width:3%"></div></div><div class="val">131</div></div>
+      <div class="bar"><div class="lab">PETS</div><div class="track"><div class="fill" style="width:2%"></div></div><div class="val">89</div></div>
+      <div class="bar"><div class="lab">BABIES</div><div class="track"><div class="fill" style="width:2%"></div></div><div class="val">84</div></div>
+      <div class="bar"><div class="lab">UNISEX</div><div class="track"><div class="fill" style="width:1%"></div></div><div class="val">30</div></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Top productos</h3>
+      <div class="bar"><div class="lab">HOODIE</div><div class="track"><div class="fill" style="width:100%"></div></div><div class="val">546</div></div>
+      <div class="bar"><div class="lab">CLÁSICA</div><div class="track"><div class="fill" style="width:55%"></div></div><div class="val">303</div></div>
+      <div class="bar"><div class="lab">GABY</div><div class="track"><div class="fill" style="width:54%"></div></div><div class="val">294</div></div>
+      <div class="bar"><div class="lab">MILA</div><div class="track"><div class="fill" style="width:54%"></div></div><div class="val">294</div></div>
+      <div class="bar"><div class="lab">RIO</div><div class="track"><div class="fill" style="width:51%"></div></div><div class="val">278</div></div>
+      <div class="bar"><div class="lab">MAR</div><div class="track"><div class="fill" style="width:48%"></div></div><div class="val">264</div></div>
+      <div class="bar"><div class="lab">SHORT PLAYA EST.</div><div class="track"><div class="fill" style="width:43%"></div></div><div class="val">237</div></div>
+      <div class="bar"><div class="lab">CLÁSICA SPORT MESH</div><div class="track"><div class="fill" style="width:43%"></div></div><div class="val">233</div></div>
+      <div class="bar"><div class="lab">ZOE</div><div class="track"><div class="fill" style="width:41%"></div></div><div class="val">224</div></div>
+      <div class="bar"><div class="lab">DANI</div><div class="track"><div class="fill" style="width:40%"></div></div><div class="val">218</div></div>
+    </div>
+  </div>
+
+  <h2>6. Catálogo inactivo (faltan venta + inventario + ABC)</h2>
+  <p class="lead">8,826 SKUs solo viven en el maestro. Muestra de 50 filas:</p>
+  <div class="scroll"><table><thead><tr><th>SKU</th><th>Producto</th><th>Género</th><th>Color</th><th>Talla</th></tr></thead><tbody>
+<tr><td>ACAMIDA120T2XL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>2XL</td></tr>
+<tr><td>ACAMIDA120TL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>L</td></tr>
+<tr><td>ACAMIDA120TXL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>XL</td></tr>
+<tr><td>ACAMIDA120TXS</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>XS</td></tr>
+<tr><td>ACAMIDA121T2XL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>2XL</td></tr>
+<tr><td>ACAMIDA121TL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>L</td></tr>
+<tr><td>ACAMIDA121TS</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>S</td></tr>
+<tr><td>ACAMIDA121TXL</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>XL</td></tr>
+<tr><td>ACAMIDA121TXS</td><td>ACTIVE ANDRE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>XS</td></tr>
+<tr><td>ACCMICA120T2XL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON AZUL</td><td>2XL</td></tr>
+<tr><td>ACCMICA120TM</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON AZUL</td><td>M</td></tr>
+<tr><td>ACCMICA120TXL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON AZUL</td><td>XL</td></tr>
+<tr><td>ACCMICA121TXL</td><td>ACTIVE CL&#193;SICA</td><td>CAB</td><td>GRIS CON VERDE</td><td>XL</td></tr>
+<tr><td>ACDMIDA120T2XL</td><td>ACTIVE DANI</td><td>DAMA</td><td>GRIS CON AZUL</td><td>2XL</td></tr>
+<tr><td>ACDMIDA121T2XL</td><td>ACTIVE DANI</td><td>DAMA</td><td>GRIS CON VERDE</td><td>2XL</td></tr>
+<tr><td>ACMMIDA120T2XL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>2XL</td></tr>
+<tr><td>ACMMIDA120TL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>L</td></tr>
+<tr><td>ACMMIDA120TM</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>M</td></tr>
+<tr><td>ACMMIDA120TS</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>S</td></tr>
+<tr><td>ACMMIDA120TXL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>XL</td></tr>
+<tr><td>ACMMIDA120TXS</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON AZUL</td><td>XS</td></tr>
+<tr><td>ACMMIDA121T2XL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>2XL</td></tr>
+<tr><td>ACMMIDA121TL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>L</td></tr>
+<tr><td>ACMMIDA121TM</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>M</td></tr>
+<tr><td>ACMMIDA121TS</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>S</td></tr>
+<tr><td>ACMMIDA121TXL</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>XL</td></tr>
+<tr><td>ACMMIDA121TXS</td><td>ACTIVE MAFE</td><td>DAMA</td><td>GRIS CON VERDE</td><td>XS</td></tr>
+<tr><td>CLADFCA30TL</td><td>ADVANCE CL&#193;SICA</td><td>CAB</td><td>GRIS CLARO</td><td>L</td></tr>
+<tr><td>CLADFCA30TS</td><td>ADVANCE CL&#193;SICA</td><td>CAB</td><td>GRIS CLARO</td><td>S</td></tr>
+<tr><td>ANDMIDA01T2XL</td><td>ANDRE</td><td>DAMA</td><td>AGUAMARINA</td><td>2XL</td></tr>
+<tr><td>ANDMIDA01TL</td><td>ANDRE</td><td>DAMA</td><td>AGUAMARINA</td><td>L</td></tr>
+<tr><td>ANDMIDA01TM</td><td>ANDRE</td><td>DAMA</td><td>AGUAMARINA</td><td>M</td></tr>
+<tr><td>ANDMIDA01TS</td><td>ANDRE</td><td>DAMA</td><td>AGUAMARINA</td><td>S</td></tr>
+<tr><td>ANDMIDA01TXL</td><td>ANDRE</td><td>DAMA</td><td>AGUAMARINA</td><td>XL</td></tr>
+<tr><td>ANDMIDA04T2XL</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO NE&#211;N</td><td>2XL</td></tr>
+<tr><td>ANDMIDA05T2XL</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>2XL</td></tr>
+<tr><td>ANDMIDA05TL</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>L</td></tr>
+<tr><td>ANDMIDA05TM</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>M</td></tr>
+<tr><td>ANDMIDA05TS</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>S</td></tr>
+<tr><td>ANDMIDA05TXS</td><td>ANDRE</td><td>DAMA</td><td>AMARILLO PASTEL</td><td>XS</td></tr>
+<tr><td>ANDMIDA09T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>2XL</td></tr>
+<tr><td>ANDMIDA09TL</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>L</td></tr>
+<tr><td>ANDMIDA09TM</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>M</td></tr>
+<tr><td>ANDMIDA09TS</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>S</td></tr>
+<tr><td>ANDMIDA09TXL</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>XL</td></tr>
+<tr><td>ANDMIDA09TXS</td><td>ANDRE</td><td>DAMA</td><td>AZUL CIELO</td><td>XS</td></tr>
+<tr><td>ANDMIDA11TL</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>L</td></tr>
+<tr><td>ANDMIDA11TM</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>M</td></tr>
+<tr><td>ANDMIDA11TS</td><td>ANDRE</td><td>DAMA</td><td>AZUL LAVANDA</td><td>S</td></tr>
+<tr><td>ANDMIDA13T2XL</td><td>ANDRE</td><td>DAMA</td><td>AZUL REY</td><td>2XL</td></tr>
+
+  </tbody></table></div>
+  <p class="note">Listado ampliado: 08_Catalogo_Inactivo_Faltan3.csv</p>
+
+  <h2>7. Fallos inversos (fuera del maestro)</h2>
+  <div class="grid g3">
+    <div class="card stat"><div class="n">105</div><div class="l">En VENTAS y no en GLOBAL</div></div>
+    <div class="card stat"><div class="n">107</div><div class="l">En Inventario y no en GLOBAL</div></div>
+    <div class="card stat"><div class="n">99</div><div class="l">En ABC y no en GLOBAL</div></div>
+  </div>
+  <h3>SKUs en VENTAS fuera de GLOBAL</h3>
+  <div>
+<span class="chip">ACCMICA120T4XL</span><span class="chip">ANTIVIBRADOR</span><span class="chip">BAN39EQ</span><span class="chip">BUFMIGE01TUN</span><span class="chip">BUFMIGE04TUN</span><span class="chip">BUFMIGE05TUN</span><span class="chip">BUFMIGE09TUN</span><span class="chip">BUFMIGE12TUN</span><span class="chip">BUFMIGE13TUN</span><span class="chip">BUFMIGE14TUN</span><span class="chip">BUFMIGE16TUN</span><span class="chip">BUFMIGE24TUN</span><span class="chip">BUFMIGE39TUN</span><span class="chip">BUFMIGE43TUN</span><span class="chip">BUFMIGE48TUN</span><span class="chip">BUFMIGE52TUN</span><span class="chip">BUFMIGE53TUN</span><span class="chip">BUFMIGE66TUN</span><span class="chip">BUFMIGE70TUN</span><span class="chip">CCBHMCA03T2XL</span><span class="chip">CCBHMCA03TL</span><span class="chip">CCBHMCA03TM</span><span class="chip">CCBHMCA03TS</span><span class="chip">CCBHMCA03TXL</span><span class="chip">CCBHMCA151T2XL</span><span class="chip">CCBHMCA151TL</span><span class="chip">CCBHMCA151TM</span><span class="chip">CCBHMCA151TS</span><span class="chip">CCBHMCA151TXL</span><span class="chip">CCBHMDA03TL</span><span class="chip">CCBHMDA03TM</span><span class="chip">CCBHMDA03TS</span><span class="chip">CCBHMDA03TXL</span><span class="chip">CCBHMDA03TXS</span><span class="chip">CCBHMDA151TL</span><span class="chip">CCBHMDA151TM</span><span class="chip">CCBHMDA151TS</span><span class="chip">CCBHMDA151TXS</span><span class="chip">CCBHMKI03T10</span><span class="chip">CCBHMKI03T12</span><span class="chip">CCBHMKI03T14</span><span class="chip">CCBHMKI03T8</span><span class="chip">CCBHMKI151T10</span><span class="chip">CCBHMKI151T12</span><span class="chip">CCBHMKI151T14</span><span class="chip">CCBHMKI151T8</span><span class="chip">CIT166CIB</span><span class="chip">JACDA01TXL</span><span class="chip">MANMEGE09TG</span><span class="chip">MANMEGE13TG</span><span class="chip">MANMEGE30TG</span><span class="chip">MANMIGE01TG</span><span class="chip">MANMIGE01TP</span><span class="chip">MANMIGE04TG</span><span class="chip">MANMIGE04TP</span><span class="chip">MANMIGE05TG</span><span class="chip">MANMIGE05TP</span><span class="chip">MANMIGE09TG</span><span class="chip">MANMIGE09TP</span><span class="chip">MANMIGE11TG</span><span class="chip">MANMIGE11TP</span><span class="chip">MANMIGE12TG</span><span class="chip">MANMIGE12TP</span><span class="chip">MANMIGE13TG</span><span class="chip">MANMIGE14TG</span><span class="chip">MANMIGE16TG</span><span class="chip">MANMIGE16TP</span><span class="chip">MANMIGE28TG</span><span class="chip">MANMIGE30TG</span><span class="chip">MANMIGE30TP</span><span class="chip">MANMIGE34TP</span><span class="chip">MANMIGE39TP</span><span class="chip">MANMIGE43TG</span><span class="chip">MANMIGE43TP</span><span class="chip">MANMIGE48TP</span><span class="chip">MANMIGE50TG</span><span class="chip">MANMIGE50TP</span><span class="chip">MANMIGE52TG</span><span class="chip">MANMIGE52TP</span><span class="chip">MANMIGE53TP</span><span class="chip">MANMIGE66TG</span><span class="chip">MANMIGE66TP</span><span class="chip">MANMIGE70TG</span><span class="chip">MANMIGE70TP</span><span class="chip">MANSPGE16TG</span><span class="chip">MANSPGE43TG</span><span class="chip">MARMIDA31TM</span><span class="chip">MARMIDA31TXS</span><span class="chip">OVEFTGE30TL</span><span class="chip">OVEFTGE30TM</span><span class="chip">OVEFTGE30TS</span><span class="chip">OVEFTGE30TXL</span><span class="chip">OVEFTGE31TL</span><span class="chip">OVEFTGE31TM</span><span class="chip">OVEFTGE31TS</span><span class="chip">OVEFTGE31TXL</span><span class="chip">OVEFTGE43TL</span><span class="chip">OVEFTGE43TM</span><span class="chip">OVEFTGE43TXL</span><span class="chip">PEB212TP</span><span class="chip">RENDER</span><span class="chip">SHONTCA66T3XL</span><span class="chip">SUC03EQV</span><span class="chip">SUC43EQV</span><span class="chip">SUC50EQV</span>
+</div><h3>SKUs en Inventario fuera de GLOBAL</h3><div>
+<span class="chip">BAN39EQ</span><span class="chip">BUFMIGE01TUN</span><span class="chip">BUFMIGE04TUN</span><span class="chip">BUFMIGE05TUN</span><span class="chip">BUFMIGE09TUN</span><span class="chip">BUFMIGE11TUN</span><span class="chip">BUFMIGE14TUN</span><span class="chip">BUFMIGE16TUN</span><span class="chip">BUFMIGE24TUN</span><span class="chip">BUFMIGE28TUN</span><span class="chip">BUFMIGE34TUN</span><span class="chip">BUFMIGE39TUN</span><span class="chip">BUFMIGE43TUN</span><span class="chip">BUFMIGE48TUN</span><span class="chip">BUFMIGE50TUN</span><span class="chip">BUFMIGE52TUN</span><span class="chip">BUFMIGE53TUN</span><span class="chip">BUFMIGE66TUN</span><span class="chip">BUFMIGE70TUN</span><span class="chip">CCBHMCA03T2XL</span><span class="chip">CCBHMCA03TL</span><span class="chip">CCBHMCA03TM</span><span class="chip">CCBHMCA03TS</span><span class="chip">CCBHMCA03TXL</span><span class="chip">CCBHMCA151T2XL</span><span class="chip">CCBHMCA151TL</span><span class="chip">CCBHMCA151TM</span><span class="chip">CCBHMCA151TS</span><span class="chip">CCBHMCA151TXL</span><span class="chip">CCBHMDA03TL</span><span class="chip">CCBHMDA03TM</span><span class="chip">CCBHMDA03TS</span><span class="chip">CCBHMDA03TXL</span><span class="chip">CCBHMDA03TXS</span><span class="chip">CCBHMDA151TL</span><span class="chip">CCBHMDA151TM</span><span class="chip">CCBHMDA151TS</span><span class="chip">CCBHMDA151TXL</span><span class="chip">CCBHMDA151TXS</span><span class="chip">CCBHMKI03T10</span><span class="chip">CCBHMKI03T12</span><span class="chip">CCBHMKI03T14</span><span class="chip">CCBHMKI03T8</span><span class="chip">CCBHMKI151T10</span><span class="chip">CCBHMKI151T12</span><span class="chip">CCBHMKI151T14</span><span class="chip">CCBHMKI151T8</span><span class="chip">CIN13EQ</span><span class="chip">CIT166CIB</span><span class="chip">EMP150TG</span><span class="chip">EMP150TM</span><span class="chip">EMP150TNG</span><span class="chip">EMP150TNM</span><span class="chip">EMP150TNP</span><span class="chip">EMP150TP</span><span class="chip">EMP150TXS</span><span class="chip">ETPRMP</span><span class="chip">HGTSM</span><span class="chip">LEB212TG</span><span class="chip">MANMEGE04TP</span><span class="chip">MANMEGE51TG</span><span class="chip">MANMIGE01TG</span><span class="chip">MANMIGE01TP</span><span class="chip">MANMIGE04TG</span><span class="chip">MANMIGE04TP</span><span class="chip">MANMIGE05TG</span><span class="chip">MANMIGE05TP</span><span class="chip">MANMIGE09TG</span><span class="chip">MANMIGE09TP</span><span class="chip">MANMIGE11TG</span><span class="chip">MANMIGE11TP</span><span class="chip">MANMIGE12TP</span><span class="chip">MANMIGE13TG</span><span class="chip">MANMIGE13TP</span><span class="chip">MANMIGE14TG</span><span class="chip">MANMIGE14TP</span><span class="chip">MANMIGE16TG</span><span class="chip">MANMIGE16TP</span><span class="chip">MANMIGE24TG</span><span class="chip">MANMIGE24TP</span><span class="chip">MANMIGE28TG</span><span class="chip">MANMIGE28TP</span><span class="chip">MANMIGE30TP</span><span class="chip">MANMIGE34TG</span><span class="chip">MANMIGE34TP</span><span class="chip">MANMIGE39TP</span><span class="chip">MANMIGE43TG</span><span class="chip">MANMIGE43TP</span><span class="chip">MANMIGE48TP</span><span class="chip">MANMIGE50TG</span><span class="chip">MANMIGE50TP</span><span class="chip">MANMIGE52TG</span><span class="chip">MANMIGE53TG</span><span class="chip">MANMIGE53TP</span><span class="chip">MANMIGE66TG</span><span class="chip">MANMIGE66TP</span><span class="chip">MANMIGE70TG</span><span class="chip">MANMIGE70TP</span><span class="chip">OVEFTGE30TXL</span><span class="chip">OVEFTGE31TL</span><span class="chip">OVEFTGE31TXL</span><span class="chip">STIRESM</span><span class="chip">SUC03EQV</span><span class="chip">SUC50EQV</span><span class="chip">VINRFL128SM</span><span class="chip">VINTADRY</span><span class="chip">VINTAES</span>
+</div><h3>SKUs en ABC fuera de GLOBAL</h3><div>
+<span class="chip">ACCMICA120T4XL</span><span class="chip">ANTIVIBRADOR</span><span class="chip">BAN39EQ</span><span class="chip">BUFMIGE01TUN</span><span class="chip">BUFMIGE04TUN</span><span class="chip">BUFMIGE05TUN</span><span class="chip">BUFMIGE09TUN</span><span class="chip">BUFMIGE12TUN</span><span class="chip">BUFMIGE13TUN</span><span class="chip">BUFMIGE14TUN</span><span class="chip">BUFMIGE16TUN</span><span class="chip">BUFMIGE24TUN</span><span class="chip">BUFMIGE39TUN</span><span class="chip">BUFMIGE43TUN</span><span class="chip">BUFMIGE48TUN</span><span class="chip">BUFMIGE52TUN</span><span class="chip">BUFMIGE53TUN</span><span class="chip">BUFMIGE66TUN</span><span class="chip">BUFMIGE70TUN</span><span class="chip">CCBHMCA03T2XL</span><span class="chip">CCBHMCA03TL</span><span class="chip">CCBHMCA03TM</span><span class="chip">CCBHMCA03TS</span><span class="chip">CCBHMCA03TXL</span><span class="chip">CCBHMCA151T2XL</span><span class="chip">CCBHMCA151TL</span><span class="chip">CCBHMCA151TM</span><span class="chip">CCBHMCA151TS</span><span class="chip">CCBHMCA151TXL</span><span class="chip">CCBHMDA03TL</span><span class="chip">CCBHMDA03TM</span><span class="chip">CCBHMDA03TS</span><span class="chip">CCBHMDA03TXL</span><span class="chip">CCBHMDA03TXS</span><span class="chip">CCBHMDA151TL</span><span class="chip">CCBHMDA151TM</span><span class="chip">CCBHMDA151TS</span><span class="chip">CCBHMDA151TXS</span><span class="chip">CCBHMKI03T10</span><span class="chip">CCBHMKI03T12</span><span class="chip">CCBHMKI03T14</span><span class="chip">CCBHMKI03T8</span><span class="chip">CCBHMKI151T10</span><span class="chip">CCBHMKI151T12</span><span class="chip">CCBHMKI151T14</span><span class="chip">CCBHMKI151T8</span><span class="chip">CIT166CIB</span><span class="chip">MANMEGE09TG</span><span class="chip">MANMEGE13TG</span><span class="chip">MANMEGE30TG</span><span class="chip">MANMIGE01TG</span><span class="chip">MANMIGE01TP</span><span class="chip">MANMIGE04TG</span><span class="chip">MANMIGE04TP</span><span class="chip">MANMIGE05TG</span><span class="chip">MANMIGE05TP</span><span class="chip">MANMIGE09TG</span><span class="chip">MANMIGE11TG</span><span class="chip">MANMIGE11TP</span><span class="chip">MANMIGE12TP</span><span class="chip">MANMIGE13TG</span><span class="chip">MANMIGE14TG</span><span class="chip">MANMIGE16TG</span><span class="chip">MANMIGE16TP</span><span class="chip">MANMIGE28TG</span><span class="chip">MANMIGE30TG</span><span class="chip">MANMIGE30TP</span><span class="chip">MANMIGE34TP</span><span class="chip">MANMIGE39TP</span><span class="chip">MANMIGE43TG</span><span class="chip">MANMIGE43TP</span><span class="chip">MANMIGE48TP</span><span class="chip">MANMIGE50TG</span><span class="chip">MANMIGE50TP</span><span class="chip">MANMIGE52TG</span><span class="chip">MANMIGE52TP</span><span class="chip">MANMIGE53TP</span><span class="chip">MANMIGE66TG</span><span class="chip">MANMIGE66TP</span><span class="chip">MANMIGE70TG</span><span class="chip">MANMIGE70TP</span><span class="chip">MANSPGE43TG</span><span class="chip">MARMIDA31TM</span><span class="chip">MARMIDA31TXS</span><span class="chip">OVEFTGE30TL</span><span class="chip">OVEFTGE30TM</span><span class="chip">OVEFTGE30TS</span><span class="chip">OVEFTGE30TXL</span><span class="chip">OVEFTGE31TL</span><span class="chip">OVEFTGE31TM</span><span class="chip">OVEFTGE31TS</span><span class="chip">OVEFTGE31TXL</span><span class="chip">OVEFTGE43TL</span><span class="chip">OVEFTGE43TM</span><span class="chip">OVEFTGE43TXL</span><span class="chip">PEB212TP</span><span class="chip">SUC03EQV</span><span class="chip">SUC43EQV</span><span class="chip">SUC50EQV</span>
+</div>
+
+  <h2>8. Metodología</h2>
+  <ol>
+    <li>Maestro = columna B de <b>SKU - Global</b> (Producto/Género/Color/Talla/Variante en C–G).</li>
+    <li>Ventas = columna SKU (E) · 95,078 filas · 3,398 SKUs únicos.</li>
+    <li>Inventario = SKU (C) + Cantidad (I); “sin inventario” si no existe o cantidad ≤ 0.</li>
+    <li>ABC = columna SKU (B) · 3,234 SKUs únicos.</li>
+    <li>Doble verificación por conjuntos de claves; se excluyó 1 SKU inválido (#N/A).</li>
+  </ol>
+
+  <div class="meta">
+    Generado: 2026-08-10 18:52 · Carpeta: CRUCE-SKU-GLOBAL-ANALISIS · HTML autocontenido para descarga/archivo.<br/>
+    Los botones CSV funcionan al abrir este HTML desde la carpeta de análisis (misma carpeta que los CSV).
+  </div>
+</div>
+</body>
+</html>
