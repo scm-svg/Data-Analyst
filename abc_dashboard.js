@@ -137,6 +137,10 @@
     };
   }
 
+  function skuIsActive(it, stock) {
+    return it.qty !== 0 || it.margin !== 0 || (stock || 0) > 0;
+  }
+
   function aggregateSalesScope(periodKeys) {
     const skuMap = new Map();
     const periodSet = new Set(periodKeys);
@@ -182,6 +186,33 @@
     return out;
   }
 
+  /** Ventas del período + SKUs con stock pero sin líneas de venta (P3 / solo inventario). */
+  function fullActiveScope(periodKeys, invMap) {
+    const map = aggregateSalesScope(periodKeys);
+    DATA.skus.forEach((sku) => {
+      if (map.has(sku)) return;
+      const stock = invMap.get(sku)?.total || 0;
+      if (stock <= 0) return;
+      if (state.store || state.category) return;
+      if (!passesSkuFilter(sku)) return;
+      const m = skuMeta(sku);
+      map.set(sku, {
+        sku,
+        producto: m.producto || sku,
+        modelo: m.modelo || m.producto || sku,
+        categoria: m.categoria || "",
+        genero: m.genero || "",
+        color: m.color || "",
+        talla: m.talla || "",
+        qty: 0,
+        revenue: 0,
+        cost: 0,
+        margin: 0,
+      });
+    });
+    return map;
+  }
+
   function assignAbcPareto(items, valueKey, classKey, extra) {
     const pos = items
       .filter((x) => x[valueKey] > 0)
@@ -206,10 +237,11 @@
     });
   }
 
-  function buildModelIndex(scopeSkuMap) {
+  function buildModelIndex(scopeSkuMap, invMap) {
     const models = new Map();
     scopeSkuMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
+      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      if (!skuIsActive(it, stock)) return;
       const key = it.modelo || it.producto;
       if (!models.has(key)) {
         models.set(key, {
@@ -218,13 +250,18 @@
           qty: 0,
           revenue: 0,
           margin: 0,
+          activeLow: false,
+          p3: false,
         });
       }
       const m = models.get(key);
+      const meta = skuMeta(sku);
       m.skus.push({ ...it, sku });
       m.qty += it.qty;
       m.revenue += it.revenue;
       m.margin += it.margin;
+      if (it.margin <= 0) m.activeLow = true;
+      if (meta.p3) m.p3 = true;
     });
     const list = [...models.values()];
     assignAbcPareto(list, "margin", "abcClass", {
@@ -232,9 +269,16 @@
       share: "marginShare",
       cum: "cumPct",
     });
-    list.sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
+    list.forEach((m) => {
+      if (m.margin <= 0) {
+        m.abcClass = "C";
+        m.activeLow = true;
+      }
+    });
+    list.sort((a, b) => (a.rank || 99999) - (b.rank || 99999));
     assignAbcPareto(list, "qty", "rotClass", {});
     list.forEach((m) => {
+      if (!m.rotClass) m.rotClass = "C";
       m.matrix = m.abcClass + m.rotClass;
       m.marginPctProd = m.revenue > 0 ? m.margin / m.revenue : 0;
     });
@@ -263,7 +307,7 @@
     return map;
   }
 
-  function computeAbc(skuMap) {
+  function computeAbc(skuMap, invMap) {
     const items = [...skuMap.values()];
     const pos = items
       .filter((x) => x.margin > 0)
@@ -283,26 +327,44 @@
         cumPct,
         marginShare: totalPos > 0 ? it.margin / totalPos : 0,
         margin: it.margin,
+        activeLow: false,
+      });
+    });
+    skuMap.forEach((it, sku) => {
+      if (out.has(sku)) return;
+      const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      if (!skuIsActive(it, stock)) return;
+      out.set(sku, {
+        class: "C",
+        rank: null,
+        cumPct: 1,
+        marginShare: 0,
+        margin: it.margin,
+        activeLow: true,
       });
     });
     return { abc: out, items, totalPosMargin: totalPos };
   }
 
-  function summarizePositive(abc, skuMap) {
+  function summarizePositive(abc, skuMap, invMap) {
     const counts = { A: 0, B: 0, C: 0 };
     const marginBy = { A: 0, B: 0, C: 0 };
     let n = 0;
+    let activeLow = 0;
     skuMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
+      const a = abc.get(sku);
+      if (!a) return;
       n++;
-      const c = abc.get(sku)?.class || "C";
+      const c = a.class;
       counts[c]++;
       marginBy[c] += it.margin;
+      if (a.activeLow) activeLow++;
     });
     const mt = marginBy.A + marginBy.B + marginBy.C || 1;
     return {
       counts,
       n,
+      activeLow,
       skuPct: { A: counts.A / (n || 1), B: counts.B / (n || 1), C: counts.C / (n || 1) },
       marginPct: { A: marginBy.A / mt, B: marginBy.B / mt, C: marginBy.C / mt },
       marginBy,
@@ -317,7 +379,7 @@
     const track = {};
     DATA.periods.forEach((p) => {
       const map = aggregateSalesScope([p.key]);
-      buildModelIndex(map).forEach((m) => {
+      buildModelIndex(map, null).forEach((m) => {
         if (!track[m.modelo]) track[m.modelo] = {};
         track[m.modelo][p.key] = m.abcClass;
       });
@@ -329,11 +391,13 @@
     const result = {};
     DATA.periods.forEach((p) => {
       const map = aggregateSalesScope([p.key]);
-      const { abc } = computeAbc(map);
+      const { abc } = computeAbc(map, null);
       map.forEach((it, sku) => {
-        if (it.margin <= 0) return;
+        if (it.qty === 0 && it.margin === 0) return;
+        const cls = abc.get(sku)?.class;
+        if (!cls) return;
         if (!result[sku]) result[sku] = {};
-        result[sku][p.key] = abc.get(sku).class;
+        result[sku][p.key] = cls;
       });
     });
     return result;
@@ -544,12 +608,15 @@
     if (!el) return;
     let netRev = 0;
     scopeSkuMap.forEach((it) => {
-      if (it.margin > 0) netRev += it.revenue;
+      netRev += it.revenue;
     });
     let stock = 0;
     scopeSkuMap.forEach((it, sku) => {
-      if (it.margin > 0) stock += invMap.get(sku)?.total || 0;
+      if (skuIsActive(it, invMap.get(sku)?.total || 0)) {
+        stock += invMap.get(sku)?.total || 0;
+      }
     });
+    const p3n = DATA.meta?.stats?.p3_integrados || (DATA.p3Skus || []).length || 0;
     el.innerHTML =
       '<div class="kpib"><div class="kv">' +
       summary.counts.A +
@@ -564,7 +631,12 @@
       "</div></div>" +
       '<div class="kpib"><div class="kv">' +
       fmt(stock, 0) +
-      '</div><div class="kl">Stock und.</div></div>';
+      '</div><div class="kl">Stock und.</div></div>' +
+      (p3n
+        ? '<div class="kpib"><div class="kv">' +
+          p3n +
+          '</div><div class="kl">P3 integrados</div><div class="ksub">Activos sin margen+</div></div>'
+        : "");
   }
 
   function renderPremisaCard(summary) {
@@ -597,15 +669,17 @@
     const sub = $("classTableSub");
     if (!body) return;
     const rows = filterModels(allModels);
-    if (sub) sub.textContent = rows.length + " productos (clase ABC fija al catálogo completo del período)";
+    if (sub) sub.textContent = rows.length + " productos activos (venta o stock; clase ABC fija al período seleccionado)";
     body.innerHTML = rows
       .slice(0, 250)
       .map(
         (m) =>
           "<tr><td>" +
-          m.rank +
+          (m.rank || "—") +
           "</td><td class=\"rn\">" +
           esc(m.modelo) +
+          (m.p3 ? ' <span class="abc abc-C" title="P3">P3</span>' : "") +
+          (m.activeLow ? ' <span style="color:var(--mu);font-size:.72rem">sin mgn+</span>' : "") +
           "</td><td>" +
           badge(m.abcClass) +
           "</td><td>" +
@@ -615,7 +689,7 @@
           "</td><td>" +
           fmtMoney(m.margin) +
           "</td><td>" +
-          pct(m.marginShare) +
+          pct(m.marginShare || 0) +
           "</td><td>" +
           fmt(m.qty, 0) +
           "</td><td>" +
@@ -632,18 +706,20 @@
     if (!body) return;
     const byModel = new Map();
     scopeSkuMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
+      const stock = invMap.get(sku)?.total || 0;
+      if (!skuIsActive(it, stock)) return;
       const a = globalAbc.get(sku);
+      if (!a) return;
       if (state.abcClass && a.class !== state.abcClass) return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
       if (state.modelo && it.modelo !== state.modelo) return;
       const k = it.modelo;
       if (!byModel.has(k)) byModel.set(k, { items: [], revenue: 0, qty: 0, stock: 0 });
       const g = byModel.get(k);
-      g.items.push({ ...it, abc: a, stock: invMap.get(sku)?.total || 0 });
+      g.items.push({ ...it, abc: a, stock });
       g.revenue += it.revenue;
       g.qty += it.qty;
-      g.stock += g.items[g.items.length - 1].stock;
+      g.stock += stock;
     });
     const models = [...byModel.entries()]
       .map(([modelo, g]) => {
@@ -743,7 +819,10 @@
     const total = Object.keys(modelTrack).length;
     if (sub)
       sub.textContent =
-        rows.length + " productos con cambios / " + total + " con venta en algún mes";
+        rows.length +
+        " productos con cambios / " +
+        total +
+        " con actividad de venta en algún mes (Pareto mensual; C si venta sin margen+)";
     head.innerHTML =
       "<tr><th>Producto</th>" +
       periods.map((p) => "<th>" + p.short + "</th>").join("") +
@@ -781,8 +860,8 @@
       if (stock <= 0) return;
       const unitCost = it.qty > 0 ? it.cost / it.qty : 0;
       const val = stock * unitCost;
-      let cl = "X";
-      if (it.margin > 0) cl = abc.get(sku)?.class || "C";
+      let cl = abc.get(sku)?.class || "X";
+      if (!abc.get(sku) && !skuIsActive(it, stock)) cl = "X";
       cap[cl].u += stock;
       cap[cl].v += val;
       cap[cl].models.add(it.modelo);
@@ -1124,11 +1203,11 @@
         return;
       }
       $("periodWarn").style.display = "none";
-      const scopeMap = aggregateSalesScope(keys);
-      const { abc: globalAbc } = computeAbc(scopeMap);
-      const summary = summarizePositive(globalAbc, scopeMap);
       const invMap = inventoryBySku(true);
-      const allModels = buildModelIndex(scopeMap);
+      const scopeMap = fullActiveScope(keys, invMap);
+      const { abc: globalAbc } = computeAbc(scopeMap, invMap);
+      const summary = summarizePositive(globalAbc, scopeMap, invMap);
+      const allModels = buildModelIndex(scopeMap, invMap);
       const modelTrack = modelClassByPeriod();
       const alerts = detectTransitions(skuClassByPeriod());
 
@@ -1159,15 +1238,18 @@
   }
 
   function exportCsv() {
-    const scopeMap = aggregateSalesScope(activePeriodKeys());
-    const { abc } = computeAbc(scopeMap);
     const invMap = inventoryBySku(true);
-    const lines = ["modelo,sku,genero,color,talla,clase,margen,ingresos_netos,qty,stock"];
+    const scopeMap = fullActiveScope(activePeriodKeys(), invMap);
+    const { abc } = computeAbc(scopeMap, invMap);
+    const lines = ["modelo,sku,genero,color,talla,clase,margen,ingresos_netos,qty,stock,p3,sin_margen_positivo"];
     scopeMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
+      const stock = invMap.get(sku)?.total || 0;
+      if (!skuIsActive(it, stock)) return;
       if (state.modelo && it.modelo !== state.modelo) return;
       const a = abc.get(sku);
+      if (!a) return;
       const v = variantInfo(sku);
+      const meta = skuMeta(sku);
       lines.push(
         [
           it.modelo,
@@ -1179,7 +1261,9 @@
           a.margin.toFixed(2),
           it.revenue.toFixed(2),
           it.qty,
-          invMap.get(sku)?.total || 0,
+          stock,
+          meta.p3 ? 1 : 0,
+          a.activeLow ? 1 : 0,
         ].join(",")
       );
     });

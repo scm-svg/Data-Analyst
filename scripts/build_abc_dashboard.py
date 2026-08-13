@@ -125,7 +125,59 @@ def load_inventory() -> pd.DataFrame:
     return df
 
 
-def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
+def load_p3_supplement() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
+    """SKUs activos fuera de ABC (P3) — cruce SKU-GLOBAL."""
+    path = DATA_DIR / "SKUs_Faltantes_ABC.xlsx"
+    if not path.exists():
+        return None
+    resumen = pd.read_excel(path, sheet_name="Resumen por SKU")
+    inv_detail = pd.read_excel(path, sheet_name="Detalle Inventario")
+    sales_detail = pd.read_excel(path, sheet_name="Detalle Ventas por Fecha")
+    for df in (resumen, inv_detail, sales_detail):
+        if "SKU" in df.columns:
+            df["SKU"] = df["SKU"].astype(str).str.strip()
+    return resumen, inv_detail, sales_detail
+
+
+def merge_p3_into_inventory(inv: pd.DataFrame, p3: tuple) -> pd.DataFrame:
+    """Añade filas de inventario P3 que no están en el archivo principal."""
+    resumen, inv_detail, _ = p3
+    known = set(inv["SKU"].unique())
+    extra_rows = []
+    for _, r in inv_detail.iterrows():
+        sku = clean_str(r["SKU"])
+        if not sku or sku in known:
+            continue
+        info = resumen[resumen["SKU"] == sku]
+        row = info.iloc[0] if len(info) else r
+        extra_rows.append(
+            {
+                "Ubicación": clean_str(r.get("Almacen"), "P3"),
+                "Producto": clean_str(row.get("Producto") or r.get("Producto"), sku),
+                "SKU": sku,
+                "MODELO": clean_str(row.get("Producto") or r.get("Producto"), sku),
+                "GENERO": clean_str(row.get("GENERO"), ""),
+                "COLOR": clean_str(row.get("COLOR"), ""),
+                "TALLA": clean_str(row.get("TALLA"), ""),
+                "Cantidad en inventario": float(r.get("Cantidad") or 0),
+            }
+        )
+        known.add(sku)
+    if not extra_rows:
+        return inv
+    extra = pd.DataFrame(extra_rows)
+    merged = pd.concat([inv, extra], ignore_index=True)
+    merged["ubicacion"] = merged["Ubicación"].fillna("SIN UBICACIÓN").astype(str).str.strip()
+    merged["modelo"] = merged["MODELO"].fillna("").astype(str).str.strip()
+    merged["qty"] = pd.to_numeric(
+        merged["Cantidad en inventario"], errors="coerce"
+    ).fillna(0)
+    return merged
+
+
+def build_indexes(
+    sales: pd.DataFrame, inv: pd.DataFrame, p3: tuple | None = None
+) -> dict:
     periods = sorted(sales["period"].unique())
     period_meta = []
     for p in periods:
@@ -161,15 +213,52 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     inv_gen = inv.groupby("SKU")["GENERO"].first().to_dict() if "GENERO" in inv.columns else {}
     inv_col = inv.groupby("SKU")["COLOR"].first().to_dict() if "COLOR" in inv.columns else {}
     inv_tal = inv.groupby("SKU")["TALLA"].first().to_dict() if "TALLA" in inv.columns else {}
+
+    p3_skus: set[str] = set()
+    p3_meta: dict[str, dict] = {}
+    if p3:
+        resumen, _, _ = p3
+        for _, r in resumen.iterrows():
+            sku = clean_str(r["SKU"])
+            if not sku:
+                continue
+            p3_skus.add(sku)
+            p3_meta[sku] = {
+                "producto": clean_str(r.get("Producto"), sku),
+                "genero": clean_str(r.get("GENERO"), ""),
+                "color": clean_str(r.get("COLOR"), ""),
+                "talla": clean_str(r.get("TALLA"), ""),
+                "modelo": clean_str(r.get("Producto"), sku),
+                "en_ventas": "SI" in clean_str(r.get("En_Ventas"), "").upper(),
+                "en_inventario": "SI" in clean_str(r.get("En_Inventario"), "").upper(),
+            }
+
     for sku in skus:
         info = sales_info.get(sku, {})
+        p3 = p3_meta.get(sku, {})
         sku_master[sku] = {
-            "producto": clean_str(info.get("producto") or inv_model.get(sku, sku), sku),
+            "producto": clean_str(
+                info.get("producto") or p3.get("producto") or inv_model.get(sku, sku),
+                sku,
+            ),
             "categoria": clean_str(info.get("categoria"), "Sin ventas / solo stock"),
-            "genero": clean_str(info.get("genero") or inv_gen.get(sku, "")),
-            "color": clean_str(info.get("color") or inv_col.get(sku, "")),
-            "talla": clean_str(info.get("talla") or inv_tal.get(sku, "")),
-            "modelo": clean_str(inv_model.get(sku) or info.get("producto") or sku, sku),
+            "genero": clean_str(
+                info.get("genero") or p3.get("genero") or inv_gen.get(sku, "")
+            ),
+            "color": clean_str(
+                info.get("color") or p3.get("color") or inv_col.get(sku, "")
+            ),
+            "talla": clean_str(
+                info.get("talla") or p3.get("talla") or inv_tal.get(sku, "")
+            ),
+            "modelo": clean_str(
+                inv_model.get(sku)
+                or p3.get("modelo")
+                or info.get("producto")
+                or sku,
+                sku,
+            ),
+            "p3": sku in p3_skus,
         }
 
     sku_idx = {s: i for i, s in enumerate(skus)}
@@ -213,6 +302,8 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "periodos": len(periods),
         "rango": f"{period_meta[0]['label']} → {period_meta[-1]['label']}",
         "margen_neto_total": round(float(sales["margin"].sum()), 2),
+        "p3_skus": len(p3_skus),
+        "p3_integrados": len(p3_skus & set(skus)),
     }
 
     return {
@@ -235,6 +326,7 @@ def build_indexes(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "skuMaster": sku_master,
         "salesRows": rows,
         "invRows": inv_rows,
+        "p3Skus": sorted(p3_skus),
     }
 
 
@@ -278,7 +370,10 @@ def build_unified_html(template: str, js: str, data_json: str) -> str:
 def main() -> None:
     sales = load_sales()
     inv = load_inventory()
-    payload = build_indexes(sales, inv)
+    p3 = load_p3_supplement()
+    if p3:
+        inv = merge_p3_into_inventory(inv, p3)
+    payload = build_indexes(sales, inv, p3)
     payload = sanitize_for_json(payload)
     data_json = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     OUT_JSON.write_text(data_json, encoding="utf-8")
