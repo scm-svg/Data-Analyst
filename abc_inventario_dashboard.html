@@ -144,6 +144,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   <button class="tab" data-tab="catalogo" onclick="AbcDashboard.st('catalogo')">Catálogo</button>
   <button class="tab" data-tab="evolucion" onclick="AbcDashboard.st('evolucion')">Migración mensual</button>
   <button class="tab" data-tab="capital" onclick="AbcDashboard.st('capital')">Capital e inventario</button>
+  <button class="tab" data-tab="sinventa" onclick="AbcDashboard.st('sinventa')">Sin venta + stock</button>
   <button class="tab" data-tab="matriz" onclick="AbcDashboard.st('matriz')">Matriz cruzada</button>
   <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas</button>
 </div>
@@ -155,7 +156,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
         <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
       </div>
       <div class="card">
-        <h3>Margen por clase</h3><div class="sub">Participación del margen de contribución</div>
+        <h3>Ingresos netos por clase</h3><div class="sub">Participación de ingresos netos (venta − costo) por clase ABC</div>
         <div class="chart-row"><div class="cw"><canvas id="cDonutMarg"></canvas></div><div class="side-legend" id="legendMarg"></div></div>
       </div>
     </div>
@@ -175,7 +176,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Clasificación ABC — productos</h3>
       <div class="sub" id="classTableSub"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>#</th><th>Producto</th><th>ABC</th><th>Demanda (XYZ)</th><th>Ingresos netos</th><th>Margen $</th><th>% venta</th><th>Unidades</th><th>% mgn prod.</th>
+        <th>#</th><th>Producto</th><th>ABC</th><th>Demanda (XYZ)</th><th>Ingreso bruto</th><th>Ingresos netos</th><th>% venta</th><th>Unidades</th><th>% mgn de ganancia</th>
       </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
@@ -184,7 +185,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
       <h3>Catálogo por modelo</h3>
       <div class="sub">Expandir fila → variantes (SKU). Clase C incluye activos con stock sin venta en el período.</div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th></th><th>ABC</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th><th>Demanda</th>
+        <th></th><th>ABC</th><th>Modelo / variante</th><th>Ingreso bruto</th><th>Und.</th><th>Stock</th><th>Demanda</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
     </div>
   </section>
@@ -213,6 +214,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
         <div><div class="sub">Valor en inventario ($)</div><div id="valueBar"></div></div>
       </div>
       <div id="capitalDiag" style="margin-top:12px"></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-sinventa">
+    <div class="g3" id="sinVentaKpis"></div>
+    <div class="card">
+      <h3>Sin venta en período + stock</h3>
+      <div class="sub" id="sinVentaSub">Productos con inventario pero sin ventas en el período seleccionado</div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th></th><th>Modelo</th><th>SKUs</th><th>Stock und.</th><th>Valor est.</th>
+      </tr></thead><tbody id="sinVentaBody"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-matriz">

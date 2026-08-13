@@ -27,6 +27,7 @@
     search: "",
     expandedModels: new Set(),
     expandedAlertModels: new Set(),
+    expandedSinVentaModels: new Set(),
   };
   let filtersInitialized = false;
 
@@ -246,9 +247,14 @@
       totals[loc] = (totals[loc] || 0) + r[2];
     });
     return DATA.locations.filter((loc) => {
-      if (loc === "Sin inventario") return false;
+      if (loc === "Sin inventario" || loc === "Transito") return false;
       return (totals[loc] || 0) > 0;
     });
+  }
+
+  /** Excluye ventas con ingresos netos negativos (ej. MAR con margen en rojo). */
+  function hasNegativeNetIncome(it) {
+    return it.revenue > 0 && it.margin <= 0;
   }
 
   function assignAbcPareto(items, valueKey, classKey, extra) {
@@ -280,6 +286,7 @@
     const models = new Map();
     scopeSkuMap.forEach((it, sku) => {
       const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
+      if (hasNegativeNetIncome(it)) return;
       if (it.revenue <= 0 && stock <= 0) return;
       const key = it.modelo || it.producto;
       if (!models.has(key)) {
@@ -300,7 +307,7 @@
       m.margin += it.margin;
       m.stock += stock;
     });
-    const all = [...models.values()];
+    const all = [...models.values()].filter((m) => !hasNegativeNetIncome(m));
     const ranked = all.filter((m) => m.revenue > 0);
     assignAbcPareto(ranked, "revenue", "abcClass", {
       rank: "rank",
@@ -365,7 +372,7 @@
   function computeAbc(skuMap, invMap) {
     const items = [...skuMap.values()];
     const pos = items
-      .filter((x) => x.revenue > 0)
+      .filter((x) => x.revenue > 0 && x.margin > 0)
       .sort((a, b) => b.revenue - a.revenue);
     const totalPos = pos.reduce((s, x) => s + x.revenue, 0);
     const out = new Map();
@@ -388,6 +395,7 @@
     });
     skuMap.forEach((it, sku) => {
       if (out.has(sku)) return;
+      if (hasNegativeNetIncome(it)) return;
       const stock = invMap ? invMap.get(sku)?.total || 0 : 0;
       if (!skuIsActive(it, stock)) return;
       out.set(sku, {
@@ -411,6 +419,7 @@
     let sinVenta = 0;
     skuMap.forEach((it, sku) => {
       const stock = invMap.get(sku)?.total || 0;
+      if (hasNegativeNetIncome(it)) return;
       if (!skuIsActive(it, stock)) return;
       const a = abc.get(sku);
       if (!a) return;
@@ -493,7 +502,7 @@
             from === "A" && (to === "B" || to === "C")
               ? "Pierde peso acumulado en venta — revisar precio, promo y stock."
               : from === "B" && to === "C"
-                ? "Sale del núcleo de venta — evaluar liquidación o bundle."
+                ? "Bajó de categoría — conviene liquidar o armar combos."
                 : to === "A"
                   ? "Entra al top de venta acumulada — asegurar abastecimiento."
                   : "Ajuste en participación acumulada — monitorear 2–3 meses.",
@@ -743,7 +752,7 @@
       '</div><div class="kl">Venta clase A</div></div>' +
       '<div class="kpib"><div class="kv">' +
       fmtMoney(netRev) +
-      '</div><div class="kl">Ingresos netos</div><div class="ksub">' +
+      '</div><div class="kl">Ingreso bruto</div><div class="ksub">' +
       esc(plabel) +
       "</div></div>" +
       '<div class="kpib"><div class="kv">' +
@@ -756,7 +765,7 @@
     if (!el) return;
     const t = DATA.meta.premisas;
     el.innerHTML =
-      '<table class="rt"><thead><tr><th></th><th>SKUs</th><th>Margen</th></tr></thead><tbody>' +
+      '<table class="rt"><thead><tr><th></th><th>SKUs</th><th>Ingresos netos</th></tr></thead><tbody>' +
       ["A", "B", "C"]
         .map(
           (c) =>
@@ -822,6 +831,7 @@
     const byModel = new Map();
     scopeSkuMap.forEach((it, sku) => {
       const stock = invMap.get(sku)?.total || 0;
+      if (hasNegativeNetIncome(it)) return;
       if (!skuIsActive(it, stock)) return;
       const a = globalAbc.get(sku);
       if (state.abcClass && a && a.class !== state.abcClass) return;
@@ -1142,7 +1152,7 @@
         " SKUs · " +
         c.models.size +
         " modelos</h4>" +
-        '<div class="cscroll" style="max-height:280px"><table class="ct"><thead><tr><th>Modelo</th><th>SKU</th><th>Género</th><th>Color</th><th>Talla</th><th>Venta</th><th>Margen</th><th>Stock</th></tr></thead><tbody>' +
+        '<div class="cscroll" style="max-height:280px"><table class="ct"><thead><tr><th>Modelo</th><th>SKU</th><th>Género</th><th>Color</th><th>Talla</th><th>Ingreso bruto</th><th>Ingresos netos</th><th>Stock</th></tr></thead><tbody>' +
         sorted
           .slice(0, 120)
           .map(
@@ -1214,7 +1224,7 @@
           );
         })
         .join("") +
-        '<div class="cap-card"><div class="lbl">Sin venta en período + stock</div><div class="big">' +
+        '<div class="cap-card mx-click" style="cursor:pointer" onclick="AbcDashboard.st(\'sinventa\')" title="Ver detalle completo"><div class="lbl">Sin venta en período + stock</div><div class="big">' +
         fmt(cap.X.u, 0) +
         '</div><div class="sub">' +
         cap.X.skus +
@@ -1262,12 +1272,12 @@
         fmtMoney(cap.C.v) +
         "</strong> en clase C (~" +
         pct(summary.marginPct.C) +
-        " del margen). Revisar promoción o bajar recompra.</div>" +
+        " de ingresos netos). Revisar promoción o bajar recompra.</div>" +
         '<div class="diag g"><strong>' +
         fmtMoney(cap.A.v) +
         "</strong> en clase A (~" +
         pct(summary.marginPct.A) +
-        " del margen). Proteger abastecimiento.</div></div>" +
+        " de ingresos netos). Proteger abastecimiento.</div></div>" +
         (cap.X.u > 0
           ? '<div class="diag m" style="margin-top:8px">' +
             fmt(cap.X.u, 0) +
@@ -1276,6 +1286,138 @@
             " SKUs). Revisar liquidación o activación comercial.</div>"
           : "");
     }
+  }
+
+  function renderSinVentaStock(scopeSkuMap, invMap) {
+    const kpiEl = $("sinVentaKpis");
+    const subEl = $("sinVentaSub");
+    const body = $("sinVentaBody");
+    if (!body) return;
+
+    const byModel = new Map();
+    let totalU = 0;
+    let totalV = 0;
+    let skuCount = 0;
+
+    DATA.skus.forEach((sku) => {
+      const stock = invMap.get(sku)?.total || 0;
+      if (stock <= 0) return;
+      if (state.modelo && !passesSkuFilter(sku)) return;
+      const it = scopeSkuMap.get(sku) || {
+        qty: 0,
+        cost: 0,
+        revenue: 0,
+        margin: 0,
+        modelo: skuMeta(sku).modelo || sku,
+      };
+      if (it.revenue > 0) return;
+      const meta = skuMeta(sku);
+      const modelo = it.modelo || meta.modelo || meta.producto || sku;
+      if (!matchesSearch(modelo + " " + sku)) return;
+
+      const unitCost = it.qty > 0 ? it.cost / it.qty : 0;
+      const val = stock * unitCost;
+      skuCount++;
+      totalU += stock;
+      totalV += val;
+
+      if (!byModel.has(modelo)) {
+        byModel.set(modelo, { modelo, skus: [], stock: 0, val: 0 });
+      }
+      const g = byModel.get(modelo);
+      g.skus.push({
+        sku,
+        genero: meta.genero || "—",
+        color: meta.color || "—",
+        talla: meta.talla || "—",
+        stock,
+        val,
+        xyz: meta.xyz || "Z",
+        cv: meta.cv || 0,
+      });
+      g.stock += stock;
+      g.val += val;
+    });
+
+    const models = [...byModel.values()].sort((a, b) => b.stock - a.stock || b.val - a.val);
+
+    if (kpiEl) {
+      kpiEl.innerHTML =
+        '<div class="cap-card"><div class="lbl">Unidades en stock</div><div class="big">' +
+        fmt(totalU, 0) +
+        '</div><div class="sub">Sin venta en el período seleccionado</div></div>' +
+        '<div class="cap-card"><div class="lbl">SKUs</div><div class="big">' +
+        skuCount +
+        '</div><div class="sub">Con inventario y cero ventas</div></div>' +
+        '<div class="cap-card"><div class="lbl">Modelos</div><div class="big">' +
+        models.length +
+        '</div><div class="sub">Productos distintos afectados</div></div>' +
+        '<div class="cap-card"><div class="lbl">Valor estimado</div><div class="big">' +
+        fmtUsd(totalV) +
+        '</div><div class="sub">Stock × costo unitario</div></div>';
+    }
+
+    if (subEl) {
+      let txt =
+        fmt(totalU, 0) +
+        " und. · " +
+        skuCount +
+        " SKUs · " +
+        models.length +
+        " modelos · " +
+        fmtUsd(totalV) +
+        " est.";
+      if (state.location) txt += " · stock en «" + state.location + "»";
+      subEl.textContent = txt;
+    }
+
+    let html = "";
+    models.slice(0, 150).forEach((m) => {
+      const open = state.expandedSinVentaModels.has(m.modelo);
+      html +=
+        '<tr class="row-model"><td><span class="expander" data-sv-toggle="' +
+        esc(m.modelo) +
+        '">' +
+        (open ? "▼" : "▶") +
+        '</span></td><td class="rn">' +
+        esc(m.modelo) +
+        "</td><td>" +
+        m.skus.length +
+        "</td><td>" +
+        fmt(m.stock, 0) +
+        "</td><td>" +
+        fmtUsd(m.val) +
+        "</td></tr>";
+      if (open) {
+        m.skus
+          .sort((a, b) => b.stock - a.stock)
+          .forEach((v) => {
+            html +=
+              '<tr class="row-variant"><td></td><td>' +
+              esc(v.sku) +
+              " · " +
+              esc(v.color) +
+              " · " +
+              esc(v.talla) +
+              "</td><td>" +
+              xyzBadge(v.xyz, v.cv) +
+              "</td><td>" +
+              fmt(v.stock, 0) +
+              "</td><td>" +
+              fmtUsd(v.val) +
+              "</td></tr>";
+          });
+      }
+    });
+    body.innerHTML = html;
+    body.querySelectorAll("[data-sv-toggle]").forEach((el) => {
+      el.onclick = () => {
+        const mod = el.getAttribute("data-sv-toggle");
+        if (state.expandedSinVentaModels.has(mod)) state.expandedSinVentaModels.delete(mod);
+        else state.expandedSinVentaModels.add(mod);
+        renderSinVentaStock(scopeSkuMap, invMap);
+      };
+    });
   }
 
   function renderAlerts(alerts, scopeSkuMap, invMap, globalAbc) {
@@ -1454,6 +1596,7 @@
       renderCatalog(scopeMap, globalAbc, invLoc);
       renderMigration(modelTrack);
       renderCapital(scopeMap, globalAbc, invLoc, summary);
+      renderSinVentaStock(scopeMap, invLoc);
       renderCrossMatrix(scopeMap, globalAbc, invAll);
       renderAlerts(alerts, scopeMap, invLoc, globalAbc);
 
@@ -1548,6 +1691,7 @@
       state.customPeriodKeys.clear();
       state.expandedModels.clear();
       state.expandedAlertModels.clear();
+      state.expandedSinVentaModels.clear();
       ["fModel", "fStore", "fCat", "fLoc", "fAbc"].forEach((id) => ($(id).value = ""));
       $("fSearch").value = "";
       buildPeriodFilters();
