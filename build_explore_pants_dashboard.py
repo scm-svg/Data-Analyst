@@ -22,7 +22,7 @@ ME_SHORT = {
     "septiembre": "Sep", "octubre": "Oct", "noviembre": "Nov", "diciembre": "Dic",
 }
 LINEAS = ["CAB", "DAMA", "KIDS"]
-STORE_ORDER = ["GRIE", "SAMBIL", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA", "TALLER"]
+STORE_ORDER = ["GRIE", "SAMBIL", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA", "WEB", "PEDIDOS", "TALLER"]
 STORE_ALIASES = {
     "LA GRIETA": "GRIE",
     "GRIETA": "GRIE",
@@ -39,6 +39,8 @@ STORE_ALIASES = {
     "TOLÓN": "TOLON",
     "VELA": "VELA",
     "LA VELA": "VELA",
+    "WEB": "WEB",
+    "PEDIDOS": "PEDIDOS",
     "TALLER": "TALLER",
     "TALLER TERMINADO": "TALLER",
 }
@@ -107,6 +109,14 @@ def normalize_genero(value: str) -> str:
     return g
 
 
+def normalize_color(value: str) -> str:
+    c = str(value).strip()
+    cl = c.lower()
+    if cl in ("gris claro", "gris oscuro"):
+        return "Gris"
+    return c
+
+
 def mes_sort_key(mes: str):
     if "-" not in mes:
         return (9999, 99)
@@ -153,10 +163,8 @@ def build_data():
         if qty == 0:
             continue
         tienda = normalize_store(get_col_like(r, "UBICAC"))
-        if tienda in ("WEB", "PEDIDOS"):
-            continue
         genero = normalize_genero(get_col(r, "Genero", "GENERO", "Género"))
-        color = get_col(r, "Color", "COLOR")
+        color = normalize_color(get_col(r, "Color", "COLOR"))
         talla = get_col(r, "Talla", "TALLA")
         mes = get_col(r, "Fecha", "FECHA").lower()
         if not mes or not genero:
@@ -211,7 +219,7 @@ def build_data():
     for r in inv:
         tienda = normalize_store(get_col_like(r, "Ubicac"))
         genero = normalize_genero(get_col(r, "Genero", "GENERO", "Género"))
-        color = get_col(r, "Color", "COLOR")
+        color = normalize_color(get_col(r, "Color", "COLOR"))
         talla = get_col(r, "Talla", "TALLA", "talla")
         qty = round(parse_num(get_col_like(r, "Cantidad")))
         if qty == 0 or not genero:
