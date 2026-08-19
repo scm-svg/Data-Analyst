@@ -13,7 +13,35 @@ JACKET_TEMPLATE = Path(__file__).resolve().parent / "Dashboard_Jacket_2_0 (3).ht
 TEMPLATE_PATH = Path(__file__).resolve().parent / "dash_shortplaya_template.html"
 OUTPUT_PATH = Path(__file__).resolve().parent / "dash_shortplaya.html"
 
-MODELS = ["SHORT PLAYA UNICOLOR", "SHORT PLAYA ESTAMPADO"]
+MODELS = ["SHORT PLAYA UNICOLOR", "SHORT PLAYA SUBLIMADO"]
+MODEL_SUBLIMADO = "SHORT PLAYA SUBLIMADO"
+MODEL_UNICOLOR = "SHORT PLAYA UNICOLOR"
+UNICOLOR_ACTIVE_COLORS = {
+    "Verde Pino", "Azul Pizarra", "Azul Verdoso", "Marron", "Cereza",
+}
+SUBLIMADO_ACTIVE_COLORS = {"Playuela", "Sal", "Tucupido", "Sombrero"}
+COLOR_ALIASES = {
+    "sal": "Sal",
+    "playuela": "Playuela",
+    "tucupido": "Tucupido",
+    "sombrero": "Sombrero",
+    "verde pino": "Verde Pino",
+    "azul pizarra": "Azul Pizarra",
+    "azul verdoso": "Azul Verdoso",
+    "marron": "Marron",
+    "marrón": "Marron",
+    "cereza": "Cereza",
+    "aguamarina": "Aguamarina",
+    "terracota": "Terracota",
+    "gris azulado": "Gris Azulado",
+    "azul marino": "Azul Marino",
+    "kaki": "Kaki",
+    "azul rey": "Azul Rey",
+    "rojo": "Rojo",
+    "verde oliva": "Verde Oliva",
+    "coral": "Coral",
+    "royal": "Royal",
+}
 LINEAS = ["CAB", "KIDS"]
 MESES_ORDER = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -120,21 +148,38 @@ def normalize_color(value: str) -> str:
     c = str(value).strip()
     if not c:
         return c
+    key = c.lower()
+    if key in COLOR_ALIASES:
+        return COLOR_ALIASES[key]
     return c[0].upper() + c[1:] if len(c) > 1 else c.upper()
 
 
 def normalize_modelo(producto: str) -> str:
     p = producto.upper().strip()
     if "ESTAMPADO" in p:
-        return "SHORT PLAYA ESTAMPADO"
-    return "SHORT PLAYA UNICOLOR"
+        return MODEL_SUBLIMADO
+    return MODEL_UNICOLOR
 
 
 def normalize_modelo_inv(modelo: str) -> str:
     m = modelo.upper().strip()
     if "ESTAMPADO" in m:
-        return "SHORT PLAYA ESTAMPADO"
-    return "SHORT PLAYA UNICOLOR"
+        return MODEL_SUBLIMADO
+    return MODEL_UNICOLOR
+
+
+def is_active_color(modelo: str, color: str) -> bool:
+    if modelo == MODEL_UNICOLOR:
+        return color in UNICOLOR_ACTIVE_COLORS
+    if modelo == MODEL_SUBLIMADO:
+        return color in SUBLIMADO_ACTIVE_COLORS
+    return True
+
+
+def include_in_dashboard(modelo: str, color: str) -> bool:
+    if modelo == MODEL_SUBLIMADO:
+        return color in SUBLIMADO_ACTIVE_COLORS
+    return True
 
 
 def mes_sort_key(mes: str):
@@ -164,7 +209,12 @@ def compute_production_plan(raw_rows, stock, stock_taller_by_key):
         if not model_rows:
             continue
         for genero in LINEAS:
-            colors = sorted({r["color"] for r in model_rows if r["genero"] == genero})
+            colors = sorted(
+                {
+                    r["color"] for r in model_rows
+                    if r["genero"] == genero and is_active_color(modelo, r["color"])
+                }
+            )
             for color in colors:
                 tallas = sorted(
                     {
@@ -280,6 +330,8 @@ def build_data():
         tienda = normalize_store(get_col_like(r, "tienda / ubic", "ubic"))
         producto = get_col_like(r, "Producto")
         modelo = normalize_modelo(producto)
+        if not include_in_dashboard(modelo, color):
+            continue
         v = round(qty)
         if v < 0:
             returns_units += v
@@ -293,6 +345,7 @@ def build_data():
             "talla": talla,
             "mes": mes,
             "modelo": modelo,
+            "activo": is_active_color(modelo, color),
             "v": v,
         })
 
@@ -311,6 +364,8 @@ def build_data():
         color = normalize_color(get_col_like(r, "COLOR", "Color"))
         talla = get_col_like(r, "TALLA", "Talla", "talla")
         modelo = normalize_modelo_inv(get_col_like(r, "MODELO", "Modelo"))
+        if not include_in_dashboard(modelo, color):
+            continue
         qty = round(parse_num(get_col_like(r, "Cantidad")))
         if qty == 0:
             continue
@@ -371,6 +426,13 @@ def build_data():
         "velocity_months": vel_months,
         "velocity_months_label": vel_labels,
         "periodo": periodo,
+        "colores_activos": {
+            MODEL_UNICOLOR: sorted(UNICOLOR_ACTIVE_COLORS),
+            MODEL_SUBLIMADO: sorted(SUBLIMADO_ACTIVE_COLORS),
+        },
+        "colores_descontinuados": sorted(
+            {r["color"] for r in raw_rows if r["modelo"] == MODEL_UNICOLOR and not r.get("activo", True)}
+        ),
         "_meta": {"returns_units": returns_units},
     }
 
