@@ -25,6 +25,7 @@ ME_SHORT = {
     "septiembre": "Sep", "octubre": "Oct", "noviembre": "Nov", "diciembre": "Dic",
 }
 PARTIAL_MONTH = "agosto-2026"
+VELOCITY_MONTHS_COUNT = 6
 HIGH_SEASON_FACTOR = 1.25
 COVER_MONTHS = 9
 LEAD_MONTHS = 3
@@ -135,10 +136,11 @@ def month_label(mes: str) -> str:
 
 
 def velocity_months(meses_order):
-    if PARTIAL_MONTH in meses_order and meses_order.index(PARTIAL_MONTH) >= 3:
+    n = VELOCITY_MONTHS_COUNT
+    if PARTIAL_MONTH in meses_order and meses_order.index(PARTIAL_MONTH) >= n:
         i = meses_order.index(PARTIAL_MONTH)
-        return meses_order[i - 3 : i]
-    return meses_order[-3:]
+        return meses_order[i - n : i]
+    return meses_order[-n:]
 
 
 def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
@@ -154,6 +156,7 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
             )
             talla_rows = []
             color_v = 0.0
+            color_v_base = 0.0
             color_stk = 0
             color_stk_taller = 0
             color_buy = 0
@@ -164,6 +167,7 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
                     if r["genero"] == genero and r["color"] == color and r["talla"] == talla
                     and r["mes"] in vel_months
                 ) / max(len(vel_months), 1)
+                v_mes_base = round(base_v, 1)
                 v_mes = round(base_v * HIGH_SEASON_FACTOR, 1)
                 key = f"{MODEL}/{genero}/{color}/{talla}"
                 stk = int(stock.get(key, 0))
@@ -172,6 +176,7 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
                 cob = round(stk / v_mes, 1) if v_mes > 0 else 999
                 talla_rows.append({
                     "talla": talla,
+                    "v_mes_base": v_mes_base,
                     "v_mes": v_mes,
                     "stk": stk,
                     "stk_taller": stk_taller,
@@ -180,6 +185,7 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
                     "urgente": cob < LEAD_MONTHS,
                 })
                 color_v += v_mes
+                color_v_base += v_mes_base
                 color_stk += stk
                 color_stk_taller += stk_taller
                 color_buy += need
@@ -189,6 +195,7 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
             purchase_rows.append({
                 "genero": genero,
                 "color": color,
+                "v_mes_base": round(color_v_base, 1),
                 "v_mes": round(color_v, 1),
                 "stk": color_stk,
                 "stk_taller": color_stk_taller,
@@ -201,10 +208,12 @@ def compute_purchase_plan(raw_rows, stock, stock_taller_by_key):
     for genero in LINEAS:
         rows_g = [r for r in purchase_rows if r["genero"] == genero]
         v_mes = sum(r["v_mes"] for r in rows_g)
+        v_mes_base = sum(r["v_mes_base"] for r in rows_g)
         stk = sum(r["stk"] for r in rows_g)
         stk_taller = sum(r["stk_taller"] for r in rows_g)
         buy = sum(r["buy"] for r in rows_g)
         summary[genero] = {
+            "v_mes_base": round(v_mes_base, 1),
             "v_mes": round(v_mes, 1),
             "stk": stk,
             "stk_taller": stk_taller,
@@ -353,6 +362,7 @@ def build_data():
         "cover_months": COVER_MONTHS,
         "lead_months": LEAD_MONTHS,
         "high_season_factor": HIGH_SEASON_FACTOR,
+        "velocity_months_count": VELOCITY_MONTHS_COUNT,
         "velocity_months": vel_months,
         "velocity_months_label": vel_labels,
         "periodo": periodo,
