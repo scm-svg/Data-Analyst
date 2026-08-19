@@ -189,7 +189,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   </div>
   <div class="card g1">
     <h3>🏪 Reabastecimiento por Tienda</h3>
-    <div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 MARGARITA (2× GRIE) y TOLON (1× CHACAO) son tiendas nuevas proyectadas</span></div>
+    <div class="sub">Distribución sugerida · <span style="color:#f97316">BARQUISIMETO proyectada como 1× GRIETA · factor temporada alta ×<span id="hsFactorLabel">1.25</span></span></div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
 </div>
@@ -208,8 +208,9 @@ function gcol(g){return GCOLOR[g]||'#8b8ba0';}
 var ME_SHORT={october:'Oct',november:'Nov',december:'Dic',january:'Ene',february:'Feb',march:'Mar',april:'Abr',may:'May',june:'Jun',july:'Jul',august:'Ago',september:'Sep',enero:'Ene',febrero:'Feb',marzo:'Mar',abril:'Abr',mayo:'May',junio:'Jun',julio:'Jul',agosto:'Ago',septiembre:'Sep',octubre:'Oct',noviembre:'Nov',diciembre:'Dic'};
 function mlbl(k){var p=k.split('-');return(ME_SHORT[p[0]]||p[0].slice(0,3))+' '+p[1].slice(-2);}
 var REAL_STORES=DATA.all_stores;
-var NEW_STORES=['MARGARITA'];
-var NEW_STORE_CAPS={'MARGARITA':{base:'GRIETA',mult:1,label:'1× capacidad GRIETA'}};
+var NEW_STORES=DATA.new_stores||['BARQUISIMETO'];
+var NEW_STORE_CAPS=DATA.new_store_caps||{'BARQUISIMETO':{base:'GRIETA',mult:1,label:'1× GRIETA'}};
+var STORE_LABELS={'CERRO VERDE':'C.Verde','GRAND PLAZ':'Grand Plaz','GRIETA':'Grieta','SAMBIL':'Sambil','CHACAO':'Chacao','TOLON':'Tolón','WEB':'Web','PEDIDOS':'Pedidos','CORPORATIVO':'Corporativo','VELA':'Vela','BARQUISIMETO':'Barquisimeto','TALLER':'Taller'};
 var MODELO_ID={'SHORT PLAYA UNICOLOR':'UNICOLOR','SHORT PLAYA SUBLIMADO':'SUBLIMADO'};
 function dcBadge(modelo,color){if((DATA.colores_descontinuados||[]).indexOf(color)>=0)return' <span style="font-size:.58rem;background:rgba(107,114,128,.22);color:#9ca3af;border:1px solid rgba(156,163,175,.25);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">descontinuado</span>';return'';}
 function modeloLabel(m){return{'SHORT PLAYA UNICOLOR':'Unicolor','SHORT PLAYA SUBLIMADO':'Sublimado'}[m]||(m||'').replace('SHORT PLAYA ','');}
@@ -333,7 +334,7 @@ function getFilteredStockByStore(){var f=gf(),sbs=DATA.stock_by_store||{},out={}
 function getStockTotals(sbs){var storeTotals={},grand=0,tallerTotal=0;Object.keys(sbs).forEach(function(s){var t=0;Object.values(sbs[s]||{}).forEach(function(q){t+=q;});storeTotals[s]=t;grand+=t;if(s==='TALLER')tallerTotal=t;});return{storeTotals:storeTotals,grand:grand,tiendaTotal:grand-tallerTotal,tallerTotal:tallerTotal};}
 function toggleInv(uid){var d=document.getElementById(uid);if(!d)return;var open=d.style.display!=='block';d.style.display=open?'block':'none';var arr=document.getElementById('arr_'+uid);if(arr)arr.style.transform=open?'rotate(90deg)':'rotate(0deg)';}
 function toggleInvCol(uid){var d=document.getElementById(uid);if(d)d.style.display=d.style.display==='block'?'none':'block';}
-var STORE_LABELS={'CERRO VERDE':'C.Verde','GRAND PLAZ':'Grand Plaz','GRIETA':'Grieta','SAMBIL':'Sambil','CHACAO':'Chacao','TOLON':'Tolón','WEB':'Web','PEDIDOS':'Pedidos','CORPORATIVO':'Corporativo','VELA':'Vela','TALLER':'Taller'};
+var STORE_LABELS={'CERRO VERDE':'C.Verde','GRAND PLAZ':'Grand Plaz','GRIETA':'Grieta','SAMBIL':'Sambil','CHACAO':'Chacao','TOLON':'Tolón','WEB':'Web','PEDIDOS':'Pedidos','CORPORATIVO':'Corporativo','VELA':'Vela','BARQUISIMETO':'Barquisimeto','TALLER':'Taller'};
 function rInventario(){
   var sbs=getFilteredStockByStore(),tot=getStockTotals(sbs),order=(DATA.stores_order||[]).filter(function(s){return sbs[s];});
   document.getElementById('invKpis').innerHTML='<div class="tkpi"><div class="tv">'+tot.grand.toLocaleString()+'</div><div class="tl">Stock total</div></div><div class="tkpi"><div class="tv">'+tot.tiendaTotal.toLocaleString()+'</div><div class="tl">En Tiendas</div></div><div class="tkpi" style="border-color:#f97316"><div class="tv" style="color:#f97316">'+tot.tallerTotal.toLocaleString()+'</div><div class="tl">🏭 En Taller</div></div>';
@@ -454,8 +455,6 @@ function rTiendas(){
 var _decMeses=2;
 var _pgX={};
 var ALL_STORES=DATA.all_stores;
-var NEW_STORES=['MARGARITA'];
-
 
 function setDecMeses(n){
   _decMeses=n;
@@ -559,14 +558,14 @@ function rDecisiones(){
       +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')
       +kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+DATA.stock_taller.toLocaleString()+' und','#22d3ee')
       +kpiCard(cobGen+'m','Cobertura prom.','Meses hasta agotarse (con rot. ajustada)','#f59e0b')
-      +kpiCard(totalProduce,'Unidades a producir','Tiempo prod. 3m · Cubre 9 meses',totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
+      +kpiCard(totalProduce,'Unidades a producir','Solo si cobertura &lt; '+((DATA.lead_months)||3)+' meses · meta = rot. ajustada × '+((DATA.lead_months)||3),totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
       +'</div>'
       +'<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55">'
       +'<div style="font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem">📋 Metodología — rotación y producción</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">'
       +'<div><strong style="color:var(--tx)">Rotación base</strong><br>Promedio mensual de ventas netas por talla en <em>'+velLbl+'</em> ('+velCount+' meses completos, sin mes parcial).</div>'
       +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta). Es la velocidad usada para cobertura y producción.</div>'
-      +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br><code style="font-size:.68rem">máx(0, rot. ajustada × 9 − stock)</code>. Tiempo prod. 90 días + 6 meses de venta = 9 meses de cobertura por lote.</div>'
+      +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br><code style="font-size:.68rem">si cobertura &lt; 3 meses → máx(0, rot. ajustada × 3 − stock)</code>. Sin factor de lote anual de 9 meses.</div>'
       +'<div><strong style="color:var(--tx)">Colores activos</strong><br>Unicolor activo: Verde Pino, Azul Pizarra, Azul Verdoso, Marron, Cereza. Sublimado: Playuela, Sal, Tucupido, Sombrero. Descontinuados excluidos de producción.</div>'
       +'</div></div>'
       +'</div>';
@@ -674,7 +673,7 @@ function renderReabast(allRows){
     h+='<div style="background:'+(isNew?'rgba(249,115,22,.08)':'var(--s2)')+';border:1px solid '+(isNew?'#f9731633':'var(--brd)')+';border-radius:12px;margin-bottom:8px">'+
       '<div data-reaid="'+sUid+'" style="display:flex;align-items:center;gap:10px;padding:13px 15px;cursor:pointer">'+
       '<span id="arr_'+sUid+'" style="color:var(--ac);font-size:0.68rem;transition:transform .2s">&#9658;</span>'+
-      '<div style="flex:1"><div style="font-family:var(--fh);font-weight:800;font-size:0.83rem">'+(isNew?'&#128260;':'&#127978;')+' '+store+'</div>'+(isNew&&cap?'<div style="font-size:0.6rem;color:#f97316">'+cap.label+'</div>':'')+'</div>'+
+      '<div style="flex:1"><div style="font-family:var(--fh);font-weight:800;font-size:0.83rem">'+(isNew?'&#128260;':'&#127978;')+' '+(STORE_LABELS[store]||store)+'</div>'+(isNew&&cap?'<div style="font-size:0.6rem;color:#f97316">'+cap.label+'</div>':'')+'</div>'+
       '<div style="text-align:right"><div style="font-family:var(--fh);font-weight:800;color:#86efac;font-size:1.05rem">'+storeTotal+'</div><div style="font-size:0.58rem;color:var(--mu)">und total</div></div></div>'+
       '<div id="'+sUid+'" style="display:none;padding:0 15px 12px">';
     if(!lineDetails.length){h+='<div style="font-size:0.72rem;color:var(--mu2);padding:6px 0">Sin proyecci\xf3n para este per\xeaodo</div>';}

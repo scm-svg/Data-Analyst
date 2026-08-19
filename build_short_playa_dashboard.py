@@ -56,13 +56,16 @@ ME_SHORT = {
 PARTIAL_MONTH = "agosto-2026"
 VELOCITY_MONTHS_COUNT = 6
 HIGH_SEASON_FACTOR = 1.25
-COVER_MONTHS = 9
 LEAD_MONTHS = 3
 ALL_STORES = [
     "CERRO VERDE", "CHACAO", "GRAND PLAZ", "GRIETA", "SAMBIL",
     "TOLON", "WEB", "PEDIDOS", "CORPORATIVO", "VELA",
 ]
-STORE_ORDER = ALL_STORES + ["TALLER"]
+STORE_ORDER = ALL_STORES + ["BARQUISIMETO", "TALLER"]
+NEW_STORES = ["BARQUISIMETO"]
+NEW_STORE_CAPS = {
+    "BARQUISIMETO": {"base": "GRIETA", "mult": 1, "label": "1× GRIETA"},
+}
 STORE_ALIASES = {
     "LA GRIETA": "GRIETA",
     "GRIETA": "GRIETA",
@@ -89,6 +92,7 @@ STORE_ALIASES = {
     "PEDIDOS": "PEDIDOS",
     "Pedidos": "PEDIDOS",
     "CORPORATIVO": "CORPORATIVO",
+    "BARQUISIMETO": "BARQUISIMETO",
     "TALLER": "TALLER",
     "TALLER TERMINADO": "TALLER",
 }
@@ -241,8 +245,11 @@ def compute_production_plan(raw_rows, stock, stock_taller_by_key):
                     key = f"{modelo}/{genero}/{color}/{talla}"
                     stk = int(stock.get(key, 0))
                     stk_taller = int(stock_taller_by_key.get(key, 0))
-                    need = max(0, round(v_mes * COVER_MONTHS - stk))
                     cob = round(stk / v_mes, 1) if v_mes > 0 else 999
+                    if cob < LEAD_MONTHS:
+                        need = max(0, round(v_mes * LEAD_MONTHS - stk))
+                    else:
+                        need = 0
                     talla_rows.append({
                         "talla": talla,
                         "v_mes_base": v_mes_base,
@@ -307,6 +314,38 @@ def compute_production_plan(raw_rows, stock, stock_taller_by_key):
         }
 
     return production_rows, summary, summary_genero, vel_months
+
+
+def compute_new_store_projection(raw_rows, base_store, mult, meses):
+    grie_monthly = defaultdict(float)
+    for r in raw_rows:
+        if r["tienda"] == base_store and r["mes"] in meses and r.get("activo", True):
+            key = (r["modelo"], r["genero"], r["color"], r["talla"])
+            grie_monthly[key] += r["v"]
+    n = max(len(meses), 1)
+    skus = []
+    total_v = 0.0
+    for (modelo, genero, color, talla), qty in sorted(grie_monthly.items()):
+        v_mes = round(qty / n * mult * HIGH_SEASON_FACTOR, 2)
+        total_v += v_mes
+        skus.append({
+            "Modelo": modelo,
+            "Genero": genero,
+            "Color": color,
+            "Talla": talla,
+            "v_mes": v_mes,
+            "need_1m": max(0, round(v_mes * 1)),
+            "need_2m": max(0, round(v_mes * 2)),
+            "need_3m": max(0, round(v_mes * 3)),
+        })
+    return {
+        "v_mes": round(total_v, 1),
+        "need_1m": max(0, round(total_v * 1)),
+        "need_2m": max(0, round(total_v * 2)),
+        "need_3m": max(0, round(total_v * 3)),
+        "nota": f"{mult}× velocidad {base_store} · factor temporada alta ×{HIGH_SEASON_FACTOR}",
+        "skus": skus,
+    }
 
 
 def build_data():
@@ -382,6 +421,7 @@ def build_data():
     production_plan, summary_produccion, summary_genero, vel_months = compute_production_plan(
         raw_rows, stock, stock_taller_by_key
     )
+    barquisimeto_proj = compute_new_store_projection(raw_rows, "GRIETA", 1, vel_months)
 
     tiendas_list = [s for s in ALL_STORES if s in tiendas_set]
     for s in sorted(tiendas_set):
@@ -419,7 +459,9 @@ def build_data():
         "production_plan": production_plan,
         "summary_produccion": summary_produccion,
         "summary_genero": summary_genero,
-        "cover_months": COVER_MONTHS,
+        "barquisimeto": barquisimeto_proj,
+        "new_stores": NEW_STORES,
+        "new_store_caps": NEW_STORE_CAPS,
         "lead_months": LEAD_MONTHS,
         "high_season_factor": HIGH_SEASON_FACTOR,
         "velocity_months_count": VELOCITY_MONTHS_COUNT,
