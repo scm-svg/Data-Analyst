@@ -189,7 +189,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   </div>
   <div class="card g1">
     <h3>🏪 Reabastecimiento por Tienda</h3>
-    <div class="sub">Distribución sugerida · <span style="color:#f97316">BARQUISIMETO proyectada como 1× GRIETA · factor temporada alta ×<span id="hsFactorLabel">1.25</span></span></div>
+    <div class="sub">Distribución sugerida · <span style="color:#f97316">VELA 1.5× GRIETA · BARQUISIMETO 1× GRIETA · factor temporada alta ×<span id="hsFactorLabel">1.25</span></span></div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
 </div>
@@ -558,14 +558,14 @@ function rDecisiones(){
       +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')
       +kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+DATA.stock_taller.toLocaleString()+' und','#22d3ee')
       +kpiCard(cobGen+'m','Cobertura prom.','Meses hasta agotarse (con rot. ajustada)','#f59e0b')
-      +kpiCard(totalProduce,'Unidades a producir','Solo si cobertura &lt; '+((DATA.lead_months)||3)+' meses · meta = rot. ajustada × '+((DATA.lead_months)||3),totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
+      +kpiCard(totalProduce,'Unidades a producir','Solo variantes con cobertura &lt; 3 meses',totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
       +'</div>'
       +'<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55">'
       +'<div style="font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem">📋 Metodología — rotación y producción</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">'
       +'<div><strong style="color:var(--tx)">Rotación base</strong><br>Promedio mensual de ventas netas por talla en <em>'+velLbl+'</em> ('+velCount+' meses completos, sin mes parcial).</div>'
       +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta). Es la velocidad usada para cobertura y producción.</div>'
-      +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br><code style="font-size:.68rem">si cobertura &lt; 3 meses → máx(0, rot. ajustada × 3 − stock)</code>. Sin factor de lote anual de 9 meses.</div>'
+      +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br>Solo entra en el análisis lo que tiene <strong style="color:var(--tx)">cobertura &lt; 3 meses</strong>.</div>'
       +'<div><strong style="color:var(--tx)">Colores activos</strong><br>Unicolor activo: Verde Pino, Azul Pizarra, Azul Verdoso, Marron, Cereza. Sublimado: Playuela, Sal, Tucupido, Sombrero. Descontinuados excluidos de producción.</div>'
       +'</div></div>'
       +'</div>';
@@ -630,7 +630,8 @@ function renderReabast(allRows){
   var meses=_decMeses||2;
   var filteredRows=allRows.filter(function(r){return(!_modelo||r.modelo===_modelo);});
   var modelos=ag(filteredRows,'modelo').map(function(x){return x.k;});
-  var storeList=ALL_STORES.concat(NEW_STORES);
+  var exclude=DATA.decision_exclude_stores||['WEB','PEDIDOS','CORPORATIVO','VELA'];
+  var storeList=(DATA.decision_stores||ALL_STORES.filter(function(s){return exclude.indexOf(s)<0;})).concat(NEW_STORES);
   var h='';
   storeList.forEach(function(store){
     var isNew=NEW_STORES.indexOf(store)>=0;

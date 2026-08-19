@@ -62,8 +62,10 @@ ALL_STORES = [
     "TOLON", "WEB", "PEDIDOS", "CORPORATIVO", "VELA",
 ]
 STORE_ORDER = ALL_STORES + ["BARQUISIMETO", "TALLER"]
-NEW_STORES = ["BARQUISIMETO"]
+DECISION_EXCLUDE_STORES = {"WEB", "PEDIDOS", "CORPORATIVO", "VELA"}
+NEW_STORES = ["VELA", "BARQUISIMETO"]
 NEW_STORE_CAPS = {
+    "VELA": {"base": "GRIETA", "mult": 1.5, "label": "1.5× GRIETA"},
     "BARQUISIMETO": {"base": "GRIETA", "mult": 1, "label": "1× GRIETA"},
 }
 STORE_ALIASES = {
@@ -422,6 +424,7 @@ def build_data():
         raw_rows, stock, stock_taller_by_key
     )
     barquisimeto_proj = compute_new_store_projection(raw_rows, "GRIETA", 1, vel_months)
+    vela_proj = compute_new_store_projection(raw_rows, "GRIETA", 1.5, vel_months)
 
     tiendas_list = [s for s in ALL_STORES if s in tiendas_set]
     for s in sorted(tiendas_set):
@@ -460,8 +463,11 @@ def build_data():
         "summary_produccion": summary_produccion,
         "summary_genero": summary_genero,
         "barquisimeto": barquisimeto_proj,
+        "vela": vela_proj,
         "new_stores": NEW_STORES,
         "new_store_caps": NEW_STORE_CAPS,
+        "decision_exclude_stores": sorted(DECISION_EXCLUDE_STORES),
+        "decision_stores": [s for s in ALL_STORES if s not in DECISION_EXCLUDE_STORES],
         "lead_months": LEAD_MONTHS,
         "high_season_factor": HIGH_SEASON_FACTOR,
         "velocity_months_count": VELOCITY_MONTHS_COUNT,
