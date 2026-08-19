@@ -398,6 +398,7 @@ def build_data():
     stock_by_store = defaultdict(lambda: defaultdict(int))
     stock_taller_by_key = defaultdict(int)
     stock_by_modelo = defaultdict(int)
+    negative_stock_units = 0
 
     for r in inv:
         store = normalize_store(get_col_like(r, "Ubicac"))
@@ -408,6 +409,9 @@ def build_data():
         if not include_in_dashboard(modelo, color):
             continue
         qty = round(parse_num(get_col_like(r, "Cantidad")))
+        if qty < 0:
+            negative_stock_units += qty
+            continue
         if qty == 0:
             continue
         key = f"{modelo}/{genero}/{color}/{talla}"
@@ -416,6 +420,19 @@ def build_data():
         stock_by_modelo[modelo] += qty
         if store == "TALLER":
             stock_taller_by_key[key] += qty
+
+    stock = {k: max(0, v) for k, v in stock.items()}
+    stock_by_store = {
+        store: {k: v for k, v in items.items() if v > 0}
+        for store, items in (
+            {s: {k: max(0, v) for k, v in d.items()} for s, d in stock_by_store.items()}
+        ).items()
+        if any(v > 0 for v in items.values())
+    }
+    stock_taller_by_key = {k: max(0, v) for k, v in stock_taller_by_key.items()}
+    stock_by_modelo = defaultdict(int)
+    for key, qty in stock.items():
+        stock_by_modelo[key.split("/")[0]] += qty
 
     stock_total = sum(stock.values())
     stock_taller = sum(stock_by_store.get("TALLER", {}).values())
@@ -481,7 +498,10 @@ def build_data():
         "colores_descontinuados": sorted(
             {r["color"] for r in raw_rows if r["modelo"] == MODEL_UNICOLOR and not r.get("activo", True)}
         ),
-        "_meta": {"returns_units": returns_units},
+        "_meta": {
+            "returns_units": returns_units,
+            "negative_stock_units": negative_stock_units,
+        },
     }
 
 
@@ -683,6 +703,7 @@ def main():
     print(f"Devoluciones netas: {meta.get('returns_units', 0)}")
     print(f"Periodo: {data['periodo']}")
     print(f"Stock total: {data['stock_total']} (Taller: {data['stock_taller']})")
+    print(f"Inventario negativo excluido: {meta.get('negative_stock_units', 0)} und")
     print(f"Velocity months: {data['velocity_months_label']}")
     for m in MODELS:
         s = data["summary_produccion"].get(m, {})
