@@ -103,23 +103,12 @@ body::before{
 .field select:focus,.field input:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(15,107,92,.12)}
 
 .charts{
-  display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:10px;
-}
-.charts-2{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;
+  display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:10px;
 }
 .chart-card h3{font-family:var(--fh);font-size:.92rem;font-weight:800;letter-spacing:-.02em}
 .chart-card .sub{font-size:.7rem;color:var(--muted);margin:1px 0 6px}
-.cw{position:relative;height:190px;width:100%;max-width:100%}
-.cw.s{height:180px}
-.top-sku{max-height:180px;overflow:auto;width:100%}
-.top-sku table{font-size:.75rem;width:100%}
-.top-sku th{cursor:default}
+.cw{position:relative;height:220px;width:100%;max-width:100%}
 
-.layout{
-  display:grid;grid-template-columns:minmax(0,1fr);gap:10px;
-  align-items:start;
-}
 .tabs{
   display:flex;gap:6px;flex:0 0 auto;
 }
@@ -131,11 +120,9 @@ body::before{
 .tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
 .tab-panel{display:none;width:100%;min-width:0}
 .tab-panel.active{display:block}
-.detail-grid{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:10px;
-}
+
 .table-wrap{
-  overflow:auto;max-height:340px;width:100%;max-width:100%;
+  overflow:auto;max-height:380px;width:100%;max-width:100%;
   border:1px solid var(--line);border-radius:10px;
 }
 .section-title{
@@ -143,6 +130,24 @@ body::before{
 }
 .section-title h2{font-family:var(--fh);font-size:.98rem;font-weight:800;letter-spacing:-.02em}
 .section-title span{font-size:.72rem;color:var(--muted)}
+
+.cal-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:10px;
+  width:100%;
+}
+.cal-day{
+  border:1px solid var(--line);border-radius:12px;padding:12px;
+  background:#fff;min-width:0;
+}
+.cal-day h3{font-family:var(--fh);font-size:1rem;font-weight:800;margin-bottom:2px}
+.cal-day .sum{font-size:.72rem;color:var(--muted);margin-bottom:8px}
+.cal-day ul{list-style:none;display:flex;flex-direction:column;gap:4px;max-height:280px;overflow:auto}
+.cal-day li{font-size:.74rem;line-height:1.25;color:var(--ink);padding:4px 0;border-bottom:1px solid #eef2ef}
+.cal-day li:last-child{border-bottom:none}
+.cal-day .name{font-weight:700}
+.cal-day .meta{color:var(--muted);font-size:.68rem;margin-top:1px}
 
 table{width:100%;border-collapse:collapse;font-size:.75rem;table-layout:auto}
 th{
@@ -172,26 +177,6 @@ tr:hover td{background:#f5faf7}
 .bar{height:6px;background:#e6ece8;border-radius:99px;overflow:hidden;min-width:48px;max-width:72px}
 .bar > i{display:block;height:100%;background:var(--teal);border-radius:99px}
 
-.side .block{margin-bottom:12px}
-.side .block:last-child{margin-bottom:0}
-.prod-row,.line-row{
-  display:grid;grid-template-columns:1fr auto;gap:4px 8px;align-items:center;
-  padding:6px 0;border-bottom:1px solid #e6ece8;font-size:.78rem;
-}
-.prod-row:last-child,.line-row:last-child{border-bottom:none}
-.prod-row .meta,.line-row .meta{grid-column:1 / -1;color:var(--muted);font-size:.68rem}
-.meter{grid-column:1 / -1;height:6px;background:#e6ece8;border-radius:99px;overflow:hidden;display:flex}
-.meter .a{background:var(--ok)}
-.meter .b{background:var(--rose)}
-
-.cal{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto}
-.cal-day{
-  border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:#fff;
-}
-.cal-day h3{font-family:var(--fh);font-size:.82rem;font-weight:800;margin-bottom:1px}
-.cal-day p{font-size:.68rem;color:var(--muted);margin-bottom:4px}
-.cal-day li{list-style:none;font-size:.7rem;padding:1px 0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
 .empty{text-align:center;color:var(--muted);padding:16px 8px;font-size:.8rem}
 .toast{
   position:fixed;right:14px;bottom:14px;background:var(--ink);color:#fff;
@@ -204,8 +189,8 @@ tr:hover td{background:#f5faf7}
 }
 @media(max-width:900px){
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .charts,.charts-2,.detail-grid{grid-template-columns:minmax(0,1fr)}
-  .table-wrap{max-height:280px}
+  .charts,.cal-grid{grid-template-columns:minmax(0,1fr)}
+  .table-wrap{max-height:300px}
 }
 @media(max-width:560px){
   .kpis{grid-template-columns:minmax(0,1fr)}
@@ -285,28 +270,23 @@ function renderShell(){
     '<section class="panel"><div class="filters" id="filters"></div></section>'+
     '<nav class="tabs">'+
       '<button class="tab active" type="button" data-tab="resumen" onclick="switchTab(\'resumen\')">Resumen</button>'+
-      '<button class="tab" type="button" data-tab="detalle" onclick="switchTab(\'detalle\')">Por producto y líneas</button>'+
+      '<button class="tab" type="button" data-tab="calendario" onclick="switchTab(\'calendario\')">Calendario de Salidas</button>'+
     '</nav>'+
     '<div class="tab-panel active" id="tab-resumen">'+
       '<div class="charts">'+
         '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
         '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante agrupado por etapa del proceso</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
       '</div>'+
-      '<div class="charts-2" style="margin-top:10px">'+
-        '<section class="panel chart-card"><h3>Carga por línea</h3><p class="sub">Faltante asignado vs capacidad diaria</p><div class="cw s"><canvas id="cLinea"></canvas></div></section>'+
-        '<section class="panel chart-card"><h3>Top SKU con faltante</h3><p class="sub">Prioridad de la cola</p><div class="top-sku" id="topSku"></div></section>'+
-      '</div>'+
       '<section class="panel" style="margin-top:10px">'+
         '<div class="section-title"><h2>Pedidos</h2><span id="tblMeta"></span></div>'+
         '<div class="table-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>'+
       '</section>'+
     '</div>'+
-    '<div class="tab-panel" id="tab-detalle">'+
-      '<div class="detail-grid">'+
-        '<section class="panel side"><div class="section-title"><h2>Por producto</h2></div><div id="byProd"></div></section>'+
-        '<section class="panel side"><div class="section-title"><h2>Carga por línea</h2></div><div id="byLine"></div></section>'+
-        '<section class="panel side"><div class="section-title"><h2>Próximas salidas</h2></div><div class="cal" id="cal"></div></section>'+
-      '</div>'+
+    '<div class="tab-panel" id="tab-calendario">'+
+      '<section class="panel">'+
+        '<div class="section-title"><h2>Salidas estimadas por día</h2><span>SKUs que cierran su faltante ese día hábil</span></div>'+
+        '<div class="cal-grid" id="cal"></div>'+
+      '</section>'+
     '</div>';
   buildFilters();
 }
@@ -420,27 +400,6 @@ function renderCharts(rows){
   var eCols=[C_TEAL,C_ROSE,C_AMBER,C_OK,'#5b7c8a','#8b6f4e'];
   mc('cEtapa','doughnut',{labels:eLabs,datasets:[{data:eLabs.map(function(k){return byE[k];}),backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),borderColor:'#fbfcfb',borderWidth:2}]},
     chartOpts({scales:{x:{display:false},y:{display:false}},plugins:{legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10}}},datalabels:{display:true,color:'#fff',font:{weight:'700',size:10,family:'Bricolage Grotesque'},formatter:function(v,ctx){var t=ctx.chart.data.datasets[0].data.reduce(function(a,b){return a+b;},0);return t&&v?Math.round(v):'';}}}}));
-
-  var lineMap={};
-  rows.forEach(function(r){
-    var ln=r.lineaAsignada||r.lineasRaw||'—';
-    lineMap[ln]=(lineMap[ln]||0)+r.faltante;
-  });
-  var lLabs=Object.keys(lineMap);
-  mc('cLinea','bar',{labels:lLabs,datasets:[
-    {label:'Faltante',data:lLabs.map(function(k){return lineMap[k];}),backgroundColor:C_TEAL+'cc',borderColor:C_TEAL,borderWidth:1,borderRadius:6}
-  ]},chartOpts({plugins:{legend:{display:true},datalabels:{display:true,color:C_MUTED,anchor:'end',align:'end',font:{family:'Bricolage Grotesque',size:9,weight:'700'},formatter:function(v){return v>0?Math.round(v):'';}}}}));
-
-  var top=rows.filter(function(r){return r.faltante>0;}).slice().sort(function(a,b){return b.faltante-a.faltante;}).slice(0,8);
-  var mx=top[0]?top[0].faltante:1;
-  document.getElementById('topSku').innerHTML=top.length
-    ? '<table><thead><tr><th>SKU</th><th>Producto</th><th>Faltante</th><th></th><th>Salida</th></tr></thead><tbody>'+
-      top.map(function(r){
-        return '<tr><td>'+esc(r.sku||'—')+'</td><td>'+esc(r.producto)+' '+esc(r.talla)+'</td><td class="num falt">'+fmtN(r.faltante)+'</td>'+
-          '<td><div class="bar"><i style="width:'+Math.round(100*r.faltante/mx)+'%"></i></div></td>'+
-          '<td class="num">'+fmtDate(r.fechaEstimada)+'</td></tr>';
-      }).join('')+'</tbody></table>'
-    : '<div class="empty">Sin faltante en cola</div>';
 }
 
 function renderAll(){
@@ -451,8 +410,6 @@ function renderAll(){
   renderKpis(rows);
   renderCharts(rows);
   renderTable(rows);
-  renderByProd(rows);
-  renderByLine(rows);
   renderCal(rows);
 }
 
@@ -529,42 +486,9 @@ function sortBy(k){
   renderTable(fr());
 }
 
-function renderByProd(rows){
-  var map={};
-  rows.forEach(function(r){
-    if(!map[r.producto]) map[r.producto]={sol:0,prod:0,falt:0};
-    map[r.producto].sol+=r.solicitada;
-    map[r.producto].prod+=r.producida;
-    map[r.producto].falt+=r.faltante;
-  });
-  var keys=Object.keys(map).sort(function(a,b){return map[b].falt-map[a].falt;});
-  document.getElementById('byProd').innerHTML=keys.length?keys.map(function(k){
-    var x=map[k], tot=x.sol||1;
-    var p=Math.round(100*x.prod/tot), f=Math.round(100*x.falt/tot);
-    return '<div class="prod-row"><strong>'+esc(k)+'</strong><span class="num">'+fmtN(x.falt)+' falt.</span>'+
-      '<div class="meter"><span class="a" style="width:'+p+'%"></span><span class="b" style="width:'+f+'%"></span></div>'+
-      '<div class="meta">'+fmtN(x.prod)+' / '+fmtN(x.sol)+' · '+p+'% avance</div></div>';
-  }).join(''):'<div class="empty">Sin datos</div>';
-}
-
-function renderByLine(rows){
-  var caps=DATA.lineCaps||{};
-  var lines=uniq(Object.keys(caps).concat(rows.map(function(r){return r.lineaAsignada;}).filter(Boolean)));
-  if(!lines.length){
-    // fallback to known lines from payload when filter empties assignment
-    lines=uniq(Object.keys(caps));
-  }
-  if(!lines.length){document.getElementById('byLine').innerHTML='<div class="empty">Sin líneas</div>';return;}
-  document.getElementById('byLine').innerHTML=lines.map(function(ln){
-    var cap=caps[ln]||130;
-    var ld=sum(rows.filter(function(r){return String(r.lineaAsignada)===String(ln);}),'faltante');
-    var days=cap>0?Math.ceil(ld/cap):0;
-    var pct=Math.min(100, days?Math.round(100*Math.min(days,14)/14):0);
-    var barColor = days>7 ? 'var(--rose)' : (days>3 ? 'var(--amber)' : 'var(--teal)');
-    return '<div class="line-row"><strong>Línea '+esc(ln)+'</strong><span class="num">'+days+' d</span>'+
-      '<div class="bar"><i style="width:'+pct+'%;background:'+barColor+'"></i></div>'+
-      '<div class="meta">'+fmtN(ld)+' pz · '+fmtN(cap)+'/dia</div></div>';
-  }).join('');
+function productLabel(r){
+  var parts=[r.producto,r.color,r.talla].filter(function(x){return x && x!=='-';});
+  return parts.join(' ') || r.sku || 'Sin nombre';
 }
 
 function renderCal(rows){
@@ -573,15 +497,17 @@ function renderCal(rows){
     if(!map[r.fechaEstimada]) map[r.fechaEstimada]=[];
     map[r.fechaEstimada].push(r);
   });
-  var days=Object.keys(map).sort().slice(0,5);
+  var days=Object.keys(map).sort();
   document.getElementById('cal').innerHTML=days.length?days.map(function(d){
-    var list=map[d], pcs=sum(list,'faltante');
-    return '<div class="cal-day"><h3>'+fmtDate(d)+'</h3><p>'+list.length+' SKUs · '+fmtN(pcs)+' pz</p><ul>'+
-      list.slice(0,5).map(function(r){
-        return '<li>'+esc(r.producto)+' '+esc(r.talla)+' · L'+esc(r.lineaAsignada)+' · '+fmtN(r.faltante)+'</li>';
-      }).join('')+(list.length>5?'<li>… +'+(list.length-5)+' más</li>':'')+
+    var list=map[d].slice().sort(function(a,b){return (a.producto||'').localeCompare(b.producto||'','es') || (a.talla||'').localeCompare(b.talla||'','es');});
+    var pcs=sum(list,'faltante');
+    return '<div class="cal-day"><h3>'+fmtDate(d)+'</h3><div class="sum">'+list.length+' SKUs · '+fmtN(pcs)+' pz</div><ul>'+
+      list.map(function(r){
+        return '<li><div class="name">'+esc(productLabel(r))+'</div>'+
+          '<div class="meta">'+esc(r.sku||'—')+' · Línea '+esc(r.lineaAsignada||r.lineasRaw||'—')+' · '+fmtN(r.faltante)+' pz</div></li>';
+      }).join('')+
       '</ul></div>';
-  }).join(''):'<div class="empty">Sin salidas pendientes</div>';
+  }).join(''):'<div class="empty">Sin salidas pendientes en el filtro actual</div>';
 }
 
 boot();
