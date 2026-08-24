@@ -110,15 +110,33 @@ body::before{
 }
 .chart-card h3{font-family:var(--fh);font-size:.92rem;font-weight:800;letter-spacing:-.02em}
 .chart-card .sub{font-size:.7rem;color:var(--muted);margin:1px 0 6px}
-.cw{position:relative;height:170px;width:100%;max-width:100%}
-.cw.s{height:160px}
-.top-sku{max-height:160px;overflow:auto;width:100%}
+.cw{position:relative;height:190px;width:100%;max-width:100%}
+.cw.s{height:180px}
+.top-sku{max-height:180px;overflow:auto;width:100%}
 .top-sku table{font-size:.75rem;width:100%}
 .top-sku th{cursor:default}
 
 .layout{
-  display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,.9fr);gap:10px;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:10px;
   align-items:start;
+}
+.tabs{
+  display:flex;gap:6px;flex:0 0 auto;
+}
+.tab{
+  border:1px solid var(--line);background:var(--paper);color:var(--muted);
+  font-family:var(--fb);font-weight:700;font-size:.8rem;
+  padding:7px 14px;border-radius:999px;cursor:pointer;
+}
+.tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.tab-panel{display:none;width:100%;min-width:0}
+.tab-panel.active{display:block}
+.detail-grid{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:10px;
+}
+.table-wrap{
+  overflow:auto;max-height:340px;width:100%;max-width:100%;
+  border:1px solid var(--line);border-radius:10px;
 }
 .section-title{
   display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;
@@ -126,10 +144,6 @@ body::before{
 .section-title h2{font-family:var(--fh);font-size:.98rem;font-weight:800;letter-spacing:-.02em}
 .section-title span{font-size:.72rem;color:var(--muted)}
 
-.table-wrap{
-  overflow:auto;max-height:280px;width:100%;max-width:100%;
-  border:1px solid var(--line);border-radius:10px;
-}
 table{width:100%;border-collapse:collapse;font-size:.75rem;table-layout:auto}
 th{
   position:sticky;top:0;background:#f3f7f4;color:var(--muted);text-align:left;
@@ -170,7 +184,7 @@ tr:hover td{background:#f5faf7}
 .meter .a{background:var(--ok)}
 .meter .b{background:var(--rose)}
 
-.cal{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
+.cal{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto}
 .cal-day{
   border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:#fff;
 }
@@ -190,8 +204,8 @@ tr:hover td{background:#f5faf7}
 }
 @media(max-width:900px){
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .charts,.charts-2,.layout{grid-template-columns:minmax(0,1fr)}
-  .table-wrap{max-height:240px}
+  .charts,.charts-2,.detail-grid{grid-template-columns:minmax(0,1fr)}
+  .table-wrap{max-height:280px}
 }
 @media(max-width:560px){
   .kpis{grid-template-columns:minmax(0,1fr)}
@@ -269,26 +283,46 @@ function renderShell(){
     '</header>'+
     '<section class="kpis" id="kpis"></section>'+
     '<section class="panel"><div class="filters" id="filters"></div></section>'+
-    '<div class="charts">'+
-      '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
-      '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante agrupado por etapa del proceso</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
-    '</div>'+
-    '<div class="charts-2">'+
-      '<section class="panel chart-card"><h3>Carga por línea</h3><p class="sub">Faltante asignado vs capacidad diaria</p><div class="cw s"><canvas id="cLinea"></canvas></div></section>'+
-      '<section class="panel chart-card"><h3>Top SKU con faltante</h3><p class="sub">Prioridad de la cola</p><div class="top-sku" id="topSku"></div></section>'+
-    '</div>'+
-    '<div class="layout">'+
-      '<section class="panel">'+
+    '<nav class="tabs">'+
+      '<button class="tab active" type="button" data-tab="resumen" onclick="switchTab(\'resumen\')">Resumen</button>'+
+      '<button class="tab" type="button" data-tab="detalle" onclick="switchTab(\'detalle\')">Por producto y líneas</button>'+
+    '</nav>'+
+    '<div class="tab-panel active" id="tab-resumen">'+
+      '<div class="charts">'+
+        '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
+        '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante agrupado por etapa del proceso</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
+      '</div>'+
+      '<div class="charts-2" style="margin-top:10px">'+
+        '<section class="panel chart-card"><h3>Carga por línea</h3><p class="sub">Faltante asignado vs capacidad diaria</p><div class="cw s"><canvas id="cLinea"></canvas></div></section>'+
+        '<section class="panel chart-card"><h3>Top SKU con faltante</h3><p class="sub">Prioridad de la cola</p><div class="top-sku" id="topSku"></div></section>'+
+      '</div>'+
+      '<section class="panel" style="margin-top:10px">'+
         '<div class="section-title"><h2>Pedidos</h2><span id="tblMeta"></span></div>'+
         '<div class="table-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>'+
       '</section>'+
-      '<aside class="panel side">'+
-        '<div class="block"><div class="section-title"><h2>Por producto</h2></div><div id="byProd"></div></div>'+
-        '<div class="block"><div class="section-title"><h2>Carga por línea</h2></div><div id="byLine"></div></div>'+
-        '<div class="block"><div class="section-title"><h2>Próximas salidas</h2></div><div class="cal" id="cal"></div></div>'+
-      '</aside>'+
+    '</div>'+
+    '<div class="tab-panel" id="tab-detalle">'+
+      '<div class="detail-grid">'+
+        '<section class="panel side"><div class="section-title"><h2>Por producto</h2></div><div id="byProd"></div></section>'+
+        '<section class="panel side"><div class="section-title"><h2>Carga por línea</h2></div><div id="byLine"></div></section>'+
+        '<section class="panel side"><div class="section-title"><h2>Próximas salidas</h2></div><div class="cal" id="cal"></div></section>'+
+      '</div>'+
     '</div>';
   buildFilters();
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-tab')===name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(function(p){
+    p.classList.toggle('active', p.id==='tab-'+name);
+  });
+  if(name==='resumen'){
+    setTimeout(function(){
+      Object.keys(CHARTS).forEach(function(id){ try{ CHARTS[id].resize(); }catch(e){} });
+    }, 40);
+  }
 }
 
 function buildFilters(){
