@@ -405,9 +405,10 @@ function renderByLine(rows){
     if(ld==null) ld=sum(rows.filter(function(r){return r.lineaAsignada===ln;}),'faltante');
     var days=cap>0?Math.ceil(ld/cap):0;
     var pct=Math.min(100, days?Math.round(100*Math.min(days,14)/14):0);
+    var barColor = days>7 ? 'var(--rose)' : (days>3 ? 'var(--amber)' : 'var(--teal)');
     return '<div class="line-row"><strong>Línea '+esc(ln)+'</strong><span class="num">'+days+' d</span>'+
-      '<div class="bar"><i style="width:'+pct+'%;background:'+(days>7?'var(--rose)':(days>3?'var(--amber)':'var(--teal)')+')"></i></div>'+
-      '<div class="meta">'+fmtN(ld)+' pz · '+fmtN(cap)+'/día</div></div>';
+      '<div class="bar"><i style="width:'+pct+'%;background:'+barColor+'"></i></div>'+
+      '<div class="meta">'+fmtN(ld)+' pz · '+fmtN(cap)+'/dia</div></div>';
   }).join('');
 }
 
