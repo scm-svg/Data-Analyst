@@ -127,6 +127,9 @@ def norm_color(c):
 
 
 def is_excluded_color(color: str) -> bool:
+    raw = str(color).strip().lower()
+    if "rosa palo" in raw or "rosa seca" in raw:
+        return True
     c = norm_color(color)
     if c in EXCLUDED_COLORS:
         return True
