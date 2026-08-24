@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Tracking Producción</title>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
 :root{
   --bg:#eef2ef;
@@ -159,6 +161,16 @@ tr:hover td{background:#f5faf7}
   animation:rise .25s ease;
 }
 .loading{padding:60px 20px;text-align:center;color:var(--muted);font-size:1rem}
+.charts{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-bottom:14px;animation:rise .55s ease .14s both}
+.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;animation:rise .55s ease .16s both}
+@media(max-width:900px){.charts,.charts-2{grid-template-columns:1fr}}
+.chart-card h3{font-family:var(--fh);font-size:1.05rem;font-weight:800;letter-spacing:-.02em}
+.chart-card .sub{font-size:.78rem;color:var(--muted);margin:2px 0 10px}
+.cw{position:relative;height:240px}
+.cw.s{height:220px}
+.top-sku{max-height:240px;overflow:auto}
+.top-sku table{font-size:.82rem}
+.top-sku th{cursor:default}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 </style>
 </head>
@@ -168,10 +180,11 @@ tr:hover td{background:#f5faf7}
 </div>
 <div class="toast" id="toast"></div>
 <script>
-var DATA=null, SORT={k:'fechaEstimada',dir:1}, COLORS={
+var DATA=null, SORT={k:'fechaEstimada',dir:1}, CHARTS={}, COLORS={
   'Blanco':'#f4f4f0','Negro':'#2b2b2b','Azul Rey':'#1e4fd6','Verde Militar':'#4b6b2f',
   'Azul Polo':'#2a6bd6','Gris Claro':'#b7b7b7','Azul Marino':'#16356b','Aguamarina':'#2bb3a0'
 };
+var C_TEAL='#0f6b5c', C_OK='#2f6b45', C_ROSE='#a33b45', C_AMBER='#b86a1a', C_MUTED='#5f6d66';
 
 function isGas(){return typeof google!=='undefined' && google.script && google.script.run;}
 function boot(){
@@ -229,6 +242,14 @@ function renderShell(){
     '</header>'+
     '<section class="kpis" id="kpis"></section>'+
     '<section class="panel"><div class="filters" id="filters"></div></section>'+
+    '<div class="charts">'+
+      '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
+      '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante agrupado por etapa del proceso</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
+    '</div>'+
+    '<div class="charts-2">'+
+      '<section class="panel chart-card"><h3>Carga por línea</h3><p class="sub">Faltante asignado vs capacidad diaria</p><div class="cw s"><canvas id="cLinea"></canvas></div></section>'+
+      '<section class="panel chart-card"><h3>Top SKU con faltante</h3><p class="sub">Prioridad de la cola</p><div class="top-sku" id="topSku"></div></section>'+
+    '</div>'+
     '<div class="layout">'+
       '<section class="panel">'+
         '<div class="section-title"><h2>Pedidos</h2><span id="tblMeta"></span></div>'+
@@ -291,12 +312,83 @@ function fr(){
   });
 }
 
+function chartOpts(extra){
+  var base={
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{labels:{color:C_MUTED,font:{family:'Figtree',size:11},boxWidth:10}},
+      datalabels:{display:false},
+      tooltip:{backgroundColor:'#1c2421',titleFont:{family:'Bricolage Grotesque',weight:'bold'},bodyFont:{family:'Figtree'}}
+    },
+    scales:{
+      x:{grid:{color:'rgba(95,109,102,.12)'},ticks:{color:C_MUTED,font:{family:'Figtree',size:10}}},
+      y:{grid:{color:'rgba(95,109,102,.12)'},ticks:{color:C_MUTED,font:{family:'Figtree',size:10}}}
+    }
+  };
+  if(!extra) return base;
+  Object.keys(extra).forEach(function(k){
+    if(k==='plugins'||k==='scales'){
+      base[k]=base[k]||{};
+      Object.keys(extra[k]||{}).forEach(function(kk){base[k][kk]=extra[k][kk];});
+    } else base[k]=extra[k];
+  });
+  return base;
+}
+function mc(id,type,data,opts){
+  if(CHARTS[id]) CHARTS[id].destroy();
+  var el=document.getElementById(id); if(!el || typeof Chart==='undefined') return;
+  CHARTS[id]=new Chart(el,{type:type,data:data,options:opts||chartOpts(),plugins:typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]});
+}
+
+function renderCharts(rows){
+  var byP={};
+  rows.forEach(function(r){
+    if(!byP[r.producto]) byP[r.producto]={sol:0,prod:0,falt:0};
+    byP[r.producto].sol+=r.solicitada; byP[r.producto].prod+=r.producida; byP[r.producto].falt+=r.faltante;
+  });
+  var labs=Object.keys(byP);
+  mc('cProd','bar',{labels:labs,datasets:[
+    {label:'Solicitado',data:labs.map(function(k){return byP[k].sol;}),backgroundColor:C_TEAL+'cc',borderColor:C_TEAL,borderWidth:1,borderRadius:6},
+    {label:'Producido',data:labs.map(function(k){return byP[k].prod;}),backgroundColor:C_OK+'cc',borderColor:C_OK,borderWidth:1,borderRadius:6},
+    {label:'Faltante',data:labs.map(function(k){return byP[k].falt;}),backgroundColor:C_ROSE+'cc',borderColor:C_ROSE,borderWidth:1,borderRadius:6}
+  ]},chartOpts({plugins:{datalabels:{display:true,color:C_MUTED,anchor:'end',align:'end',font:{family:'Bricolage Grotesque',size:9,weight:'700'},formatter:function(v){return v>0?Math.round(v):'';}}}}));
+
+  var byE={};
+  rows.forEach(function(r){byE[r.etapa||'—']=(byE[r.etapa||'—']||0)+r.faltante;});
+  var eLabs=Object.keys(byE);
+  var eCols=[C_TEAL,C_ROSE,C_AMBER,C_OK,'#5b7c8a','#8b6f4e'];
+  mc('cEtapa','doughnut',{labels:eLabs,datasets:[{data:eLabs.map(function(k){return byE[k];}),backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),borderColor:'#fbfcfb',borderWidth:2}]},
+    chartOpts({scales:{x:{display:false},y:{display:false}},plugins:{legend:{position:'right',labels:{color:C_MUTED,boxWidth:10,font:{size:11}}},datalabels:{display:true,color:'#fff',font:{weight:'700',size:11,family:'Bricolage Grotesque'},formatter:function(v,ctx){var t=ctx.chart.data.datasets[0].data.reduce(function(a,b){return a+b;},0);return t&&v?Math.round(v):'';}}}}));
+
+  var lineMap={};
+  rows.forEach(function(r){
+    var ln=r.lineaAsignada||r.lineasRaw||'—';
+    lineMap[ln]=(lineMap[ln]||0)+r.faltante;
+  });
+  var lLabs=Object.keys(lineMap);
+  mc('cLinea','bar',{labels:lLabs,datasets:[
+    {label:'Faltante',data:lLabs.map(function(k){return lineMap[k];}),backgroundColor:C_TEAL+'cc',borderColor:C_TEAL,borderWidth:1,borderRadius:6}
+  ]},chartOpts({plugins:{legend:{display:true},datalabels:{display:true,color:C_MUTED,anchor:'end',align:'end',font:{family:'Bricolage Grotesque',size:10,weight:'700'},formatter:function(v){return v>0?Math.round(v):'';}}}}));
+
+  var top=rows.filter(function(r){return r.faltante>0;}).slice().sort(function(a,b){return b.faltante-a.faltante;}).slice(0,12);
+  var mx=top[0]?top[0].faltante:1;
+  document.getElementById('topSku').innerHTML=top.length
+    ? '<table><thead><tr><th>SKU</th><th>Producto</th><th>Faltante</th><th></th><th>Salida</th></tr></thead><tbody>'+
+      top.map(function(r){
+        return '<tr><td>'+esc(r.sku||'—')+'</td><td>'+esc(r.producto)+' '+esc(r.talla)+'</td><td class="num falt">'+fmtN(r.faltante)+'</td>'+
+          '<td><div class="bar"><i style="width:'+Math.round(100*r.faltante/mx)+'%"></i></div></td>'+
+          '<td class="num">'+fmtDate(r.fechaEstimada)+'</td></tr>';
+      }).join('')+'</tbody></table>'
+    : '<div class="empty">Sin faltante en cola</div>';
+}
+
 function renderAll(){
   if(!DATA) return;
   var rows=fr();
   document.getElementById('sub').textContent=
     (DATA.sheetName||'Tracking')+' · desde '+fmtDate(DATA.startDate)+' · '+fmtDate(DATA.generatedAt);
   renderKpis(rows);
+  renderCharts(rows);
   renderTable(rows);
   renderByProd(rows);
   renderByLine(rows);
