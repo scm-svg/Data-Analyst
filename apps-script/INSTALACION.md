@@ -26,7 +26,7 @@ Al implementar como Web App:
 
 ## Cómo se estima la fecha de salida
 
-La simulación arranca en `FECHA_INICIO` (hoy si está vacío) y solo cuenta días de `DIAS_LABORABLES` (lunes a sábado por defecto).
+La simulación arranca en `FECHA_INICIO` (hoy si está vacío) y solo cuenta días de `DIAS_LABORABLES` (lunes a viernes por defecto).
 
 1. Toma cada fila con **faltante > 0**.
 2. Ordena la cola:
@@ -45,7 +45,7 @@ La simulación arranca en `FECHA_INICIO` (hoy si está vacío) y solo cuenta dí
 |---|---|
 | `HOJA_DATOS` | Nombre de la hoja. Vacío = detectar (busca columnas MO + SKU) |
 | `FILA_ENCABEZADOS` | Fila de encabezados (en el archivo original es 2) |
-| `DIAS_LABORABLES` | `1,2,3,4,5,6` = lun–sáb. `1,2,3,4,5` = lun–vie |
+| `DIAS_LABORABLES` | `1,2,3,4,5` = lun–vie (default). `1,2,3,4,5,6` = lun–sáb |
 | `FECHA_INICIO` | `YYYY-MM-DD`. Vacío = hoy |
 | `ETAPAS_EN_LINEA` | Ya en máquina |
 | `ETAPAS_LISTAS` | Cola lista para confección |

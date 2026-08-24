@@ -17,7 +17,7 @@ var CONFIG_SHEET_NAME = 'Config Tracking';
 var DEFAULT_CONFIG = {
   HOJA_DATOS: '',
   FILA_ENCABEZADOS: '2',
-  DIAS_LABORABLES: '1,2,3,4,5,6',
+  DIAS_LABORABLES: '1,2,3,4,5',
   FECHA_INICIO: '',
   ETAPAS_EN_LINEA: 'En Confeccion',
   ETAPAS_LISTAS: 'A espera de Confeccion',
@@ -142,7 +142,7 @@ function ensureConfigSheet() {
   var rows = [
     ['HOJA_DATOS', existing.HOJA_DATOS || DEFAULT_CONFIG.HOJA_DATOS, 'Nombre de la hoja de pedidos. Vacío = detectar automáticamente.'],
     ['FILA_ENCABEZADOS', existing.FILA_ENCABEZADOS || DEFAULT_CONFIG.FILA_ENCABEZADOS, 'Fila donde están MO, SKU, Producto, etc.'],
-    ['DIAS_LABORABLES', existing.DIAS_LABORABLES || DEFAULT_CONFIG.DIAS_LABORABLES, 'ISO: 1=Lunes … 7=Domingo. Default lun-sáb.'],
+    ['DIAS_LABORABLES', existing.DIAS_LABORABLES || DEFAULT_CONFIG.DIAS_LABORABLES, 'ISO: 1=Lunes … 7=Domingo. Default lun-vie.'],
     ['FECHA_INICIO', existing.FECHA_INICIO || DEFAULT_CONFIG.FECHA_INICIO, 'Fecha de arranque de la simulación. Vacío = hoy.'],
     ['ETAPAS_EN_LINEA', existing.ETAPAS_EN_LINEA || DEFAULT_CONFIG.ETAPAS_EN_LINEA, 'Ya están en las líneas (ocupan capacidad primero).'],
     ['ETAPAS_LISTAS', existing.ETAPAS_LISTAS || DEFAULT_CONFIG.ETAPAS_LISTAS, 'Preparadas para entrar a línea. Van después de las que ya están en confección.'],
@@ -488,13 +488,13 @@ function matchesAny_(folded, list) {
 }
 
 function parseWorkdays_(s) {
-  var parts = String(s || '1,2,3,4,5,6').split(',');
+  var parts = String(s || '1,2,3,4,5').split(',');
   var out = [];
   parts.forEach(function (p) {
     var n = parseInt(p.trim(), 10);
     if (n >= 1 && n <= 7) out.push(n);
   });
-  return out.length ? out : [1, 2, 3, 4, 5, 6];
+  return out.length ? out : [1, 2, 3, 4, 5];
 }
 
 function parseStartDate_(value, tz) {

@@ -6,7 +6,7 @@ import datetime
 from collections import defaultdict
 
 TODAY = datetime.date(2026, 8, 24)
-WORKDAYS = {1, 2, 3, 4, 5, 6}
+WORKDAYS = {1, 2, 3, 4, 5}
 
 
 def fold(s):
@@ -93,7 +93,7 @@ def main():
     assert "Estampado" not in load or load["Estampado"] == 0
 
     last = max(r["fechaEstimada"] for r in dated)
-    assert last == "2026-09-04", last
+    assert last == "2026-09-07", last
 
     # A espera de Confeccion must be scheduled after En Confeccion on same line
     demo = [
