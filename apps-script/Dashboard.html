@@ -205,7 +205,7 @@ tr:hover td{background:#f5faf7}
 </div>
 <div class="toast" id="toast"></div>
 <script>
-var DATA=null, SORT={k:'fechaEstimada',dir:1}, CHARTS={}, COLORS={
+var DATA=null, SORT={k:'_cola',dir:1}, CHARTS={}, COLORS={
   'Blanco':'#f4f4f0','Negro':'#2b2b2b','Azul Rey':'#1e4fd6','Verde Militar':'#4b6b2f',
   'Azul Polo':'#2a6bd6','Gris Claro':'#b7b7b7','Azul Marino':'#16356b','Aguamarina':'#2bb3a0'
 };
@@ -274,7 +274,7 @@ function renderShell(){
     '<div class="tab-panel active" id="tab-resumen">'+
       '<div class="charts">'+
         '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
-        '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante agrupado por etapa del proceso</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
+        '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante en proceso y piezas terminadas</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
       '</div>'+
       '<section class="panel" style="margin-top:10px">'+
         '<div class="section-title"><h2>Pedidos</h2><span id="tblMeta"></span></div>'+
@@ -329,6 +329,7 @@ function resetFilters(){
     var el=document.getElementById(id); if(el) el.value='';
   });
   var q=document.getElementById('fQ'); if(q) q.value='';
+  SORT={k:'_cola',dir:1};
   renderAll();
 }
 function fr(){
@@ -393,12 +394,32 @@ function renderCharts(rows){
     {label:'Faltante',data:labs.map(function(k){return byP[k].falt;}),backgroundColor:C_ROSE+'cc',borderColor:C_ROSE,borderWidth:1,borderRadius:6}
   ]},chartOpts({plugins:{datalabels:{display:true,color:C_MUTED,anchor:'end',align:'end',font:{family:'Bricolage Grotesque',size:8,weight:'700'},formatter:function(v){return v>0?Math.round(v):'';}}}}));
 
-  var byE={};
-  rows.forEach(function(r){byE[r.etapa||'—']=(byE[r.etapa||'—']||0)+r.faltante;});
-  var eLabs=Object.keys(byE);
+  var byE={}, eOrder=[];
+  rows.forEach(function(r){
+    var etapa=r.etapa||'—';
+    var e=String(etapa).toLowerCase();
+    var isDone=e.indexOf('termin')>=0;
+    // Terminado suele tener faltante 0: mostrar piezas solicitadas/producidas para que se vea
+    var val=isDone ? (r.solicitada || r.producida || 0) : (r.faltante || 0);
+    if(!byE[etapa]){ byE[etapa]=0; eOrder.push(etapa); }
+    byE[etapa]+=val;
+  });
+  var eLabs=eOrder.slice().sort(function(a,b){
+    var ra=String(a).toLowerCase().indexOf('termin')>=0?1:0;
+    var rb=String(b).toLowerCase().indexOf('termin')>=0?1:0;
+    return ra-rb || String(a).localeCompare(String(b),'es');
+  });
   var eCols=[C_TEAL,C_ROSE,C_AMBER,C_OK,'#5b7c8a','#8b6f4e'];
-  mc('cEtapa','doughnut',{labels:eLabs,datasets:[{data:eLabs.map(function(k){return byE[k];}),backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),borderColor:'#fbfcfb',borderWidth:2}]},
-    chartOpts({scales:{x:{display:false},y:{display:false}},plugins:{legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10}}},datalabels:{display:true,color:'#fff',font:{weight:'700',size:10,family:'Bricolage Grotesque'},formatter:function(v,ctx){var t=ctx.chart.data.datasets[0].data.reduce(function(a,b){return a+b;},0);return t&&v?Math.round(v):'';}}}}));
+  var eData=eLabs.map(function(k){return byE[k];});
+  var eTotal=eData.reduce(function(a,b){return a+b;},0);
+  mc('cEtapa','doughnut',{labels:eLabs,datasets:[{data:eData,backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),borderColor:'#fbfcfb',borderWidth:2,hoverOffset:4}]},
+    chartOpts({scales:{x:{display:false},y:{display:false}},plugins:{legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10},generateLabels:function(chart){
+      var ds=chart.data.datasets[0];
+      return chart.data.labels.map(function(label,i){
+        var v=ds.data[i]||0;
+        return {text:label+' ('+Math.round(v)+')',fillStyle:ds.backgroundColor[i],strokeStyle:'#fbfcfb',lineWidth:1,hidden:false,index:i};
+      });
+    }},datalabels:{display:function(ctx){return (ctx.dataset.data[ctx.dataIndex]||0)>0;},color:'#fff',font:{weight:'700',size:11,family:'Bricolage Grotesque'},formatter:function(v){return eTotal&&v?Math.round(v):'';}}}}));
 }
 
 function renderAll(){
@@ -444,6 +465,14 @@ var COLS=[
   {k:'fechaEstimada',l:'Salida'},{k:'etapa',l:'Etapa'},{k:'status',l:'Status'}
 ];
 
+function etapaRank(etapa){
+  var e=String(etapa||'').toLowerCase()
+    .replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u');
+  if(e.indexOf('termin')>=0 || e.indexOf('complet')>=0 || e.indexOf('entreg')>=0) return 2;
+  if(e.indexOf('confeccion')>=0) return 0;
+  return 1;
+}
+
 function renderTable(rows){
   var thead='<tr>'+COLS.map(function(c){
     var mark=SORT.k===c.k?(SORT.dir>0?' ↑':' ↓'):'';
@@ -452,6 +481,13 @@ function renderTable(rows){
   document.querySelector('#tbl thead').innerHTML=thead;
 
   var sorted=rows.slice().sort(function(a,b){
+    if(SORT.k==='_cola'){
+      var ra=etapaRank(a.etapa), rb=etapaRank(b.etapa);
+      if(ra!==rb) return ra-rb;
+      var fa=a.fechaEstimada||'9999-99-99', fb=b.fechaEstimada||'9999-99-99';
+      if(fa!==fb) return fa<fb?-1:1;
+      return String(a.mo||'').localeCompare(String(b.mo||''),'es');
+    }
     var va=a[SORT.k], vb=b[SORT.k];
     if(va==null) va=''; if(vb==null) vb='';
     if(typeof va==='number' && typeof vb==='number') return (va-vb)*SORT.dir;
