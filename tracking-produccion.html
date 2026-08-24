@@ -261,7 +261,7 @@ function buildFilters(){
       '</select></div>';
   }).join('');
   html+='<div class="field grow"><label>Buscar</label><input id="fQ" placeholder="MO, SKU, cliente…" oninput="renderAll()"></div>';
-  html+='<div class="field" style="flex:0;min-width:auto"><label>&nbsp;</label><button class="btn" onclick="resetFilters()">Limpiar</button></div>';
+  html+='<button class="btn" type="button" onclick="resetFilters()" style="align-self:end;margin-bottom:1px">Limpiar</button>';
   document.getElementById('filters').innerHTML=html;
 }
 function resetFilters(){
@@ -396,13 +396,16 @@ function renderByProd(rows){
 }
 
 function renderByLine(rows){
-  var caps=DATA.lineCaps||{}, load=DATA.lineLoad||{};
-  var lines=uniq(Object.keys(caps).concat(Object.keys(load)).concat(rows.map(function(r){return r.lineaAsignada;}).filter(Boolean)));
+  var caps=DATA.lineCaps||{};
+  var lines=uniq(Object.keys(caps).concat(rows.map(function(r){return r.lineaAsignada;}).filter(Boolean)));
+  if(!lines.length){
+    // fallback to known lines from payload when filter empties assignment
+    lines=uniq(Object.keys(caps));
+  }
   if(!lines.length){document.getElementById('byLine').innerHTML='<div class="empty">Sin líneas</div>';return;}
   document.getElementById('byLine').innerHTML=lines.map(function(ln){
     var cap=caps[ln]||130;
-    var ld=load[ln];
-    if(ld==null) ld=sum(rows.filter(function(r){return r.lineaAsignada===ln;}),'faltante');
+    var ld=sum(rows.filter(function(r){return String(r.lineaAsignada)===String(ln);}),'faltante');
     var days=cap>0?Math.ceil(ld/cap):0;
     var pct=Math.min(100, days?Math.round(100*Math.min(days,14)/14):0);
     var barColor = days>7 ? 'var(--rose)' : (days>3 ? 'var(--amber)' : 'var(--teal)');
