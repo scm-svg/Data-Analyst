@@ -61,4 +61,11 @@ La fila 1 puede quedar vacía. Los encabezados van en la fila 2.
 
 ## Dashboard
 
-Filtros por producto, tipo, línea, etapa, estatus, género, color, talla y cliente. Muestra solicitado / producido / faltante, avance, fecha estimada, carga por línea y calendario de salidas.
+Diseño simple en una sola pantalla (sin tabs ni charts pesados):
+
+- 4 KPIs: solicitado, producido, faltante, última salida
+- Filtros: producto, tipo, línea, etapa, status, color, talla y búsqueda
+- Tabla de pedidos (ordenable)
+- Lateral: avance por producto, carga por línea y próximas salidas
+
+Vista previa local: `tracking-produccion.html`
