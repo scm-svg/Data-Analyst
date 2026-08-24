@@ -225,9 +225,14 @@ function bootErr(e){
   if(el) el.textContent='No se pudo cargar: '+(e&&e.message?e.message:e);
 }
 function init(payload){
-  DATA=payload;
-  renderShell();
-  renderAll();
+  try{
+    DATA=payload;
+    renderShell();
+    renderAll();
+  }catch(err){
+    bootErr(err);
+    console.error(err);
+  }
 }
 function toast(m){
   var t=document.getElementById('toast');
@@ -412,14 +417,28 @@ function renderCharts(rows){
   var eCols=[C_TEAL,C_ROSE,C_AMBER,C_OK,'#5b7c8a','#8b6f4e'];
   var eData=eLabs.map(function(k){return byE[k];});
   var eTotal=eData.reduce(function(a,b){return a+b;},0);
-  mc('cEtapa','doughnut',{labels:eLabs,datasets:[{data:eData,backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),borderColor:'#fbfcfb',borderWidth:2,hoverOffset:4}]},
-    chartOpts({scales:{x:{display:false},y:{display:false}},plugins:{legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10},generateLabels:function(chart){
-      var ds=chart.data.datasets[0];
-      return chart.data.labels.map(function(label,i){
-        var v=ds.data[i]||0;
-        return {text:label+' ('+Math.round(v)+')',fillStyle:ds.backgroundColor[i],strokeStyle:'#fbfcfb',lineWidth:1,hidden:false,index:i};
-      });
-    }},datalabels:{display:function(ctx){return (ctx.dataset.data[ctx.dataIndex]||0)>0;},color:'#fff',font:{weight:'700',size:11,family:'Bricolage Grotesque'},formatter:function(v){return eTotal&&v?Math.round(v):'';}}}}));
+  var eLegend=eLabs.map(function(label,i){return label+' ('+Math.round(eData[i]||0)+')';});
+  mc('cEtapa','doughnut',{
+    labels:eLegend,
+    datasets:[{
+      data:eData,
+      backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),
+      borderColor:'#fbfcfb',
+      borderWidth:2,
+      hoverOffset:4
+    }]
+  }, chartOpts({
+    scales:{x:{display:false},y:{display:false}},
+    plugins:{
+      legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10}}},
+      datalabels:{
+        display:function(ctx){return (ctx.dataset.data[ctx.dataIndex]||0)>0;},
+        color:'#fff',
+        font:{weight:'700',size:11,family:'Bricolage Grotesque'},
+        formatter:function(v){return eTotal && v ? Math.round(v) : '';}
+      }
+    }
+  }));
 }
 
 function renderAll(){
