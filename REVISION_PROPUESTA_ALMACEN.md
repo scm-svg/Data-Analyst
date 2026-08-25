@@ -225,7 +225,34 @@ error (y puede leerse como doble conteo).
 Faltan 6 HH. Si alguien cruza las dos secciones, encuentra que el protocolo propuesto no cubre
 la demanda que el mismo documento definió.
 
-### 3.11 Errores menores de redondeo y formato
+### 3.11 Consumibles está asignado a dos células, y la Célula 3 queda sobredimensionada
+
+- La **Célula 1** aparece en la tabla de custodia como responsable de la "Jaula de Consumibles
+  (Empaques/Taller)".
+- La **Célula 3** dice en su justificación que "unifica los pedidos de la web, cuadro chat **y la
+  entrega de consumibles** a tiendas y backoffice".
+
+El mismo frente está en dos células. Y eso importa porque define si la Célula 3 tiene trabajo:
+
+| Célula | Ops | Capacidad nominal | Demanda mapeada | Utilización |
+|---|---|---|---|---|
+| 1: MP + Insumos + Consumibles | 3 | 123.75 HH | 108.00 HH | 87% |
+| 2: PT + Equipamiento + Rampa | 5 | 206.25 HH | 164.75 HH | 80% |
+| 3: E-commerce + Chat (+ Consumibles?) | 2 | 82.50 HH | 15.00 - 40.50 HH | **18% - 49%** |
+| 4: Logística Inversa + REFRESH | 2 | 82.50 HH | 60.00 HH | 73% |
+
+Con los propios números del documento, la Célula 3 usa entre el 18% y el 49% de su capacidad,
+según dónde se cuenten los consumibles. Es la célula más fácil de recortar para quien quiera
+rechazar la propuesta, y encima es la que tiene el SLA más agresivo (< 24 h). Hay que sustentarla
+con volúmenes de pedidos web y proyección de crecimiento del canal digital, que hoy no aparecen
+en ninguna parte, o redistribuir el alcance.
+
+También conviene notar que la línea "Reabastecimiento Tienda Nueva" (16.25 HH) **no queda
+asignada explícitamente a ninguna célula** en la estructura nueva. Cada HH de la demanda debe
+tener un dueño en el organigrama propuesto; si no, la tabla de demanda y la de células no son
+comparables.
+
+### 3.12 Errores menores de redondeo y formato
 
 - `288.75 / 371.25 = 77.78%` → el documento dice **77.7%**, debe ser **77.8%**.
 - `287.75 / 288.75 = 99.65%` → el documento lo trunca a "99.6%".
