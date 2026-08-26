@@ -1,17 +1,17 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.7.0 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.8.0 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - CANTIDAD MÍNIMA = prioridad máxima justo DESPUÉS de Especial,
- *     respetando el "Día de inicio" de Por Hacer (columna R).
- *     No se adelanta producción antes de esa fecha.
- *   - PROYECCIÓN ACUMULADA: se escribe el acumulado hasta la semana en
- *     que se alcanza la meta (o deja de crecer). No se repite el mismo
- *     número en las semanas siguientes.
- *   - Tableros Planificacion / Semana 2–5 ordenados por flujo diario.
+ *   - PRIORIZACION - SKUs: cupos mínimos por SKU que se integran a
+ *     Cantidad Minima del modelo. Esos SKUs salen primero (después de
+ *     Especial), luego el resto del piso del modelo (colores core).
+ *   - PROYECCIÓN: sin mensaje superior; encabezado azul/blanco; filas
+ *     con borde negro exterior y líneas internas suaves; amarillo suave
+ *     al llegar a la mínima y verde suave al llegar a la meta.
+ *   - CANTIDAD MÍNIMA respeta Día de inicio (Por Hacer col. R).
  *   - COLORES CORE primero en toda la distribución de variantes.
  *   - MO ATÓMICA: cada lote (MO) entra completo en UNA sola línea.
  *   - PROYECCIÓN ACUMULADA en "Proyeccion" y "Proyeccion - SKUS".
@@ -23,7 +23,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.7.0";
+var VERSION_SISTEMA = "5.8.0";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_RESTO = 2;
@@ -33,6 +33,11 @@ var MAX_SNAPSHOTS = 8;
 var NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 var LOTE_RUEDA_LINEA5 = 5;
 var LOCK_MS = 120000;
+var COLOR_HEADER_PROY = "#3d85c6";
+var COLOR_MINIMA_PROY = "#fff2cc";
+var COLOR_META_PROY = "#d9ead3";
+var COLOR_BORDE_INTERNO = "#d0d0d0";
+var NOMBRES_PRIO_SKU = ["Priorizacion - SKUs", "Priorizacion - SKUS", "Priorización - SKUs", "Priorizacion SKUs"];
 
 // =====================================================================
 //  MENÚ Y BOTONES (UNIFICADOS)
@@ -300,6 +305,22 @@ function idxExacto_(headers, nombre) {
   return -1;
 }
 
+function claveSku_(s) { return normUp_(s); }
+
+function hojaPorNombreFlex_(ss, nombres) {
+  var i, h;
+  for (i = 0; i < nombres.length; i++) {
+    h = ss.getSheetByName(nombres[i]);
+    if (h) return h;
+  }
+  var alvos = nombres.map(function (n) { return claveModeloNorm_(n); });
+  var sheets = ss.getSheets();
+  for (i = 0; i < sheets.length; i++) {
+    if (alvos.indexOf(claveModeloNorm_(sheets[i].getName())) !== -1) return sheets[i];
+  }
+  return null;
+}
+
 function claveFecha_(v) {
   if (v instanceof Date && !isNaN(v)) return v.getTime();
   var s = norm_(v);
@@ -444,7 +465,10 @@ function clonarConBanda_(t, newQty, isFase2, esMinima) {
   return c;
 }
 
-function expandirTareasPorMinima_(tareas, mapaMinimas) {
+function expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku) {
+  mapaMinimas = mapaMinimas || {};
+  mapaMinimasSku = mapaMinimasSku || {};
+
   var porModelo = {};
   var orden = [];
   tareas.forEach(function (t) {
@@ -458,51 +482,142 @@ function expandirTareasPorMinima_(tareas, mapaMinimas) {
   var out = [];
   orden.forEach(function (mod) {
     var group = porModelo[mod];
-    var minTotal = minimaDeModelo_(mapaMinimas, mod);
-    if (group[0].esEspecial || !(minTotal > 0)) {
+    if (group[0].esEspecial) {
       group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, false)); });
       return;
     }
 
+    var minModelo = minimaDeModelo_(mapaMinimas, mod);
+    var remainingSku = {};
+    var minSkuDeclarado = 0;
+    group.forEach(function (t) {
+      var k = claveSku_(t.sku);
+      if (remainingSku[k] !== undefined) return;
+      var rec = mapaMinimasSku[k];
+      if (rec && rec.min > 0) {
+        remainingSku[k] = rec.min;
+        minSkuDeclarado += rec.min;
+      } else {
+        remainingSku[k] = 0;
+      }
+    });
+
+    var prodPorSku = {};
     var volFaltante = 0, volOriginal = 0;
     group.forEach(function (t) {
       volFaltante += t.cantidad;
       volOriginal += (t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal);
+      var k = claveSku_(t.sku);
+      var orig = t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal;
+      prodPorSku[k] = (prodPorSku[k] || 0) + Math.max(0, orig - t.cantidad);
     });
-    var producido = Math.max(0, volOriginal - volFaltante);
-    var minFaltante = Math.max(0, minTotal - producido);
+    Object.keys(remainingSku).forEach(function (k) {
+      if (remainingSku[k] > 0) remainingSku[k] = Math.max(0, remainingSku[k] - (prodPorSku[k] || 0));
+    });
 
-    if (minFaltante <= 0) {
-      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, true, false)); });
+    var hasSkuMin = false;
+    var sumSkuRestante = 0;
+    Object.keys(remainingSku).forEach(function (k) {
+      if (remainingSku[k] > 0) { hasSkuMin = true; sumSkuRestante += remainingSku[k]; }
+    });
+
+    var producido = Math.max(0, volOriginal - volFaltante);
+    var minModeloFaltante = Math.max(0, minModelo - producido);
+    var minModeloResto = Math.max(0, minModeloFaltante - sumSkuRestante);
+
+    if (!hasSkuMin && minModeloFaltante <= 0) {
+      var yaCubierta = minModelo > 0;
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, yaCubierta, false)); });
       return;
     }
-    if (minFaltante >= volFaltante) {
+    if (!hasSkuMin && minModeloFaltante >= volFaltante) {
       group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, true)); });
       return;
     }
 
     group.sort(function (a, b) {
+      var pa = remainingSku[claveSku_(a.sku)] > 0 ? 0 : 1;
+      var pb = remainingSku[claveSku_(b.sku)] > 0 ? 0 : 1;
+      if (pa !== pb) return pa - pb;
       var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
       if (ra !== rb) return ra - rb;
       if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
       return String(a.sku).localeCompare(String(b.sku));
     });
 
-    var remaining = minFaltante;
+    var restoModelo = minModeloResto;
+    var leftovers = [];
     group.forEach(function (t) {
-      if (remaining <= 0) {
-        out.push(clonarConBanda_(t, t.cantidad, true, false));
-      } else if (t.cantidad <= remaining) {
-        out.push(clonarConBanda_(t, t.cantidad, false, true));
-        remaining -= t.cantidad;
-      } else {
-        out.push(clonarConBanda_(t, remaining, false, true));
-        out.push(clonarConBanda_(t, t.cantidad - remaining, true, false));
-        remaining = 0;
+      var k = claveSku_(t.sku);
+      var left = t.cantidad;
+      var rec = mapaMinimasSku[k];
+      var needSku = remainingSku[k] || 0;
+      if (needSku > 0 && left > 0) {
+        var takeSku = Math.min(left, needSku);
+        var cSku = clonarConBanda_(t, takeSku, false, true);
+        if (rec && isFinite(rec.fechaKey)) cSku.fechaKey = rec.fechaKey;
+        out.push(cSku);
+        remainingSku[k] -= takeSku;
+        left -= takeSku;
       }
+      if (left > 0) leftovers.push({ t: t, left: left });
+    });
+    leftovers.sort(function (a, b) {
+      var ra = rangoColor_(a.t.color), rb = rangoColor_(b.t.color);
+      if (ra !== rb) return ra - rb;
+      if (b.left !== a.left) return b.left - a.left;
+      return String(a.t.sku).localeCompare(String(b.t.sku));
+    });
+    leftovers.forEach(function (item) {
+      var left = item.left;
+      if (restoModelo > 0 && left > 0) {
+        var takeMod = Math.min(left, restoModelo);
+        out.push(clonarConBanda_(item.t, takeMod, false, true));
+        restoModelo -= takeMod;
+        left -= takeMod;
+      }
+      if (left > 0) out.push(clonarConBanda_(item.t, left, true, false));
     });
   });
   return out;
+}
+
+function leerMinimasSku_(ss) {
+  var mapa = {};
+  var hoja = hojaPorNombreFlex_(ss, NOMBRES_PRIO_SKU);
+  if (!hoja || hoja.getLastRow() < 3) return mapa;
+
+  var ancho = Math.max(8, hoja.getLastColumn());
+  var headers = hoja.getRange(2, 2, 1, ancho - 1).getValues()[0];
+  var iSku = idxExacto_(headers, "SKU");
+  if (iSku === -1) iSku = idxPorFragmento_(headers, ["sku"]);
+  if (iSku === -1) iSku = 0;
+  var iProd = idxPorFragmento_(headers, ["producto", "modelo"]);
+  var iGen = idxPorFragmento_(headers, ["genero", "género"]);
+  var iMin = idxCantidadMinima_(headers);
+  var iFec = idxPorFragmento_(headers, ["fecha"]);
+  var iLin = idxPorFragmento_(headers, ["linea", "línea"]);
+
+  var nFilas = hoja.getLastRow() - 2;
+  if (nFilas < 1) return mapa;
+  var datos = hoja.getRange(3, 2, nFilas, ancho - 1).getValues();
+  for (var i = 0; i < datos.length; i++) {
+    var sku = iSku !== -1 ? norm_(datos[i][iSku]) : "";
+    if (sku === "") continue;
+    var minVal = iMin !== -1 ? parseCantidad_(datos[i][iMin]) : 0;
+    if (!(minVal > 0)) continue;
+    var prod = iProd !== -1 ? norm_(datos[i][iProd]) : "";
+    var gen = iGen !== -1 ? norm_(datos[i][iGen]) : "";
+    var modelo = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
+    mapa[claveSku_(sku)] = {
+      sku: sku,
+      min: minVal,
+      modelo: modelo,
+      fechaKey: iFec !== -1 ? claveFecha_(datos[i][iFec]) : Infinity,
+      lineas: iLin !== -1 ? parsearLineas_(datos[i][iLin]) : []
+    };
+  }
+  return mapa;
 }
 
 function guardarSnapshotPlan_() {
@@ -717,12 +832,14 @@ function generarPlanificacionSemanal_() {
 
   ss.toast("Leyendo prioridades y fechas... (v" + VERSION_SISTEMA + ")", "⚙️ Planificando", 5);
   guardarSnapshotPlan_();
+  asegurarHojaPriorizacionSkus_(ss);
 
   var jerarquiaInversa = { 0: "ESPECIAL (Satélite)", 1: "Urgente", 2: "Alta", 3: "Media", 4: "Baja", 5: "Sin Asignar" };
   var mapaPrioridades = {};
   var mapaFechaModelo = {};
   var mapaMinimas = {};
   var mapaLineasModelo = {};
+  var mapaMinimasSku = leerMinimasSku_(ss);
 
   if (hojaPriorizacion && hojaPriorizacion.getLastRow() >= 3) {
     var anchoPrio = Math.max(6, hojaPriorizacion.getLastColumn());
@@ -788,12 +905,26 @@ function generarPlanificacionSemanal_() {
       if (inter.length) t.lineas = inter;
     }
     t.colorRank = rangoColor_(t.color);
+    var recSku = mapaMinimasSku[claveSku_(t.sku)];
+    if (recSku && !recSku.modelo) recSku.modelo = t.modelo;
+  });
+
+  var sumaSkuPorModelo = {};
+  Object.keys(mapaMinimasSku).forEach(function (k) {
+    var recS = mapaMinimasSku[k];
+    if (recS.modelo) sumaSkuPorModelo[recS.modelo] = (sumaSkuPorModelo[recS.modelo] || 0) + recS.min;
   });
 
   var nModelosConMinima = Object.keys(mapaMinimas).length;
   var detalleMinimas = [];
   for (var mk in mapaMinimas) detalleMinimas.push(mk + ": " + mapaMinimas[mk]);
-  tareas = expandirTareasPorMinima_(tareas, mapaMinimas);
+  var nSkusMin = Object.keys(mapaMinimasSku).length;
+  var detalleSkusMin = [];
+  Object.keys(mapaMinimasSku).forEach(function (k) {
+    var rsk = mapaMinimasSku[k];
+    detalleSkusMin.push(rsk.sku + ": " + rsk.min);
+  });
+  tareas = expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku);
 
   tareas.sort(function (a, b) {
     var ba = bandaDe_(a), bb = bandaDe_(b);
@@ -1025,7 +1156,9 @@ function generarPlanificacionSemanal_() {
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
         fechaObj: t.fechaKey, mos: new Set(),
         porSemana: [], restante: 0, ultimoDia: -1,
-        diaFinEstimado: -1, minima: minimaDeModelo_(mapaMinimas, t.modelo), bandaMin: 9
+        diaFinEstimado: -1,
+        minima: Math.max(minimaDeModelo_(mapaMinimas, t.modelo), sumaSkuPorModelo[t.modelo] || 0),
+        bandaMin: 9
       };
       for (var w = 0; w < cfg.semanas; w++) infoModelo[t.modelo].porSemana.push(0);
     }
@@ -1054,7 +1187,8 @@ function generarPlanificacionSemanal_() {
         lineas: t.lineas, esEspecial: t.esEspecial,
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
         fechaObj: t.fechaKey, porSemana: [], restante: 0, ultimoDia: -1,
-        diaFinEstimado: -1, lineaAsignada: t.lineaFija || ""
+        diaFinEstimado: -1, lineaAsignada: t.lineaFija || "",
+        minima: (mapaMinimasSku[claveSku_(t.sku)] || {}).min || 0
       };
       for (var wSku = 0; wSku < cfg.semanas; wSku++) infoSku[skuKey].porSemana.push(0);
     }
@@ -1184,17 +1318,20 @@ function generarPlanificacionSemanal_() {
     if (infoModelo[modMin]) nMinAplicadas++;
   }
   var txtMin = detalleMinimas.length ? detalleMinimas.join("\n  - ") : "(ningún modelo con cupo > 0 en Priorizacion)";
+  var txtSkuMin = detalleSkusMin.length
+    ? detalleSkusMin.slice(0, 15).join("\n  - ") + (detalleSkusMin.length > 15 ? "\n  - … +" + (detalleSkusMin.length - 15) + " SKUs" : "")
+    : "(ningún SKU con cupo en Priorizacion - SKUs)";
 
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
-    "• Orden de carga: 1) Especial  →  2) Cantidad mínima (máxima urgencia)  →  3) Resto del plan.\n" +
-    "• Cupo mínimo leído de Priorizacion (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
+    "• Orden de carga: 1) Especial  →  2) Cantidad mínima (SKU + modelo)  →  3) Resto del plan.\n" +
+    "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
+    "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
     "  Programadas en banda mínima: " + piezasMinima + " pzas.  |  Modelos vivos con cupo: " + nMinAplicadas + "\n" +
-    "  Fase 1 (mínima + colores core): " + piezasFase1 + " pzas.  |  Fase 2 (resto): " + piezasFase2 + " pzas.\n" +
+    "  Fase 1 (mínima): " + piezasFase1 + " pzas.  |  Fase 2 (resto): " + piezasFase2 + " pzas.\n" +
     "• Tableros semanales ordenados por flujo diario (primer día con producción).\n" +
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
-    "• Proyección acumulada: se muestra hasta la semana en que se alcanza la meta (sin repetir el mismo número).\n" +
-    "• Colores core (Negro / Blanco / Azul Marino) salen primero."
+    "• Proyección: amarillo al llegar a la mínima, verde al llegar a la meta."
   );
 }
 
@@ -1553,12 +1690,42 @@ function valoresAcumuladosSemanas_(porSemana, nSemanas, meta) {
   return out;
 }
 
+function colorCeldaUmbral_(valor, minima, meta) {
+  if (valor === "--" || valor === "" || valor === null || valor === undefined) return "#FFFFFF";
+  var n = Number(valor);
+  if (!isFinite(n) || n <= 0) return "#FFFFFF";
+  if (meta > 0 && n >= meta) return COLOR_META_PROY;
+  if (minima > 0 && n >= minima) return COLOR_MINIMA_PROY;
+  return "#FFFFFF";
+}
+
+function aplicarBordesFilasProy_(hoja, filaIni, nFilas, colIni, nCols) {
+  if (nFilas <= 0) return;
+  for (var i = 0; i < nFilas; i++) {
+    var row = hoja.getRange(filaIni + i, colIni, 1, nCols);
+    row.setBorder(null, null, null, null, true, false, COLOR_BORDE_INTERNO, SpreadsheetApp.BorderStyle.SOLID);
+    row.setBorder(true, true, true, true, null, null, "black", SpreadsheetApp.BorderStyle.SOLID);
+  }
+}
+
+function estiloEncabezadoProy_(hoja, fila, colIni, nCols) {
+  var header = hoja.getRange(fila, colIni, 1, nCols);
+  header.setBackground(COLOR_HEADER_PROY)
+    .setFontColor("#FFFFFF")
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setBorder(null, null, null, null, true, false, COLOR_BORDE_INTERNO, SpreadsheetApp.BorderStyle.SOLID)
+    .setBorder(true, true, true, true, null, null, "black", SpreadsheetApp.BorderStyle.SOLID);
+  try { hoja.setFrozenRows(fila); } catch (e) {}
+}
+
 function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   var hojaProy = ss.getSheetByName("Proyeccion");
   if (!hojaProy) hojaProy = ss.insertSheet("Proyeccion");
 
   var maxFPr = hojaProy.getMaxRows();
-  if (maxFPr > 1) {
+  if (maxFPr > 0) {
     var limpPr = hojaProy.getRange(1, 1, maxFPr, Math.max(12, hojaProy.getMaxColumns()));
     try { limpPr.clear(); } catch (e) {}
   }
@@ -1568,17 +1735,16 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     cabProy.push("Acum Sem " + (w2 + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, w2 * DIAS_LABORALES), cfg.tz, "dd/MM") + ")");
   }
   cabProy.push("Sin Programar", "Fecha Estim. Término", "Estado");
+  var idxSemProy = 3;
 
-  hojaProy.getRange(1, 2).setValue("📅 PROYECCIÓN ACUMULADA — Nivel: Modelo — Horizonte: " + cfg.semanas +
-    " semanas desde el " + Utilities.formatDate(cfg.lunesBase, cfg.tz, "dd/MM/yyyy") +
-    "  |  Acumulado hasta la semana en que se alcanza la meta (no se repite el mismo número)")
-    .setFontWeight("bold");
-  hojaProy.getRange(2, 2, 1, cabProy.length).setValues([cabProy])
-    .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
-    .setHorizontalAlignment("center").setVerticalAlignment("middle");
+  hojaProy.getRange(1, 2, 1, cabProy.length).setValues([cabProy]);
+  estiloEncabezadoProy_(hojaProy, 1, 2, cabProy.length);
 
   var modelosOrdenados = Object.keys(infoModelo).sort(function (a, b) {
     var ia = infoModelo[a], ib = infoModelo[b];
+    var ba = (ia.bandaMin !== undefined) ? ia.bandaMin : 9;
+    var bb = (ib.bandaMin !== undefined) ? ib.bandaMin : 9;
+    if (ba !== bb) return ba - bb;
     var aPlan = (ia.porSemana[0] || 0) > 0, bPlan = (ib.porSemana[0] || 0) > 0;
     if (aPlan !== bPlan) return aPlan ? -1 : 1;
     if (ia.fechaObj !== ib.fechaObj) return ia.fechaObj - ib.fechaObj;
@@ -1589,7 +1755,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   });
 
   var filasProy = [];
-  var coloresEstado = [];
+  var fondosProy = [];
 
   for (var mi2 = 0; mi2 < modelosOrdenados.length; mi2++) {
     var nomMod = modelosOrdenados[mi2];
@@ -1600,19 +1766,17 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
       fechaFinMs = fechaDeDia_(cfg, im3.diaFinEstimado).getTime();
     }
 
-    var estado, colorFondo;
+    var estado;
     if (im3.restante > 0) {
       if (isFinite(im3.fechaObj)) {
-        if (fechaFinMs <= im3.fechaObj) { estado = "✅ FUERA DE HORIZONTE (PERO A TIEMPO)"; colorFondo = "#d9ead3"; }
-        else { estado = "🚨 FUERA DE HORIZONTE Y RETRASADO"; colorFondo = "#f4cccc"; }
+        estado = fechaFinMs <= im3.fechaObj ? "✅ FUERA DE HORIZONTE (PERO A TIEMPO)" : "🚨 FUERA DE HORIZONTE Y RETRASADO";
       } else {
-        estado = "⚠️ FUERA DE HORIZONTE"; colorFondo = "#fff2cc";
+        estado = "⚠️ FUERA DE HORIZONTE";
       }
     } else if (isFinite(im3.fechaObj)) {
-      if (fechaFinMs <= im3.fechaObj) { estado = "✅ A TIEMPO"; colorFondo = "#d9ead3"; }
-      else { estado = "🚨 RETRASADO"; colorFondo = "#fce5cd"; }
+      estado = fechaFinMs <= im3.fechaObj ? "✅ A TIEMPO" : "🚨 RETRASADO";
     } else {
-      estado = "— Sin fecha objetivo"; colorFondo = "#FFFFFF";
+      estado = "— Sin fecha objetivo";
     }
 
     var fila = [nomMod, formatoFecha_(cfg, im3.fechaObj), im3.solicitada];
@@ -1621,25 +1785,34 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     fila.push(im3.restante === 0 ? "--" : im3.restante);
     fila.push(isFinite(fechaFinMs) ? formatoFecha_(cfg, fechaFinMs) : "--");
     fila.push(estado);
-
     filasProy.push(fila);
-    coloresEstado.push(colorFondo);
+
+    var fondoFila = [];
+    for (var c0 = 0; c0 < cabProy.length; c0++) fondoFila.push("#FFFFFF");
+    for (var wC = 0; wC < cfg.semanas; wC++) {
+      fondoFila[idxSemProy + wC] = colorCeldaUmbral_(acumMod[wC], im3.minima || 0, im3.solicitada);
+    }
+    fondosProy.push(fondoFila);
   }
 
   if (filasProy.length > 0) {
-    var rProy = hojaProy.getRange(3, 2, filasProy.length, cabProy.length);
+    var rProy = hojaProy.getRange(2, 2, filasProy.length, cabProy.length);
     rProy.setValues(filasProy)
-      .setHorizontalAlignment("center").setVerticalAlignment("middle")
-      .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
-    var fondos = coloresEstado.map(function (c) { return [c]; });
-    hojaProy.getRange(3, 1 + cabProy.length, filasProy.length, 1).setBackgrounds(fondos);
+      .setBackgrounds(fondosProy)
+      .setFontColor("#000000")
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setWrap(false);
+    aplicarBordesFilasProy_(hojaProy, 2, filasProy.length, 2, cabProy.length);
+    try { hojaProy.autoResizeColumns(2, cabProy.length); } catch (e2) {}
+    try { hojaProy.setRowHeights(1, filasProy.length + 1, 24); } catch (e3) {}
   }
 
   var hojaProySkus = ss.getSheetByName("Proyeccion - SKUS");
   if (!hojaProySkus) hojaProySkus = ss.insertSheet("Proyeccion - SKUS");
 
   var maxFPrS = hojaProySkus.getMaxRows();
-  if (maxFPrS > 1) {
+  if (maxFPrS > 0) {
     var limpPrS = hojaProySkus.getRange(1, 1, maxFPrS, Math.max(20, hojaProySkus.getMaxColumns()));
     try { limpPrS.clear(); } catch (e) {}
   }
@@ -1649,14 +1822,10 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     cabProySku.push("Acum Sem " + (wS + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, wS * DIAS_LABORALES), cfg.tz, "dd/MM") + ")");
   }
   cabProySku.push("Sin Programar", "Fecha Estim. Término", "Estado", "Genero", "Color", "Talla", "Linea", "Cap Produccion por Dia", "Tipo");
+  var idxSemSku = 5;
 
-  hojaProySkus.getRange(1, 2).setValue("📅 PROYECCIÓN ACUMULADA — Nivel: SKU — Horizonte: " + cfg.semanas +
-    " semanas desde el " + Utilities.formatDate(cfg.lunesBase, cfg.tz, "dd/MM/yyyy") +
-    "  |  Acumulado hasta la semana en que se alcanza la meta (no se repite el mismo número)")
-    .setFontWeight("bold");
-  hojaProySkus.getRange(2, 2, 1, cabProySku.length).setValues([cabProySku])
-    .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
-    .setHorizontalAlignment("center").setVerticalAlignment("middle");
+  hojaProySkus.getRange(1, 2, 1, cabProySku.length).setValues([cabProySku]);
+  estiloEncabezadoProy_(hojaProySkus, 1, 2, cabProySku.length);
 
   var skusOrdenados = Object.keys(infoSku).sort(function (a, b) {
     var ia = infoSku[a], ib = infoSku[b];
@@ -1672,7 +1841,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   });
 
   var filasProySku = [];
-  var coloresEstadoSku = [];
+  var fondosSku = [];
 
   for (var miS = 0; miS < skusOrdenados.length; miS++) {
     var claveSku = skusOrdenados[miS];
@@ -1683,26 +1852,17 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
       fechaFinMsSku = fechaDeDia_(cfg, isku.diaFinEstimado).getTime();
     }
 
-    var estadoSku, colorFondoSku;
+    var estadoSku;
     if (isku.restante > 0) {
       if (isFinite(isku.fechaObj)) {
-        if (fechaFinMsSku <= isku.fechaObj) {
-          estadoSku = "✅ FUERA DE HORIZONTE (PERO A TIEMPO)";
-          colorFondoSku = "#d9ead3";
-        } else {
-          estadoSku = "🚨 FUERA DE HORIZONTE Y RETRASADO";
-          colorFondoSku = "#f4cccc";
-        }
+        estadoSku = fechaFinMsSku <= isku.fechaObj ? "✅ FUERA DE HORIZONTE (PERO A TIEMPO)" : "🚨 FUERA DE HORIZONTE Y RETRASADO";
       } else {
         estadoSku = "⚠️ FUERA DE HORIZONTE";
-        colorFondoSku = "#fff2cc";
       }
     } else if (isFinite(isku.fechaObj)) {
-      if (fechaFinMsSku <= isku.fechaObj) { estadoSku = "✅ A TIEMPO"; colorFondoSku = "#d9ead3"; }
-      else { estadoSku = "🚨 RETRASADO"; colorFondoSku = "#fce5cd"; }
+      estadoSku = fechaFinMsSku <= isku.fechaObj ? "✅ A TIEMPO" : "🚨 RETRASADO";
     } else {
       estadoSku = "— Sin fecha objetivo";
-      colorFondoSku = "#FFFFFF";
     }
 
     var filaS = [isku.sku, isku.modelo, isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
@@ -1717,22 +1877,31 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     filaS.push(isku.lineaAsignada ? String(isku.lineaAsignada) : formatearLineas_(isku.lineas || []));
     filaS.push(isku.cap || "");
     filaS.push(isku.esEspecial ? "Especial" : "Producción");
-
     filasProySku.push(filaS);
-    coloresEstadoSku.push(colorFondoSku);
+
+    var fondoSku = [];
+    for (var cS = 0; cS < cabProySku.length; cS++) fondoSku.push("#FFFFFF");
+    for (var wCs = 0; wCs < cfg.semanas; wCs++) {
+      fondoSku[idxSemSku + wCs] = colorCeldaUmbral_(acumSku[wCs], isku.minima || 0, isku.solicitada);
+    }
+    fondosSku.push(fondoSku);
   }
 
   if (filasProySku.length > 0) {
-    var rProyS = hojaProySkus.getRange(3, 2, filasProySku.length, cabProySku.length);
+    var rProyS = hojaProySkus.getRange(2, 2, filasProySku.length, cabProySku.length);
     rProyS.setValues(filasProySku)
-      .setHorizontalAlignment("center").setVerticalAlignment("middle")
-      .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
-    var fondosS = coloresEstadoSku.map(function (c) { return [c]; });
-    var idxColEstadoSku = cabProySku.indexOf("Estado");
-    hojaProySkus.getRange(3, 2 + idxColEstadoSku, filasProySku.length, 1).setBackgrounds(fondosS);
-    hojaProySkus.getRange(3, 2, filasProySku.length, 1).setNumberFormat("@");
+      .setBackgrounds(fondosSku)
+      .setFontColor("#000000")
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setWrap(false);
+    aplicarBordesFilasProy_(hojaProySkus, 2, filasProySku.length, 2, cabProySku.length);
+    hojaProySkus.getRange(2, 2, filasProySku.length, 1).setNumberFormat("@");
+    try { hojaProySkus.autoResizeColumns(2, cabProySku.length); } catch (e4) {}
+    try { hojaProySkus.setRowHeights(1, Math.min(filasProySku.length + 1, 400), 22); } catch (e5) {}
   }
 }
+
 
 function addBusinessDays_(dateMs, days) {
   if (!isFinite(dateMs)) return Infinity;
@@ -1891,6 +2060,33 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
 }
 
 
+function asegurarHojaPriorizacionSkus_(ss) {
+  var hoja = hojaPorNombreFlex_(ss, NOMBRES_PRIO_SKU);
+  if (!hoja) {
+    hoja = ss.insertSheet("Priorizacion - SKUs");
+  }
+  var cab = hoja.getRange("B2:I2").getValues()[0];
+  var cabOk = normUp_(cab[0]) === "SKU" && quitarTildes_(normLow_(cab[5] || "")).indexOf("minima") !== -1;
+  if (!cabOk) {
+    hoja.getRange("B2:I2").setValues([["SKU", "Producto", "Genero", "Color", "Talla", "Cantidad Minima", "Fecha de Salida Estimada", "Lineas"]]);
+    hoja.getRange("B2:I2").setBackground("#3d85c6").setFontColor("#FFFFFF")
+      .setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  }
+  var maxPre = 200;
+  if (!hoja.getRange(3, 9).getFormula()) {
+    var formulas = [];
+    for (var r = 3; r <= maxPre; r++) {
+      formulas.push(["=IFERROR(VLOOKUP(B" + r + ",'Por Hacer'!$F$2:$S$2000,6,FALSE),\"\")"]);
+    }
+    hoja.getRange(3, 9, formulas.length, 1).setFormulas(formulas);
+  }
+  hoja.getRange("B3:B" + maxPre).setNumberFormat("@");
+  hoja.getRange("G3:G" + maxPre).setNumberFormat("0");
+  hoja.getRange("H3:H" + maxPre).setNumberFormat("dd/mm/yyyy");
+  hoja.setFrozenRows(2);
+  return hoja;
+}
+
 // =====================================================================
 //  GESTOR DE PRIORIZACIÓN: actualizarModelosPriorizacion()
 // =====================================================================
@@ -1987,11 +2183,14 @@ function actualizarModelosPriorizacion_() {
     hojaPrio.getRange(3, 7, conservados.length, 1).setNumberFormat("@");
   }
 
+  asegurarHojaPriorizacionSkus_(ss);
+
   var msg = "";
   if (huerfanos > 0) msg += "🗑️ LIMPIEZA:\nSe eliminaron " + huerfanos + " modelos huérfanos.\n\n";
   msg += nuevos > 0
     ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima y Líneas."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
+  msg += "\n\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
   SpreadsheetApp.getUi().alert("RESUMEN DE PRIORIZACIÓN\n\n" + msg);
 }
 

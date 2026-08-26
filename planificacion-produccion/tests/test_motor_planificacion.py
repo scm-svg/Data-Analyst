@@ -96,8 +96,22 @@ def dia_inicio_efectivo(t):
     return t.get("diaIngreso") or 0
 
 
-def expandir_por_minima(tareas, mapa_minimas):
-    """Fase 1 cubre cantidad minima priorizando colores core; marca esMinima."""
+def clave_sku(s):
+    return norm(s).upper()
+
+
+def min_de_sku(mapa_sku, sku):
+    if not mapa_sku:
+        return 0
+    v = mapa_sku.get(clave_sku(sku), mapa_sku.get(sku))
+    if isinstance(v, dict):
+        return v.get("min") or 0
+    return v or 0
+
+
+def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
+    """SKU mins primero; el resto del piso del modelo con colores core."""
+    mapa_minimas_sku = mapa_minimas_sku or {}
     por_modelo = defaultdict(list)
     orden = []
     for t in tareas:
@@ -108,56 +122,95 @@ def expandir_por_minima(tareas, mapa_minimas):
     out = []
     for modelo in orden:
         group = por_modelo[modelo]
-        min_total = minima_de_modelo(mapa_minimas, modelo)
-        if group[0].get("esEspecial") or not min_total:
+        if group[0].get("esEspecial"):
             for t in group:
                 t["fase2"] = False
                 t["esMinima"] = False
                 out.append(t)
             continue
 
-        vol_faltante = sum(t["cantidad"] for t in group)
-        vol_original = sum(t.get("solicitadaOrig", t["cantidad"]) for t in group)
-        producido = vol_original - vol_faltante
-        min_faltante = max(0, min_total - producido)
-
-        if min_faltante <= 0:
-            for t in group:
-                t["fase2"] = True
-                t["esMinima"] = False
-                out.append(t)
-            continue
-        if min_faltante >= vol_faltante:
-            for t in group:
-                t["fase2"] = False
-                t["esMinima"] = True
-                out.append(t)
-            continue
-
-        group.sort(key=lambda t: (rango_color(t.get("color")), -t["cantidad"], t["sku"]))
-        remaining = min_faltante
+        min_modelo = minima_de_modelo(mapa_minimas, modelo)
+        remaining_sku = {}
+        seen = set()
         for t in group:
-            if remaining <= 0:
-                t["fase2"] = True
+            k = clave_sku(t["sku"])
+            if k in seen:
+                continue
+            seen.add(k)
+            remaining_sku[k] = min_de_sku(mapa_minimas_sku, t["sku"])
+
+        prod_por_sku = defaultdict(float)
+        vol_faltante = 0
+        vol_original = 0
+        for t in group:
+            vol_faltante += t["cantidad"]
+            orig = t.get("solicitadaOrig", t["cantidad"])
+            vol_original += orig
+            prod_por_sku[clave_sku(t["sku"])] += max(0, orig - t["cantidad"])
+        for k in list(remaining_sku):
+            if remaining_sku[k] > 0:
+                remaining_sku[k] = max(0, remaining_sku[k] - prod_por_sku[k])
+
+        has_sku_min = any(v > 0 for v in remaining_sku.values())
+        sum_sku_rest = sum(remaining_sku.values())
+        producido = max(0, vol_original - vol_faltante)
+        min_modelo_faltante = max(0, min_modelo - producido)
+        min_modelo_resto = max(0, min_modelo_faltante - sum_sku_rest)
+
+        if not has_sku_min and min_modelo_faltante <= 0:
+            ya = min_modelo > 0
+            for t in group:
+                t["fase2"] = ya
                 t["esMinima"] = False
                 out.append(t)
-            elif t["cantidad"] <= remaining:
+            continue
+        if not has_sku_min and min_modelo_faltante >= vol_faltante:
+            for t in group:
                 t["fase2"] = False
                 t["esMinima"] = True
-                remaining -= t["cantidad"]
                 out.append(t)
-            else:
+            continue
+
+        group.sort(key=lambda t: (
+            0 if remaining_sku.get(clave_sku(t["sku"]), 0) > 0 else 1,
+            rango_color(t.get("color")),
+            -t["cantidad"],
+            t["sku"],
+        ))
+        resto_modelo = min_modelo_resto
+        leftovers = []
+        for t in group:
+            k = clave_sku(t["sku"])
+            left = t["cantidad"]
+            need = remaining_sku.get(k, 0)
+            if need > 0 and left > 0:
+                take = min(left, need)
                 a = dict(t)
-                a["cantidad"] = remaining
+                a["cantidad"] = take
                 a["fase2"] = False
                 a["esMinima"] = True
-                b = dict(t)
-                b["cantidad"] = t["cantidad"] - remaining
-                b["fase2"] = True
-                b["esMinima"] = False
                 out.append(a)
+                remaining_sku[k] -= take
+                left -= take
+            if left > 0:
+                leftovers.append((t, left))
+        leftovers.sort(key=lambda it: (rango_color(it[0].get("color")), -it[1], it[0]["sku"]))
+        for t, left in leftovers:
+            if resto_modelo > 0 and left > 0:
+                take_m = min(left, resto_modelo)
+                b = dict(t)
+                b["cantidad"] = take_m
+                b["fase2"] = False
+                b["esMinima"] = True
                 out.append(b)
-                remaining = 0
+                resto_modelo -= take_m
+                left -= take_m
+            if left > 0:
+                c = dict(t)
+                c["cantidad"] = left
+                c["fase2"] = True
+                c["esMinima"] = False
+                out.append(c)
     return out
 
 
@@ -352,6 +405,31 @@ class TestCantidadMinima(unittest.TestCase):
         self.assertFalse(out[0]["esMinima"])
         self.assertTrue(out[0]["fase2"])
 
+    def test_sku_minima_sale_antes_que_core(self):
+        """Priorizacion - SKUs fuerza Rojo aunque no sea color núcleo."""
+        tareas = [
+            self._t("R", "Rojo", 80),
+            self._t("N", "Negro", 80),
+            self._t("B", "Blanco", 80),
+            self._t("A", "Azul Marino", 80),
+        ]
+        out = expandir_por_minima(tareas, {"RIO DAMA": 200}, {"R": 50})
+        fase1 = [t for t in out if t["esMinima"]]
+        self.assertEqual(sum(t["cantidad"] for t in fase1), 200)
+        rojo = [t for t in fase1 if t["color"] == "Rojo"]
+        self.assertEqual(sum(t["cantidad"] for t in rojo), 50)
+        self.assertIn("Negro", {t["color"] for t in fase1})
+
+    def test_sku_minima_sin_cupo_de_modelo(self):
+        tareas = [
+            self._t("R", "Rojo", 80),
+            self._t("N", "Negro", 80),
+        ]
+        out = expandir_por_minima(tareas, {}, {"R": 40})
+        self.assertEqual(sum(t["cantidad"] for t in out if t["esMinima"] and t["sku"] == "R"), 40)
+        self.assertFalse(any(t["esMinima"] and t["sku"] == "N" for t in out))
+
+
     def test_match_case_insensitive(self):
         self.assertEqual(minima_de_modelo({"RIO DAMA": 400}, "rio dama"), 400)
         self.assertEqual(minima_de_modelo({"RIO DAMA": 400}, "RIO DAMA"), 400)
@@ -473,6 +551,20 @@ class TestAcumulado(unittest.TestCase):
 
     def test_vacio(self):
         self.assertEqual(acumular_semanas([0, 0, 0]), [None, None, None])
+
+    def test_colores_umbral(self):
+        def color(val, minima, meta):
+            if val in (None, "--", 0):
+                return "white"
+            if meta and val >= meta:
+                return "green"
+            if minima and val >= minima:
+                return "yellow"
+            return "white"
+        self.assertEqual(color(88, 0, 88), "green")
+        self.assertEqual(color(100, 100, 400), "yellow")
+        self.assertEqual(color(400, 100, 400), "green")
+        self.assertEqual(color("--", 100, 400), "white")
 
 
 if __name__ == "__main__":
