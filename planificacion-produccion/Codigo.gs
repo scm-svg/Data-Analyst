@@ -1,16 +1,17 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.6.0 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.7.0 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - CANTIDAD MÍNIMA = prioridad máxima justo DESPUÉS de Especial
- *     (Por Hacer - Especial). El cupo de Priorizacion!Cantidad Minima
- *     se programa con máxima urgencia (no espera el "día de inicio" del SKU)
- *     y recién después sigue el paneo normal (fecha + Urgente/Alta/Media/Baja).
- *   - Tableros Planificacion / Semana 2–5 ordenados por flujo diario
- *     (primer día de la semana con unidades), no por fecha objetivo.
+ *   - CANTIDAD MÍNIMA = prioridad máxima justo DESPUÉS de Especial,
+ *     respetando el "Día de inicio" de Por Hacer (columna R).
+ *     No se adelanta producción antes de esa fecha.
+ *   - PROYECCIÓN ACUMULADA: se escribe el acumulado hasta la semana en
+ *     que se alcanza la meta (o deja de crecer). No se repite el mismo
+ *     número en las semanas siguientes.
+ *   - Tableros Planificacion / Semana 2–5 ordenados por flujo diario.
  *   - COLORES CORE primero en toda la distribución de variantes.
  *   - MO ATÓMICA: cada lote (MO) entra completo en UNA sola línea.
  *   - PROYECCIÓN ACUMULADA en "Proyeccion" y "Proyeccion - SKUS".
@@ -22,7 +23,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.6.0";
+var VERSION_SISTEMA = "5.7.0";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_RESTO = 2;
@@ -376,8 +377,7 @@ function minimaDeModelo_(mapaMinimas, modelo) {
 }
 
 function diaInicioEfectivo_(t) {
-  if (t && t.esMinima) return 0;
-  return t && t.diaIngreso ? t.diaIngreso : 0;
+  return (t && t.diaIngreso) ? t.diaIngreso : 0;
 }
 
 function bandaDe_(t) {
@@ -550,7 +550,7 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
   var iFalt = idxPorFragmento_(headers, ["faltante"]);
   var iProdQty = idxPorFragmento_(headers, ["producida"]);
   var iCap  = idxPorFragmento_(headers, ["cap produccion", "cap producción", "promedio"]);
-  var iDia  = idxPorFragmento_(headers, ["dia de in", "día de in", "fecha de in"]);
+  var iDia  = idxPorFragmento_(headers, ["dia de inicio", "día de inicio", "dia de in", "día de in", "fecha de in"]);
   var iNoLab = idxPorFragmento_(headers, ["dia no lab", "día no lab", "feriado"]);
   var iMO   = idxExacto_(headers, "MO");
   var iFec  = idxPorFragmento_(headers, ["fecha de salida", "fecha salida"]);
@@ -1193,7 +1193,7 @@ function generarPlanificacionSemanal_() {
     "  Fase 1 (mínima + colores core): " + piezasFase1 + " pzas.  |  Fase 2 (resto): " + piezasFase2 + " pzas.\n" +
     "• Tableros semanales ordenados por flujo diario (primer día con producción).\n" +
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
-    "• Proyección en acumulado por semana.\n" +
+    "• Proyección acumulada: se muestra hasta la semana en que se alcanza la meta (sin repetir el mismo número).\n" +
     "• Colores core (Negro / Blanco / Azul Marino) salen primero."
   );
 }
@@ -1534,12 +1534,21 @@ function dibujarPendiente_(hojaPendiente, tareas, cfg) {
   }
 }
 
-function valoresAcumuladosSemanas_(porSemana, nSemanas) {
+function valoresAcumuladosSemanas_(porSemana, nSemanas, meta) {
   var acum = 0;
+  var previo = 0;
+  var metaNum = Number(meta) || 0;
+  var metaAlcanzada = false;
   var out = [];
   for (var w = 0; w < nSemanas; w++) {
     acum += (porSemana[w] || 0);
-    out.push(acum === 0 ? "--" : acum);
+    if (metaAlcanzada || acum === 0 || acum === previo) {
+      out.push("--");
+    } else {
+      out.push(acum);
+      previo = acum;
+      if (metaNum > 0 && acum >= metaNum) metaAlcanzada = true;
+    }
   }
   return out;
 }
@@ -1562,7 +1571,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
 
   hojaProy.getRange(1, 2).setValue("📅 PROYECCIÓN ACUMULADA — Nivel: Modelo — Horizonte: " + cfg.semanas +
     " semanas desde el " + Utilities.formatDate(cfg.lunesBase, cfg.tz, "dd/MM/yyyy") +
-    "  |  Cada semana muestra el acumulado a producir hasta esa semana")
+    "  |  Acumulado hasta la semana en que se alcanza la meta (no se repite el mismo número)")
     .setFontWeight("bold");
   hojaProy.getRange(2, 2, 1, cabProy.length).setValues([cabProy])
     .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
@@ -1607,7 +1616,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     }
 
     var fila = [nomMod, formatoFecha_(cfg, im3.fechaObj), im3.solicitada];
-    var acumMod = valoresAcumuladosSemanas_(im3.porSemana, cfg.semanas);
+    var acumMod = valoresAcumuladosSemanas_(im3.porSemana, cfg.semanas, im3.solicitada);
     for (var w3 = 0; w3 < cfg.semanas; w3++) fila.push(acumMod[w3]);
     fila.push(im3.restante === 0 ? "--" : im3.restante);
     fila.push(isFinite(fechaFinMs) ? formatoFecha_(cfg, fechaFinMs) : "--");
@@ -1643,7 +1652,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
 
   hojaProySkus.getRange(1, 2).setValue("📅 PROYECCIÓN ACUMULADA — Nivel: SKU — Horizonte: " + cfg.semanas +
     " semanas desde el " + Utilities.formatDate(cfg.lunesBase, cfg.tz, "dd/MM/yyyy") +
-    "  |  Cada semana muestra el acumulado a producir hasta esa semana")
+    "  |  Acumulado hasta la semana en que se alcanza la meta (no se repite el mismo número)")
     .setFontWeight("bold");
   hojaProySkus.getRange(2, 2, 1, cabProySku.length).setValues([cabProySku])
     .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
@@ -1697,7 +1706,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     }
 
     var filaS = [isku.sku, isku.modelo, isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
-    var acumSku = valoresAcumuladosSemanas_(isku.porSemana, cfg.semanas);
+    var acumSku = valoresAcumuladosSemanas_(isku.porSemana, cfg.semanas, isku.solicitada);
     for (var w3S = 0; w3S < cfg.semanas; w3S++) filaS.push(acumSku[w3S]);
     filaS.push(isku.restante === 0 ? "--" : isku.restante);
     filaS.push(isFinite(fechaFinMsSku) ? formatoFecha_(cfg, fechaFinMsSku) : "--");

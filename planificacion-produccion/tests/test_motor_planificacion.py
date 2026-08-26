@@ -93,8 +93,6 @@ def banda_de(t):
 
 
 def dia_inicio_efectivo(t):
-    if t.get("esMinima"):
-        return 0
     return t.get("diaIngreso") or 0
 
 
@@ -163,11 +161,18 @@ def expandir_por_minima(tareas, mapa_minimas):
     return out
 
 
-def acumular_semanas(por_semana):
-    acum, out = 0, []
+def acumular_semanas(por_semana, meta=0):
+    acum, previo, alcanzada, out = 0, 0, False, []
+    meta_num = meta or 0
     for v in por_semana:
         acum += v
-        out.append(None if acum == 0 else acum)
+        if alcanzada or acum == 0 or acum == previo:
+            out.append(None)
+        else:
+            out.append(acum)
+            previo = acum
+            if meta_num > 0 and acum >= meta_num:
+                alcanzada = True
     return out
 
 
@@ -370,9 +375,8 @@ class TestTresBandas(unittest.TestCase):
         self.assertEqual([f[1] for f in orden if f[0] == "2"], ["CLÁSICA CAB", "VITA DAMA"])
         self.assertEqual(primer_dia_fila(filas[2]), 3)
 
-    def test_minima_gana_lunes_linea4_aunque_core_diga_martes(self):
-        """Réplica del Excel: core colors de RIO arrancan martes; VITA es Urgente el 28/08.
-        La banda mínima debe tomar Linea 4 el lunes (130) y VITA espera."""
+    def test_minima_respeta_dia_de_inicio(self):
+        """La banda mínima no puede producir antes del Día de inicio (columna R)."""
         tareas = [
             {"sku": "ESP1", "modelo": "MAR CAB (Especial)", "color": "Azul", "cantidad": 130,
              "solicitadaOrig": 130, "esEspecial": True, "mo": "E1", "cap": 130,
@@ -382,15 +386,39 @@ class TestTresBandas(unittest.TestCase):
              "lineas": ["1", "2"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
             {"sku": "N", "modelo": "RIO DAMA", "color": "Negro", "cantidad": 165,
              "solicitadaOrig": 165, "esEspecial": False, "mo": "R-N", "cap": 130,
-             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 1, "fechaKey": 20260904},
+             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 2, "fechaKey": 20260904},
             {"sku": "B", "modelo": "RIO DAMA", "color": "Blanco", "cantidad": 165,
              "solicitadaOrig": 165, "esEspecial": False, "mo": "R-B", "cap": 130,
-             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 1, "fechaKey": 20260904},
-            {"sku": "A", "modelo": "RIO DAMA", "color": "Azul Marino", "cantidad": 165,
-             "solicitadaOrig": 165, "esEspecial": False, "mo": "R-A", "cap": 130,
-             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 1, "fechaKey": 20260904},
-            {"sku": "RO", "modelo": "RIO DAMA", "color": "Rojo", "cantidad": 130,
-             "solicitadaOrig": 130, "esEspecial": False, "mo": "R-RO", "cap": 130,
+             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 2, "fechaKey": 20260904},
+            {"sku": "A", "modelo": "RIO DAMA", "color": "Azul Marino", "cantidad": 70,
+             "solicitadaOrig": 70, "esEspecial": False, "mo": "R-A", "cap": 130,
+             "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 2, "fechaKey": 20260904},
+            {"sku": "V", "modelo": "VITA BIKER DAMA", "color": "Negro", "cantidad": 88,
+             "solicitadaOrig": 88, "esEspecial": False, "mo": "V1", "cap": 130,
+             "lineas": ["4"], "prioridadNum": 1, "diaIngreso": 0, "fechaKey": 20260828},
+        ]
+        out = planificar(tareas, {"RIO DAMA": 400}, total_dias=5)
+        lunes4 = defaultdict(int)
+        miercoles4 = defaultdict(int)
+        for t in out:
+            lunes4[t["modelo"]] += t["plan"]["4"][0]
+            miercoles4[t["modelo"]] += t["plan"]["4"][2]
+        self.assertEqual(lunes4["RIO DAMA"], 0, "RIO DAMA no puede arrancar antes del día de inicio")
+        self.assertEqual(lunes4["VITA BIKER DAMA"], 88)
+        self.assertGreater(miercoles4["RIO DAMA"], 0, "RIO DAMA mínima debe salir el miércoles (día de inicio)")
+        self.assertEqual(sum(t["planificada"] for t in out if t.get("esMinima")), 400)
+
+    def test_minima_gana_el_mismo_dia_si_ya_puede_iniciar(self):
+        """Si mínima y VITA pueden iniciar el mismo día, mínima toma la capacidad primero."""
+        tareas = [
+            {"sku": "ESP1", "modelo": "MAR CAB (Especial)", "color": "Azul", "cantidad": 130,
+             "solicitadaOrig": 130, "esEspecial": True, "mo": "E1", "cap": 130,
+             "lineas": ["1", "2"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
+            {"sku": "ESP2", "modelo": "MAR DAMA (Especial)", "color": "Azul", "cantidad": 130,
+             "solicitadaOrig": 130, "esEspecial": True, "mo": "E2", "cap": 130,
+             "lineas": ["1", "2"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
+            {"sku": "N", "modelo": "RIO DAMA", "color": "Negro", "cantidad": 400,
+             "solicitadaOrig": 400, "esEspecial": False, "mo": "R-N", "cap": 130,
              "lineas": ["2", "4"], "prioridadNum": 2, "diaIngreso": 0, "fechaKey": 20260904},
             {"sku": "V", "modelo": "VITA BIKER DAMA", "color": "Negro", "cantidad": 88,
              "solicitadaOrig": 88, "esEspecial": False, "mo": "V1", "cap": 130,
@@ -400,25 +428,8 @@ class TestTresBandas(unittest.TestCase):
         lunes4 = defaultdict(int)
         for t in out:
             lunes4[t["modelo"]] += t["plan"]["4"][0]
-        self.assertGreater(lunes4["RIO DAMA"], 0, "RIO DAMA mínima debe producir el lunes en línea 4")
         self.assertEqual(lunes4["RIO DAMA"], 130)
-        self.assertEqual(lunes4["VITA BIKER DAMA"], 0, "VITA no puede comerse el lunes de la línea 4")
-        self.assertEqual(sum(t["planificada"] for t in out if t.get("esMinima")), 400)
-
-        por_modelo_linea = defaultdict(lambda: [0] * 5)
-        for t in out:
-            for lin, arr in t["plan"].items():
-                for d, q in enumerate(arr):
-                    por_modelo_linea[(lin, t["modelo"])][d] += q
-        filas = []
-        for (lin, modelo), dias in por_modelo_linea.items():
-            if sum(dias) <= 0:
-                continue
-            filas.append([lin, modelo] + dias)
-        filas.sort(key=lambda f: (f[0], next((i for i, q in enumerate(f[2:]) if q > 0), 99)))
-        line2 = [f[1] for f in filas if f[0] == "2"]
-        self.assertTrue(line2, msg="Linea 2 vacía")
-        self.assertTrue(line2[0].endswith("(Especial)"), msg="Especial debe ir primero en línea 2: %s" % line2)
+        self.assertEqual(lunes4["VITA BIKER DAMA"], 0)
 
 
 class TestMOAtomica(unittest.TestCase):
@@ -453,8 +464,12 @@ class TestMOAtomica(unittest.TestCase):
 
 
 class TestAcumulado(unittest.TestCase):
-    def test_acumulado_plateau(self):
-        self.assertEqual(acumular_semanas([901, 704, 0, 0, 0]), [901, 1605, 1605, 1605, 1605])
+    def test_acumulado_hasta_meta_sin_repetir(self):
+        self.assertEqual(acumular_semanas([88, 0, 0, 0, 0], 88), [88, None, None, None, None])
+        self.assertEqual(acumular_semanas([390, 93, 0, 0, 0], 483), [390, 483, None, None, None])
+        self.assertEqual(acumular_semanas([16, 100, 131, 21, 0], 268), [16, 116, 247, 268, None])
+        self.assertEqual(acumular_semanas([107, 325, 325, 325, 325], 2010), [107, 432, 757, 1082, 1407])
+        self.assertEqual(acumular_semanas([0, 0, 31, 0, 0], 31), [None, None, 31, None, None])
 
     def test_vacio(self):
         self.assertEqual(acumular_semanas([0, 0, 0]), [None, None, None])
