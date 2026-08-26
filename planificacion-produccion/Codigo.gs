@@ -1,18 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.8.1 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.0 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - PRIORIZACION - SKUs: cupos mínimos por SKU que se integran a
- *     Cantidad Minima del modelo. Esos SKUs salen primero (después de
- *     Especial), luego el resto del piso del modelo (colores core).
- *   - PROYECCIÓN: tablas desde B2; encabezado navy #20124D; filas con
- *     borde negro exterior y líneas internas suaves. Amarillo #FFE599
- *     SOLO en la primera semana que cruza la mínima; verde #D9EAD3 SOLO
- *     en la primera que cruza la meta (intermedios en blanco). Cada
- *     modelo en Proyeccion enlaza a su primera fila en Proyeccion - SKUS.
+ *   - URGENTE primero (luego fecha más próxima). Un modelo Urgente con
+ *     2+ líneas usa ambas. Una línea = un modelo a la vez; puede
+ *     cambiar de modelo entre semanas o al terminar su cantidad.
+ *   - ESPECIAL: respeta Linea de Produccion; línea 1 es la casa. Si L1
+ *     termina y quedan Especiales en otras líneas, desbordan a L1.
+ *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
+ *   - Priorización elimina modelos con faltante total 0.
+ *   - PROYECCIÓN: tablas desde B2; umbrales primer cruce; links a SKUS.
  *   - CANTIDAD MÍNIMA respeta Día de inicio (Por Hacer col. R).
  *   - COLORES CORE primero en toda la distribución de variantes.
  *   - MO ATÓMICA: cada lote (MO) entra completo en UNA sola línea.
@@ -25,10 +25,11 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.8.1";
+var VERSION_SISTEMA = "5.9.0";
 var BANDA_ESPECIAL = 0;
-var BANDA_MINIMA = 1;
-var BANDA_RESTO = 2;
+var BANDA_URGENTE = 1;
+var BANDA_MINIMA = 2;
+var BANDA_RESTO = 3;
 var DIAS_LABORALES = 5;
 var MAX_MODELOS_PARALELO = 2;
 var MAX_SNAPSHOTS = 8;
@@ -326,6 +327,9 @@ function hojaPorNombreFlex_(ss, nombres) {
 
 function claveFecha_(v) {
   if (v instanceof Date && !isNaN(v)) return v.getTime();
+  if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) {
+    return new Date(Math.round((v - 25569) * 86400 * 1000)).getTime();
+  }
   var s = norm_(v);
   if (s === "") return Infinity;
   var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
@@ -333,6 +337,10 @@ function claveFecha_(v) {
     var anio = Number(m[3]); if (anio < 100) anio += 2000;
     var f = new Date(anio, Number(m[2]) - 1, Number(m[1]));
     if (!isNaN(f)) return f.getTime();
+  }
+  var n = Number(s);
+  if (isFinite(n) && n > 20000 && n < 80000) {
+    return new Date(Math.round((n - 25569) * 86400 * 1000)).getTime();
   }
   return Infinity;
 }
@@ -404,10 +412,26 @@ function diaInicioEfectivo_(t) {
   return (t && t.diaIngreso) ? t.diaIngreso : 0;
 }
 
+function esUrgente_(t) {
+  return !t.esEspecial && Number(t.prioridadNum) === 1;
+}
+
 function bandaDe_(t) {
   if (t.esEspecial) return BANDA_ESPECIAL;
+  if (esUrgente_(t)) return BANDA_URGENTE;
   if (t.esMinima) return BANDA_MINIMA;
   return BANDA_RESTO;
+}
+
+function faltanteDeFila_(fila, iCant, iFalt, iProdQty) {
+  var sol = iCant !== -1 ? (Number(fila[iCant]) || 0) : 0;
+  var prod = iProdQty !== -1 ? (Number(fila[iProdQty]) || 0) : 0;
+  if (iProdQty !== -1) return Math.max(0, sol - prod);
+  if (iFalt !== -1 && fila[iFalt] !== "") {
+    var f = Number(fila[iFalt]);
+    if (!isNaN(f)) return f;
+  }
+  return Math.max(0, sol);
 }
 
 function rangoColor_(color) {
@@ -673,7 +697,7 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
   var iMO   = idxExacto_(headers, "MO");
   var iFec  = idxPorFragmento_(headers, ["fecha de salida", "fecha salida"]);
 
-  if (iSKU === -1 || iProd === -1 || iCant === -1 || iCap === -1 || iLin === -1) {
+  if (iSKU === -1 || iProd === -1 || iCant === -1 || iCap === -1 || (!esEspecial && iLin === -1)) {
     SpreadsheetApp.getUi().alert(
       "Error de encabezados en '" + hoja.getName() + "'.\n" +
       "Verifica que existan: SKU, Producto/Modelo, Linea de Produccion, Cantidad Solicitada y Cap Produccion por Dia (fila 2)."
@@ -700,9 +724,13 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     }
 
     var cap = Number(fila[iCap]);
-    var lineasStr = norm_(fila[iLin]);
+    var lineasStr = iLin !== -1 ? norm_(fila[iLin]) : "";
 
-    if (sku === "" || productoBase === "" || !(cantEfectiva > 0) || !(cap > 0) || lineasStr === "") continue;
+    if (sku === "" || productoBase === "" || !(cantEfectiva > 0) || !(cap > 0)) continue;
+    if (lineasStr === "") {
+      if (esEspecial) lineasStr = "1";
+      else continue;
+    }
 
     var genero = iGen !== -1 ? norm_(fila[iGen]) : "";
     var talla  = iTal !== -1 ? norm_(fila[iTal]) : "";
@@ -771,7 +799,6 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     if (!isFinite(fechaKey) && mapaFechaModelo[modelo] !== undefined) {
       fechaKey = mapaFechaModelo[modelo];
     }
-    if (esEspecial && !isFinite(fechaKey)) fechaKey = 0;
 
     var lineas = parsearLineas_(lineasStr);
     if (lineas.length === 0) {
@@ -932,10 +959,8 @@ function generarPlanificacionSemanal_() {
   tareas.sort(function (a, b) {
     var ba = bandaDe_(a), bb = bandaDe_(b);
     if (ba !== bb) return ba - bb;
-    if (ba === BANDA_RESTO) {
-      if (a.fechaKey !== b.fechaKey) return a.fechaKey - b.fechaKey;
-      if (a.prioridadNum !== b.prioridadNum) return a.prioridadNum - b.prioridadNum;
-    }
+    if (a.fechaKey !== b.fechaKey) return a.fechaKey - b.fechaKey;
+    if (a.prioridadNum !== b.prioridadNum) return a.prioridadNum - b.prioridadNum;
     var ra = a.colorRank, rb = b.colorRank;
     if (ra !== rb) return ra - rb;
     if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
@@ -943,7 +968,7 @@ function generarPlanificacionSemanal_() {
     return a.indice - b.indice;
   });
 
-  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, MO atómica)...", "⚙️ Planificando", 5);
+  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, 1 modelo/línea)...", "⚙️ Planificando", 5);
 
   var carga = {};
   ["1", "2", "3", "4", "5"].forEach(function (l) {
@@ -951,44 +976,40 @@ function generarPlanificacionSemanal_() {
     for (var d0 = 0; d0 < totalDias; d0++) carga[l].push(0.0);
   });
 
-  var grupos = [];
-  var idxGrupo = {};
+  var mapaModelos = {};
+  var ordenModelos = [];
   tareas.forEach(function (t) {
-    var banda = bandaDe_(t);
-    var claveGrupo = "B" + banda + "|" + (banda === BANDA_RESTO ? String(t.fechaKey) : (banda === BANDA_ESPECIAL ? "ESP" : "MIN"));
-    if (idxGrupo[claveGrupo] === undefined) {
-      idxGrupo[claveGrupo] = grupos.length;
-      grupos.push({ clave: claveGrupo, banda: banda, modelos: [], idxModelo: {} });
+    if (!mapaModelos[t.modelo]) {
+      mapaModelos[t.modelo] = {
+        nombre: t.modelo, tareas: [], volumen: 0,
+        prioMin: t.prioridadNum, fechaMin: t.fechaKey,
+        esEspecial: !!t.esEspecial, banda: bandaDe_(t)
+      };
+      ordenModelos.push(t.modelo);
     }
-    var g = grupos[idxGrupo[claveGrupo]];
-    if (g.idxModelo[t.modelo] === undefined) {
-      g.idxModelo[t.modelo] = g.modelos.length;
-      g.modelos.push({ nombre: t.modelo, tareas: [], volumen: 0, prioMin: t.prioridadNum });
-    }
-    var m = g.modelos[g.idxModelo[t.modelo]];
-    m.tareas.push(t);
-    m.volumen += t.cantidad;
-    if (t.prioridadNum < m.prioMin) m.prioMin = t.prioridadNum;
+    var mm = mapaModelos[t.modelo];
+    mm.tareas.push(t);
+    mm.volumen += t.cantidad;
+    if (t.prioridadNum < mm.prioMin) mm.prioMin = t.prioridadNum;
+    if (t.fechaKey < mm.fechaMin) mm.fechaMin = t.fechaKey;
+    var bt = bandaDe_(t);
+    if (bt < mm.banda) mm.banda = bt;
   });
 
-  grupos.sort(function (a, b) {
+  var listaModelos = ordenModelos.map(function (n) { return mapaModelos[n]; });
+  listaModelos.sort(function (a, b) {
     if (a.banda !== b.banda) return a.banda - b.banda;
-    return String(a.clave).localeCompare(String(b.clave));
+    if (a.fechaMin !== b.fechaMin) return a.fechaMin - b.fechaMin;
+    if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
+    if (b.volumen !== a.volumen) return b.volumen - a.volumen;
+    return a.nombre.localeCompare(b.nombre);
   });
-
-  grupos.forEach(function (g) {
-    g.modelos.sort(function (a, b) {
-      if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
-      if (b.volumen !== a.volumen) return b.volumen - a.volumen;
-      return a.nombre.localeCompare(b.nombre);
-    });
-    g.modelos.forEach(function (m) {
-      m.tareas.sort(function (a, b) {
-        var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
-        if (ra !== rb) return ra - rb;
-        if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
-        return a.sku.localeCompare(b.sku);
-      });
+  listaModelos.forEach(function (m) {
+    m.tareas.sort(function (a, b) {
+      var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
+      if (ra !== rb) return ra - rb;
+      if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
+      return String(a.sku).localeCompare(String(b.sku));
     });
   });
 
@@ -1058,66 +1079,141 @@ function generarPlanificacionSemanal_() {
     return cands[0];
   }
 
-  grupos.forEach(function (g) {
-    for (var c = 0; c < g.modelos.length; c += MAX_MODELOS_PARALELO) {
-      var chunk = g.modelos.slice(c, c + MAX_MODELOS_PARALELO);
-      for (var d = 0; d < totalDias; d++) {
-        var activos = chunk.filter(function (m) { return restanteModelo_(m) > 0; });
-        if (activos.length === 0) break;
-
-        var availInicio = {};
-        activos.forEach(function (m) {
-          m.tareas.forEach(function (t) {
-            t.lineas.forEach(function (lin) {
-              if (carga[lin] !== undefined && availInicio[lin] === undefined) {
-                availInicio[lin] = Math.max(0, 1 - carga[lin][d]);
-              }
-            });
-          });
-        });
-
-        var fairUsado = activos.map(function () { return {}; });
-
-        for (var pase = 0; pase < 2; pase++) {
-          activos.forEach(function (m, mi) {
-            var asignandoModelo = true;
-            while (asignandoModelo) {
-              asignandoModelo = false;
-              m.tareas.forEach(function (t) {
-                var diaSemanaActual = d % DIAS_LABORALES;
-                if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) return;
-
-                var lin = fijarLineaSiHaceFalta_(t, d);
-                if (!lin || carga[lin] === undefined) return;
-
-                var avail = 1 - carga[lin][d];
-                if (avail <= 0.001) return;
-
-                var limiteFrac = avail;
-                if (pase === 0 && activos.length > 1) {
-                  var fair = (availInicio[lin] || 0) / activos.length;
-                  var usado = fairUsado[mi][lin] || 0;
-                  limiteFrac = Math.min(avail, Math.max(0, fair - usado));
-                }
-
-                var piezasCaben = Math.floor(limiteFrac * t.cap + 0.0001);
-                if (piezasCaben <= 0) return;
-
-                var loteMaximo = piezasCaben;
-                if (String(lin).trim() === "5") loteMaximo = Math.min(piezasCaben, LOTE_RUEDA_LINEA5);
-
-                var puestas = asignar_(t, lin, d, loteMaximo);
-                if (puestas > 0) {
-                  asignandoModelo = true;
-                  if (pase === 0) fairUsado[mi][lin] = (fairUsado[mi][lin] || 0) + puestas / t.cap;
-                }
-              });
-            }
-          });
-        }
+  function nativosLinea1Pendientes_() {
+    for (var iN = 0; iN < listaModelos.length; iN++) {
+      var mN = listaModelos[iN];
+      if (!mN.esEspecial || restanteModelo_(mN) <= 0) continue;
+      for (var tN = 0; tN < mN.tareas.length; tN++) {
+        if (mN.tareas[tN].restante > 0 && mN.tareas[tN].lineas.indexOf("1") !== -1) return true;
       }
     }
-  });
+    return false;
+  }
+
+  function elegiblesTarea_(t, overflow) {
+    var ls = t.lineas.slice();
+    if (t.esEspecial && overflow && ls.indexOf("1") === -1) ls.push("1");
+    return ls.filter(function (l) { return carga[l] !== undefined; });
+  }
+
+  function capRestanteSemana_(lin, d) {
+    var week = Math.floor(d / DIAS_LABORALES);
+    var end = Math.min(totalDias, (week + 1) * DIAS_LABORALES);
+    var piezas = 0;
+    for (var dd = d; dd < end; dd++) piezas += Math.max(0, 1 - carga[lin][dd]) * 130;
+    return piezas;
+  }
+
+  var ocupante = { "1": null, "2": null, "3": null, "4": null, "5": null };
+
+  for (var d = 0; d < totalDias; d++) {
+    var overflowL1 = !nativosLinea1Pendientes_();
+    if (d % DIAS_LABORALES === 0) {
+      ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = null; });
+    }
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      var mod = ocupante[lin];
+      if (!mod) return;
+      var mO = mapaModelos[mod];
+      if (!mO || restanteModelo_(mO) <= 0) { ocupante[lin] = null; return; }
+      var puede = mO.tareas.some(function (t) {
+        if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
+        if (t.lineaFija && t.lineaFija !== lin) return false;
+        return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
+      });
+      if (!puede) ocupante[lin] = null;
+    });
+
+    function lineasLibresDe_(m) {
+      var out = [], seen = {};
+      m.tareas.forEach(function (t) {
+        if (t.restante <= 0) return;
+        elegiblesTarea_(t, overflowL1).forEach(function (lin) {
+          if (!seen[lin] && !ocupante[lin]) { seen[lin] = true; out.push(lin); }
+        });
+      });
+      return out;
+    }
+
+    var vivos = listaModelos.filter(function (m) { return restanteModelo_(m) > 0; });
+    vivos.forEach(function (m) {
+      var ya = ["1", "2", "3", "4", "5"].some(function (lin) { return ocupante[lin] === m.nombre; });
+      if (ya) return;
+      var libres = lineasLibresDe_(m);
+      if (libres.length === 0) return;
+      libres.sort(function (a, b) {
+        if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
+        return String(a).localeCompare(String(b));
+      });
+      ocupante[libres[0]] = m.nombre;
+    });
+    vivos.forEach(function (m) {
+      if (m.banda !== BANDA_ESPECIAL && m.banda !== BANDA_URGENTE) return;
+      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) { return ocupante[lin] === m.nombre; });
+      if (owned.length === 0) return;
+      var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d); }, 0);
+      if (restanteModelo_(m) <= capOwned + 0.001) return;
+      lineasLibresDe_(m).forEach(function (lin) {
+        if (restanteModelo_(m) <= capOwned + 0.001) return;
+        ocupante[lin] = m.nombre;
+        capOwned += capRestanteSemana_(lin, d);
+      });
+    });
+    if (overflowL1 && !ocupante["1"]) {
+      for (var iE = 0; iE < vivos.length; iE++) {
+        var mE = vivos[iE];
+        if (!mE.esEspecial) continue;
+        var hayPend = mE.tareas.some(function (t) {
+          return t.restante > 0 && (!t.lineaFija || t.lineaFija === "1");
+        });
+        if (!hayPend) continue;
+        ocupante["1"] = mE.nombre;
+        break;
+      }
+    }
+
+    vivos.forEach(function (m) {
+      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) { return ocupante[lin] === m.nombre; });
+      if (owned.length < 2) return;
+      var unfixed = m.tareas.filter(function (t) {
+        return t.restante > 0 && !t.lineaFija && !lineaPorMO[claveMO_(t)] && d >= diaInicioEfectivo_(t);
+      });
+      var load = {};
+      owned.forEach(function (lin) { load[lin] = carga[lin][d]; });
+      unfixed.forEach(function (t) {
+        var cands = owned.filter(function (lin) { return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1; });
+        if (cands.length === 0) cands = owned;
+        cands.sort(function (a, b) {
+          if (load[a] !== load[b]) return load[a] - load[b];
+          return String(a).localeCompare(String(b));
+        });
+        t.lineaFija = cands[0];
+        lineaPorMO[claveMO_(t)] = cands[0];
+        load[cands[0]] += 0.01;
+      });
+    });
+
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      var nom = ocupante[lin];
+      if (!nom) return;
+      var mP = mapaModelos[nom];
+      mP.tareas.forEach(function (t) {
+        var diaSemanaActual = d % DIAS_LABORALES;
+        if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) return;
+        var clave = claveMO_(t);
+        if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
+        if (t.lineaFija && t.lineaFija !== lin) return;
+        if (elegiblesTarea_(t, overflowL1).indexOf(lin) === -1) return;
+        var avail = 1 - carga[lin][d];
+        if (avail <= 0.001) return;
+        var piezasCaben = Math.floor(avail * t.cap + 0.0001);
+        if (String(lin).trim() === "5") piezasCaben = Math.min(piezasCaben, LOTE_RUEDA_LINEA5);
+        if (piezasCaben <= 0) return;
+        var puestas = asignar_(t, lin, d, piezasCaben);
+        if (puestas > 0) lineaPorMO[clave] = lin;
+      });
+    });
+  }
 
   if (cfg.forzarMeta) {
     tareas.forEach(function (t) {
@@ -2188,21 +2284,31 @@ function actualizarModelosPriorizacion_() {
   }
 
   var modelosUnicos = new Set();
+  var quitadosCero = 0;
 
   function procesarModelos(datos, tipo) {
     if (!datos || datos.length < 3) return;
     var headers = datos[1];
     var iProd = idxPorFragmento_(headers, ["modelo", "producto"]);
     var iGen = idxPorFragmento_(headers, ["genero", "género"]);
+    var iCant = idxPorFragmento_(headers, ["cantidad solicitada"]);
+    var iFalt = idxPorFragmento_(headers, ["faltante"]);
+    var iProdQty = idxPorFragmento_(headers, ["producida"]);
     if (iProd === -1) return;
 
+    var tot = {};
     for (var i = 2; i < datos.length; i++) {
       var prod = norm_(datos[i][iProd]);
       if (prod === "") continue;
       var gen = iGen !== -1 ? norm_(datos[i][iGen]) : "";
       var nombreCompleto = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
-      modelosUnicos.add(nombreCompleto + "||" + tipo);
+      var falt = faltanteDeFila_(datos[i], iCant, iFalt, iProdQty);
+      tot[nombreCompleto] = (tot[nombreCompleto] || 0) + falt;
     }
+    Object.keys(tot).forEach(function (nombreCompleto) {
+      if (tot[nombreCompleto] > 0) modelosUnicos.add(nombreCompleto + "||" + tipo);
+      else quitadosCero++;
+    });
   }
 
   procesarModelos(hojaPorHacer.getDataRange().getValues(), "Producción");
@@ -2269,6 +2375,7 @@ function actualizarModelosPriorizacion_() {
 
   var msg = "";
   if (huerfanos > 0) msg += "🗑️ LIMPIEZA:\nSe eliminaron " + huerfanos + " modelos huérfanos.\n\n";
+  if (quitadosCero > 0) msg += "📦 FALTANTE 0:\nSe quitaron " + quitadosCero + " modelos ya cubiertos (faltante total 0).\n\n";
   msg += nuevos > 0
     ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima y Líneas."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";

@@ -1,4 +1,4 @@
-# Planificación de Producción v5.8.1 — códigos listos para pegar
+# Planificación de Producción v5.9.0 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -15,7 +15,13 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 - SKU, Producto, Genero, Color, Talla, Cantidad Minima y Fecha se llenan **a mano**.
 - **Lineas** es fórmula (VLOOKUP a `Por Hacer`); no la borres.
 
-Esos SKUs entran en la banda de cantidad mínima **justo después de Especial**. Si el modelo también tiene cupo en `Priorizacion!Cantidad Minima`, primero se cubren los SKUs listados y el resto del piso del modelo se llena con colores núcleo.
+Esos SKUs entran en la banda de cantidad mínima **después de Especial y de Urgente**. Si el modelo también tiene cupo en `Priorizacion!Cantidad Minima`, primero se cubren los SKUs listados y el resto del piso del modelo se llena con colores núcleo.
+
+## Motor v5.9
+
+- **Urgente primero**, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos. Una línea no mezcla modelos el mismo día; puede cambiar de modelo entre semanas o cuando termina su cantidad.
+- **Especial:** se respeta `Linea de Produccion`. La línea 1 es la casa: si no hay línea, se usa 1. Cuando L1 termina los Especiales que sí la listan, los Especiales de otras líneas desbordan a L1. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
+- **Priorización:** al actualizar, se eliminan modelos con faltante total 0.
 
 ## Proyección
 
