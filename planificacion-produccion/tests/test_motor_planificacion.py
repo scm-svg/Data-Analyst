@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.1 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -10,7 +10,9 @@ BANDA_URGENTE = 1
 BANDA_MINIMA = 2
 BANDA_RESTO = 3
 DIAS_LABORALES = 5
-MAX_MODELOS_PARALELO = 2
+MAX_MODELOS_LINEA5 = 2
+MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
+LOTE_RUEDA_LINEA5 = 5
 
 
 def norm(s):
@@ -318,8 +320,12 @@ def primer_dia_fila(fila):
     return 99
 
 
+def max_ocupantes(lin):
+    return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
+
+
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9: 1 modelo por línea, urgentes en todas sus líneas, overflow especial a L1."""
+    """Motor v5.9.1: L1-4 un modelo; L5 hasta 2 en paralelo; urgentes dual-línea; overflow especial a L1."""
     if caps_lineas is None:
         caps_lineas = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 
@@ -408,13 +414,12 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def reclamar_lineas(d, ocupante, overflow):
         if d % DIAS_LABORALES == 0:
             for lin in list(ocupante):
-                ocupante[lin] = None
-        for lin, mod in list(ocupante.items()):
-            if not mod:
-                continue
-            m = modelos[mod]
-            if restante_modelo(m) <= 0 or not modelo_puede(m, d, lin, overflow):
-                ocupante[lin] = None
+                ocupante[lin] = []
+        for lin, mods in list(ocupante.items()):
+            ocupante[lin] = [
+                mod for mod in mods
+                if restante_modelo(modelos[mod]) > 0 and modelo_puede(modelos[mod], d, lin, overflow)
+            ]
 
         def lineas_libres_de(m):
             out = []
@@ -423,38 +428,44 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if t["restante"] <= 0:
                     continue
                 for lin in elegibles(t, overflow):
-                    if lin not in seen and not ocupante.get(lin):
-                        seen.add(lin)
-                        out.append(lin)
+                    if lin in seen:
+                        continue
+                    occ = ocupante.get(lin) or []
+                    if m["nombre"] in occ:
+                        continue
+                    if len(occ) >= max_ocupantes(lin):
+                        continue
+                    seen.add(lin)
+                    out.append(lin)
             return out
 
         vivos = [m for m in lista if restante_modelo(m) > 0]
-        # Pase 1: una línea por modelo
+        # Pase 1: una línea por modelo (L5 puede recibir un segundo modelo)
         for m in vivos:
-            if any(ocupante.get(lin) == m["nombre"] for lin in ocupante):
+            if any(m["nombre"] in (ocupante.get(lin) or []) for lin in ocupante):
                 continue
             libres = lineas_libres_de(m)
             if not libres:
                 continue
             libres.sort(key=lambda lin: (carga[lin][d], lin))
-            ocupante[libres[0]] = m["nombre"]
+            ocupante[libres[0]].append(m["nombre"])
         # Pase 2: líneas extra para especial/urgente si no caben en una semana
         for m in vivos:
             if m["banda"] not in (BANDA_ESPECIAL, BANDA_URGENTE):
                 continue
-            owned = [lin for lin, mod in ocupante.items() if mod == m["nombre"]]
+            owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if not owned:
                 continue
             cap_owned = sum(cap_restante_semana(lin, d) for lin in owned)
             if restante_modelo(m) <= cap_owned + 1e-6:
                 continue
             for lin in lineas_libres_de(m):
-                ocupante[lin] = m["nombre"]
+                ocupante[lin].append(m["nombre"])
                 cap_owned += cap_restante_semana(lin, d)
                 if restante_modelo(m) <= cap_owned + 1e-6:
                     break
         # Pase 3: Especiales de otras líneas pasan a L1 cuando L1 ya terminó lo nativo
-        if overflow and not ocupante.get("1"):
+        if overflow and len(ocupante.get("1") or []) == 0:
             for m in vivos:
                 if not m["esEspecial"]:
                     continue
@@ -462,13 +473,15 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                            for t in m["tareas"]):
                     continue
                 if "1" in elegibles(m["tareas"][0], True) or overflow:
-                    ocupante["1"] = m["nombre"]
+                    ocupante["1"].append(m["nombre"])
                     break
 
-    def producir(m, lin, d, overflow):
+    def producir_lote(m, lin, d, overflow, max_lote=0):
         cap_lin = caps_lineas[lin]
         for t in m["tareas"]:
             if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
+                continue
+            if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
                 continue
             mo = t.get("mo") or t["sku"]
             if mo in linea_por_mo:
@@ -479,8 +492,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             avail = 1.0 - carga[lin][d]
             if avail <= 0.001:
-                return
+                return 0
             piezas = min(t["restante"], math.floor(avail * cap_lin + 1e-9))
+            if max_lote > 0:
+                piezas = min(piezas, max_lote)
             if piezas <= 0:
                 continue
             t["lineaFija"] = lin
@@ -489,14 +504,31 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             carga[lin][d] += piezas / cap_lin
             t["restante"] -= piezas
             t["planificada"] += piezas
+            return piezas
+        return 0
 
-    ocupante = {lin: None for lin in caps_lineas}
+    def producir_modelo_dia(m, lin, d, overflow):
+        while carga[lin][d] < 0.999:
+            if producir_lote(m, lin, d, overflow, 0) <= 0:
+                break
+
+    def producir_rueda_linea5(noms, d, overflow):
+        lin = "5"
+        i = 0
+        estancado = 0
+        while carga[lin][d] < 0.999 and estancado < len(noms):
+            nom = noms[i % len(noms)]
+            i += 1
+            p = producir_lote(modelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5)
+            estancado = 0 if p > 0 else estancado + 1
+
+    ocupante = {lin: [] for lin in caps_lineas}
     for d in range(total_dias):
         overflow = not nativos_linea1_pendientes()
         reclamar_lineas(d, ocupante, overflow)
         # balancear MOs nuevos del modelo entre líneas que ya ocupa
         for m in lista:
-            owned = [lin for lin, mod in ocupante.items() if mod == m["nombre"]]
+            owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if len(owned) < 2:
                 continue
             unfixed = [t for t in m["tareas"] if t["restante"] > 0 and not t.get("lineaFija")
@@ -509,10 +541,14 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 t["lineaFija"] = cands[0]
                 linea_por_mo[t.get("mo") or t["sku"]] = cands[0]
                 load[cands[0]] += 0.01
-        for lin, mod in ocupante.items():
-            if not mod:
+        for lin, noms in ocupante.items():
+            if not noms:
                 continue
-            producir(modelos[mod], lin, d, overflow)
+            if str(lin) == "5" and len(noms) >= 2:
+                producir_rueda_linea5(noms, d, overflow)
+                continue
+            for nom in noms:
+                producir_modelo_dia(modelos[nom], lin, d, overflow)
     return tareas
 
 
@@ -728,6 +764,99 @@ class TestLineasExclusivas(unittest.TestCase):
                 if t["plan"]["4"][d] > 0:
                     modelos_hoy.add(t["modelo"])
             self.assertLessEqual(len(modelos_hoy), 1, "día %s mezcló %s" % (d, modelos_hoy))
+
+    def test_linea5_sola_usa_capacidad_40(self):
+        tareas = [{
+            "sku": "V1", "modelo": "VITA LEGGINGS DAMA", "mo": "MO-V",
+            "cantidad": 88, "cap": 40, "lineas": ["5"],
+            "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 88,
+        }]
+        out = planificar(tareas, {}, total_dias=5)
+        dias = out[0]["plan"]["5"]
+        self.assertEqual(list(dias[:3]), [40, 40, 8])
+
+    def test_linea5_dos_modelos_comparten_el_dia(self):
+        tareas = [
+            {"sku": "D1", "modelo": "SHORT SPORT R1 DAMA", "mo": "MO-D",
+             "cantidad": 200, "cap": 40, "lineas": ["5"], "color": "Negro",
+             "prioridadNum": 1, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20260910, "solicitadaOrig": 200},
+            {"sku": "C1", "modelo": "SHORT SPORT R1 CAB", "mo": "MO-C",
+             "cantidad": 185, "cap": 40, "lineas": ["5"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20260912, "solicitadaOrig": 185},
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        for d in range(5):
+            por = defaultdict(int)
+            for t in out:
+                por[t["modelo"]] += t["plan"]["5"][d]
+            self.assertEqual(sum(por.values()), 40, "día %s total %s" % (d, dict(por)))
+            vivos = [m for m, v in por.items() if v > 0]
+            self.assertEqual(len(vivos), 2, "día %s modelos %s" % (d, dict(por)))
+            self.assertEqual(por["SHORT SPORT R1 DAMA"], 20)
+            self.assertEqual(por["SHORT SPORT R1 CAB"], 20)
+
+    def test_linea5_maximo_dos_modelos(self):
+        tareas = [
+            {"sku": "A", "modelo": "MODELO A", "mo": "MO-A", "cantidad": 400, "cap": 40,
+             "lineas": ["5"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 400},
+            {"sku": "B", "modelo": "MODELO B", "mo": "MO-B", "cantidad": 400, "cap": 40,
+             "lineas": ["5"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 400},
+            {"sku": "C", "modelo": "MODELO C", "mo": "MO-C", "cantidad": 400, "cap": 40,
+             "lineas": ["5"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 400},
+        ]
+        out = planificar(tareas, {}, total_dias=1)
+        modelos_hoy = {t["modelo"] for t in out if t["plan"]["5"][0] > 0}
+        self.assertEqual(modelos_hoy, {"MODELO A", "MODELO B"})
+        self.assertEqual(sum(t["plan"]["5"][0] for t in out), 40)
+
+    def test_linea5_varios_mos_no_quedan_en_lote_5(self):
+        """Regresión v5.9: el lote de 5 no puede ser techo diario cuando L5 va sola."""
+        tareas = [{
+            "sku": "D%d" % i, "modelo": "SHORT SPORT R1 DAMA", "mo": "MO-D%d" % i,
+            "cantidad": 30, "cap": 40, "lineas": ["5"], "color": "Negro",
+            "prioridadNum": 1, "esEspecial": False, "diaIngreso": 0,
+            "fechaKey": 20260910, "solicitadaOrig": 30,
+        } for i in range(6)]
+        out = planificar(tareas, {}, total_dias=5)
+        self.assertEqual(sum(t["plan"]["5"][0] for t in out), 40)
+
+    def test_linea5_reparte_varios_modelos_en_horizonte(self):
+        tareas = [
+            {"sku": "VL", "modelo": "VITA LEGGINGS DAMA", "mo": "MO-VL", "cantidad": 88,
+             "cap": 40, "lineas": ["5"], "color": "Negro", "prioridadNum": 1,
+             "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 88},
+            {"sku": "RD", "modelo": "SHORT SPORT R1 DAMA", "mo": "MO-RD", "cantidad": 268,
+             "cap": 40, "lineas": ["5"], "color": "Negro", "prioridadNum": 2,
+             "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260910, "solicitadaOrig": 268},
+            {"sku": "RC", "modelo": "SHORT SPORT R1 CAB", "mo": "MO-RC", "cantidad": 185,
+             "cap": 40, "lineas": ["5"], "color": "Negro", "prioridadNum": 2,
+             "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260912, "solicitadaOrig": 185},
+            {"sku": "VA", "modelo": "VESTIDO ARYNA DAMA", "mo": "MO-VA", "cantidad": 192,
+             "cap": 40, "lineas": ["5"], "color": "Negro", "prioridadNum": 3,
+             "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260918, "solicitadaOrig": 192},
+            {"sku": "SC", "modelo": "SHORT SPORT CAB", "mo": "MO-SC", "cantidad": 784,
+             "cap": 40, "lineas": ["5"], "color": "Negro", "prioridadNum": 3,
+             "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260920, "solicitadaOrig": 784},
+        ]
+        out = planificar(tareas, {}, total_dias=25)
+        por_modelo = defaultdict(int)
+        for t in out:
+            por_modelo[t["modelo"]] += t["planificada"]
+        self.assertEqual(por_modelo["VITA LEGGINGS DAMA"], 88)
+        self.assertGreater(por_modelo["SHORT SPORT R1 DAMA"], 0)
+        self.assertGreater(por_modelo["SHORT SPORT R1 CAB"], 0)
+        programados = [m for m, v in por_modelo.items() if v > 0]
+        self.assertGreaterEqual(len(programados), 3, programados)
+        for d in range(25):
+            modelos_hoy = {t["modelo"] for t in out if t["plan"]["5"][d] > 0}
+            self.assertLessEqual(len(modelos_hoy), 2, "día %s mezcló %s" % (d, modelos_hoy))
+            self.assertEqual(sum(t["plan"]["5"][d] for t in out), 40)
 
     def test_especial_overflow_a_linea1(self):
         tareas = [

@@ -1,13 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.0 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.1 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - LÍNEA 5: única que trabaja 2 modelos en paralelo (rueda de 5 pzas
+ *     cuando hay dos). Si solo hay un modelo, usa las 40 pzas/día.
+ *   - Capacidad real por línea (L5 = 40, resto = 130). El lote de 5 ya
+ *     no se aplica como techo diario cuando L5 va sola.
  *   - URGENTE primero (luego fecha más próxima). Un modelo Urgente con
- *     2+ líneas usa ambas. Una línea = un modelo a la vez; puede
- *     cambiar de modelo entre semanas o al terminar su cantidad.
+ *     2+ líneas usa ambas. Líneas 1-4 = un modelo a la vez; L5 hasta 2.
  *   - ESPECIAL: respeta Linea de Produccion; línea 1 es la casa. Si L1
  *     termina y quedan Especiales en otras líneas, desbordan a L1.
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
@@ -25,16 +28,18 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.0";
+var VERSION_SISTEMA = "5.9.1";
 var BANDA_ESPECIAL = 0;
 var BANDA_URGENTE = 1;
 var BANDA_MINIMA = 2;
 var BANDA_RESTO = 3;
 var DIAS_LABORALES = 5;
-var MAX_MODELOS_PARALELO = 2;
+var MAX_MODELOS_LINEA5 = 2;
+var MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5;
 var MAX_SNAPSHOTS = 8;
 var NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 var LOTE_RUEDA_LINEA5 = 5;
+var CAP_POR_LINEA = { "1": 130, "2": 130, "3": 130, "4": 130, "5": 40 };
 var LOCK_MS = 120000;
 var COLOR_HEADER_PROY = "#20124D";
 var COLOR_MINIMA_PROY = "#FFE599";
@@ -968,7 +973,7 @@ function generarPlanificacionSemanal_() {
     return a.indice - b.indice;
   });
 
-  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, 1 modelo/línea)...", "⚙️ Planificando", 5);
+  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, L5 hasta 2 modelos)...", "⚙️ Planificando", 5);
 
   var carga = {};
   ["1", "2", "3", "4", "5"].forEach(function (l) {
@@ -1017,6 +1022,14 @@ function generarPlanificacionSemanal_() {
     return m.tareas.reduce(function (s, t) { return s + t.restante; }, 0);
   }
 
+  function capLinea_(lin) {
+    return CAP_POR_LINEA[String(lin)] || 130;
+  }
+
+  function maxOcupantes_(lin) {
+    return String(lin) === "5" ? MAX_MODELOS_LINEA5 : 1;
+  }
+
   function asignar_(t, lin, d, maxPiezas) {
     if (maxPiezas <= 0 || t.restante <= 0) return 0;
     var piezas = Math.min(t.restante, maxPiezas);
@@ -1025,7 +1038,7 @@ function generarPlanificacionSemanal_() {
       for (var k = 0; k < totalDias; k++) t.plan[lin].push(0);
     }
     t.plan[lin][d] += piezas;
-    carga[lin][d] += piezas / t.cap;
+    carga[lin][d] += piezas / capLinea_(lin);
     t.restante -= piezas;
     t.planificada += piezas;
     if (d < DIAS_LABORALES) t.planificadaSem1 += piezas;
@@ -1038,12 +1051,12 @@ function generarPlanificacionSemanal_() {
 
   function estimarDiaFinLinea_(t, lin, fromDay) {
     var rest = t.restante;
+    var capLin = capLinea_(lin);
     for (var d = fromDay; d < totalDias; d++) {
       if (d < diaInicioEfectivo_(t)) continue;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) continue;
       var avail = Math.max(0, 1 - carga[lin][d]);
-      var piezas = Math.floor(avail * t.cap + 0.0001);
-      if (String(lin).trim() === "5") piezas = Math.min(piezas, LOTE_RUEDA_LINEA5);
+      var piezas = Math.floor(avail * capLin + 0.0001);
       rest -= piezas;
       if (rest <= 0) return d;
     }
@@ -1099,29 +1112,71 @@ function generarPlanificacionSemanal_() {
   function capRestanteSemana_(lin, d) {
     var week = Math.floor(d / DIAS_LABORALES);
     var end = Math.min(totalDias, (week + 1) * DIAS_LABORALES);
+    var cap = capLinea_(lin);
     var piezas = 0;
-    for (var dd = d; dd < end; dd++) piezas += Math.max(0, 1 - carga[lin][dd]) * 130;
+    for (var dd = d; dd < end; dd++) piezas += Math.max(0, 1 - carga[lin][dd]) * cap;
     return piezas;
   }
 
-  var ocupante = { "1": null, "2": null, "3": null, "4": null, "5": null };
+  function producirLote_(mP, lin, d, overflow, maxLote) {
+    var capLin = capLinea_(lin);
+    for (var ti = 0; ti < mP.tareas.length; ti++) {
+      var t = mP.tareas[ti];
+      var diaSemanaActual = d % DIAS_LABORALES;
+      if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) continue;
+      var clave = claveMO_(t);
+      if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
+      if (t.lineaFija && t.lineaFija !== lin) continue;
+      if (elegiblesTarea_(t, overflow).indexOf(lin) === -1) continue;
+      var avail = 1 - carga[lin][d];
+      if (avail <= 0.001) return 0;
+      var piezasCaben = Math.floor(avail * capLin + 0.0001);
+      if (maxLote > 0) piezasCaben = Math.min(piezasCaben, maxLote);
+      if (piezasCaben <= 0) return 0;
+      var puestas = asignar_(t, lin, d, piezasCaben);
+      if (puestas > 0) {
+        lineaPorMO[clave] = lin;
+        return puestas;
+      }
+    }
+    return 0;
+  }
+
+  function producirModeloDia_(mP, lin, d, overflow) {
+    while (carga[lin][d] < 0.999) {
+      if (producirLote_(mP, lin, d, overflow, 0) <= 0) break;
+    }
+  }
+
+  function producirRuedaLinea5_(noms, d, overflow) {
+    var lin = "5";
+    var iR = 0;
+    var estancado = 0;
+    while (carga[lin][d] < 0.999 && estancado < noms.length) {
+      var nom = noms[iR % noms.length];
+      iR++;
+      var p = producirLote_(mapaModelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5);
+      estancado = p > 0 ? 0 : estancado + 1;
+    }
+  }
+
+  var ocupante = { "1": [], "2": [], "3": [], "4": [], "5": [] };
 
   for (var d = 0; d < totalDias; d++) {
     var overflowL1 = !nativosLinea1Pendientes_();
     if (d % DIAS_LABORALES === 0) {
-      ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = null; });
+      ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = []; });
     }
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      var mod = ocupante[lin];
-      if (!mod) return;
-      var mO = mapaModelos[mod];
-      if (!mO || restanteModelo_(mO) <= 0) { ocupante[lin] = null; return; }
-      var puede = mO.tareas.some(function (t) {
-        if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
-        if (t.lineaFija && t.lineaFija !== lin) return false;
-        return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
+      ocupante[lin] = ocupante[lin].filter(function (mod) {
+        var mO = mapaModelos[mod];
+        if (!mO || restanteModelo_(mO) <= 0) return false;
+        return mO.tareas.some(function (t) {
+          if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
+          if (t.lineaFija && t.lineaFija !== lin) return false;
+          return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
+        });
       });
-      if (!puede) ocupante[lin] = null;
     });
 
     function lineasLibresDe_(m) {
@@ -1129,7 +1184,12 @@ function generarPlanificacionSemanal_() {
       m.tareas.forEach(function (t) {
         if (t.restante <= 0) return;
         elegiblesTarea_(t, overflowL1).forEach(function (lin) {
-          if (!seen[lin] && !ocupante[lin]) { seen[lin] = true; out.push(lin); }
+          if (seen[lin]) return;
+          var occ = ocupante[lin] || [];
+          if (occ.indexOf(m.nombre) !== -1) return;
+          if (occ.length >= maxOcupantes_(lin)) return;
+          seen[lin] = true;
+          out.push(lin);
         });
       });
       return out;
@@ -1137,7 +1197,9 @@ function generarPlanificacionSemanal_() {
 
     var vivos = listaModelos.filter(function (m) { return restanteModelo_(m) > 0; });
     vivos.forEach(function (m) {
-      var ya = ["1", "2", "3", "4", "5"].some(function (lin) { return ocupante[lin] === m.nombre; });
+      var ya = ["1", "2", "3", "4", "5"].some(function (lin) {
+        return ocupante[lin].indexOf(m.nombre) !== -1;
+      });
       if (ya) return;
       var libres = lineasLibresDe_(m);
       if (libres.length === 0) return;
@@ -1145,21 +1207,23 @@ function generarPlanificacionSemanal_() {
         if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
         return String(a).localeCompare(String(b));
       });
-      ocupante[libres[0]] = m.nombre;
+      ocupante[libres[0]].push(m.nombre);
     });
     vivos.forEach(function (m) {
       if (m.banda !== BANDA_ESPECIAL && m.banda !== BANDA_URGENTE) return;
-      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) { return ocupante[lin] === m.nombre; });
+      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
+        return ocupante[lin].indexOf(m.nombre) !== -1;
+      });
       if (owned.length === 0) return;
       var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d); }, 0);
       if (restanteModelo_(m) <= capOwned + 0.001) return;
       lineasLibresDe_(m).forEach(function (lin) {
         if (restanteModelo_(m) <= capOwned + 0.001) return;
-        ocupante[lin] = m.nombre;
+        ocupante[lin].push(m.nombre);
         capOwned += capRestanteSemana_(lin, d);
       });
     });
-    if (overflowL1 && !ocupante["1"]) {
+    if (overflowL1 && ocupante["1"].length === 0) {
       for (var iE = 0; iE < vivos.length; iE++) {
         var mE = vivos[iE];
         if (!mE.esEspecial) continue;
@@ -1167,13 +1231,15 @@ function generarPlanificacionSemanal_() {
           return t.restante > 0 && (!t.lineaFija || t.lineaFija === "1");
         });
         if (!hayPend) continue;
-        ocupante["1"] = mE.nombre;
+        ocupante["1"].push(mE.nombre);
         break;
       }
     }
 
     vivos.forEach(function (m) {
-      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) { return ocupante[lin] === m.nombre; });
+      var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
+        return ocupante[lin].indexOf(m.nombre) !== -1;
+      });
       if (owned.length < 2) return;
       var unfixed = m.tareas.filter(function (t) {
         return t.restante > 0 && !t.lineaFija && !lineaPorMO[claveMO_(t)] && d >= diaInicioEfectivo_(t);
@@ -1194,23 +1260,14 @@ function generarPlanificacionSemanal_() {
     });
 
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      var nom = ocupante[lin];
-      if (!nom) return;
-      var mP = mapaModelos[nom];
-      mP.tareas.forEach(function (t) {
-        var diaSemanaActual = d % DIAS_LABORALES;
-        if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) return;
-        var clave = claveMO_(t);
-        if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
-        if (t.lineaFija && t.lineaFija !== lin) return;
-        if (elegiblesTarea_(t, overflowL1).indexOf(lin) === -1) return;
-        var avail = 1 - carga[lin][d];
-        if (avail <= 0.001) return;
-        var piezasCaben = Math.floor(avail * t.cap + 0.0001);
-        if (String(lin).trim() === "5") piezasCaben = Math.min(piezasCaben, LOTE_RUEDA_LINEA5);
-        if (piezasCaben <= 0) return;
-        var puestas = asignar_(t, lin, d, piezasCaben);
-        if (puestas > 0) lineaPorMO[clave] = lin;
+      var noms = ocupante[lin];
+      if (!noms || noms.length === 0) return;
+      if (String(lin) === "5" && noms.length >= 2) {
+        producirRuedaLinea5_(noms, d, overflowL1);
+        return;
+      }
+      noms.forEach(function (nom) {
+        producirModeloDia_(mapaModelos[nom], lin, d, overflowL1);
       });
     });
   }
@@ -1423,6 +1480,7 @@ function generarPlanificacionSemanal_() {
 
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
+    "• Línea 5: hasta 2 modelos en paralelo (40 pzas/día; rueda de 5 si hay dos).\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima (SKU + modelo)  →  3) Resto del plan.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
