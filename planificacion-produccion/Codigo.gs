@@ -1,12 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.5.0 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.6.0 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - CANTIDAD MÍNIMA reactivada: cubre primero el cupo de almacén
- *     (Priorizacion!Cantidad Minima) priorizando Negro / Blanco / Azul Marino.
+ *   - CANTIDAD MÍNIMA = prioridad máxima justo DESPUÉS de Especial
+ *     (Por Hacer - Especial). El cupo de Priorizacion!Cantidad Minima
+ *     se programa con máxima urgencia (no espera el "día de inicio" del SKU)
+ *     y recién después sigue el paneo normal (fecha + Urgente/Alta/Media/Baja).
+ *   - Tableros Planificacion / Semana 2–5 ordenados por flujo diario
+ *     (primer día de la semana con unidades), no por fecha objetivo.
  *   - COLORES CORE primero en toda la distribución de variantes.
  *   - MO ATÓMICA: cada lote (MO) entra completo en UNA sola línea.
  *   - PROYECCIÓN ACUMULADA en "Proyeccion" y "Proyeccion - SKUS".
@@ -18,7 +22,10 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.5.0";
+var VERSION_SISTEMA = "5.6.0";
+var BANDA_ESPECIAL = 0;
+var BANDA_MINIMA = 1;
+var BANDA_RESTO = 2;
 var DIAS_LABORALES = 5;
 var MAX_MODELOS_PARALELO = 2;
 var MAX_SNAPSHOTS = 8;
@@ -331,6 +338,54 @@ function prioridadNum_(txt) {
   return 5;
 }
 
+function parseCantidad_(v) {
+  if (v === true || v === false || v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  var s = String(v).trim().replace(/\s/g, "").replace(",", ".");
+  var n = Number(s);
+  return isFinite(n) ? n : 0;
+}
+
+function idxCantidadMinima_(headers) {
+  for (var i = 0; i < headers.length; i++) {
+    var h = quitarTildes_(normLow_(headers[i]));
+    if (h.indexOf("cantidad") !== -1 && (h.indexOf("minima") !== -1 || h.indexOf("min ") !== -1 || h.indexOf(" minimo") !== -1)) {
+      return i;
+    }
+  }
+  return idxPorFragmento_(headers, ["cantidad minima", "cantidad mínima", "cant. minima", "minima", "mínima"]);
+}
+
+function claveModeloNorm_(s) {
+  return quitarTildes_(normLow_(s)).replace(/\s+/g, " ");
+}
+
+function minimaDeModelo_(mapaMinimas, modelo) {
+  if (!mapaMinimas) return 0;
+  if (mapaMinimas[modelo] > 0) return mapaMinimas[modelo];
+  var alvo = claveModeloNorm_(modelo);
+  if (mapaMinimas[alvo] > 0) return mapaMinimas[alvo];
+  var alvoBase = alvo.replace(/\s*\(especial\)\s*$/, "");
+  for (var k in mapaMinimas) {
+    var nk = claveModeloNorm_(k);
+    if ((nk === alvo || nk === alvoBase || nk.replace(/\s*\(especial\)\s*$/, "") === alvoBase) && mapaMinimas[k] > 0) {
+      return mapaMinimas[k];
+    }
+  }
+  return 0;
+}
+
+function diaInicioEfectivo_(t) {
+  if (t && t.esMinima) return 0;
+  return t && t.diaIngreso ? t.diaIngreso : 0;
+}
+
+function bandaDe_(t) {
+  if (t.esEspecial) return BANDA_ESPECIAL;
+  if (t.esMinima) return BANDA_MINIMA;
+  return BANDA_RESTO;
+}
+
 function rangoColor_(color) {
   var c = quitarTildes_(normLow_(color));
   if (c === "") return 50;
@@ -378,8 +433,15 @@ function cloneTask(t, newQty, isFase2) {
     plan: {},
     indice: t.indice,
     fase2: isFase2,
-    lineaFija: t.lineaFija || null
+    lineaFija: t.lineaFija || null,
+    esMinima: isFase2 ? false : !!t.esMinima
   };
+}
+
+function clonarConBanda_(t, newQty, isFase2, esMinima) {
+  var c = cloneTask(t, newQty, isFase2);
+  c.esMinima = !isFase2 && !t.esEspecial && !!esMinima;
+  return c;
 }
 
 function expandirTareasPorMinima_(tareas, mapaMinimas) {
@@ -396,9 +458,9 @@ function expandirTareasPorMinima_(tareas, mapaMinimas) {
   var out = [];
   orden.forEach(function (mod) {
     var group = porModelo[mod];
-    var minTotal = mapaMinimas[mod];
+    var minTotal = minimaDeModelo_(mapaMinimas, mod);
     if (group[0].esEspecial || !(minTotal > 0)) {
-      group.forEach(function (t) { out.push(cloneTask(t, t.cantidad, false)); });
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, false)); });
       return;
     }
 
@@ -411,11 +473,11 @@ function expandirTareasPorMinima_(tareas, mapaMinimas) {
     var minFaltante = Math.max(0, minTotal - producido);
 
     if (minFaltante <= 0) {
-      group.forEach(function (t) { out.push(cloneTask(t, t.cantidad, true)); });
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, true, false)); });
       return;
     }
     if (minFaltante >= volFaltante) {
-      group.forEach(function (t) { out.push(cloneTask(t, t.cantidad, false)); });
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, true)); });
       return;
     }
 
@@ -429,13 +491,13 @@ function expandirTareasPorMinima_(tareas, mapaMinimas) {
     var remaining = minFaltante;
     group.forEach(function (t) {
       if (remaining <= 0) {
-        out.push(cloneTask(t, t.cantidad, true));
+        out.push(clonarConBanda_(t, t.cantidad, true, false));
       } else if (t.cantidad <= remaining) {
-        out.push(cloneTask(t, t.cantidad, false));
+        out.push(clonarConBanda_(t, t.cantidad, false, true));
         remaining -= t.cantidad;
       } else {
-        out.push(cloneTask(t, remaining, false));
-        out.push(cloneTask(t, t.cantidad - remaining, true));
+        out.push(clonarConBanda_(t, remaining, false, true));
+        out.push(clonarConBanda_(t, t.cantidad - remaining, true, false));
         remaining = 0;
       }
     });
@@ -605,7 +667,7 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
       esEspecial: esEspecial, fechaKey: fechaKey, diaIngreso: diaIngreso, diaNoLaborable: diaNoLaborable,
       mo: mo, genero: genero, color: color, colorRank: rangoColor_(color), talla: talla,
       restante: cantEfectiva, planificada: 0, planificadaSem1: 0, ultimoDia: -1, plan: {},
-      indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null
+      indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null, esMinima: false
     });
   }
 }
@@ -668,7 +730,7 @@ function generarPlanificacionSemanal_() {
     var idxTipo = idxPorFragmento_(headersPrio, ["tipo"]);
     var idxPrio = idxPorFragmento_(headersPrio, ["prioridad"]);
     var idxFec = idxPorFragmento_(headersPrio, ["fecha"]);
-    var idxMin = idxPorFragmento_(headersPrio, ["cantidad minima", "mínima", "minima"]);
+    var idxMin = idxCantidadMinima_(headersPrio);
     var idxLinP = idxPorFragmento_(headersPrio, ["linea", "línea"]);
 
     var datosPrio = hojaPriorizacion.getRange(3, 2, hojaPriorizacion.getLastRow() - 2, anchoPrio - 1).getValues();
@@ -687,7 +749,7 @@ function generarPlanificacionSemanal_() {
       if (isFinite(fk)) mapaFechaModelo[modP] = fk;
 
       if (idxMin !== -1) {
-        var minVal = Number(datosPrio[p][idxMin]);
+        var minVal = parseCantidad_(datosPrio[p][idxMin]);
         if (minVal > 0) mapaMinimas[modP] = minVal;
       }
       if (idxLinP !== -1) {
@@ -729,13 +791,17 @@ function generarPlanificacionSemanal_() {
   });
 
   var nModelosConMinima = Object.keys(mapaMinimas).length;
+  var detalleMinimas = [];
+  for (var mk in mapaMinimas) detalleMinimas.push(mk + ": " + mapaMinimas[mk]);
   tareas = expandirTareasPorMinima_(tareas, mapaMinimas);
 
   tareas.sort(function (a, b) {
-    if (a.fase2 !== b.fase2) return a.fase2 ? 1 : -1;
-    if (a.esEspecial !== b.esEspecial) return a.esEspecial ? -1 : 1;
-    if (a.fechaKey !== b.fechaKey) return a.fechaKey - b.fechaKey;
-    if (a.prioridadNum !== b.prioridadNum) return a.prioridadNum - b.prioridadNum;
+    var ba = bandaDe_(a), bb = bandaDe_(b);
+    if (ba !== bb) return ba - bb;
+    if (ba === BANDA_RESTO) {
+      if (a.fechaKey !== b.fechaKey) return a.fechaKey - b.fechaKey;
+      if (a.prioridadNum !== b.prioridadNum) return a.prioridadNum - b.prioridadNum;
+    }
     var ra = a.colorRank, rb = b.colorRank;
     if (ra !== rb) return ra - rb;
     if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
@@ -754,12 +820,13 @@ function generarPlanificacionSemanal_() {
   var grupos = [];
   var idxGrupo = {};
   tareas.forEach(function (t) {
-    var clave = (t.fase2 ? "P2|" : "P1|") + (t.esEspecial ? "E|" : "R|") + t.fechaKey;
-    if (idxGrupo[clave] === undefined) {
-      idxGrupo[clave] = grupos.length;
-      grupos.push({ clave: clave, modelos: [], idxModelo: {} });
+    var banda = bandaDe_(t);
+    var claveGrupo = "B" + banda + "|" + (banda === BANDA_RESTO ? String(t.fechaKey) : (banda === BANDA_ESPECIAL ? "ESP" : "MIN"));
+    if (idxGrupo[claveGrupo] === undefined) {
+      idxGrupo[claveGrupo] = grupos.length;
+      grupos.push({ clave: claveGrupo, banda: banda, modelos: [], idxModelo: {} });
     }
-    var g = grupos[idxGrupo[clave]];
+    var g = grupos[idxGrupo[claveGrupo]];
     if (g.idxModelo[t.modelo] === undefined) {
       g.idxModelo[t.modelo] = g.modelos.length;
       g.modelos.push({ nombre: t.modelo, tareas: [], volumen: 0, prioMin: t.prioridadNum });
@@ -768,6 +835,11 @@ function generarPlanificacionSemanal_() {
     m.tareas.push(t);
     m.volumen += t.cantidad;
     if (t.prioridadNum < m.prioMin) m.prioMin = t.prioridadNum;
+  });
+
+  grupos.sort(function (a, b) {
+    if (a.banda !== b.banda) return a.banda - b.banda;
+    return String(a.clave).localeCompare(String(b.clave));
   });
 
   grupos.forEach(function (g) {
@@ -812,7 +884,7 @@ function generarPlanificacionSemanal_() {
   function estimarDiaFinLinea_(t, lin, fromDay) {
     var rest = t.restante;
     for (var d = fromDay; d < totalDias; d++) {
-      if (d < t.diaIngreso) continue;
+      if (d < diaInicioEfectivo_(t)) continue;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) continue;
       var avail = Math.max(0, 1 - carga[lin][d]);
       var piezas = Math.floor(avail * t.cap + 0.0001);
@@ -879,7 +951,7 @@ function generarPlanificacionSemanal_() {
               asignandoModelo = false;
               m.tareas.forEach(function (t) {
                 var diaSemanaActual = d % DIAS_LABORALES;
-                if (t.restante <= 0 || d < t.diaIngreso || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) return;
+                if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) return;
 
                 var lin = fijarLineaSiHaceFalta_(t, d);
                 if (!lin || carga[lin] === undefined) return;
@@ -953,7 +1025,7 @@ function generarPlanificacionSemanal_() {
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
         fechaObj: t.fechaKey, mos: new Set(),
         porSemana: [], restante: 0, ultimoDia: -1,
-        diaFinEstimado: -1, minima: mapaMinimas[t.modelo] || 0
+        diaFinEstimado: -1, minima: minimaDeModelo_(mapaMinimas, t.modelo), bandaMin: 9
       };
       for (var w = 0; w < cfg.semanas; w++) infoModelo[t.modelo].porSemana.push(0);
     }
@@ -961,6 +1033,8 @@ function generarPlanificacionSemanal_() {
     im.solicitada += t.cantidad;
     im.sem1 += t.planificadaSem1;
     im.restante += t.restante;
+    var bandaT = bandaDe_(t);
+    if (bandaT < im.bandaMin) im.bandaMin = bandaT;
     if (t.prioridadNum < im.prioMin) im.prioMin = t.prioridadNum;
     if (t.fechaKey < im.fechaObj) im.fechaObj = t.fechaKey;
     if (t.ultimoDia > im.ultimoDia) im.ultimoDia = t.ultimoDia;
@@ -1102,19 +1176,40 @@ function generarPlanificacionSemanal_() {
   dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias);
 
   var nMinAplicadas = 0;
+  var piezasMinima = 0;
+  tareas.forEach(function (t) {
+    if (t.esMinima) piezasMinima += t.planificada;
+  });
   for (var modMin in mapaMinimas) {
     if (infoModelo[modMin]) nMinAplicadas++;
   }
+  var txtMin = detalleMinimas.length ? detalleMinimas.join("\n  - ") : "(ningún modelo con cupo > 0 en Priorizacion)";
 
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
-    "• Tableros semanales, líneas 1-5, proyección y almacén actualizados.\n" +
-    "• Cantidad mínima: " + nMinAplicadas + " modelo(s) con cupo de almacén (" + nModelosConMinima + " configurados).\n" +
+    "• Orden de carga: 1) Especial  →  2) Cantidad mínima (máxima urgencia)  →  3) Resto del plan.\n" +
+    "• Cupo mínimo leído de Priorizacion (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
+    "  Programadas en banda mínima: " + piezasMinima + " pzas.  |  Modelos vivos con cupo: " + nMinAplicadas + "\n" +
     "  Fase 1 (mínima + colores core): " + piezasFase1 + " pzas.  |  Fase 2 (resto): " + piezasFase2 + " pzas.\n" +
+    "• Tableros semanales ordenados por flujo diario (primer día con producción).\n" +
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
     "• Proyección en acumulado por semana.\n" +
     "• Colores core (Negro / Blanco / Azul Marino) salen primero."
   );
+}
+
+function numCeldaDia_(row, idx) {
+  if (idx < 4 || idx > 8) return 0;
+  var v = row[idx];
+  if (v === "--" || v === "" || v === null || v === undefined) return 0;
+  return Number(v) || 0;
+}
+
+function primerDiaFila_(row) {
+  for (var i = 4; i <= 8; i++) {
+    if (numCeldaDia_(row, i) > 0) return i;
+  }
+  return 99;
 }
 
 function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, infoModelo, hojasLineas, hojaPendiente, jerarquiaInversa) {
@@ -1177,12 +1272,19 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
     var filaTotalesS = 4;
     if (datosGlobalesS.length > 0) {
       datosGlobalesS.sort(function (a, b) {
-        if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
-        var ia = infoModelo[a[1]], ib = infoModelo[b[1]];
-        if (ia.fechaObj !== ib.fechaObj) return ia.fechaObj - ib.fechaObj;
-        if (ia.prioMin !== ib.prioMin) return ia.prioMin - ib.prioMin;
-        if (b[3] !== a[3]) return b[3] - a[3];
-        return a[1].localeCompare(b[1]);
+        if (String(a[0]) !== String(b[0])) return String(a[0]).localeCompare(String(b[0]));
+        var da = primerDiaFila_(a);
+        var db = primerDiaFila_(b);
+        if (da !== db) return da - db;
+        var ia = infoModelo[a[1]] || {};
+        var ib = infoModelo[b[1]] || {};
+        var ba = (ia.bandaMin !== undefined) ? ia.bandaMin : 9;
+        var bb = (ib.bandaMin !== undefined) ? ib.bandaMin : 9;
+        if (ba !== bb) return ba - bb;
+        var qtyA = numCeldaDia_(a, da);
+        var qtyB = numCeldaDia_(b, db);
+        if (qtyA !== qtyB) return qtyB - qtyA;
+        return String(a[1]).localeCompare(String(b[1]));
       });
 
       var rangoS = hojaS.getRange(4, 2, datosGlobalesS.length, 11);
@@ -1264,13 +1366,15 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
       datosResumenS.push({
         modelo: modS, mos: imS.mos.size, meta: metaSemanaActual, plan: planS,
         pct: metaSemanaActual > 0 ? planS / metaSemanaActual : (planS > 0 ? 1 : 0),
-        pendiente: pendS, prioMin: imS.prioMin, fechaObj: imS.fechaObj
+        pendiente: pendS, prioMin: imS.prioMin, fechaObj: imS.fechaObj,
+        bandaMin: (imS.bandaMin !== undefined) ? imS.bandaMin : 9
       });
       totalSolS += metaSemanaActual; totalPlanS += planS;
       imS.mos.forEach(function (m) { totalMOsResS.add(m); });
     }
 
     datosResumenS.sort(function (a, b) {
+      if (a.bandaMin !== b.bandaMin) return a.bandaMin - b.bandaMin;
       var aPlan = a.plan > 0, bPlan = b.plan > 0;
       if (aPlan !== bPlan) return aPlan ? -1 : 1;
       if (a.fechaObj !== b.fechaObj) return a.fechaObj - b.fechaObj;
@@ -1312,6 +1416,7 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
       var filaAlertaS = filaTotalesResumenS + 3;
 
       pendientesS.sort(function (a, b) {
+        if (a.bandaMin !== b.bandaMin) return a.bandaMin - b.bandaMin;
         var aPlan = a.plan > 0, bPlan = b.plan > 0;
         if (aPlan !== bPlan) return aPlan ? -1 : 1;
         if (a.fechaObj !== b.fechaObj) return a.fechaObj - b.fechaObj;

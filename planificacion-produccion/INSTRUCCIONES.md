@@ -1,4 +1,4 @@
-# Planificación de Producción v5.5 — códigos listos para pegar
+# Planificación de Producción v5.6 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -9,29 +9,27 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 3. Guarda el proyecto. Recarga la hoja de cálculo para ver los menús `⚙️ Producción`, `👁️ Ver Pestañas` y `⚙️ Tracking`.
 4. Si usas la Web App del dashboard: **Implementar → Implementación nueva → Aplicación web** (o vuelve a implementar la existente).
 
-No hace falta cambiar la estructura de pestañas. La columna **Cantidad Minima** de `Priorizacion` (columna F) ya es la fuente del cupo de almacén.
+No hace falta cambiar la estructura de pestañas. La columna **Cantidad Minima** de `Priorizacion` (columna F) es la fuente del cupo de almacén. Los modelos especiales salen de `Por Hacer - Especial`.
 
-## Qué hace esta versión
+## Orden de carga v5.6
 
-- **Cantidad mínima reactivada**: si un modelo tiene cupo en `Priorizacion!Cantidad Minima`, primero se programa ese cupo (Fase 1) y después el resto (Fase 2).
-- **Colores core primero**: Negro, Blanco y Azul Marino (y parecidos: Negro Aventura, Ivory, Azul marino - Beige) salen antes que el resto de variantes, tanto en el cupo mínimo como en la distribución general.
-- **MO atómica**: cada orden/lote entra completa en **una sola línea**. Si el SKU admite `2 / 4`, el motor elige la línea que puede terminar antes y no parte el lote.
-- **Proyección acumulada**: en `Proyeccion` y `Proyeccion - SKUS`, Sem 1…5 muestran el acumulado a producir hasta esa semana (901, 1605, 1605…), no el flujo semanal suelto.
-- **Bugs**: prioridad `Urgente ` (espacio) ya no cae a “Sin Asignar”; `"2, 4"` ya no se guarda como `2.4`; el cruce de almacén usa `datosM[i]` (antes `datos[i]` reventaba el sync); `doGet` y **Guardar Producción (Corte Diario)** restaurados.
+1. **Especial** — todo lo de `Por Hacer - Especial`.
+2. **Cantidad mínima (prioridad máxima)** — si el modelo tiene cupo en `Priorizacion!Cantidad Minima`, esas piezas salen con máxima urgencia, **antes** que Urgente/Alta/Media/Baja y **antes** que cualquier modelo sin mínima, aunque la fecha objetivo sea más lejana. El cupo **no espera** el “día de inicio” del SKU (en el archivo actual Negro/Blanco/Azul Marino de RIO DAMA arrancaban el martes y por eso VITA se comía el lunes de la línea 4).
+3. **Resto del paneo** — fecha de salida + prioridad, con colores núcleo primero.
+
+## Tableros semanales
+
+En `Planificacion`, `Semana 2`, `Semana 3`, `Semana 4` y `Semana 5` los modelos se listan **por línea** y, dentro de cada línea, por el **primer día de esa semana con unidades** (flujo real), no por fecha objetivo. El resumen de cada hoja sigue el mismo orden de bandas: Especial → Mínima → Resto.
+
+## Qué más conserva esta versión (v5.5)
+
+- **Colores núcleo primero**: Negro, Blanco y Azul Marino (y parecidos: Negro Aventura, Ivory, Azul marino - Beige).
+- **MO atómica**: cada orden/lote entra completa en **una sola línea**.
+- **Proyección acumulada**: en `Proyeccion` y `Proyeccion - SKUS`, Sem 1…5 muestran el acumulado hasta esa semana.
+- **Bugs**: prioridad `Urgente ` (espacio) ya no cae a “Sin Asignar”; `"2, 4"` ya no se guarda como `2.4`; el cruce de almacén usa `datosM[i]`; `doGet` y **Guardar Producción (Corte Diario)** restaurados.
 
 ## Cómo usar Cantidad Mínima
 
-En `Priorizacion`, columna **Cantidad Minima**, escribe por modelo el piso de almacén (ej. `200`). Deja vacío o `0` si no aplica.
+En `Priorizacion`, columna **Cantidad Minima**, escribe por modelo el piso de almacén (ej. `400` en RIO DAMA). Deja vacío o `0` si no aplica.
 
-Al correr **3️⃣ Generar Planificación**, el resumen indica cuántos modelos tenían cupo y cuántas piezas cayeron en Fase 1 vs Fase 2.
-
-## Mejoras que se pueden aplicar después (no incluidas)
-
-1. Semáforo de stock en `Por Hacer` según proyección de ventas vs mínimo.
-2. Etapa de **corte** separada de costura (solo programar MOs ya cortadas).
-3. Calendario de feriados más allá de “día no laborable” por fila.
-4. Traer cantidades mínimas desde Odoo / ERP en lugar de cargarlas a mano.
-5. Alerta si el cupo mínimo de un modelo no cabe en la Semana 1.
-6. Simulador del dashboard con la misma regla de MO atómica + colores core que el motor real (hoy el simulador ya no parte un SKU entre líneas, pero no replica el cupo mínimo).
-
-Si quieres implementar alguna de estas, dímelo y la metemos en una siguiente versión.
+Al correr **3️⃣ Generar Planificación**, el aviso indica el orden de carga, los cupos leídos y cuántas piezas cayeron en la banda mínima.
