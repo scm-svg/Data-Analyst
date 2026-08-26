@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.6 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.8.1 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -227,6 +227,51 @@ def acumular_semanas(por_semana, meta=0):
             if meta_num > 0 and acum >= meta_num:
                 alcanzada = True
     return out
+
+
+COLOR_MINIMA_PROY = "#FFE599"
+COLOR_META_PROY = "#D9EAD3"
+COLOR_META_TEXTO_PROY = "#38761D"
+FILA_ENC_PROY = 2
+COL_INI_PROY = 2
+FILA_DATOS_PROY = FILA_ENC_PROY + 1
+
+
+def umbrales_semana(acum_arr, minima, meta):
+    """Espejo de umbralesSemana_ en Codigo.gs: solo el primer cruce de cada umbral."""
+    fondos = ["#FFFFFF"] * len(acum_arr)
+    min_hecho = False
+    meta_hecho = False
+    for w, v in enumerate(acum_arr):
+        if v in (None, "--", "", 0):
+            continue
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            continue
+        if n <= 0:
+            continue
+        if not meta_hecho and meta and n >= meta:
+            fondos[w] = COLOR_META_PROY
+            meta_hecho = True
+            min_hecho = True
+        elif not min_hecho and minima and n >= minima:
+            fondos[w] = COLOR_MINIMA_PROY
+            min_hecho = True
+    return fondos
+
+
+def primera_fila_sku(skus, fila_datos=3):
+    primera = {}
+    for i, sku in enumerate(skus):
+        modelo = sku["modelo"]
+        if modelo not in primera:
+            primera[modelo] = fila_datos + i
+    return primera
+
+
+def link_modelo_sku(gid, fila):
+    return "#gid=%s&range=B%s" % (gid, fila)
 
 
 def primer_dia_fila(fila):
@@ -552,19 +597,34 @@ class TestAcumulado(unittest.TestCase):
     def test_vacio(self):
         self.assertEqual(acumular_semanas([0, 0, 0]), [None, None, None])
 
-    def test_colores_umbral(self):
-        def color(val, minima, meta):
-            if val in (None, "--", 0):
-                return "white"
-            if meta and val >= meta:
-                return "green"
-            if minima and val >= minima:
-                return "yellow"
-            return "white"
-        self.assertEqual(color(88, 0, 88), "green")
-        self.assertEqual(color(100, 100, 400), "yellow")
-        self.assertEqual(color(400, 100, 400), "green")
-        self.assertEqual(color("--", 100, 400), "white")
+    def test_colores_umbral_primer_cruce(self):
+        # BASIC LINE CROP TEE DAMA: 250 amarillo, 339 blanco, 357 verde
+        self.assertEqual(
+            umbrales_semana([250, "--", "--", 339, 357], 250, 357),
+            ["#FFE599", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#D9EAD3"],
+        )
+        # CLÁSICA CAB: 390 blanco, 483 verde (meta)
+        self.assertEqual(
+            umbrales_semana([390, 483, "--", "--", "--"], 0, 483),
+            ["#FFFFFF", "#D9EAD3", "#FFFFFF", "#FFFFFF", "#FFFFFF"],
+        )
+        # Misma semana mínima y meta → gana verde
+        self.assertEqual(umbrales_semana([408, "--"], 250, 408), ["#D9EAD3", "#FFFFFF"])
+        self.assertEqual(umbrales_semana(["--", "--"], 100, 400), ["#FFFFFF", "#FFFFFF"])
+
+    def test_origen_tabla_b2_y_enlace_sku(self):
+        self.assertEqual(FILA_ENC_PROY, 2)
+        self.assertEqual(COL_INI_PROY, 2)
+        self.assertEqual(FILA_DATOS_PROY, 3)
+        skus = [
+            {"sku": "CLA1", "modelo": "CLÁSICA CAB (Especial)"},
+            {"sku": "CLA2", "modelo": "CLÁSICA CAB (Especial)"},
+            {"sku": "BL1", "modelo": "BASIC LINE CROP TEE DAMA"},
+        ]
+        primera = primera_fila_sku(skus, FILA_DATOS_PROY)
+        self.assertEqual(primera["CLÁSICA CAB (Especial)"], 3)
+        self.assertEqual(primera["BASIC LINE CROP TEE DAMA"], 5)
+        self.assertEqual(link_modelo_sku(123, primera["BASIC LINE CROP TEE DAMA"]), "#gid=123&range=B5")
 
 
 if __name__ == "__main__":

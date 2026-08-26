@@ -1,4 +1,4 @@
-# Planificación de Producción v5.8 — códigos listos para pegar
+# Planificación de Producción v5.8.1 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -19,4 +19,12 @@ Esos SKUs entran en la banda de cantidad mínima **justo después de Especial**.
 
 ## Proyección
 
-`Proyeccion` y `Proyeccion - SKUS`: encabezado azul con letras blancas, filas con borde negro exterior y líneas internas suaves, sin texto encima de la tabla. Amarillo suave al llegar a la mínima; verde suave al llegar a la meta. El acumulado no se repite después de la meta.
+`Proyeccion` y `Proyeccion - SKUS` se dibujan desde **B2** (fila 1 vacía; encabezado en la fila 2; datos desde la fila 3). Encabezado navy `#20124D` con letras blancas. Filas con borde negro exterior y líneas internas suaves.
+
+Resaltado de acumulados (solo la **primera** semana que cruza cada umbral):
+
+- Amarillo `#FFE599` al llegar a la cantidad mínima.
+- Verde `#D9EAD3` (texto `#38761D` en negrita) al llegar a la meta.
+- Valores intermedios se quedan en blanco. Después de la meta el resto de semanas es `--`.
+
+En `Proyeccion`, cada nombre de modelo es un enlace a la primera fila de ese modelo en `Proyeccion - SKUS`.

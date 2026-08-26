@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.8.0 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.8.1 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
@@ -8,9 +8,11 @@
  *   - PRIORIZACION - SKUs: cupos mínimos por SKU que se integran a
  *     Cantidad Minima del modelo. Esos SKUs salen primero (después de
  *     Especial), luego el resto del piso del modelo (colores core).
- *   - PROYECCIÓN: sin mensaje superior; encabezado azul/blanco; filas
- *     con borde negro exterior y líneas internas suaves; amarillo suave
- *     al llegar a la mínima y verde suave al llegar a la meta.
+ *   - PROYECCIÓN: tablas desde B2; encabezado navy #20124D; filas con
+ *     borde negro exterior y líneas internas suaves. Amarillo #FFE599
+ *     SOLO en la primera semana que cruza la mínima; verde #D9EAD3 SOLO
+ *     en la primera que cruza la meta (intermedios en blanco). Cada
+ *     modelo en Proyeccion enlaza a su primera fila en Proyeccion - SKUS.
  *   - CANTIDAD MÍNIMA respeta Día de inicio (Por Hacer col. R).
  *   - COLORES CORE primero en toda la distribución de variantes.
  *   - MO ATÓMICA: cada lote (MO) entra completo en UNA sola línea.
@@ -23,7 +25,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.8.0";
+var VERSION_SISTEMA = "5.8.1";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_RESTO = 2;
@@ -33,10 +35,11 @@ var MAX_SNAPSHOTS = 8;
 var NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 var LOTE_RUEDA_LINEA5 = 5;
 var LOCK_MS = 120000;
-var COLOR_HEADER_PROY = "#3d85c6";
-var COLOR_MINIMA_PROY = "#fff2cc";
-var COLOR_META_PROY = "#d9ead3";
-var COLOR_BORDE_INTERNO = "#d0d0d0";
+var COLOR_HEADER_PROY = "#20124D";
+var COLOR_MINIMA_PROY = "#FFE599";
+var COLOR_META_PROY = "#D9EAD3";
+var COLOR_META_TEXTO_PROY = "#38761D";
+var COLOR_BORDE_INTERNO = "#D0D0D0";
 var NOMBRES_PRIO_SKU = ["Priorizacion - SKUs", "Priorizacion - SKUS", "Priorización - SKUs", "Priorizacion SKUs"];
 
 // =====================================================================
@@ -1690,13 +1693,82 @@ function valoresAcumuladosSemanas_(porSemana, nSemanas, meta) {
   return out;
 }
 
-function colorCeldaUmbral_(valor, minima, meta) {
-  if (valor === "--" || valor === "" || valor === null || valor === undefined) return "#FFFFFF";
-  var n = Number(valor);
-  if (!isFinite(n) || n <= 0) return "#FFFFFF";
-  if (meta > 0 && n >= meta) return COLOR_META_PROY;
-  if (minima > 0 && n >= minima) return COLOR_MINIMA_PROY;
-  return "#FFFFFF";
+function letraColumna_(col) {
+  var s = "";
+  var n = Number(col) || 0;
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function colorEstadoProy_(txt) {
+  var t = String(txt || "");
+  if (t.indexOf("RETRASADO") >= 0) {
+    return { bg: "#F4CCCC", fg: "#990000", bold: true };
+  }
+  if (t.indexOf("A TIEMPO") >= 0) {
+    return { bg: COLOR_META_PROY, fg: COLOR_META_TEXTO_PROY, bold: true };
+  }
+  if (t.indexOf("SIN FECHA") >= 0 || t.indexOf("Sin fecha") >= 0) {
+    return { bg: "#FFF2CC", fg: "#BF9000", bold: false };
+  }
+  return { bg: "#FFFFFF", fg: "#000000", bold: false };
+}
+
+function umbralesSemana_(acumArr, minima, meta, nCols, idxSem, nSemanas) {
+  var fondos = [], fuentes = [], negrita = [];
+  var i;
+  for (i = 0; i < nCols; i++) {
+    fondos.push("#FFFFFF");
+    fuentes.push("#000000");
+  }
+  var minHecho = false, metaHecho = false;
+  var celdasAmarillas = [], celdasVerdes = [];
+  for (var w = 0; w < nSemanas; w++) {
+    var v = acumArr[w];
+    if (v === "--" || v === "" || v === null || v === undefined) continue;
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) continue;
+    var idx = idxSem + w;
+    if (!metaHecho && meta > 0 && n >= meta) {
+      fondos[idx] = COLOR_META_PROY;
+      fuentes[idx] = COLOR_META_TEXTO_PROY;
+      celdasVerdes.push(idx);
+      negrita.push(idx);
+      metaHecho = true;
+      minHecho = true;
+    } else if (!minHecho && minima > 0 && n >= minima) {
+      fondos[idx] = COLOR_MINIMA_PROY;
+      fuentes[idx] = "#000000";
+      celdasAmarillas.push(idx);
+      negrita.push(idx);
+      minHecho = true;
+    }
+  }
+  return { fondos: fondos, fuentes: fuentes, amarillas: celdasAmarillas, verdes: celdasVerdes, negrita: negrita };
+}
+
+function aplicarColorEstadoFila_(est, idxEstado, estado) {
+  var estE = colorEstadoProy_(estado);
+  est.fondos[idxEstado] = estE.bg;
+  est.fuentes[idxEstado] = estE.fg;
+  if (estE.bold) est.negrita.push(idxEstado);
+  return est;
+}
+
+function aplicarNegritaUmbrales_(hoja, filaIni, colIni, filasEstilos) {
+  var refs = [];
+  for (var i = 0; i < filasEstilos.length; i++) {
+    var lista = (filasEstilos[i] && filasEstilos[i].negrita) || [];
+    for (var k = 0; k < lista.length; k++) {
+      refs.push(letraColumna_(colIni + lista[k]) + (filaIni + i));
+    }
+  }
+  if (refs.length === 0) return;
+  try { hoja.getRangeList(refs).setFontWeight("bold"); } catch (e) {}
 }
 
 function aplicarBordesFilasProy_(hoja, filaIni, nFilas, colIni, nCols) {
@@ -1713,32 +1785,97 @@ function estiloEncabezadoProy_(hoja, fila, colIni, nCols) {
   header.setBackground(COLOR_HEADER_PROY)
     .setFontColor("#FFFFFF")
     .setFontWeight("bold")
+    .setFontFamily("Arial")
+    .setFontSize(10)
     .setHorizontalAlignment("center")
     .setVerticalAlignment("middle")
+    .setWrap(true)
     .setBorder(null, null, null, null, true, false, COLOR_BORDE_INTERNO, SpreadsheetApp.BorderStyle.SOLID)
     .setBorder(true, true, true, true, null, null, "black", SpreadsheetApp.BorderStyle.SOLID);
   try { hoja.setFrozenRows(fila); } catch (e) {}
+  try { hoja.setRowHeight(fila, 32); } catch (e2) {}
+}
+
+function limpiarHojaProy_(hoja, nColsMin) {
+  var maxF = hoja.getMaxRows();
+  var maxC = Math.max(nColsMin || 12, hoja.getMaxColumns());
+  if (maxF > 0) {
+    try { hoja.getRange(1, 1, maxF, maxC).clear(); } catch (e) {}
+  }
+}
+
+function estadoProyeccion_(restante, fechaObj, fechaFinMs) {
+  if (restante > 0) {
+    if (isFinite(fechaObj)) {
+      return fechaFinMs <= fechaObj ? "✅ FUERA DE HORIZONTE (PERO A TIEMPO)" : "🚨 FUERA DE HORIZONTE Y RETRASADO";
+    }
+    return "⚠️ FUERA DE HORIZONTE";
+  }
+  if (isFinite(fechaObj)) {
+    return fechaFinMs <= fechaObj ? "✅ A TIEMPO" : "🚨 RETRASADO";
+  }
+  return "— Sin fecha objetivo";
+}
+
+function escribirTablaProyeccion_(hoja, cab, filas, fondos, fuentes, estilos, colIni, filaEnc) {
+  var filaDatos = filaEnc + 1;
+  hoja.getRange(filaEnc, colIni, 1, cab.length).setValues([cab]);
+  estiloEncabezadoProy_(hoja, filaEnc, colIni, cab.length);
+  try { hoja.setColumnWidth(1, 24); } catch (e0) {}
+  if (filas.length === 0) return filaDatos;
+  var rango = hoja.getRange(filaDatos, colIni, filas.length, cab.length);
+  rango.setValues(filas)
+    .setBackgrounds(fondos)
+    .setFontColors(fuentes)
+    .setFontFamily("Arial")
+    .setFontSize(10)
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setWrap(false);
+  aplicarBordesFilasProy_(hoja, filaDatos, filas.length, colIni, cab.length);
+  aplicarNegritaUmbrales_(hoja, filaDatos, colIni, estilos);
+  try { hoja.setRowHeights(filaDatos, Math.min(filas.length, 400), 24); } catch (e) {}
+  try { hoja.autoResizeColumns(colIni, cab.length); } catch (e2) {}
+  return filaDatos;
+}
+
+function aplicarEnlacesModeloProy_(ss, hoja, filaDatos, filas, primeraFilaSku, gidSku, colIni) {
+  var base = ss.getUrl();
+  for (var r = 0; r < filas.length; r++) {
+    var modelo = String(filas[r][0] || "");
+    if (!modelo) continue;
+    var destino = primeraFilaSku[modelo] || filaDatos;
+    var url = base + "#gid=" + gidSku + "&range=B" + destino;
+    try {
+      var rich = SpreadsheetApp.newRichTextValue().setText(modelo).setLinkUrl(url).build();
+      hoja.getRange(filaDatos + r, colIni).setRichTextValue(rich).setFontWeight("bold");
+    } catch (eLink) {}
+  }
 }
 
 function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
-  var hojaProy = ss.getSheetByName("Proyeccion");
-  if (!hojaProy) hojaProy = ss.insertSheet("Proyeccion");
+  var COL_INI = 2;
+  var FILA_ENC = 2;
+  var filaDatos = FILA_ENC + 1;
 
-  var maxFPr = hojaProy.getMaxRows();
-  if (maxFPr > 0) {
-    var limpPr = hojaProy.getRange(1, 1, maxFPr, Math.max(12, hojaProy.getMaxColumns()));
-    try { limpPr.clear(); } catch (e) {}
-  }
+  var hojaProy = ss.getSheetByName("Proyeccion") || ss.insertSheet("Proyeccion");
+  var hojaProySkus = ss.getSheetByName("Proyeccion - SKUS") || ss.insertSheet("Proyeccion - SKUS");
+  limpiarHojaProy_(hojaProy, 12);
+  limpiarHojaProy_(hojaProySkus, 20);
 
   var cabProy = ["Modelo", "Fecha Objetivo", "Meta (Faltante)"];
+  var cabProySku = ["SKU", "Modelo", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"];
   for (var w2 = 0; w2 < cfg.semanas; w2++) {
-    cabProy.push("Acum Sem " + (w2 + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, w2 * DIAS_LABORALES), cfg.tz, "dd/MM") + ")");
+    var etq = "Acum Sem " + (w2 + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, w2 * DIAS_LABORALES), cfg.tz, "dd/MM") + ")";
+    cabProy.push(etq);
+    cabProySku.push(etq);
   }
   cabProy.push("Sin Programar", "Fecha Estim. Término", "Estado");
+  cabProySku.push("Sin Programar", "Fecha Estim. Término", "Estado", "Genero", "Color", "Talla", "Linea", "Cap Produccion por Dia", "Tipo");
   var idxSemProy = 3;
-
-  hojaProy.getRange(1, 2, 1, cabProy.length).setValues([cabProy]);
-  estiloEncabezadoProy_(hojaProy, 1, 2, cabProy.length);
+  var idxSemSku = 5;
+  var idxEstadoProy = 3 + cfg.semanas + 2;
+  var idxEstadoSku = 5 + cfg.semanas + 2;
 
   var modelosOrdenados = Object.keys(infoModelo).sort(function (a, b) {
     var ia = infoModelo[a], ib = infoModelo[b];
@@ -1754,81 +1891,14 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     return a.localeCompare(b);
   });
 
-  var filasProy = [];
-  var fondosProy = [];
-
-  for (var mi2 = 0; mi2 < modelosOrdenados.length; mi2++) {
-    var nomMod = modelosOrdenados[mi2];
-    var im3 = infoModelo[nomMod];
-
-    var fechaFinMs = Infinity;
-    if (im3.diaFinEstimado >= 0) {
-      fechaFinMs = fechaDeDia_(cfg, im3.diaFinEstimado).getTime();
-    }
-
-    var estado;
-    if (im3.restante > 0) {
-      if (isFinite(im3.fechaObj)) {
-        estado = fechaFinMs <= im3.fechaObj ? "✅ FUERA DE HORIZONTE (PERO A TIEMPO)" : "🚨 FUERA DE HORIZONTE Y RETRASADO";
-      } else {
-        estado = "⚠️ FUERA DE HORIZONTE";
-      }
-    } else if (isFinite(im3.fechaObj)) {
-      estado = fechaFinMs <= im3.fechaObj ? "✅ A TIEMPO" : "🚨 RETRASADO";
-    } else {
-      estado = "— Sin fecha objetivo";
-    }
-
-    var fila = [nomMod, formatoFecha_(cfg, im3.fechaObj), im3.solicitada];
-    var acumMod = valoresAcumuladosSemanas_(im3.porSemana, cfg.semanas, im3.solicitada);
-    for (var w3 = 0; w3 < cfg.semanas; w3++) fila.push(acumMod[w3]);
-    fila.push(im3.restante === 0 ? "--" : im3.restante);
-    fila.push(isFinite(fechaFinMs) ? formatoFecha_(cfg, fechaFinMs) : "--");
-    fila.push(estado);
-    filasProy.push(fila);
-
-    var fondoFila = [];
-    for (var c0 = 0; c0 < cabProy.length; c0++) fondoFila.push("#FFFFFF");
-    for (var wC = 0; wC < cfg.semanas; wC++) {
-      fondoFila[idxSemProy + wC] = colorCeldaUmbral_(acumMod[wC], im3.minima || 0, im3.solicitada);
-    }
-    fondosProy.push(fondoFila);
-  }
-
-  if (filasProy.length > 0) {
-    var rProy = hojaProy.getRange(2, 2, filasProy.length, cabProy.length);
-    rProy.setValues(filasProy)
-      .setBackgrounds(fondosProy)
-      .setFontColor("#000000")
-      .setHorizontalAlignment("center")
-      .setVerticalAlignment("middle")
-      .setWrap(false);
-    aplicarBordesFilasProy_(hojaProy, 2, filasProy.length, 2, cabProy.length);
-    try { hojaProy.autoResizeColumns(2, cabProy.length); } catch (e2) {}
-    try { hojaProy.setRowHeights(1, filasProy.length + 1, 24); } catch (e3) {}
-  }
-
-  var hojaProySkus = ss.getSheetByName("Proyeccion - SKUS");
-  if (!hojaProySkus) hojaProySkus = ss.insertSheet("Proyeccion - SKUS");
-
-  var maxFPrS = hojaProySkus.getMaxRows();
-  if (maxFPrS > 0) {
-    var limpPrS = hojaProySkus.getRange(1, 1, maxFPrS, Math.max(20, hojaProySkus.getMaxColumns()));
-    try { limpPrS.clear(); } catch (e) {}
-  }
-
-  var cabProySku = ["SKU", "Modelo", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"];
-  for (var wS = 0; wS < cfg.semanas; wS++) {
-    cabProySku.push("Acum Sem " + (wS + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, wS * DIAS_LABORALES), cfg.tz, "dd/MM") + ")");
-  }
-  cabProySku.push("Sin Programar", "Fecha Estim. Término", "Estado", "Genero", "Color", "Talla", "Linea", "Cap Produccion por Dia", "Tipo");
-  var idxSemSku = 5;
-
-  hojaProySkus.getRange(1, 2, 1, cabProySku.length).setValues([cabProySku]);
-  estiloEncabezadoProy_(hojaProySkus, 1, 2, cabProySku.length);
+  var idxModelo = {};
+  for (var imo = 0; imo < modelosOrdenados.length; imo++) idxModelo[modelosOrdenados[imo]] = imo;
 
   var skusOrdenados = Object.keys(infoSku).sort(function (a, b) {
     var ia = infoSku[a], ib = infoSku[b];
+    var ma = idxModelo.hasOwnProperty(ia.modelo) ? idxModelo[ia.modelo] : 9999;
+    var mb = idxModelo.hasOwnProperty(ib.modelo) ? idxModelo[ib.modelo] : 9999;
+    if (ma !== mb) return ma - mb;
     var aPlan = (ia.porSemana[0] || 0) > 0, bPlan = (ib.porSemana[0] || 0) > 0;
     if (aPlan !== bPlan) return aPlan ? -1 : 1;
     if (ia.fechaObj !== ib.fechaObj) return ia.fechaObj - ib.fechaObj;
@@ -1842,29 +1912,18 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
 
   var filasProySku = [];
   var fondosSku = [];
+  var fuentesSku = [];
+  var estilosSku = [];
+  var primeraFilaSku = {};
 
   for (var miS = 0; miS < skusOrdenados.length; miS++) {
     var claveSku = skusOrdenados[miS];
     var isku = infoSku[claveSku];
-
     var fechaFinMsSku = Infinity;
     if (isku.diaFinEstimado >= 0) {
       fechaFinMsSku = fechaDeDia_(cfg, isku.diaFinEstimado).getTime();
     }
-
-    var estadoSku;
-    if (isku.restante > 0) {
-      if (isFinite(isku.fechaObj)) {
-        estadoSku = fechaFinMsSku <= isku.fechaObj ? "✅ FUERA DE HORIZONTE (PERO A TIEMPO)" : "🚨 FUERA DE HORIZONTE Y RETRASADO";
-      } else {
-        estadoSku = "⚠️ FUERA DE HORIZONTE";
-      }
-    } else if (isFinite(isku.fechaObj)) {
-      estadoSku = fechaFinMsSku <= isku.fechaObj ? "✅ A TIEMPO" : "🚨 RETRASADO";
-    } else {
-      estadoSku = "— Sin fecha objetivo";
-    }
-
+    var estadoSku = estadoProyeccion_(isku.restante, isku.fechaObj, fechaFinMsSku);
     var filaS = [isku.sku, isku.modelo, isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
     var acumSku = valoresAcumuladosSemanas_(isku.porSemana, cfg.semanas, isku.solicitada);
     for (var w3S = 0; w3S < cfg.semanas; w3S++) filaS.push(acumSku[w3S]);
@@ -1879,27 +1938,50 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     filaS.push(isku.esEspecial ? "Especial" : "Producción");
     filasProySku.push(filaS);
 
-    var fondoSku = [];
-    for (var cS = 0; cS < cabProySku.length; cS++) fondoSku.push("#FFFFFF");
-    for (var wCs = 0; wCs < cfg.semanas; wCs++) {
-      fondoSku[idxSemSku + wCs] = colorCeldaUmbral_(acumSku[wCs], isku.minima || 0, isku.solicitada);
-    }
-    fondosSku.push(fondoSku);
+    var estSku = umbralesSemana_(acumSku, isku.minima || 0, isku.solicitada, cabProySku.length, idxSemSku, cfg.semanas);
+    aplicarColorEstadoFila_(estSku, idxEstadoSku, estadoSku);
+    fondosSku.push(estSku.fondos);
+    fuentesSku.push(estSku.fuentes);
+    estilosSku.push(estSku);
+
+    if (!primeraFilaSku[isku.modelo]) primeraFilaSku[isku.modelo] = filaDatos + miS;
   }
 
+  escribirTablaProyeccion_(hojaProySkus, cabProySku, filasProySku, fondosSku, fuentesSku, estilosSku, COL_INI, FILA_ENC);
   if (filasProySku.length > 0) {
-    var rProyS = hojaProySkus.getRange(2, 2, filasProySku.length, cabProySku.length);
-    rProyS.setValues(filasProySku)
-      .setBackgrounds(fondosSku)
-      .setFontColor("#000000")
-      .setHorizontalAlignment("center")
-      .setVerticalAlignment("middle")
-      .setWrap(false);
-    aplicarBordesFilasProy_(hojaProySkus, 2, filasProySku.length, 2, cabProySku.length);
-    hojaProySkus.getRange(2, 2, filasProySku.length, 1).setNumberFormat("@");
-    try { hojaProySkus.autoResizeColumns(2, cabProySku.length); } catch (e4) {}
-    try { hojaProySkus.setRowHeights(1, Math.min(filasProySku.length + 1, 400), 22); } catch (e5) {}
+    try { hojaProySkus.getRange(filaDatos, COL_INI, filasProySku.length, 1).setNumberFormat("@"); } catch (eFmt) {}
   }
+
+  var filasProy = [];
+  var fondosProy = [];
+  var fuentesProy = [];
+  var estilosProy = [];
+
+  for (var mi2 = 0; mi2 < modelosOrdenados.length; mi2++) {
+    var nomMod = modelosOrdenados[mi2];
+    var im3 = infoModelo[nomMod];
+    var fechaFinMs = Infinity;
+    if (im3.diaFinEstimado >= 0) {
+      fechaFinMs = fechaDeDia_(cfg, im3.diaFinEstimado).getTime();
+    }
+    var estado = estadoProyeccion_(im3.restante, im3.fechaObj, fechaFinMs);
+    var fila = [nomMod, formatoFecha_(cfg, im3.fechaObj), im3.solicitada];
+    var acumMod = valoresAcumuladosSemanas_(im3.porSemana, cfg.semanas, im3.solicitada);
+    for (var w3 = 0; w3 < cfg.semanas; w3++) fila.push(acumMod[w3]);
+    fila.push(im3.restante === 0 ? "--" : im3.restante);
+    fila.push(isFinite(fechaFinMs) ? formatoFecha_(cfg, fechaFinMs) : "--");
+    fila.push(estado);
+    filasProy.push(fila);
+
+    var estMod = umbralesSemana_(acumMod, im3.minima || 0, im3.solicitada, cabProy.length, idxSemProy, cfg.semanas);
+    aplicarColorEstadoFila_(estMod, idxEstadoProy, estado);
+    fondosProy.push(estMod.fondos);
+    fuentesProy.push(estMod.fuentes);
+    estilosProy.push(estMod);
+  }
+
+  escribirTablaProyeccion_(hojaProy, cabProy, filasProy, fondosProy, fuentesProy, estilosProy, COL_INI, FILA_ENC);
+  aplicarEnlacesModeloProy_(ss, hojaProy, filaDatos, filasProy, primeraFilaSku, hojaProySkus.getSheetId(), COL_INI);
 }
 
 
