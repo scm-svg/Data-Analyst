@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.4 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.5 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CANTIDAD MÍNIMA programa el cupo pedido (ej. 100 pzas) desde el
+ *     faltante. Lo ya producido solo quita la banda si YA se cubrió
+ *     el piso completo; no recorta 100 a 67. El modelo no cede la
+ *     línea hasta cubrir esas piezas.
  *   - CANTIDAD MÍNIMA vuelve a ser la máxima prioridad después de
  *     Especial (Por Hacer - Especial). Gana incluso a Urgente. Al
  *     cubrir la mínima, el modelo cede el sobrante del día y el resto
@@ -40,7 +44,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.4";
+var VERSION_SISTEMA = "5.9.5";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_URGENTE = 2;
@@ -578,11 +582,14 @@ function expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku) {
       volOriginal += (t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal);
     });
     var producido = Math.max(0, volOriginal - volFaltante);
-    var minModeloFaltante = Math.max(0, minModelo - producido);
+    if (minModelo > 0 && producido >= minModelo) {
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, true, false)); });
+      return;
+    }
+    var minModeloFaltante = Math.min(minModelo, volFaltante);
 
-    if (minModeloFaltante <= 0) {
-      var yaCubierta = minModelo > 0;
-      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, yaCubierta, false)); });
+    if (!(minModeloFaltante > 0)) {
+      group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, false)); });
       return;
     }
     if (minModeloFaltante >= volFaltante) {

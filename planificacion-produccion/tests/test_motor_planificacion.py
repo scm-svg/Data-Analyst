@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.4 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.5 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -210,12 +210,17 @@ def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
             orig = t.get("solicitadaOrig", t["cantidad"])
             vol_original += orig
         producido = max(0, vol_original - vol_faltante)
-        min_modelo_faltante = max(0, min_modelo - producido)
+        if min_modelo > 0 and producido >= min_modelo:
+            for t in group:
+                t["fase2"] = True
+                t["esMinima"] = False
+                out.append(t)
+            continue
+        min_modelo_faltante = min(min_modelo, vol_faltante) if min_modelo > 0 else 0
 
         if min_modelo_faltante <= 0:
-            ya = min_modelo > 0
             for t in group:
-                t["fase2"] = ya
+                t["fase2"] = False
                 t["esMinima"] = False
                 out.append(t)
             continue
@@ -325,7 +330,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.4: Especial → cantidad mínima → urgente/resto; L1-4 secuencial; L5 hasta 2."""
+    """Motor v5.9.5: Especial → cantidad mínima → urgente/resto; L1-4 secuencial; L5 hasta 2."""
     if caps_lineas is None:
         caps_lineas = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 
@@ -698,6 +703,15 @@ class TestCantidadMinima(unittest.TestCase):
         self.assertFalse(out[0]["esMinima"])
         self.assertTrue(out[0]["fase2"])
 
+    def test_cupo_minima_no_resta_lo_ya_producido(self):
+        """Excel (12): 33 ya hechas, mínima 100 → cupo 100 del faltante, no 67."""
+        t = self._t("ML", "Azul Marino", 479, modelo="MOTION LOOP CLASICA CAB")
+        t["solicitadaOrig"] = 512
+        out = expandir_por_minima([t], {"MOTION LOOP CLASICA CAB": 100})
+        self.assertEqual(sum(x["cantidad"] for x in out if x["esMinima"]), 100)
+        self.assertEqual(sum(x["cantidad"] for x in out if not x["esMinima"]), 379)
+        self.assertNotEqual(sum(x["cantidad"] for x in out if x["esMinima"]), 67)
+
     def test_sku_minima_sale_antes_que_core(self):
         """Priorizacion - SKUs marca el SKU; no lo mete en banda mínima del modelo."""
         tareas = [
@@ -903,6 +917,38 @@ class TestTresBandas(unittest.TestCase):
         self.assertEqual(lunes4["RIO CAB"], 30)
         self.assertEqual(sum(lunes4.values()), 130)
         self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "MOTION LOOP CLASICA CAB" and t.get("esMinima")), 100)
+
+    def test_minima_programa_100_aunque_ya_hayan_33(self):
+        """Excel (12): MOTION LOOP con 33 producidas y mínima 100 sigue programando 100, no 67."""
+        tareas = [
+            {"sku": "ESP1", "modelo": "MAR CAB (Especial)", "color": "Azul", "cantidad": 130,
+             "solicitadaOrig": 130, "esEspecial": True, "mo": "E1", "cap": 130,
+             "lineas": ["1"], "prioridadNum": 0, "diaIngreso": 3, "fechaKey": 20260904},
+            {"sku": "ESP2", "modelo": "MAR DAMA (Especial)", "color": "Azul", "cantidad": 130,
+             "solicitadaOrig": 130, "esEspecial": True, "mo": "E2", "cap": 130,
+             "lineas": ["2"], "prioridadNum": 0, "diaIngreso": 3, "fechaKey": 20260904},
+            {"sku": "ESP3", "modelo": "DOMINIC CAB (Especial)", "color": "Azul", "cantidad": 130,
+             "solicitadaOrig": 130, "esEspecial": True, "mo": "E3", "cap": 130,
+             "lineas": ["3"], "prioridadNum": 0, "diaIngreso": 3, "fechaKey": 20260828},
+            {"sku": "M1", "modelo": "MOTION LOOP CLASICA CAB", "color": "Azul Marino", "cantidad": 479,
+             "solicitadaOrig": 512, "esEspecial": False, "mo": "MO-ML", "cap": 130,
+             "lineas": ["2", "4"], "prioridadNum": 1, "diaIngreso": 3, "fechaKey": 20260918},
+            {"sku": "R1", "modelo": "RIO CAB", "color": "Negro", "cantidad": 400,
+             "solicitadaOrig": 400, "esEspecial": False, "mo": "MO-RIO", "cap": 130,
+             "lineas": ["2", "4"], "prioridadNum": 1, "diaIngreso": 3, "fechaKey": 20260914},
+        ]
+        out = planificar(tareas, {"MOTION LOOP CLASICA CAB": 100}, total_dias=5)
+        jueves4 = defaultdict(int)
+        for t in out:
+            jueves4[t["modelo"]] += t["plan"]["4"][3]
+        self.assertEqual(jueves4["MOTION LOOP CLASICA CAB"], 100)
+        self.assertEqual(jueves4["RIO CAB"], 30)
+        self.assertEqual(sum(jueves4.values()), 130)
+        self.assertEqual(
+            sum(t["planificada"] for t in out if t["modelo"] == "MOTION LOOP CLASICA CAB" and t.get("esMinima")),
+            100,
+        )
+        self.assertEqual(sum(t["plan"]["4"][0] for t in out), 0, "antes del día de inicio no hay carga")
 
 
 class TestLineasExclusivas(unittest.TestCase):

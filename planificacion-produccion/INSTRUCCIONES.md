@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.4 — códigos listos para pegar
+# Planificación de Producción v5.9.5 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -17,9 +17,9 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.4
+## Motor v5.9.5
 
-- **Cantidad mínima** (columna en `Priorizacion`): máxima prioridad **después de Especial**. El cupo mínimo sale antes que Urgente / Alta / fecha. Cuando se cubre esa cantidad, el modelo **cede la línea** (el sobrante del día pasa al siguiente) y el resto de su pedido vuelve a la cola normal.
+- **Cantidad mínima** (columna en `Priorizacion`): máxima prioridad **después de Especial**. El cupo es la cantidad pedida (ej. 100) tomada del **faltante**; lo ya producido **no recorta** ese cupo (no convierte 100 en 67). Solo si el piso ya está cubierto (producido ≥ mínima) el modelo no entra a esa banda. El cupo sale antes que Urgente / Alta / fecha. Cuando se cubre, el modelo **cede la línea** (el sobrante del día pasa al siguiente) y el resto de su pedido vuelve a la cola normal.
 - **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos.
 - **Líneas 1-4:** un modelo a la vez (**no en paralelo**). Si el modelo termina o no puede seguir, el **sobrante del mismo día** pasa al siguiente de la cola.
 - **Línea 5** es la única que puede trabajar **dos modelos en paralelo**. Capacidad 40 pzas/día: si va un modelo solo, produce 40; si hay dos, se turnan en lotes de 5 (~20 + 20). El lote de 5 ya no limita el día cuando L5 va sola.
