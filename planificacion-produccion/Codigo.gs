@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.3 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.4 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CANTIDAD MÍNIMA vuelve a ser la máxima prioridad después de
+ *     Especial (Por Hacer - Especial). Gana incluso a Urgente. Al
+ *     cubrir la mínima, el modelo cede el sobrante del día y el resto
+ *     de su pedido vuelve a la cola normal.
  *   - CAMBIO DE MODELO SECUENCIAL: L1-4 no corren dos modelos en
  *     paralelo, pero sí pueden cambiar el mismo día. Si el ocupante
  *     termina (o no puede seguir), el sobrante de capacidad pasa al
@@ -16,9 +20,9 @@
  *     cuando hay dos). Si solo hay un modelo, usa las 40 pzas/día.
  *   - Capacidad real por línea (L5 = 40, resto = 130). El lote de 5 ya
  *     no se aplica como techo diario cuando L5 va sola.
- *   - URGENTE primero (luego fecha más próxima). Un modelo Urgente con
- *     2+ líneas usa ambas. Líneas 1-4 = un modelo a la vez (secuencial);
- *     L5 hasta 2 en paralelo.
+ *   - URGENTE (después de Especial y de la cantidad mínima), luego la
+ *     fecha más próxima. Un modelo Urgente con 2+ líneas usa ambas.
+ *     Líneas 1-4 = un modelo a la vez (secuencial); L5 hasta 2 en paralelo.
  *   - ESPECIAL: respeta Linea de Produccion; línea 1 es la casa. Si L1
  *     termina y quedan Especiales en otras líneas, desbordan a L1.
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
@@ -36,10 +40,10 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.3";
+var VERSION_SISTEMA = "5.9.4";
 var BANDA_ESPECIAL = 0;
-var BANDA_URGENTE = 1;
-var BANDA_MINIMA = 2;
+var BANDA_MINIMA = 1;
+var BANDA_URGENTE = 2;
 var BANDA_RESTO = 3;
 var DIAS_LABORALES = 5;
 var MAX_MODELOS_LINEA5 = 2;
@@ -431,8 +435,8 @@ function esUrgente_(t) {
 
 function bandaDe_(t) {
   if (t.esEspecial) return BANDA_ESPECIAL;
-  if (esUrgente_(t)) return BANDA_URGENTE;
   if (t.esMinima) return BANDA_MINIMA;
+  if (esUrgente_(t)) return BANDA_URGENTE;
   return BANDA_RESTO;
 }
 
@@ -998,19 +1002,45 @@ function generarPlanificacionSemanal_() {
   });
 
   var listaModelos = ordenModelos.map(function (n) { return mapaModelos[n]; });
-  listaModelos.sort(function (a, b) {
-    if (a.banda !== b.banda) return a.banda - b.banda;
-    if (a.fechaMin !== b.fechaMin) return a.fechaMin - b.fechaMin;
-    if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
-    if (b.volumen !== a.volumen) return b.volumen - a.volumen;
-    return a.nombre.localeCompare(b.nombre);
-  });
+  listaModelos.sort(cmpModelosCola_);
   listaModelos.forEach(function (m) {
     m.tareas.sort(cmpTareasDentroModelo_);
   });
 
   function restanteModelo_(m) {
     return m.tareas.reduce(function (s, t) { return s + t.restante; }, 0);
+  }
+
+  function restanteMinima_(m) {
+    return m.tareas.reduce(function (s, t) { return s + (t.esMinima ? t.restante : 0); }, 0);
+  }
+
+  function tuvoMinima_(m) {
+    return m.tareas.some(function (t) { return t.esMinima; });
+  }
+
+  function bandaViva_(m) {
+    var b = 9;
+    m.tareas.forEach(function (t) {
+      if (t.restante > 0) {
+        var bt = bandaDe_(t);
+        if (bt < b) b = bt;
+      }
+    });
+    return b;
+  }
+
+  function cmpModelosCola_(a, b) {
+    if (a.banda !== b.banda) return a.banda - b.banda;
+    if (a.fechaMin !== b.fechaMin) return a.fechaMin - b.fechaMin;
+    if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
+    if (b.volumen !== a.volumen) return b.volumen - a.volumen;
+    return a.nombre.localeCompare(b.nombre);
+  }
+
+  function refrescarColaModelos_() {
+    listaModelos.forEach(function (m) { m.banda = bandaViva_(m); });
+    listaModelos.sort(cmpModelosCola_);
   }
 
   function capLinea_(lin) {
@@ -1109,12 +1139,13 @@ function generarPlanificacionSemanal_() {
     return piezas;
   }
 
-  function producirLote_(mP, lin, d, overflow, maxLote) {
+  function producirLote_(mP, lin, d, overflow, maxLote, soloMinima) {
     var capLin = capLinea_(lin);
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
       var diaSemanaActual = d % DIAS_LABORALES;
       if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) continue;
+      if (soloMinima && !t.esMinima) continue;
       var clave = claveMO_(t);
       if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
       if (t.lineaFija && t.lineaFija !== lin) continue;
@@ -1134,8 +1165,9 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
+    var soloMinima = restanteMinima_(mP) > 0;
     while (carga[lin][d] < 0.999) {
-      if (producirLote_(mP, lin, d, overflow, 0) <= 0) break;
+      if (producirLote_(mP, lin, d, overflow, 0, soloMinima) <= 0) break;
     }
   }
 
@@ -1146,7 +1178,8 @@ function generarPlanificacionSemanal_() {
     while (carga[lin][d] < 0.999 && estancado < noms.length) {
       var nom = noms[iR % noms.length];
       iR++;
-      var p = producirLote_(mapaModelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5);
+      var soloMinima = restanteMinima_(mapaModelos[nom]) > 0;
+      var p = producirLote_(mapaModelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5, soloMinima);
       estancado = p > 0 ? 0 : estancado + 1;
     }
   }
@@ -1154,6 +1187,7 @@ function generarPlanificacionSemanal_() {
   var ocupante = { "1": [], "2": [], "3": [], "4": [], "5": [] };
 
   for (var d = 0; d < totalDias; d++) {
+    refrescarColaModelos_();
     var overflowL1 = !nativosLinea1Pendientes_();
     if (d % DIAS_LABORALES === 0) {
       ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = []; });
@@ -1202,7 +1236,7 @@ function generarPlanificacionSemanal_() {
       ocupante[libres[0]].push(m.nombre);
     });
     vivos.forEach(function (m) {
-      if (m.banda !== BANDA_ESPECIAL && m.banda !== BANDA_URGENTE) return;
+      if (m.banda > BANDA_URGENTE) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
@@ -1301,12 +1335,16 @@ function generarPlanificacionSemanal_() {
         if (carga[lin][d] >= 0.999) break;
 
         ocupante[lin] = ocupante[lin].filter(function (nom) {
-          return !skip[nom] && modeloPuedeProducirHoy_(nom, lin, d, overflow);
+          if (skip[nom] || !modeloPuedeProducirHoy_(nom, lin, d, overflow)) return false;
+          var mOcc = mapaModelos[nom];
+          if (tuvoMinima_(mOcc) && restanteMinima_(mOcc) <= 0) return false;
+          return true;
         });
         if (carga[lin][d] <= before + 0.0001) {
           ocupante[lin].forEach(function (nom) { skip[nom] = true; });
           ocupante[lin] = ocupante[lin].filter(function (nom) { return !skip[nom]; });
         }
+        refrescarColaModelos_();
         if (ocupante[lin].length >= maxOcupantes_(lin)) break;
         var next = siguienteCandidato_(lin, d, overflow, skip);
         if (!next) break;
@@ -1532,7 +1570,7 @@ function generarPlanificacionSemanal_() {
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 modelos en paralelo (40 pzas/día; rueda de 5 si hay dos).\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
-    "• Orden de carga: 1) Especial  →  2) Cantidad mínima de modelo  →  3) Resto del plan.\n" +
+    "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
     "  Programadas en banda mínima: " + piezasMinima + " pzas.  |  Modelos vivos con cupo: " + nMinAplicadas + "\n" +
