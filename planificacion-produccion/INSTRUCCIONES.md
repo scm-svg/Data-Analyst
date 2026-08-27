@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.1 — códigos listos para pegar
+# Planificación de Producción v5.9.2 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -15,9 +15,9 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 - SKU, Producto, Genero, Color, Talla, Cantidad Minima y Fecha se llenan **a mano**.
 - **Lineas** es fórmula (VLOOKUP a `Por Hacer`); no la borres.
 
-Esos SKUs entran en la banda de cantidad mínima **después de Especial y de Urgente**. Si el modelo también tiene cupo en `Priorizacion!Cantidad Minima`, primero se cubren los SKUs listados y el resto del piso del modelo se llena con colores núcleo.
+Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.1
+## Motor v5.9.2
 
 - **Urgente primero**, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos. Las líneas 1-4 no mezclan modelos el mismo día; pueden cambiar de modelo entre semanas o cuando termina su cantidad.
 - **Línea 5** es la única que puede trabajar **dos modelos en paralelo**. Capacidad 40 pzas/día: si va un modelo solo, produce 40; si hay dos, se turnan en lotes de 5 (~20 + 20). El lote de 5 ya no limita el día cuando L5 va sola.

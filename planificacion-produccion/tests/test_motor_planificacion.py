@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.1 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.2 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -144,8 +144,46 @@ def min_de_sku(mapa_sku, sku):
     return v or 0
 
 
+def rec_sku_prio(mapa_sku, sku):
+    if not mapa_sku:
+        return None
+    rec = mapa_sku.get(clave_sku(sku), mapa_sku.get(sku))
+    if rec is None:
+        return None
+    if isinstance(rec, dict):
+        if (rec.get("min") or 0) > 0:
+            return rec
+        return None
+    if rec > 0:
+        return {"min": rec, "orden": 0}
+    return None
+
+
+def marcar_sku_prio(tareas, mapa_sku):
+    for t in tareas:
+        rec = rec_sku_prio(mapa_sku, t.get("sku"))
+        if rec:
+            t["esSkuPrio"] = True
+            t["skuPrioOrden"] = rec.get("orden", 0)
+        else:
+            t["esSkuPrio"] = False
+            t.setdefault("skuPrioOrden", 9999)
+    return tareas
+
+
+def cmp_tareas_modelo(t):
+    return (
+        0 if t.get("esSkuPrio") else 1,
+        t.get("skuPrioOrden", 9999) if t.get("esSkuPrio") else 0,
+        0 if t.get("esMinima") else 1,
+        t.get("colorRank", rango_color(t.get("color"))),
+        -(t.get("restante", t.get("cantidad", 0))),
+        t.get("sku") or "",
+    )
+
+
 def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
-    """SKU mins primero; el resto del piso del modelo con colores core."""
+    """Piso de modelo con colores core. SKUs de Priorizacion se marcan pero no cambian la banda."""
     mapa_minimas_sku = mapa_minimas_sku or {}
     por_modelo = defaultdict(list)
     orden = []
@@ -165,72 +203,33 @@ def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
             continue
 
         min_modelo = minima_de_modelo(mapa_minimas, modelo)
-        remaining_sku = {}
-        seen = set()
-        for t in group:
-            k = clave_sku(t["sku"])
-            if k in seen:
-                continue
-            seen.add(k)
-            remaining_sku[k] = min_de_sku(mapa_minimas_sku, t["sku"])
-
-        prod_por_sku = defaultdict(float)
         vol_faltante = 0
         vol_original = 0
         for t in group:
             vol_faltante += t["cantidad"]
             orig = t.get("solicitadaOrig", t["cantidad"])
             vol_original += orig
-            prod_por_sku[clave_sku(t["sku"])] += max(0, orig - t["cantidad"])
-        for k in list(remaining_sku):
-            if remaining_sku[k] > 0:
-                remaining_sku[k] = max(0, remaining_sku[k] - prod_por_sku[k])
-
-        has_sku_min = any(v > 0 for v in remaining_sku.values())
-        sum_sku_rest = sum(remaining_sku.values())
         producido = max(0, vol_original - vol_faltante)
         min_modelo_faltante = max(0, min_modelo - producido)
-        min_modelo_resto = max(0, min_modelo_faltante - sum_sku_rest)
 
-        if not has_sku_min and min_modelo_faltante <= 0:
+        if min_modelo_faltante <= 0:
             ya = min_modelo > 0
             for t in group:
                 t["fase2"] = ya
                 t["esMinima"] = False
                 out.append(t)
             continue
-        if not has_sku_min and min_modelo_faltante >= vol_faltante:
+        if min_modelo_faltante >= vol_faltante:
             for t in group:
                 t["fase2"] = False
                 t["esMinima"] = True
                 out.append(t)
             continue
 
-        group.sort(key=lambda t: (
-            0 if remaining_sku.get(clave_sku(t["sku"]), 0) > 0 else 1,
-            rango_color(t.get("color")),
-            -t["cantidad"],
-            t["sku"],
-        ))
-        resto_modelo = min_modelo_resto
-        leftovers = []
+        group.sort(key=lambda t: (rango_color(t.get("color")), -t["cantidad"], t["sku"]))
+        resto_modelo = min_modelo_faltante
         for t in group:
-            k = clave_sku(t["sku"])
             left = t["cantidad"]
-            need = remaining_sku.get(k, 0)
-            if need > 0 and left > 0:
-                take = min(left, need)
-                a = dict(t)
-                a["cantidad"] = take
-                a["fase2"] = False
-                a["esMinima"] = True
-                out.append(a)
-                remaining_sku[k] -= take
-                left -= take
-            if left > 0:
-                leftovers.append((t, left))
-        leftovers.sort(key=lambda it: (rango_color(it[0].get("color")), -it[1], it[0]["sku"]))
-        for t, left in leftovers:
             if resto_modelo > 0 and left > 0:
                 take_m = min(left, resto_modelo)
                 b = dict(t)
@@ -246,6 +245,7 @@ def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
                 c["fase2"] = True
                 c["esMinima"] = False
                 out.append(c)
+    marcar_sku_prio(out, mapa_minimas_sku)
     return out
 
 
@@ -325,7 +325,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.1: L1-4 un modelo; L5 hasta 2 en paralelo; urgentes dual-línea; overflow especial a L1."""
+    """Motor v5.9.2: L1-4 un modelo; L5 hasta 2; SKUs de Priorizacion primero dentro del modelo."""
     if caps_lineas is None:
         caps_lineas = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 
@@ -370,6 +370,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     lista.sort(key=lambda m: (
         m["banda"], m["fechaMin"], m["prioMin"], -sum(t["cantidad"] for t in m["tareas"]), m["nombre"]
     ))
+    for m in lista:
+        m["tareas"].sort(key=cmp_tareas_modelo)
 
     carga = {lin: [0.0] * total_dias for lin in caps_lineas}
     linea_por_mo = {}
@@ -533,7 +535,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             unfixed = [t for t in m["tareas"] if t["restante"] > 0 and not t.get("lineaFija")
                        and d >= dia_inicio_efectivo(t)]
-            unfixed.sort(key=lambda t: (t.get("colorRank", 50), -t["restante"], t["sku"]))
+            unfixed.sort(key=cmp_tareas_modelo)
             load = {lin: carga[lin][d] for lin in owned}
             for t in unfixed:
                 cands = [lin for lin in owned if lin in elegibles(t, overflow)] or owned
@@ -617,7 +619,7 @@ class TestCantidadMinima(unittest.TestCase):
         self.assertTrue(out[0]["fase2"])
 
     def test_sku_minima_sale_antes_que_core(self):
-        """Priorizacion - SKUs fuerza Rojo aunque no sea color núcleo."""
+        """Priorizacion - SKUs marca el SKU; no lo mete en banda mínima del modelo."""
         tareas = [
             self._t("R", "Rojo", 80),
             self._t("N", "Negro", 80),
@@ -625,10 +627,10 @@ class TestCantidadMinima(unittest.TestCase):
             self._t("A", "Azul Marino", 80),
         ]
         out = expandir_por_minima(tareas, {"RIO DAMA": 200}, {"R": 50})
+        self.assertTrue(any(t["esSkuPrio"] and t["sku"] == "R" for t in out))
+        self.assertFalse(any(t.get("esSkuPrio") and t["sku"] == "N" for t in out))
         fase1 = [t for t in out if t["esMinima"]]
         self.assertEqual(sum(t["cantidad"] for t in fase1), 200)
-        rojo = [t for t in fase1 if t["color"] == "Rojo"]
-        self.assertEqual(sum(t["cantidad"] for t in rojo), 50)
         self.assertIn("Negro", {t["color"] for t in fase1})
 
     def test_sku_minima_sin_cupo_de_modelo(self):
@@ -637,13 +639,71 @@ class TestCantidadMinima(unittest.TestCase):
             self._t("N", "Negro", 80),
         ]
         out = expandir_por_minima(tareas, {}, {"R": 40})
-        self.assertEqual(sum(t["cantidad"] for t in out if t["esMinima"] and t["sku"] == "R"), 40)
-        self.assertFalse(any(t["esMinima"] and t["sku"] == "N" for t in out))
+        self.assertTrue(any(t.get("esSkuPrio") and t["sku"] == "R" for t in out))
+        self.assertFalse(any(t.get("esMinima") for t in out))
+        self.assertFalse(any(t.get("esSkuPrio") and t["sku"] == "N" for t in out))
 
 
     def test_match_case_insensitive(self):
         self.assertEqual(minima_de_modelo({"RIO DAMA": 400}, "rio dama"), 400)
         self.assertEqual(minima_de_modelo({"RIO DAMA": 400}, "RIO DAMA"), 400)
+
+
+class TestPriorizacionSkus(unittest.TestCase):
+    def test_skus_listados_salen_primero_cuando_entra_el_modelo(self):
+        """Al entrar RIO, Gris/Marino de Priorizacion - SKUs salen antes que Negro/Blanco."""
+        tareas = [
+            {"sku": "N", "modelo": "RIO CAB", "mo": "MO-N", "cantidad": 130, "cap": 130,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 130},
+            {"sku": "B", "modelo": "RIO CAB", "mo": "MO-B", "cantidad": 130, "cap": 130,
+             "lineas": ["4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 130},
+            {"sku": "RIOMICA12TM", "modelo": "RIO CAB", "mo": "MO-NAVY", "cantidad": 80, "cap": 130,
+             "lineas": ["4"], "color": "Azul Marino", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 80},
+            {"sku": "RIOMICA30TS", "modelo": "RIO CAB", "mo": "MO-GRIS", "cantidad": 20, "cap": 130,
+             "lineas": ["4"], "color": "Gris Claro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 20},
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_minimas_sku={
+            "RIOMICA12TM": {"min": 80, "orden": 0},
+            "RIOMICA30TS": {"min": 20, "orden": 1},
+        })
+        por = defaultdict(int)
+        for t in out:
+            por[t["sku"]] += t["plan"]["4"][0]
+        self.assertEqual(por["RIOMICA12TM"], 80)
+        self.assertEqual(por["RIOMICA30TS"], 20)
+        self.assertEqual(por["N"], 30)
+        self.assertEqual(por["B"], 0)
+        self.assertEqual(sum(t["plan"]["4"][0] for t in out), 130)
+
+    def test_sku_prio_no_adelanta_el_modelo(self):
+        """Listar un SKU no quita la línea al modelo que ya toca por prioridad."""
+        tareas = [
+            {"sku": "V", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 88, "cap": 130,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 88},
+            {"sku": "R", "modelo": "BASIC LINE CROP TEE DAMA", "mo": "MO-R", "cantidad": 200, "cap": 130,
+             "lineas": ["4"], "color": "Rojo", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260926, "solicitadaOrig": 200},
+            {"sku": "BN", "modelo": "BASIC LINE CROP TEE DAMA", "mo": "MO-BN", "cantidad": 200, "cap": 130,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260926, "solicitadaOrig": 200},
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_minimas_sku={"R": {"min": 50, "orden": 0}})
+        lunes = defaultdict(int)
+        for t in out:
+            lunes[t["modelo"]] += t["plan"]["4"][0]
+        self.assertEqual(lunes["VITA BIKER DAMA"], 88)
+        self.assertEqual(lunes["BASIC LINE CROP TEE DAMA"], 0)
+        martes_sku = defaultdict(int)
+        for t in out:
+            if t["modelo"] == "BASIC LINE CROP TEE DAMA":
+                martes_sku[t["sku"]] += t["plan"]["4"][1]
+        self.assertEqual(martes_sku["R"], 130)
+        self.assertEqual(martes_sku["BN"], 0)
 
 
 class TestTresBandas(unittest.TestCase):

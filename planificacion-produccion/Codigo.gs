@@ -1,10 +1,13 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.1 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.2 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - PRIORIZACION - SKUs: no adelanta el modelo. Cuando el modelo
+ *     entra a la línea, esos SKUs salen primero (todo su faltante);
+ *     luego sigue la distribución de colores núcleo.
  *   - LÍNEA 5: única que trabaja 2 modelos en paralelo (rueda de 5 pzas
  *     cuando hay dos). Si solo hay un modelo, usa las 40 pzas/día.
  *   - Capacidad real por línea (L5 = 40, resto = 130). El lote de 5 ya
@@ -28,7 +31,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.1";
+var VERSION_SISTEMA = "5.9.2";
 var BANDA_ESPECIAL = 0;
 var BANDA_URGENTE = 1;
 var BANDA_MINIMA = 2;
@@ -487,7 +490,9 @@ function cloneTask(t, newQty, isFase2) {
     indice: t.indice,
     fase2: isFase2,
     lineaFija: t.lineaFija || null,
-    esMinima: isFase2 ? false : !!t.esMinima
+    esMinima: isFase2 ? false : !!t.esMinima,
+    esSkuPrio: !!t.esSkuPrio,
+    skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
   };
 }
 
@@ -495,6 +500,44 @@ function clonarConBanda_(t, newQty, isFase2, esMinima) {
   var c = cloneTask(t, newQty, isFase2);
   c.esMinima = !isFase2 && !t.esEspecial && !!esMinima;
   return c;
+}
+
+function recSkuPrio_(mapa, sku) {
+  if (!mapa) return null;
+  var rec = mapa[claveSku_(sku)] || mapa[sku];
+  if (rec === undefined || rec === null) return null;
+  if (typeof rec === "number") return rec > 0 ? { min: rec, orden: 0 } : null;
+  if (rec.min > 0) return rec;
+  return null;
+}
+
+function marcarSkuPrioEnTarea_(t, mapaMinimasSku) {
+  var rec = recSkuPrio_(mapaMinimasSku, t.sku);
+  if (rec) {
+    t.esSkuPrio = true;
+    t.skuPrioOrden = rec.orden !== undefined ? rec.orden : 0;
+  } else {
+    t.esSkuPrio = false;
+    if (t.skuPrioOrden === undefined) t.skuPrioOrden = 9999;
+  }
+}
+
+function cmpTareasDentroModelo_(a, b) {
+  var pa = a.esSkuPrio ? 0 : 1, pb = b.esSkuPrio ? 0 : 1;
+  if (pa !== pb) return pa - pb;
+  if (a.esSkuPrio && b.esSkuPrio) {
+    var oa = a.skuPrioOrden !== undefined ? a.skuPrioOrden : 0;
+    var ob = b.skuPrioOrden !== undefined ? b.skuPrioOrden : 0;
+    if (oa !== ob) return oa - ob;
+  }
+  var ma = a.esMinima ? 0 : 1, mb = b.esMinima ? 0 : 1;
+  if (ma !== mb) return ma - mb;
+  var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
+  if (ra !== rb) return ra - rb;
+  var ca = a.restante !== undefined ? a.restante : a.cantidad;
+  var cb = b.restante !== undefined ? b.restante : b.cantidad;
+  if (cb !== ca) return cb - ca;
+  return String(a.sku).localeCompare(String(b.sku));
 }
 
 function expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku) {
@@ -520,97 +563,43 @@ function expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku) {
     }
 
     var minModelo = minimaDeModelo_(mapaMinimas, mod);
-    var remainingSku = {};
-    var minSkuDeclarado = 0;
-    group.forEach(function (t) {
-      var k = claveSku_(t.sku);
-      if (remainingSku[k] !== undefined) return;
-      var rec = mapaMinimasSku[k];
-      if (rec && rec.min > 0) {
-        remainingSku[k] = rec.min;
-        minSkuDeclarado += rec.min;
-      } else {
-        remainingSku[k] = 0;
-      }
-    });
-
-    var prodPorSku = {};
     var volFaltante = 0, volOriginal = 0;
     group.forEach(function (t) {
       volFaltante += t.cantidad;
       volOriginal += (t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal);
-      var k = claveSku_(t.sku);
-      var orig = t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal;
-      prodPorSku[k] = (prodPorSku[k] || 0) + Math.max(0, orig - t.cantidad);
     });
-    Object.keys(remainingSku).forEach(function (k) {
-      if (remainingSku[k] > 0) remainingSku[k] = Math.max(0, remainingSku[k] - (prodPorSku[k] || 0));
-    });
-
-    var hasSkuMin = false;
-    var sumSkuRestante = 0;
-    Object.keys(remainingSku).forEach(function (k) {
-      if (remainingSku[k] > 0) { hasSkuMin = true; sumSkuRestante += remainingSku[k]; }
-    });
-
     var producido = Math.max(0, volOriginal - volFaltante);
     var minModeloFaltante = Math.max(0, minModelo - producido);
-    var minModeloResto = Math.max(0, minModeloFaltante - sumSkuRestante);
 
-    if (!hasSkuMin && minModeloFaltante <= 0) {
+    if (minModeloFaltante <= 0) {
       var yaCubierta = minModelo > 0;
       group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, yaCubierta, false)); });
       return;
     }
-    if (!hasSkuMin && minModeloFaltante >= volFaltante) {
+    if (minModeloFaltante >= volFaltante) {
       group.forEach(function (t) { out.push(clonarConBanda_(t, t.cantidad, false, true)); });
       return;
     }
 
     group.sort(function (a, b) {
-      var pa = remainingSku[claveSku_(a.sku)] > 0 ? 0 : 1;
-      var pb = remainingSku[claveSku_(b.sku)] > 0 ? 0 : 1;
-      if (pa !== pb) return pa - pb;
       var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
       if (ra !== rb) return ra - rb;
       if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
       return String(a.sku).localeCompare(String(b.sku));
     });
-
-    var restoModelo = minModeloResto;
-    var leftovers = [];
+    var restoModelo = minModeloFaltante;
     group.forEach(function (t) {
-      var k = claveSku_(t.sku);
       var left = t.cantidad;
-      var rec = mapaMinimasSku[k];
-      var needSku = remainingSku[k] || 0;
-      if (needSku > 0 && left > 0) {
-        var takeSku = Math.min(left, needSku);
-        var cSku = clonarConBanda_(t, takeSku, false, true);
-        if (rec && isFinite(rec.fechaKey)) cSku.fechaKey = rec.fechaKey;
-        out.push(cSku);
-        remainingSku[k] -= takeSku;
-        left -= takeSku;
-      }
-      if (left > 0) leftovers.push({ t: t, left: left });
-    });
-    leftovers.sort(function (a, b) {
-      var ra = rangoColor_(a.t.color), rb = rangoColor_(b.t.color);
-      if (ra !== rb) return ra - rb;
-      if (b.left !== a.left) return b.left - a.left;
-      return String(a.t.sku).localeCompare(String(b.t.sku));
-    });
-    leftovers.forEach(function (item) {
-      var left = item.left;
       if (restoModelo > 0 && left > 0) {
         var takeMod = Math.min(left, restoModelo);
-        out.push(clonarConBanda_(item.t, takeMod, false, true));
+        out.push(clonarConBanda_(t, takeMod, false, true));
         restoModelo -= takeMod;
         left -= takeMod;
       }
-      if (left > 0) out.push(clonarConBanda_(item.t, left, true, false));
+      if (left > 0) out.push(clonarConBanda_(t, left, true, false));
     });
   });
+  out.forEach(function (t) { marcarSkuPrioEnTarea_(t, mapaMinimasSku); });
   return out;
 }
 
@@ -646,7 +635,8 @@ function leerMinimasSku_(ss) {
       min: minVal,
       modelo: modelo,
       fechaKey: iFec !== -1 ? claveFecha_(datos[i][iFec]) : Infinity,
-      lineas: iLin !== -1 ? parsearLineas_(datos[i][iLin]) : []
+      lineas: iLin !== -1 ? parsearLineas_(datos[i][iLin]) : [],
+      orden: i
     };
   }
   return mapa;
@@ -817,7 +807,8 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
       esEspecial: esEspecial, fechaKey: fechaKey, diaIngreso: diaIngreso, diaNoLaborable: diaNoLaborable,
       mo: mo, genero: genero, color: color, colorRank: rangoColor_(color), talla: talla,
       restante: cantEfectiva, planificada: 0, planificadaSem1: 0, ultimoDia: -1, plan: {},
-      indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null, esMinima: false
+      indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null, esMinima: false,
+      esSkuPrio: false, skuPrioOrden: 9999
     });
   }
 }
@@ -1010,12 +1001,7 @@ function generarPlanificacionSemanal_() {
     return a.nombre.localeCompare(b.nombre);
   });
   listaModelos.forEach(function (m) {
-    m.tareas.sort(function (a, b) {
-      var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
-      if (ra !== rb) return ra - rb;
-      if (b.cantidad !== a.cantidad) return b.cantidad - a.cantidad;
-      return String(a.sku).localeCompare(String(b.sku));
-    });
+    m.tareas.sort(cmpTareasDentroModelo_);
   });
 
   function restanteModelo_(m) {
@@ -1244,6 +1230,7 @@ function generarPlanificacionSemanal_() {
       var unfixed = m.tareas.filter(function (t) {
         return t.restante > 0 && !t.lineaFija && !lineaPorMO[claveMO_(t)] && d >= diaInicioEfectivo_(t);
       });
+      unfixed.sort(cmpTareasDentroModelo_);
       var load = {};
       owned.forEach(function (lin) { load[lin] = carga[lin][d]; });
       unfixed.forEach(function (t) {
@@ -1344,7 +1331,9 @@ function generarPlanificacionSemanal_() {
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
         fechaObj: t.fechaKey, porSemana: [], restante: 0, ultimoDia: -1,
         diaFinEstimado: -1, lineaAsignada: t.lineaFija || "",
-        minima: (mapaMinimasSku[claveSku_(t.sku)] || {}).min || 0
+        minima: (mapaMinimasSku[claveSku_(t.sku)] || {}).min || 0,
+        esSkuPrio: !!t.esSkuPrio,
+        skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
       };
       for (var wSku = 0; wSku < cfg.semanas; wSku++) infoSku[skuKey].porSemana.push(0);
     }
@@ -1481,7 +1470,8 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Línea 5: hasta 2 modelos en paralelo (40 pzas/día; rueda de 5 si hay dos).\n" +
-    "• Orden de carga: 1) Especial  →  2) Cantidad mínima (SKU + modelo)  →  3) Resto del plan.\n" +
+    "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
+    "• Orden de carga: 1) Especial  →  2) Cantidad mínima de modelo  →  3) Resto del plan.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
     "  Programadas en banda mínima: " + piezasMinima + " pzas.  |  Modelos vivos con cupo: " + nMinAplicadas + "\n" +
@@ -2053,6 +2043,13 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     var ma = idxModelo.hasOwnProperty(ia.modelo) ? idxModelo[ia.modelo] : 9999;
     var mb = idxModelo.hasOwnProperty(ib.modelo) ? idxModelo[ib.modelo] : 9999;
     if (ma !== mb) return ma - mb;
+    var pa = ia.esSkuPrio ? 0 : 1, pb = ib.esSkuPrio ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (ia.esSkuPrio && ib.esSkuPrio) {
+      var oa = ia.skuPrioOrden !== undefined ? ia.skuPrioOrden : 0;
+      var ob = ib.skuPrioOrden !== undefined ? ib.skuPrioOrden : 0;
+      if (oa !== ob) return oa - ob;
+    }
     var aPlan = (ia.porSemana[0] || 0) > 0, bPlan = (ib.porSemana[0] || 0) > 0;
     if (aPlan !== bPlan) return aPlan ? -1 : 1;
     if (ia.fechaObj !== ib.fechaObj) return ia.fechaObj - ib.fechaObj;
@@ -2199,10 +2196,12 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
       agrupadoSku[key] = {
         mo: moClave, sku: t.sku, producto: t.detalleAlmacen,
         cantidad: t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal,
-        diaFin: -1, prioMin: t.prioridadNum
+        diaFin: -1, prioMin: t.prioridadNum,
+        esSkuPrio: !!t.esSkuPrio, skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
       };
     }
     if (t.prioridadNum < agrupadoSku[key].prioMin) agrupadoSku[key].prioMin = t.prioridadNum;
+    if (t.esSkuPrio) agrupadoSku[key].esSkuPrio = true;
     var dFin = t.ultimoDia;
     if (t.restante > 0 && t.cap > 0) dFin = (totalDias - 1) + Math.ceil(t.restante / t.cap);
     if (dFin > agrupadoSku[key].diaFin) agrupadoSku[key].diaFin = dFin;
@@ -2253,6 +2252,9 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
 
   listAlmacenSku.sort(function (a, b) {
     if (a.diaFin !== b.diaFin) return a.diaFin - b.diaFin;
+    var pa = a.esSkuPrio ? 0 : 1, pb = b.esSkuPrio ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (a.skuPrioOrden !== b.skuPrioOrden) return a.skuPrioOrden - b.skuPrioOrden;
     if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
     return a.sku.localeCompare(b.sku);
   });
