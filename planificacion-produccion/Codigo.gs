@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.2 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.3 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CAMBIO DE MODELO SECUENCIAL: L1-4 no corren dos modelos en
+ *     paralelo, pero sí pueden cambiar el mismo día. Si el ocupante
+ *     termina (o no puede seguir), el sobrante de capacidad pasa al
+ *     siguiente modelo de la cola. Ya no se deja el día a medias.
  *   - PRIORIZACION - SKUs: no adelanta el modelo. Cuando el modelo
  *     entra a la línea, esos SKUs salen primero (todo su faltante);
  *     luego sigue la distribución de colores núcleo.
@@ -13,7 +17,8 @@
  *   - Capacidad real por línea (L5 = 40, resto = 130). El lote de 5 ya
  *     no se aplica como techo diario cuando L5 va sola.
  *   - URGENTE primero (luego fecha más próxima). Un modelo Urgente con
- *     2+ líneas usa ambas. Líneas 1-4 = un modelo a la vez; L5 hasta 2.
+ *     2+ líneas usa ambas. Líneas 1-4 = un modelo a la vez (secuencial);
+ *     L5 hasta 2 en paralelo.
  *   - ESPECIAL: respeta Linea de Produccion; línea 1 es la casa. Si L1
  *     termina y quedan Especiales en otras líneas, desbordan a L1.
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
@@ -31,7 +36,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.2";
+var VERSION_SISTEMA = "5.9.3";
 var BANDA_ESPECIAL = 0;
 var BANDA_URGENTE = 1;
 var BANDA_MINIMA = 2;
@@ -964,7 +969,7 @@ function generarPlanificacionSemanal_() {
     return a.indice - b.indice;
   });
 
-  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, L5 hasta 2 modelos)...", "⚙️ Planificando", 5);
+  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, cambio secuencial, L5 hasta 2)...", "⚙️ Planificando", 5);
 
   var carga = {};
   ["1", "2", "3", "4", "5"].forEach(function (l) {
@@ -1159,6 +1164,7 @@ function generarPlanificacionSemanal_() {
         if (!mO || restanteModelo_(mO) <= 0) return false;
         return mO.tareas.some(function (t) {
           if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
+          if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
           if (t.lineaFija && t.lineaFija !== lin) return false;
           return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
         });
@@ -1246,16 +1252,70 @@ function generarPlanificacionSemanal_() {
       });
     });
 
-    ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      var noms = ocupante[lin];
-      if (!noms || noms.length === 0) return;
-      if (String(lin) === "5" && noms.length >= 2) {
-        producirRuedaLinea5_(noms, d, overflowL1);
-        return;
-      }
-      noms.forEach(function (nom) {
-        producirModeloDia_(mapaModelos[nom], lin, d, overflowL1);
+    function modeloPuedeProducirHoy_(nom, lin, d, overflow) {
+      var mO = mapaModelos[nom];
+      if (!mO || restanteModelo_(mO) <= 0) return false;
+      return mO.tareas.some(function (t) {
+        if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
+        if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
+        var clave = claveMO_(t);
+        if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
+        if (t.lineaFija && t.lineaFija !== lin) return false;
+        return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
       });
+    }
+
+    function siguienteCandidato_(lin, d, overflow, skip) {
+      skip = skip || {};
+      for (var iC = 0; iC < listaModelos.length; iC++) {
+        var mC = listaModelos[iC];
+        if (restanteModelo_(mC) <= 0) continue;
+        if (skip[mC.nombre]) continue;
+        if (ocupante[lin].indexOf(mC.nombre) !== -1) continue;
+        var yaOtra = ["1", "2", "3", "4", "5"].some(function (l2) {
+          return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
+        });
+        if (yaOtra && !(overflow && lin === "1" && mC.esEspecial)) continue;
+        if (!modeloPuedeProducirHoy_(mC.nombre, lin, d, overflow)) continue;
+        return mC.nombre;
+      }
+      return null;
+    }
+
+    function producirLineaDia_(lin, d) {
+      var skip = {};
+      var guard = 0;
+      while (carga[lin][d] < 0.999 && guard < 40) {
+        guard++;
+        var overflow = !nativosLinea1Pendientes_();
+        ocupante[lin] = ocupante[lin].filter(function (nom) {
+          return !skip[nom] && modeloPuedeProducirHoy_(nom, lin, d, overflow);
+        });
+        var noms = ocupante[lin];
+        var before = carga[lin][d];
+        if (String(lin) === "5" && noms.length >= 2) {
+          producirRuedaLinea5_(noms, d, overflow);
+        } else if (noms.length > 0) {
+          producirModeloDia_(mapaModelos[noms[0]], lin, d, overflow);
+        }
+        if (carga[lin][d] >= 0.999) break;
+
+        ocupante[lin] = ocupante[lin].filter(function (nom) {
+          return !skip[nom] && modeloPuedeProducirHoy_(nom, lin, d, overflow);
+        });
+        if (carga[lin][d] <= before + 0.0001) {
+          ocupante[lin].forEach(function (nom) { skip[nom] = true; });
+          ocupante[lin] = ocupante[lin].filter(function (nom) { return !skip[nom]; });
+        }
+        if (ocupante[lin].length >= maxOcupantes_(lin)) break;
+        var next = siguienteCandidato_(lin, d, overflow, skip);
+        if (!next) break;
+        ocupante[lin].push(next);
+      }
+    }
+
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      producirLineaDia_(lin, d);
     });
   }
 
@@ -1469,6 +1529,7 @@ function generarPlanificacionSemanal_() {
 
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
+    "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 modelos en paralelo (40 pzas/día; rueda de 5 si hay dos).\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima de modelo  →  3) Resto del plan.\n" +

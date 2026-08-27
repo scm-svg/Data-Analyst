@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.2 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.3 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -325,7 +325,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.2: L1-4 un modelo; L5 hasta 2; SKUs de Priorizacion primero dentro del modelo."""
+    """Motor v5.9.3: L1-4 secuencial (no paralelo); L5 hasta 2; SKUs de Priorizacion primero dentro del modelo."""
     if caps_lineas is None:
         caps_lineas = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 
@@ -396,6 +396,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def runnable(t, d, lin, overflow):
         if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
+            return False
+        if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
+            return False
+        mo = t.get("mo") or t["sku"]
+        if mo in linea_por_mo and linea_por_mo[mo] != lin:
             return False
         if t.get("lineaFija") and t["lineaFija"] != lin:
             return False
@@ -524,6 +529,58 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             p = producir_lote(modelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5)
             estancado = 0 if p > 0 else estancado + 1
 
+    def siguiente_candidato(lin, d, overflow, skip):
+        for m in lista:
+            if restante_modelo(m) <= 0:
+                continue
+            if skip.get(m["nombre"]):
+                continue
+            if m["nombre"] in (ocupante.get(lin) or []):
+                continue
+            ya_otra = any(
+                l2 != lin and m["nombre"] in (ocupante.get(l2) or [])
+                for l2 in ocupante
+            )
+            if ya_otra and not (overflow and lin == "1" and m["esEspecial"]):
+                continue
+            if not modelo_puede(m, d, lin, overflow):
+                continue
+            return m["nombre"]
+        return None
+
+    def producir_linea_dia(lin, d):
+        skip = {}
+        guard = 0
+        while carga[lin][d] < 0.999 and guard < 40:
+            guard += 1
+            overflow_now = not nativos_linea1_pendientes()
+            ocupante[lin] = [
+                nom for nom in ocupante[lin]
+                if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
+            ]
+            noms = ocupante[lin]
+            before = carga[lin][d]
+            if str(lin) == "5" and len(noms) >= 2:
+                producir_rueda_linea5(noms, d, overflow_now)
+            elif noms:
+                producir_modelo_dia(modelos[noms[0]], lin, d, overflow_now)
+            if carga[lin][d] >= 0.999:
+                break
+            ocupante[lin] = [
+                nom for nom in ocupante[lin]
+                if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
+            ]
+            if carga[lin][d] <= before + 1e-6:
+                for nom in list(ocupante[lin]):
+                    skip[nom] = True
+                ocupante[lin] = [nom for nom in ocupante[lin] if not skip.get(nom)]
+            if len(ocupante[lin]) >= max_ocupantes(lin):
+                break
+            nxt = siguiente_candidato(lin, d, overflow_now, skip)
+            if not nxt:
+                break
+            ocupante[lin].append(nxt)
+
     ocupante = {lin: [] for lin in caps_lineas}
     for d in range(total_dias):
         overflow = not nativos_linea1_pendientes()
@@ -543,14 +600,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 t["lineaFija"] = cands[0]
                 linea_por_mo[t.get("mo") or t["sku"]] = cands[0]
                 load[cands[0]] += 0.01
-        for lin, noms in ocupante.items():
-            if not noms:
-                continue
-            if str(lin) == "5" and len(noms) >= 2:
-                producir_rueda_linea5(noms, d, overflow)
-                continue
-            for nom in noms:
-                producir_modelo_dia(modelos[nom], lin, d, overflow)
+        for lin in list(ocupante):
+            producir_linea_dia(lin, d)
     return tareas
 
 
@@ -694,10 +745,16 @@ class TestPriorizacionSkus(unittest.TestCase):
         ]
         out = planificar(tareas, {}, total_dias=5, mapa_minimas_sku={"R": {"min": 50, "orden": 0}})
         lunes = defaultdict(int)
+        lunes_sku = defaultdict(int)
         for t in out:
             lunes[t["modelo"]] += t["plan"]["4"][0]
+            lunes_sku[t["sku"]] += t["plan"]["4"][0]
         self.assertEqual(lunes["VITA BIKER DAMA"], 88)
-        self.assertEqual(lunes["BASIC LINE CROP TEE DAMA"], 0)
+        self.assertEqual(lunes["BASIC LINE CROP TEE DAMA"], 42)
+        self.assertEqual(lunes_sku["V"], 88)
+        self.assertEqual(lunes_sku["R"], 42, "el sobrante del día debe ir al SKU priorizado de BASIC, no adelantar BASIC sobre VITA")
+        self.assertEqual(lunes_sku["BN"], 0)
+        self.assertEqual(sum(lunes.values()), 130)
         martes_sku = defaultdict(int)
         for t in out:
             if t["modelo"] == "BASIC LINE CROP TEE DAMA":
@@ -767,7 +824,7 @@ class TestTresBandas(unittest.TestCase):
         self.assertGreaterEqual(sum(t["planificada"] for t in out if t.get("esMinima")), 390)
 
     def test_urgente_gana_el_mismo_dia_sobre_minima(self):
-        """Urgente (VITA) tiene la línea; la mínima no urgente espera."""
+        """Urgente (VITA) entra primero; al terminar, el sobrante del día pasa a la mínima (secuencial, no paralelo)."""
         tareas = [
             {"sku": "ESP1", "modelo": "MAR CAB (Especial)", "color": "Azul", "cantidad": 130,
              "solicitadaOrig": 130, "esEspecial": True, "mo": "E1", "cap": 130,
@@ -787,7 +844,8 @@ class TestTresBandas(unittest.TestCase):
         for t in out:
             lunes4[t["modelo"]] += t["plan"]["4"][0]
         self.assertEqual(lunes4["VITA BIKER DAMA"], 88)
-        self.assertEqual(lunes4["RIO DAMA"], 0)
+        self.assertEqual(lunes4["RIO DAMA"], 42)
+        self.assertEqual(sum(lunes4.values()), 130)
 
 
 class TestLineasExclusivas(unittest.TestCase):
@@ -808,22 +866,48 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertGreater(por_linea["2"], 0)
         self.assertGreater(por_linea["4"], 0)
 
-    def test_un_modelo_por_linea_por_dia(self):
+    def test_no_paralelo_mientras_ocupante_sigue(self):
+        """L1-4: si el ocupante aún llena el día, el siguiente espera. Al terminar, el sobrante sí cambia de modelo."""
         tareas = [
             {"sku": "R1", "modelo": "RIO DAMA", "mo": "MO-R", "cantidad": 400, "cap": 130,
              "lineas": ["4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 400},
-            {"sku": "V1", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 88, "cap": 130,
+            {"sku": "V1", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 400, "cap": 130,
              "lineas": ["4"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
-             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 88},
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 400},
         ]
         out = planificar(tareas, {}, total_dias=5)
+        por_dia = []
         for d in range(5):
-            modelos_hoy = set()
+            modelos_hoy = defaultdict(int)
             for t in out:
                 if t["plan"]["4"][d] > 0:
-                    modelos_hoy.add(t["modelo"])
-            self.assertLessEqual(len(modelos_hoy), 1, "día %s mezcló %s" % (d, modelos_hoy))
+                    modelos_hoy[t["modelo"]] += t["plan"]["4"][d]
+            por_dia.append(dict(modelos_hoy))
+            self.assertEqual(sum(modelos_hoy.values()), 130, "día %s ocioso: %s" % (d, dict(modelos_hoy)))
+        for d in range(3):
+            self.assertEqual(por_dia[d], {"RIO DAMA": 130}, "día %s mezcló en paralelo: %s" % (d, por_dia[d]))
+        self.assertEqual(por_dia[3]["RIO DAMA"], 10)
+        self.assertEqual(por_dia[3]["VITA BIKER DAMA"], 120)
+        self.assertEqual(por_dia[4], {"VITA BIKER DAMA": 130})
+
+    def test_cambio_modelo_llena_sobrante_del_dia(self):
+        """Al terminar un modelo a media jornada, el siguiente usa el resto de la capacidad ese mismo día."""
+        tareas = [
+            {"sku": "V1", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 88, "cap": 130,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 88},
+            {"sku": "B1", "modelo": "BASIC LINE CROP TEE DAMA", "mo": "MO-B", "cantidad": 200, "cap": 130,
+             "lineas": ["4"], "color": "Rojo", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260926, "solicitadaOrig": 200},
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        lunes = defaultdict(int)
+        for t in out:
+            lunes[t["modelo"]] += t["plan"]["4"][0]
+        self.assertEqual(lunes["VITA BIKER DAMA"], 88)
+        self.assertEqual(lunes["BASIC LINE CROP TEE DAMA"], 42)
+        self.assertEqual(sum(lunes.values()), 130)
 
     def test_linea5_sola_usa_capacidad_40(self):
         tareas = [{
@@ -835,6 +919,26 @@ class TestLineasExclusivas(unittest.TestCase):
         out = planificar(tareas, {}, total_dias=5)
         dias = out[0]["plan"]["5"]
         self.assertEqual(list(dias[:3]), [40, 40, 8])
+
+    def test_linea5_cambio_secuencial_llena_sobrante(self):
+        """Si el único ocupante de L5 termina a media jornada, el siguiente usa las piezas que quedan."""
+        tareas = [
+            {"sku": "V1", "modelo": "VITA LEGGINGS DAMA", "mo": "MO-V",
+             "cantidad": 8, "cap": 40, "lineas": ["5"], "color": "Negro",
+             "prioridadNum": 1, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20260828, "solicitadaOrig": 8},
+            {"sku": "D1", "modelo": "SHORT SPORT R1 DAMA", "mo": "MO-D",
+             "cantidad": 200, "cap": 40, "lineas": ["5"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20260910, "solicitadaOrig": 200},
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        lunes = defaultdict(int)
+        for t in out:
+            lunes[t["modelo"]] += t["plan"]["5"][0]
+        self.assertEqual(lunes["VITA LEGGINGS DAMA"], 8)
+        self.assertEqual(lunes["SHORT SPORT R1 DAMA"], 32)
+        self.assertEqual(sum(lunes.values()), 40)
 
     def test_linea5_dos_modelos_comparten_el_dia(self):
         tareas = [
