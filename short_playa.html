@@ -435,7 +435,7 @@ function rInventario(){
   var sk=fSkus(), f=gf();
   var locQty={}, rec=0, pt=0, tiendas=0, dev=0, pp=0, totInv=0;
   sk.forEach(function(s){
-    rec+=s.rec; totInv+=s.inv_total; pt+=s.inv_pt; tiendas+=s.inv_tiendas; dev+=s.inv_dev; pp+=s.inv_pp;
+    rec+=s.rec; totInv+=s.inv_total; pt+=Math.max(0,s.inv_pt); tiendas+=Math.max(0,s.inv_tiendas); dev+=s.inv_dev; pp+=s.inv_pp;
     Object.keys(s.inv_by_store).forEach(function(st){
       if(f.tienda && st!==f.tienda) return;
       locQty[st]=(locQty[st]||0)+s.inv_by_store[st];
