@@ -1,10 +1,13 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.5 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.6 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - LÍNEA 1: al cambiar de modelo el sobrante del día se llena
+ *     (igual que L2-4). Un nativo de L1 que ya está en otra línea no
+ *     bloquea el desborde; el overflow se recálcula al ceder la línea.
  *   - CANTIDAD MÍNIMA programa el cupo pedido (ej. 100 pzas) desde el
  *     faltante. Lo ya producido solo quita la banda si YA se cubrió
  *     el piso completo; no recorta 100 a 67. El modelo no cede la
@@ -44,7 +47,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.5";
+var VERSION_SISTEMA = "5.9.6";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_URGENTE = 2;
@@ -1120,12 +1123,23 @@ function generarPlanificacionSemanal_() {
     return cands[0];
   }
 
-  function nativosLinea1Pendientes_() {
+  function nativosLinea1Pendientes_(d) {
     for (var iN = 0; iN < listaModelos.length; iN++) {
       var mN = listaModelos[iN];
       if (!mN.esEspecial || restanteModelo_(mN) <= 0) continue;
+      var ocupandoOtra = ["2", "3", "4", "5"].some(function (l2) {
+        return ocupante[l2].indexOf(mN.nombre) !== -1;
+      });
+      if (ocupandoOtra) continue;
       for (var tN = 0; tN < mN.tareas.length; tN++) {
-        if (mN.tareas[tN].restante > 0 && mN.tareas[tN].lineas.indexOf("1") !== -1) return true;
+        var tNat = mN.tareas[tN];
+        if (tNat.restante <= 0 || tNat.lineas.indexOf("1") === -1) continue;
+        if (d < diaInicioEfectivo_(tNat)) continue;
+        if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === tNat.diaNoLaborable) continue;
+        var claveNat = claveMO_(tNat);
+        if (lineaPorMO[claveNat] && lineaPorMO[claveNat] !== "1") continue;
+        if (tNat.lineaFija && tNat.lineaFija !== "1") continue;
+        return true;
       }
     }
     return false;
@@ -1195,10 +1209,10 @@ function generarPlanificacionSemanal_() {
 
   for (var d = 0; d < totalDias; d++) {
     refrescarColaModelos_();
-    var overflowL1 = !nativosLinea1Pendientes_();
     if (d % DIAS_LABORALES === 0) {
       ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = []; });
     }
+    var overflowL1 = !nativosLinea1Pendientes_(d);
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
       ocupante[lin] = ocupante[lin].filter(function (mod) {
         var mO = mapaModelos[mod];
@@ -1211,6 +1225,7 @@ function generarPlanificacionSemanal_() {
         });
       });
     });
+    overflowL1 = !nativosLinea1Pendientes_(d);
 
     function lineasLibresDe_(m) {
       var out = [], seen = {};
@@ -1328,7 +1343,7 @@ function generarPlanificacionSemanal_() {
       var guard = 0;
       while (carga[lin][d] < 0.999 && guard < 40) {
         guard++;
-        var overflow = !nativosLinea1Pendientes_();
+        var overflow = !nativosLinea1Pendientes_(d);
         ocupante[lin] = ocupante[lin].filter(function (nom) {
           return !skip[nom] && modeloPuedeProducirHoy_(nom, lin, d, overflow);
         });
@@ -1352,6 +1367,7 @@ function generarPlanificacionSemanal_() {
           ocupante[lin] = ocupante[lin].filter(function (nom) { return !skip[nom]; });
         }
         refrescarColaModelos_();
+        overflow = !nativosLinea1Pendientes_(d);
         if (ocupante[lin].length >= maxOcupantes_(lin)) break;
         var next = siguienteCandidato_(lin, d, overflow, skip);
         if (!next) break;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.5 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.6 (espejo de las reglas en Codigo.gs)."""
 import math
 import unittest
 from collections import defaultdict
@@ -330,7 +330,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.5: Especial → cantidad mínima → urgente/resto; L1-4 secuencial; L5 hasta 2."""
+    """Motor v5.9.6: Especial → cantidad mínima → urgente/resto; L1-4 secuencial; L5 hasta 2."""
     if caps_lineas is None:
         caps_lineas = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 
@@ -406,13 +406,29 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             m["banda"], m["fechaMin"], m["prioMin"], -sum(t["cantidad"] for t in m["tareas"]), m["nombre"]
         ))
 
-    def nativos_linea1_pendientes():
+    def nativos_linea1_pendientes(d):
         for m in lista:
             if not m["esEspecial"] or restante_modelo(m) <= 0:
                 continue
+            ocupando_otra = any(
+                l2 != "1" and m["nombre"] in (ocupante.get(l2) or [])
+                for l2 in ocupante
+            )
+            if ocupando_otra:
+                continue
             for t in m["tareas"]:
-                if t["restante"] > 0 and "1" in t["lineas"]:
-                    return True
+                if t["restante"] <= 0 or "1" not in t["lineas"]:
+                    continue
+                if d < dia_inicio_efectivo(t):
+                    continue
+                if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
+                    continue
+                mo = t.get("mo") or t["sku"]
+                if mo in linea_por_mo and linea_por_mo[mo] != "1":
+                    continue
+                if t.get("lineaFija") and t["lineaFija"] != "1":
+                    continue
+                return True
         return False
 
     def elegibles(t, overflow):
@@ -584,7 +600,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         guard = 0
         while carga[lin][d] < 0.999 and guard < 40:
             guard += 1
-            overflow_now = not nativos_linea1_pendientes()
+            overflow_now = not nativos_linea1_pendientes(d)
             ocupante[lin] = [
                 nom for nom in ocupante[lin]
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
@@ -607,6 +623,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     skip[nom] = True
                 ocupante[lin] = [nom for nom in ocupante[lin] if not skip.get(nom)]
             refrescar_cola()
+            overflow_now = not nativos_linea1_pendientes(d)
             if len(ocupante[lin]) >= max_ocupantes(lin):
                 break
             nxt = siguiente_candidato(lin, d, overflow_now, skip)
@@ -616,9 +633,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     ocupante = {lin: [] for lin in caps_lineas}
     for d in range(total_dias):
-        overflow = not nativos_linea1_pendientes()
         refrescar_cola()
+        overflow = not nativos_linea1_pendientes(d)
         reclamar_lineas(d, ocupante, overflow)
+        overflow = not nativos_linea1_pendientes(d)
         # balancear MOs nuevos del modelo entre líneas que ya ocupa
         for m in lista:
             owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
@@ -1011,6 +1029,30 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(lunes["VITA BIKER DAMA"], 88)
         self.assertEqual(lunes["BASIC LINE CROP TEE DAMA"], 42)
         self.assertEqual(sum(lunes.values()), 130)
+
+    def test_linea1_cambio_secuencial_llena_sobrante(self):
+        """Excel (13): L1 no queda a 80/130 cuando el nativo termina; el siguiente especial usa el sobrante."""
+        tareas = [
+            {"sku": "MD1", "modelo": "MAR DAMA (Especial)", "color": "Blanco", "cantidad": 80,
+             "solicitadaOrig": 80, "esEspecial": True, "mo": "MO-MD", "cap": 130,
+             "lineas": ["1"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260828},
+            {"sku": "MC1", "modelo": "MAR CAB (Especial)", "color": "Blanco", "cantidad": 96,
+             "solicitadaOrig": 96, "esEspecial": True, "mo": "MO-MC", "cap": 130,
+             "lineas": ["1", "2"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
+            {"sku": "CD1", "modelo": "CLÁSICA DAMA (Especial)", "color": "Negro", "cantidad": 149,
+             "solicitadaOrig": 149, "esEspecial": True, "mo": "MO-CD", "cap": 130,
+             "lineas": ["3"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        lunes1 = defaultdict(int)
+        for t in out:
+            lunes1[t["modelo"]] += t["plan"]["1"][0]
+        self.assertEqual(sum(lunes1.values()), 130, "L1 lunes incompleto: %s" % dict(lunes1))
+        self.assertEqual(lunes1["MAR DAMA (Especial)"], 80)
+        self.assertGreater(lunes1["CLÁSICA DAMA (Especial)"], 0, "el sobrante de L1 debe ir al especial de otra línea")
+        self.assertEqual(lunes1["MAR DAMA (Especial)"] + lunes1["CLÁSICA DAMA (Especial)"], 130)
+        vivos = [m for m, q in lunes1.items() if q > 0]
+        self.assertEqual(len(vivos), 2)
 
     def test_linea5_sola_usa_capacidad_40(self):
         tareas = [{
