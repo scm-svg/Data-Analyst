@@ -252,7 +252,8 @@ var SL={
 var TORD={'1':0,'2':1,'4':2,'6':3,'8':4,'10':5,'12':6,'14':7,'XS':10,'S':11,'M':12,'L':13,'XL':14,'2XL':15,'3XL':16,'4XL':17};
 var KIDS_CURVE=['2','4','6','8','10','12','14'];
 var CAB_CURVE=['S','M','L','XL','2XL'];
-var MIN_LOTE=8;
+var MIN_KIDS=15;
+var MIN_CAB=8;
 var LISO='Short Playa';
 function gcol(g){return GCOLOR[g]||'#8b8ba0';}
 function sl(s){return SL[s]||s;}
@@ -792,15 +793,15 @@ function buildProduccion(){
     var cab={};CAB_CURVE.forEach(function(t){cab[t]=0;});
     var left=piezas, kidsOk=false;
     if(!f.genero||f.genero==='KIDS'){
-      var fk=fillToMin(KIDS_CURVE,stK,shareK,left,MIN_LOTE);
+      var fk=fillToMin(KIDS_CURVE,stK,shareK,left,MIN_KIDS);
       kids=fk.prod; left=fk.left; kidsOk=fk.complete;
     } else {
-      kidsOk=KIDS_CURVE.every(function(t){return stK[t]>=MIN_LOTE;});
+      kidsOk=KIDS_CURVE.every(function(t){return stK[t]>=MIN_KIDS;});
     }
     if(kidsOk&&left>0&&(!f.genero||f.genero==='CAB')){
-      var fc=fillToMin(CAB_CURVE,stC,shareC,left,MIN_LOTE);
+      var fc=fillToMin(CAB_CURVE,stC,shareC,left,MIN_CAB);
       cab=fc.prod; left=fc.left;
-      var pool=fc.complete?CAB_CURVE:CAB_CURVE.filter(function(t){return (stC[t]+cab[t])>=MIN_LOTE;});
+      var pool=fc.complete?CAB_CURVE:CAB_CURVE.filter(function(t){return (stC[t]+cab[t])>=MIN_CAB;});
       if(left>0&&pool.length){
         var w={};pool.forEach(function(t){w[t]=shareC[t]||0;});
         var extra=largestRemainder(w,left);
@@ -840,44 +841,42 @@ function rProducir(){
     var te=r.tela, uid='pr_'+idx;
     if(_prodX[uid]==null)_prodX[uid]=!!te.disponible_ok;
     var open=_prodX[uid];
-    function curveTable(gen,curve,prod,stock,share){
-      var h='<table class="ct"><thead><tr><th>Talla</th><th class="num">% vent.</th><th class="num">PT actual</th><th class="num">Producir</th><th class="num">PT post</th></tr></thead><tbody>';
+    function curveTable(curve,prod,stock){
+      var h='<table class="ct"><thead><tr><th>Talla</th><th class="num">PT actual</th><th class="num">Producir</th><th class="num">PT post</th></tr></thead><tbody>';
       curve.forEach(function(t){
-        var p=prod[t]||0, st=stock[t]||0, pct=((share[t]||0)*100).toFixed(1);
-        h+='<tr><td>'+t+'</td><td class="num">'+pct+'%</td><td class="num">'+st+'</td><td class="num" style="color:'+(p?'#86efac':'var(--mu)')+'">'+(p||'—')+'</td><td class="num">'+(st+p)+'</td></tr>';
+        var p=prod[t]||0, st=stock[t]||0;
+        h+='<tr><td>'+t+'</td><td class="num">'+st+'</td><td class="num" style="color:'+(p?'#86efac':'var(--mu)')+'">'+(p||'—')+'</td><td class="num">'+(st+p)+'</td></tr>';
       });
       return h+'</tbody></table>';
     }
-    var body='<div class="g2" style="margin-top:8px"><div><div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">👶 KIDS 2–14</div>'+curveTable('KIDS',KIDS_CURVE,r.kids,r.stK,r.shareK)+'</div>';
-    if(r.kidsOk){body+='<div><div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">👔 CAB</div>'+curveTable('CAB',CAB_CURVE,r.cab,r.stC,r.shareC)+'</div>';}
-    else {body+='<div class="nodata">KIDS aún no cubre 8 und por talla · sin CAB</div>';}
-    body+='</div>';
-    var estado=!te.disponible_ok?'Sin tela':r.kidsOk?(r.cSum?'KIDS listo · CAB '+r.cSum:'KIDS listo'):('KIDS '+r.kSum);
+    var body='<div class="g2" style="margin-top:8px"><div><div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">👶 KIDS 2–14</div>'+curveTable(KIDS_CURVE,r.kids,r.stK)+'</div>'+
+      '<div><div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">👔 CAB</div>'+curveTable(CAB_CURVE,r.cab,r.stC)+'</div></div>';
+    var estado=(te.disponible_ok?te.piezas+' pz':'—');
     cards+='<div class="card" style="margin-bottom:10px">'+
       '<div onclick="toggleProd(\''+uid+'\')" style="display:flex;align-items:center;gap:10px;cursor:pointer">'+
       '<span id="arr_'+uid+'" style="color:var(--ac);transform:'+(open?'rotate(90deg)':'rotate(0)')+';display:inline-block">▶</span>'+
       '<span class="chip" style="background:'+cn(te.color)+'"></span>'+
       '<div style="flex:1"><div style="font-family:var(--fh);font-weight:800">'+te.color+'</div><div style="font-size:0.65rem;color:var(--mu)">'+te.tela+(te.disponible_ok?' · '+te.disponible+' m · rend '+te.rendimiento:'')+'</div></div>'+
-      '<div style="text-align:right"><div style="font-family:var(--fh);font-weight:800;color:#fb923c">'+(te.disponible_ok?te.piezas+' pz':'—')+'</div><div style="font-size:0.62rem;color:var(--mu)">'+estado+'</div></div></div>'+
+      '<div style="text-align:right"><div style="font-family:var(--fh);font-weight:800;color:#fb923c">'+estado+'</div></div></div>'+
       '<div id="'+uid+'" style="display:'+(open?'block':'none')+'">'+body+'</div></div>';
   });
   document.getElementById('prodColors').innerHTML=cards||'<div class="nodata">Sin telas</div>';
-  document.querySelector('#prodTable thead').innerHTML='<tr><th>Color</th><th>Género</th><th>Talla</th><th>SKU</th><th class="num">% vent.</th><th class="num">PT actual</th><th class="num">Producir</th><th class="num">PT post</th></tr>';
+  document.querySelector('#prodTable thead').innerHTML='<tr><th>Color</th><th>Género</th><th>Talla</th><th>SKU</th><th class="num">PT actual</th><th class="num">Producir</th><th class="num">PT post</th></tr>';
   var body='', tProd=0;
   plan.rows.forEach(function(r){
-    function dump(gen,curve,prod,stock,share){
+    function dump(gen,curve,prod,stock){
       curve.forEach(function(t){
         var p=prod[t]||0; if(!p) return;
         var s=findSku(r.tela.color,t,gen);
         tProd+=p;
-        body+='<tr><td><span class="chip" style="background:'+cn(r.tela.color)+'"></span>'+r.tela.color+'</td><td>'+gen+'</td><td>'+t+'</td><td class="sku">'+(s?s.sku:'—')+'</td><td class="num">'+(((share[t]||0)*100).toFixed(1))+'%</td><td class="num">'+stock[t]+'</td><td class="num" style="color:#86efac">'+p+'</td><td class="num">'+(stock[t]+p)+'</td></tr>';
+        body+='<tr><td><span class="chip" style="background:'+cn(r.tela.color)+'"></span>'+r.tela.color+'</td><td>'+gen+'</td><td>'+t+'</td><td class="sku">'+(s?s.sku:'—')+'</td><td class="num">'+stock[t]+'</td><td class="num" style="color:#86efac">'+p+'</td><td class="num">'+(stock[t]+p)+'</td></tr>';
       });
     }
-    dump('KIDS',KIDS_CURVE,r.kids,r.stK,r.shareK);
-    dump('CAB',CAB_CURVE,r.cab,r.stC,r.shareC);
+    dump('KIDS',KIDS_CURVE,r.kids,r.stK);
+    dump('CAB',CAB_CURVE,r.cab,r.stC);
   });
-  document.querySelector('#prodTable tbody').innerHTML=body||'<tr><td colspan="8" class="nodata">Nada a producir con la tela disponible</td></tr>';
-  document.querySelector('#prodTable tfoot').innerHTML=tProd?'<tr><td colspan="6">Total</td><td class="num">'+tProd+'</td><td></td></tr>':'';
+  document.querySelector('#prodTable tbody').innerHTML=body||'<tr><td colspan="7" class="nodata">Nada a producir con la tela disponible</td></tr>';
+  document.querySelector('#prodTable tfoot').innerHTML=tProd?'<tr><td colspan="5">Total</td><td class="num">'+tProd+'</td><td></td></tr>':'';
 }
 
 function exportCSV(){var rows=fr();var lines=['Tienda,Modelo,Género,Color,Talla,SKU,Mes,Unidades'];rows.forEach(function(r){lines.push([r.tienda,r.modelo,r.genero,r.color,r.talla,r.sku,r.mes,r.v].join(','));});var blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Short_Playa_ventas.csv';a.click();}
