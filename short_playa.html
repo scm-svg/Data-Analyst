@@ -774,6 +774,15 @@ function fillToMin(sizes,stock,share,piezas,minLot){
   var complete=sizes.every(function(t){return stock[t]+prod[t]>=minLot;});
   return {prod:prod,left:left,complete:complete};
 }
+function addShare(prod,sizes,share,left){
+  if(left<=0||!sizes||!sizes.length) return left;
+  var w={}, ok=false;
+  sizes.forEach(function(t){w[t]=share[t]||0; if(w[t]>0)ok=true;});
+  if(!ok) sizes.forEach(function(t){w[t]=1;});
+  var extra=largestRemainder(w,left);
+  sizes.forEach(function(t){prod[t]=(prod[t]||0)+(extra[t]||0);});
+  return 0;
+}
 function extraShare(sizes,share,left){
   var w={};sizes.forEach(function(t){w[t]=share[t]||0;});
   return largestRemainder(w,left);
@@ -791,23 +800,23 @@ function buildProduccion(){
     var stC=stockCurve(te.color,'CAB',CAB_CURVE);
     var kids={};KIDS_CURVE.forEach(function(t){kids[t]=0;});
     var cab={};CAB_CURVE.forEach(function(t){cab[t]=0;});
-    var left=piezas, kidsOk=false;
+    var left=piezas, kidsOk=KIDS_CURVE.every(function(t){return stK[t]>=MIN_KIDS;});
     if(!f.genero||f.genero==='KIDS'){
       var fk=fillToMin(KIDS_CURVE,stK,shareK,left,MIN_KIDS);
       kids=fk.prod; left=fk.left; kidsOk=fk.complete;
-    } else {
-      kidsOk=KIDS_CURVE.every(function(t){return stK[t]>=MIN_KIDS;});
+      if(!kidsOk&&left>0){
+        var hole=KIDS_CURVE.filter(function(t){return stK[t]+kids[t]<MIN_KIDS;});
+        left=addShare(kids, hole.length?hole:KIDS_CURVE, shareK, left);
+        kidsOk=KIDS_CURVE.every(function(t){return stK[t]+kids[t]>=MIN_KIDS;});
+      }
     }
-    if(kidsOk&&left>0&&(!f.genero||f.genero==='CAB')){
+    if(left>0&&(!f.genero||f.genero==='CAB')&&(kidsOk||f.genero==='CAB')){
       var fc=fillToMin(CAB_CURVE,stC,shareC,left,MIN_CAB);
       cab=fc.prod; left=fc.left;
-      var pool=fc.complete?CAB_CURVE:CAB_CURVE.filter(function(t){return (stC[t]+cab[t])>=MIN_CAB;});
-      if(left>0&&pool.length){
-        var w={};pool.forEach(function(t){w[t]=shareC[t]||0;});
-        var extra=largestRemainder(w,left);
-        pool.forEach(function(t){cab[t]+=extra[t]||0;});
-        left=0;
-      }
+      if(left>0) left=addShare(cab, CAB_CURVE, shareC, left);
+    }
+    if(left>0&&(!f.genero||f.genero==='KIDS')){
+      left=addShare(kids, KIDS_CURVE, shareK, left);
     }
     var kSum=0,cSum=0;
     KIDS_CURVE.forEach(function(t){kSum+=kids[t];});
