@@ -258,9 +258,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
             )
             talla_rows = []
             color_v = color_v_base = color_produce = 0.0
-            produce_network = 0.0
-            produce_new_stores = 0.0
-            new_store_detail = {}
             talla_v_map = {}
 
             for talla in tallas:
@@ -271,7 +268,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 base_v = sum(refs) / len(refs)
                 v_mes_base = round(base_v, 1)
                 v_mes = round(base_v * HIGH_SEASON_FACTOR, 1)
-                network_produce = max(0, round(v_mes * LEAD_MONTHS))
+                produce_qty = max(0, round(v_mes * LEAD_MONTHS))
                 talla_v_map[talla] = v_mes
                 talla_rows.append({
                     "talla": talla,
@@ -280,9 +277,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                     "stk": 0,
                     "stk_taller": 0,
                     "cob": 0,
-                    "produce": network_produce,
-                    "produce_network": network_produce,
-                    "produce_new_stores": 0,
+                    "produce": produce_qty,
                     "urgente": True,
                     "benchmark_refs": [
                         round(base_velocity(model_rows, genero, ref_color, talla, vel_months), 2)
@@ -291,8 +286,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 })
                 color_v += v_mes
                 color_v_base += v_mes_base
-                produce_network += network_produce
-                color_produce += network_produce
+                color_produce += produce_qty
 
             if not talla_rows:
                 continue
@@ -305,18 +299,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 | {r["tienda"] for r in model_rows if r["genero"] == genero}
             )
             shares = compute_store_shares(model_rows, genero, share_stores)
-            line_v = line_velocity_adj(model_rows, genero, vel_months)
-
-            for store in NEW_STORES:
-                sh = resolve_store_share(store, shares, new_store_caps)
-                store_3m = round(line_v * sh * LEAD_MONTHS)
-                new_store_detail[store] = store_3m
-                produce_new_stores += store_3m
-                for tr in talla_rows:
-                    addon = round(store_3m * talla_mix[tr["talla"]])
-                    tr["produce_new_stores"] += addon
-                    tr["produce"] += addon
-                    color_produce += addon
 
             reabast_stores = list(decision_stores) + [
                 s for s in NEW_STORES if s not in decision_stores
@@ -364,7 +346,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 "display_after": after,
                 "benchmark_colors": benchmark_colors,
                 "benchmark_note": (
-                    f"Prom. top {top_n}: {bench_label} · red + tiendas nuevas "
+                    f"Prom. top {top_n}: {bench_label} · red completa "
                     f"(VELA 1.5× GRIETA · BARQUISIMETO prom. CHACAO+GRIETA)"
                 ),
                 "v_mes_base": round(color_v_base, 1),
@@ -373,9 +355,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 "stk_taller": 0,
                 "cob": 0,
                 "produce": color_produce,
-                "produce_network": produce_network,
-                "produce_new_stores": produce_new_stores,
-                "new_store_detail": new_store_detail,
                 "tallas": talla_rows,
             })
 
@@ -388,8 +367,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
             "v_mes_base": round(sum(r["v_mes_base"] for r in rows_m), 1),
             "v_mes": round(sum(r["v_mes"] for r in rows_m), 1),
             "produce": sum(r["produce"] for r in rows_m),
-            "produce_network": sum(r.get("produce_network", 0) for r in rows_m),
-            "produce_new_stores": sum(r.get("produce_new_stores", 0) for r in rows_m),
             "colors": sorted({r["color"] for r in rows_m}),
         }
 
@@ -554,10 +531,7 @@ def main():
     print(f"launch produce: {launch_prod}")
     if data["launch_production_plan"]:
         row = data["launch_production_plan"][0]
-        print(
-            f"launch sample: {row['genero']} {row['color']} -> {row['produce']} und "
-            f"(red {row.get('produce_network', 0)} + nuevas {row.get('produce_new_stores', 0)})"
-        )
+        print(f"launch sample: {row['genero']} {row['color']} -> {row['produce']} und (red completa)")
     vela_dist = sum(d["total"] for d in data["launch_store_distribution"] if d["store"] == "VELA")
     barq_dist = sum(d["total"] for d in data["launch_store_distribution"] if d["store"] == "BARQUISIMETO")
     print(f"launch dist VELA: {vela_dist} | BARQUISIMETO: {barq_dist}")
