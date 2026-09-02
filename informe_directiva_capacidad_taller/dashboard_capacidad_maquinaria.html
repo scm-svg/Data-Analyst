@@ -36,7 +36,9 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:14px 16px}
 .card h3{font-family:var(--fh);font-size:.86rem;font-weight:700;margin-bottom:2px}
 .sub{font-size:.68rem;color:var(--mu);margin-bottom:10px}
-.cw{position:relative;height:230px}.cw.t{height:280px}.cw.s{height:170px}
+.card{overflow:hidden}
+.cw{position:relative;height:230px;overflow:hidden}.cw.t{height:280px}.cw.s{height:170px}
+.piebox{position:relative;width:180px;height:180px;max-width:100%;margin:8px auto 4px;overflow:hidden}
 .dec{border-left:3px solid var(--ac);background:var(--s2);border-radius:8px;padding:10px 12px;font-size:.8rem;color:var(--tx);margin-top:8px}
 .dec b{color:var(--ac)}
 .dec.warn{border-left-color:var(--rd)}
@@ -102,7 +104,7 @@ tr:last-child td{border:none}
     <div class="card"><div class="sub">Capacidad diaria</div><div class="scen"><div class="lab">Teórica → Real</div><div class="big">2.940 → 2.649</div><div class="delta dn">−291 ops/día</div></div></div>
     <div class="card"><div class="sub">Capacidad mensual (×20 d)</div><div class="scen"><div class="lab">Teórica → Real</div><div class="big">58.800 → 52.980</div><div class="delta dn">−5.820 ops/mes</div></div></div>
     <div class="card"><div class="sub">Utilización</div><div class="scen"><div class="lab">No es métrica de éxito</div><div class="big">90%</div><div class="delta neu">Pérdida estructural 10%</div></div></div>
-    <div class="card"><div class="sub">Estatus del taller (informe)</div><div class="scen"><div class="lab">Teórico 100%</div><div class="big" style="font-size:1.25rem">64%</div><div class="delta dn">Inactivo o parcial</div></div></div>
+    <div class="card"><div class="sub">Estatus del taller</div><div class="scen"><div class="lab">4 de 22 · sin Overlock de cuellos</div><div class="big">18%</div><div class="delta dn">Inactivo o parcial · 18 activas (82%)</div></div></div>
   </div>
   <div class="g2">
     <div class="card"><h3>Teórica vs real por línea</h3><div class="sub">Ops/día · suma L1–L4 = 2.940 / 2.649</div><div class="cw t"><canvas id="cLineas"></canvas></div></div>
@@ -145,7 +147,7 @@ tr:last-child td{border:none}
     <div class="card">
       <h3>Reproceso QA · Costura</h3>
       <div class="sub">Remate / Pedidos QA</div>
-      <div class="cw s"><canvas id="cQa"></canvas></div>
+      <div class="piebox"><canvas id="cQa"></canvas></div>
       <table>
         <tr><td>Inspeccionadas</td><td class="num">10.502</td></tr>
         <tr><td>Rechazadas</td><td class="num">1.695</td></tr>
@@ -177,7 +179,7 @@ tr:last-child td{border:none}
       <h3>Riesgo financiero</h3>
       <div class="sub">Diciembre operando al “máximo”</div>
       <div class="scen"><div class="lab">Piezas no fabricadas</div><div class="big">648</div><div class="delta dn">Pérdida directa de margen bruto</div></div>
-      <div class="dec"><b>Dato.</b> 27% del parque es chatarra que se deprecia sin aportar un segundo de valor.</div>
+      <div class="dec"><b>Dato.</b> 9% del parque es chatarra que se deprecia sin aportar un segundo de valor.</div>
     </div>
     <div class="card">
       <h3>Erosión de marca</h3>
@@ -199,7 +201,7 @@ tr:last-child td{border:none}
     <h3>Mix ponderado de planificación</h3>
     <div class="sub">50% MAR · 35% RIO · 15% Basic Line · picos con quiebre de stock. El cuerpo cita RIO 9 ops; las tablas de escenario usan 6 ops.</div>
     <div class="g2" style="margin:0">
-      <div class="cw s"><canvas id="cMix"></canvas></div>
+      <div class="piebox"><canvas id="cMix"></canvas></div>
       <div>
         <div class="barrow"><span class="nm">MAR · 7 ops</span><div class="track"><div class="fill" style="width:50%;background:var(--ac)"></div></div><b>50%</b></div>
         <div class="barrow"><span class="nm">RIO · 6 ops</span><div class="track"><div class="fill" style="width:35%;background:var(--gr)"></div></div><b>35%</b></div>
@@ -352,7 +354,7 @@ tr:last-child td{border:none}
       <h3>Pedido en una línea</h3>
       <div class="scen">
         <div class="lab">Secuencia</div>
-        <div class="big" style="font-size:1.05rem;font-family:var(--fb);font-weight:700;line-height:1.35">K7 ahora (recuperar 105 MAR y 16,14% de reproceso) → incorporar módulos antes de la tienda nueva → vender el 27% inactivo para abatir CAPEX.</div>
+        <div class="big" style="font-size:1.05rem;font-family:var(--fb);font-weight:700;line-height:1.35">K7 ahora (recuperar 105 MAR y 16,14% de reproceso) → incorporar módulos antes de la tienda nueva → vender el 9% chatarra para abatir CAPEX.</div>
       </div>
     </div>
   </div>
@@ -363,6 +365,7 @@ tr:last-child td{border:none}
 
 <script>
 Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels',{display:false});
 const C={ac:'#5b6af7',gr:'#4caf76',rd:'#ef4444',yw:'#ffc107',or:'#f97316',tx:'#f0f0f5',mu:'#7a7b95'};
 function tx(){return document.body.classList.contains('light')?'#1a1a2e':'#f0f0f5'}
 function mu(){return document.body.classList.contains('light')?'#6b6c85':'#7a7b95'}
@@ -422,8 +425,8 @@ function bo(){
     responsive:true,maintainAspectRatio:false,
     plugins:{
       legend:{labels:{color:tx(),font:{family:'DM Sans',size:11},boxWidth:10}},
-      datalabels:{color:tx(),font:{family:'Syne',weight:'700',size:10},
-        formatter:v=>v? (Number.isInteger(v)?v.toLocaleString('es-VE'):v):''}
+      datalabels:{display:true,color:tx(),font:{family:'Syne',weight:'700',size:10},
+        formatter:v=>v? (Number.isInteger(v)?v.toLocaleString('es-VE'):v):'',clip:true}
     },
     scales:{
       x:{ticks:{color:mu(),font:{size:10}},grid:{color:grid()}},
@@ -450,11 +453,20 @@ function makeCharts(){
       datasets:[{label:'Pérdida ops/día',data:[0,40,150.5,100],backgroundColor:[C.gr,C.yw,C.rd,C.or],borderRadius:4}]},
     options:{...bo(),plugins:{...bo().plugins,legend:{display:false}},indexAxis:'y'}
   });
+  const pieOpt={
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{position:'bottom',labels:{color:tx(),font:{size:10},boxWidth:10,padding:8}},
+      datalabels:{display:false}
+    },
+    cutout:'68%',
+    layout:{padding:4}
+  };
   charts.cQa=new Chart(document.getElementById('cQa'),{
     type:'doughnut',
     data:{labels:['OK 8.807','Reproceso 1.695'],
       datasets:[{data:[8807,1695],backgroundColor:[C.gr,C.rd],borderWidth:0}]},
-    options:{plugins:{legend:{labels:{color:tx(),font:{size:10},boxWidth:10}},datalabels:{display:false}},cutout:'62%'}
+    options:pieOpt
   });
   charts.cDic=new Chart(document.getElementById('cDic'),{
     type:'bar',
@@ -466,7 +478,7 @@ function makeCharts(){
     type:'doughnut',
     data:{labels:['MAR 50%','RIO 35%','Basic 15%'],
       datasets:[{data:[50,35,15],backgroundColor:[C.ac,C.gr,C.or],borderWidth:0}]},
-    options:{plugins:{legend:{labels:{color:tx(),font:{size:11},boxWidth:10}},datalabels:{color:'#fff',font:{weight:'700',size:11},formatter:v=>v+'%'}},cutout:'55%'}
+    options:pieOpt
   });
   charts.cDaily=new Chart(document.getElementById('cDaily'),{
     type:'bar',
