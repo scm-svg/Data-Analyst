@@ -770,7 +770,7 @@ def patch_html(html: str, data: dict) -> str:
 
 """
     html = re.sub(
-        r"  // ── (?:PRODUCTION CURVE|CURVA DE PRODUCCIÓN POR ZONA).*?(?=  // ── REABASTECIMIENTO)",
+        r"  // ── (?:PRODUCTION CURVE|CURVA DE PRODUCCIÓN POR ZONA).*?(?=\n\}\n\nfunction exportCSV)",
         lambda _m: prod_curve_js,
         html,
         count=1,
@@ -782,145 +782,68 @@ def patch_html(html: str, data: dict) -> str:
         "<h3>🏭 Curva de Producción por Zona</h3>\n      <div class=\"sub\">Margarita → Caracas → Valencia → Barquisimeto · diseños expandibles con variantes a producir</div>\n      <div id=\"propGrid\" style=\"display:flex;flex-direction:column;gap:14px;margin-top:10px\"></div>",
     )
 
-    # Replace old MARGARITA reabast with expansion stores
-    old_reabast = """  // ── REABASTECIMIENTO incluyendo MARGARITA y TOLON proyectadas
-  var reabastGrid=document.getElementById('reabastGrid');
-  if(reabastGrid){
-    var mesesActivos=getMesesActivos();
-    var nMeses=Math.min(meses,mesesActivos.length)||1;
-
-    // Real stores (excl. CERRO VERDE in restock display)
-    var EXCLUIR_RESTOCK=[];
-    var tiendaData={};
-    DATA.raw_rows.forEach(function(r){
-      if(EXCLUIR_RESTOCK.indexOf(r.tienda)>=0) return;
-      if(mesesActivos.slice(-nMeses).indexOf(r.mes)<0) return;
-      if(!tiendaData[r.tienda]) tiendaData[r.tienda]={v:0,items:{},proyectada:false,nota:''};
-      tiendaData[r.tienda].v+=r.v;
-      var k=r.modelo+'<br><span style="font-size:.6rem;color:var(--mu)">'+r.color+' / '+r.talla+'</span>';
-      tiendaData[r.tienda].items[r.color+'/'+r.talla]=(tiendaData[r.tienda].items[r.color+'/'+r.talla]||0)+r.v;
-    });
-
-    // Add MARGARITA as projected store
-    var marNeed=meses===1?DATA.margarita.need_1m:meses===2?DATA.margarita.need_2m:DATA.margarita.need_3m;
-    if(marNeed>0)tiendaData['MARGARITA 🆕']={v:marNeed,items:{},proyectada:true,nota:DATA.margarita.nota};
-    // build items from margarita SKUs sorted by talla
-    if(marNeed>0){DATA.margarita.skus.forEach(function(s){
-      var need=meses===1?s.need_1m:meses===2?s.need_2m:s.need_3m;
-      if(need>0){
-        var k=s.COLOR+' / '+s.TALLA;
-        tiendaData['MARGARITA 🆕'].items[k]=(tiendaData['MARGARITA 🆕'].items[k]||0)+need;
-      }
-    });tiendaData['MARGARITA 🆕'].nota=DATA.margarita.nota;}
-
-    // Enrich TOLON with note
-    if(tiendaData['TOLON']) tiendaData['TOLON'].nota='';
-
-    var tiendas=Object.keys(tiendaData).sort(function(a,b){
-      return tiendaData[b].v-tiendaData[a].v;
-    });
-
-    reabastGrid.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">'
-      +tiendas.map(function(t){
-        var td=tiendaData[t];
-        // sort items by talla within color
-        var itemKeys=Object.keys(td.items).sort(function(a,b){
-          var ta=a.split(' / ')[1]||'', tb=b.split(' / ')[1]||'';
-          return (TORD[ta]||99)-(TORD[tb]||99);
-        });
-        var topItems=itemKeys.slice(0,8);
-        var isNew=td.proyectada;
-        return '<div style="background:var(--s2);border-radius:10px;padding:12px;border:1px solid '+(isNew?'rgba(249,115,22,.3)':'var(--brd)')+';">'
-          +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
-          +'<span style="font-weight:700;font-size:.8rem">🏪 '+t+'</span>'
-          +(isNew?'<span style="background:rgba(249,115,22,.15);color:#f97316;border-radius:4px;padding:1px 6px;font-size:.61rem">Proyectada</span>':'')
-          +'</div>'
-          +(td.nota?'<div style="font-size:.62rem;color:var(--mu2);margin-bottom:6px;font-style:italic">'+td.nota+'</div>':'')
-          +'<div style="font-family:var(--fm);font-size:.68rem;color:var(--mu);margin-bottom:8px">'+td.v+' und sugeridas / '+nMeses+' mes(es)</div>'
-          +topItems.map(function(k){
-            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:.69rem;padding:3px 0;border-bottom:1px solid var(--brd)">'
-              +'<span style="color:var(--tx)">'+k+'</span>'
-              +'<span style="color:var(--a2);font-family:var(--fm);font-weight:700">'+td.items[k]+'</span></div>';
-          }).join('')
-          +(itemKeys.length>8?'<div style="font-size:.61rem;color:var(--mu2);margin-top:5px">+ '+(itemKeys.length-8)+' variantes más</div>':'')
-          +'</div>';
-      }).join('')
-      +'</div>';
-  }"""
-
-    new_reabast = """  // ── REABASTECIMIENTO VELA + expansión Valencia / Barquisimeto / Caracas
-  var reabastGrid=document.getElementById('reabastGrid');
-  if(reabastGrid){
-    var tiendaData={};
-    // VELA histórico (solo tienda física)
-    var velaRows=DATA.raw_rows.filter(function(r){return r.tienda==='VELA';});
-    var swVela=getSW(velaRows,'CAB','SPOTS MANGA CORTA');
-    tiendaData['VELA']={v:velaRows.reduce(function(a,r){return a+r.v;},0),items:{},proyectada:false,nota:'Tienda ancla · Margarita · diseños exclusivos zona'};
-    velaRows.forEach(function(r){
-      var k=(r.diseno||r.color)+' / '+r.talla+' · '+r.genero;
-      tiendaData['VELA'].items[k]=(tiendaData['VELA'].items[k]||0)+r.v;
-    });
-    // Tiendas expansión desde DATA.expansion (modelo propio por zona)
-    (DATA.expansion&&DATA.expansion.by_store||[]).forEach(function(es){
-      var items={};
-      es.skus.forEach(function(s){
-        var k=s.color+' / '+s.talla+' · '+s.genero+' · '+(s.zone_model||s.diseno||'');
-        items[k]=(items[k]||0)+s.need_3m;
-      });
-      tiendaData[es.store+' 🆕']={v:es.total,blanco:es.blanco,adicional:es.adicional,zone_model:es.zone_model,items:items,proyectada:true,nota:es.label};
-    });
-    var tiendas=Object.keys(tiendaData).sort(function(a,b){return tiendaData[b].v-tiendaData[a].v;});
-    reabastGrid.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">'
-      +tiendas.map(function(t){
-        var td=tiendaData[t];
-        var itemKeys=Object.keys(td.items).sort();
-        var topItems=itemKeys.slice(0,10);
-        var isNew=td.proyectada;
-        return '<div style="background:var(--s2);border-radius:10px;padding:12px;border:1px solid '+(isNew?'rgba(249,115,22,.3)':'var(--brd)')+';">'
-          +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">'
-          +'<span style="font-weight:700;font-size:.8rem">🏪 '+t+'</span>'
-          +(isNew?'<span style="background:rgba(249,115,22,.15);color:#f97316;border-radius:4px;padding:1px 6px;font-size:.61rem">Expansión</span>':'')
-          +'</div>'
-          +(td.nota?'<div style="font-size:.62rem;color:var(--mu2);margin-bottom:6px">'+td.nota+(td.zone_model?' · <strong style="color:var(--tx)">'+td.zone_model+'</strong>':'')+'</div>':'')
-          +(isNew?'<div style="font-size:.64rem;color:var(--mu);margin-bottom:8px">'+td.v+' und · Blanco <strong>'+td.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+td.adicional+'</strong></div>'
-            :'<div style="font-family:var(--fm);font-size:.68rem;color:var(--mu);margin-bottom:8px">'+td.v+' und vendidas (histórico)</div>')
-          +topItems.map(function(k){
-            return '<div style="display:flex;justify-content:space-between;font-size:.69rem;padding:3px 0;border-bottom:1px solid var(--brd)">'
-              +'<span style="color:var(--tx)">'+k+'</span>'
-              +'<span style="color:var(--a2);font-family:var(--fm);font-weight:700">'+td.items[k]+'</span></div>';
-          }).join('')
-          +(itemKeys.length>10?'<div style="font-size:.61rem;color:var(--mu2);margin-top:5px">+ '+(itemKeys.length-10)+' más</div>':'')
-          +'</div>';
-      }).join('')
-      +'</div>';
-  }"""
-
-    if old_reabast in html:
-        html = html.replace(old_reabast, new_reabast)
-    elif "// ── REABASTECIMIENTO VELA + expansión" in html:
-        html = re.sub(
-            r"  // ── REABASTECIMIENTO VELA \+ expansión.*?(?=\n\}\n\nfunction renderReabast)",
-            new_reabast.rstrip(),
-            html,
-            count=1,
-            flags=re.DOTALL,
-        )
-    else:
-        print("WARN: reabast block not found for replacement")
-
-    sub_new = (
-        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · '
-        'expansión <strong style="color:#f97316">Caracas</strong>, '
-        '<strong style="color:#f97316">Valencia</strong> y '
-        '<strong style="color:#f97316">Barquisimeto</strong> · temp. alta ×'
-        '<span id="hsFactorLabel">1.2</span></div>'
-    )
+    # Quitar reabastecimiento por tienda (movido a curva de producción por zona)
     html = re.sub(
-        r'<div class="sub">Foco tienda.*?id="hsFactorLabel">[^<]+</span></div>',
-        sub_new,
+        r'\s*<div class="card g1">\s*<h3>🏪 Reabastecimiento por Tienda</h3>.*?</div>\s*</div>\s*</div>',
+        "\n</div>\n</div>",
         html,
         count=1,
+        flags=re.DOTALL,
     )
+    html = re.sub(
+        r"\n  // ── REABASTECIMIENTO.*?(?=\n\}\n\nfunction exportCSV)",
+        "",
+        html,
+        count=1,
+        flags=re.DOTALL,
+    )
+    html = re.sub(r"\nfunction renderReabast\(allRows\)\{.*?\n\}\n\n", "\n", html, count=1, flags=re.DOTALL)
+
+    # Pestaña y sección Diseños (al lado de Colores)
+    if 'st(\'disenos\')' not in html:
+        html = html.replace(
+            '<button class="tab" onclick="st(\'colores\')">🎨 Colores</button>\n  <button class="tab" onclick="st(\'tallas\')">📐 Tallas</button>',
+            '<button class="tab" onclick="st(\'colores\')">🎨 Colores</button>\n  <button class="tab" onclick="st(\'disenos\')">✨ Diseños</button>\n  <button class="tab" onclick="st(\'tallas\')">📐 Tallas</button>',
+        )
+    if 'id="sec-disenos"' not in html:
+        html = html.replace(
+            '</div>\n<div class="sec" id="sec-tallas">',
+            '</div>\n<div class="sec" id="sec-disenos">\n  <div class="g2">\n'
+            '    <div class="card"><h3>Ranking de Diseños</h3><div class="sub">Unidades y proporción total</div><div id="disRank"></div></div>\n'
+            '    <div class="card"><h3>Diseños por Género</h3><div class="sub">Barras agrupadas por línea</div><div class="cw t"><canvas id="cDisGen"></canvas></div></div>\n'
+            '  </div>\n  <div class="g1 card"><h3>Diseño × Tienda</h3><div class="sub">Heatmap de volumen</div><div class="hmw" id="disTiendaHM"></div></div>\n'
+            '</div>\n<div class="sec" id="sec-tallas">',
+            1,
+        )
+    html = html.replace(
+        "var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];",
+        "var TABS=['resumen','colores','disenos','tallas','tiendas','inventario','decisiones'];",
+    )
+    html = html.replace(
+        "if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Talla')>=0)return'tallas';",
+        "if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Diseño')>=0)return'disenos';if(tx.indexOf('Talla')>=0)return'tallas';",
+    )
+    html = html.replace(
+        "else if(n==='colores')rColores();else if(n==='tallas')rTallas();",
+        "else if(n==='colores')rColores();else if(n==='disenos')rDisenos();else if(n==='tallas')rTallas();",
+    )
+    if "function rDisenos()" not in html:
+        r_disenos = (
+            "function rDisenos(){\n"
+            "  var rows=fr();if(!rows.length){document.getElementById('disRank').innerHTML='<div class=\"nodata\">Sin datos</div>';return;}\n"
+            "  var normRows=rows.map(function(r){return Object.assign({},r,{diseno:r.diseno||'Sin diseño'});});\n"
+            "  var byDiseno=ag(normRows,'diseno');bRT(document.getElementById('disRank'),byDiseno,cn);\n"
+            "  var generos=ag(normRows,'genero').map(function(x){return x.k;});\n"
+            "  var topDisenos=byDiseno.slice(0,10).map(function(x){return x.k;});\n"
+            "  var m2dg=ag2(normRows,'diseno','genero');\n"
+            "  mc('cDisGen','bar',{labels:topDisenos,datasets:generos.map(function(g){var gRows=normRows.filter(function(r){return r.genero===g;});var gtot=gRows.reduce(function(a,r){return a+r.v;},0);return{label:(GICO[g]||'')+' '+g,data:topDisenos.map(function(d){return(m2dg[d]&&m2dg[d][g])||0;}),backgroundColor:gcol(g)+'bb',borderColor:gcol(g),borderWidth:1,borderRadius:4,_pcts:topDisenos.map(function(d){var v=(m2dg[d]&&m2dg[d][g])||0;return gtot>0?Math.round(v/gtot*1000)/10:0;})};})},Object.assign(bo(),{plugins:{legend:{display:true,position:'top',labels:{color:txCol(),font:{family:'DM Sans',size:10},boxWidth:10,padding:8}},tooltip:{mode:'index',intersect:false,backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{label:function(ctx){var pct=ctx.dataset._pcts[ctx.dataIndex];return ' '+ctx.dataset.label+': '+ctx.parsed.y+' und ('+pct+'%)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:12},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v){return v>0?v:'';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:9},maxRotation:30}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:10}}}}}));\n"
+            "  var tiendas=ag(normRows,'tienda').map(function(x){return x.k;});var m2dt=ag2(normRows,'diseno','tienda');var topD12=byDiseno.slice(0,12).map(function(x){return x.k;});var mxDT=0;topD12.forEach(function(d){tiendas.forEach(function(t){var v=(m2dt[d]&&m2dt[d][t])||0;if(v>mxDT)mxDT=v;});});\n"
+            "  var h='<table class=\"hmt\"><thead><tr><th></th>'+tiendas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';topD12.forEach(function(d){h+='<tr><td class=\"rl\"><span class=\"chip\" style=\"background:'+cn(d)+'\"></span>'+d+'</td>'+tiendas.map(function(t){var v=(m2dt[d]&&m2dt[d][t])||0;return'<td style=\"background:'+hb(v,mxDT)+';color:'+ht(v,mxDT)+'\" title=\"'+d+' · '+t+': '+v+' und\">'+v+'</td>';}).join('')+'</tr>';});\n"
+            "  document.getElementById('disTiendaHM').innerHTML=h+'</tbody></table>';\n"
+            "}\n\n"
+        )
+        html = html.replace("function rTallas(){", r_disenos + "function rTallas(){")
+
     html = html.replace("DATA.high_season_factor||1.4", "DATA.high_season_factor||1.2")
     html = html.replace(
         "DATA.expansion_stores||['VALENCIA','BARQUISIMETO']",
