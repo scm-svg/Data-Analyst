@@ -21,6 +21,7 @@ BASE_MESES = ["febrero-2026", "marzo-2026", "abril-2026"]
 MODEL_ONLY = "CLASICA DAILY 3.0"
 LINEAS = ["CAB", "DAMA"]
 REPLACE_MESES = {"julio-2026", "agosto-2026"}
+DECISION_EXCLUDE = {"TALLER", "WEB", "PEDIDOS"}
 PARTIAL_MONTH = "agosto-2026"
 VELOCITY_MONTHS_COUNT = 6
 HIGH_SEASON_FACTOR = 1.4
@@ -516,7 +517,11 @@ def build_data():
         stock_by_modelo[k.split("/")[0]] += v
 
     tiendas = sorted(set(r["tienda"] for r in raw_rows) | set(stock_by_loc.keys()))
-    all_stores = sorted(set(tiendas) - {"TALLER", "WEB", "PEDIDOS"})
+    decision_stores = sorted(
+        {t for t in tiendas if t not in DECISION_EXCLUDE}
+        | {loc for loc in stock_by_loc if loc not in DECISION_EXCLUDE}
+    )
+    all_stores = decision_stores
     stock_pt_total = sum(stock_by_loc.get("TALLER", {}).values())
     last_mes = meses_order[-1] if meses_order else ""
     es_parcial = last_mes == "agosto-2026"
@@ -540,6 +545,8 @@ def build_data():
         "stock_pt_total": stock_pt_total,
         "total": sum(r["v"] for r in raw_rows),
         "all_stores": all_stores,
+        "decision_stores": decision_stores,
+        "decision_exclude_stores": sorted(DECISION_EXCLUDE),
         "inv_locations": sorted(stock_by_loc.keys()),
         "prod_curve": prod_curve,
         "summary_prod": compute_summary_prod(prod_curve),
