@@ -19,7 +19,13 @@ MESES_UPPER = {m.upper(): m for m in MESES}
 TALLA_ORDER = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "6", "8", "10", "12", "14"]
 BASE_MESES = ["febrero-2026", "marzo-2026", "abril-2026"]
 MODEL_ONLY = "CLASICA DAILY 3.0"
+LINEAS = ["CAB", "DAMA"]
 REPLACE_MESES = {"julio-2026", "agosto-2026"}
+PARTIAL_MONTH = "agosto-2026"
+VELOCITY_MONTHS_COUNT = 6
+HIGH_SEASON_FACTOR = 1.4
+DEC_BASE_FACTOR = 1.4
+LEAD_MONTHS = 3
 
 
 def read_csv(path: Path):
@@ -234,6 +240,118 @@ def merge_raw_rows(existing_rows: list, update_rows: list) -> list:
     return kept + update_rows
 
 
+def velocity_months(meses_order: list) -> list:
+    if PARTIAL_MONTH in meses_order and meses_order.index(PARTIAL_MONTH) >= VELOCITY_MONTHS_COUNT:
+        i = meses_order.index(PARTIAL_MONTH)
+        return meses_order[i - VELOCITY_MONTHS_COUNT : i]
+    return meses_order[-VELOCITY_MONTHS_COUNT:]
+
+
+def month_weight(mes: str) -> float:
+    return DEC_BASE_FACTOR if mes.startswith("diciembre") else 1.0
+
+
+def base_velocity(rows, genero, color, talla, vel_months):
+    weighted = 0.0
+    weights = 0.0
+    for mes in vel_months:
+        w = month_weight(mes)
+        qty = sum(
+            r["v"] for r in rows
+            if r["genero"] == genero and r["color"] == color and r["talla"] == talla and r["mes"] == mes
+        )
+        weighted += qty * w
+        weights += w
+    return weighted / weights if weights > 0 else 0.0
+
+
+def compute_production_plan(raw_rows, stock, stock_taller_by_key, vel_months):
+    production_rows = []
+    model_rows = [r for r in raw_rows if r["modelo"] == MODEL_ONLY]
+    for genero in LINEAS:
+        colors = sorted({r["color"] for r in model_rows if r["genero"] == genero})
+        for color in colors:
+            tallas = sorted(
+                {r["talla"] for r in model_rows if r["genero"] == genero and r["color"] == color},
+                key=lambda t: (len(t), t),
+            )
+            talla_rows = []
+            color_v = color_v_base = color_stk = color_stk_taller = color_produce = 0.0
+
+            for talla in tallas:
+                base_v = base_velocity(model_rows, genero, color, talla, vel_months)
+                v_mes_base = round(base_v, 1)
+                v_mes = round(base_v * HIGH_SEASON_FACTOR, 1)
+                key = f"{MODEL_ONLY}/{genero}/{color}/{talla}"
+                stk = int(stock.get(key, 0))
+                stk_taller = int(stock_taller_by_key.get(key, 0))
+                cob = round(stk / v_mes, 1) if v_mes > 0 else 999
+                need = max(0, round(v_mes * LEAD_MONTHS - stk)) if cob < LEAD_MONTHS else 0
+                talla_rows.append({
+                    "talla": talla,
+                    "v_mes_base": v_mes_base,
+                    "v_mes": v_mes,
+                    "stk": stk,
+                    "stk_taller": stk_taller,
+                    "cob": cob,
+                    "produce": need,
+                    "urgente": cob < LEAD_MONTHS,
+                })
+                color_v += v_mes
+                color_v_base += v_mes_base
+                color_stk += stk
+                color_stk_taller += stk_taller
+                color_produce += need
+
+            if not talla_rows:
+                continue
+            production_rows.append({
+                "modelo": MODEL_ONLY,
+                "genero": genero,
+                "color": color,
+                "v_mes_base": round(color_v_base, 1),
+                "v_mes": round(color_v, 1),
+                "stk": color_stk,
+                "stk_taller": color_stk_taller,
+                "cob": round(color_stk / color_v, 1) if color_v > 0 else 999,
+                "produce": color_produce,
+                "tallas": talla_rows,
+            })
+
+    v_mes = sum(r["v_mes"] for r in production_rows)
+    v_mes_base = sum(r["v_mes_base"] for r in production_rows)
+    stk = sum(r["stk"] for r in production_rows)
+    stk_taller = sum(r["stk_taller"] for r in production_rows)
+    produce = sum(r["produce"] for r in production_rows)
+    summary = {
+        MODEL_ONLY: {
+            "v_mes_base": round(v_mes_base, 1),
+            "v_mes": round(v_mes, 1),
+            "stk": stk,
+            "stk_taller": stk_taller,
+            "cob": round(stk / v_mes, 1) if v_mes > 0 else 999,
+            "produce": produce,
+        }
+    }
+
+    summary_genero = {}
+    for genero in LINEAS:
+        rows_g = [r for r in production_rows if r["genero"] == genero]
+        g_v = sum(r["v_mes"] for r in rows_g)
+        g_v_base = sum(r["v_mes_base"] for r in rows_g)
+        g_stk = sum(r["stk"] for r in rows_g)
+        g_prod = sum(r["produce"] for r in rows_g)
+        summary_genero[genero] = {
+            "v_mes_base": round(g_v_base, 1),
+            "v_mes": round(g_v, 1),
+            "stk": g_stk,
+            "cob": round(g_stk / g_v, 1) if g_v > 0 else 999,
+            "produce": g_prod,
+        }
+
+    return production_rows, summary, summary_genero
+
+
 def compute_prod_curve(raw_rows, stock, stock_by_loc):
     base = [m for m in BASE_MESES if any(r["mes"] == m for r in raw_rows)]
     if not base:
@@ -348,8 +466,12 @@ def build_data():
     raw_rows = merge_raw_rows(existing["raw_rows"], update_rows)
     stock, stock_by_loc, inv_rows = read_inventario()
     prod_curve = compute_prod_curve(raw_rows, stock, stock_by_loc)
-
     meses_order = sorted({r["mes"] for r in raw_rows}, key=mes_sort_key)
+    vel_months = velocity_months(meses_order)
+    stock_taller = stock_by_loc.get("TALLER", {})
+    production_plan, summary_produccion, summary_genero = compute_production_plan(
+        raw_rows, stock, stock_taller, vel_months
+    )
     meses_und = {m: sum(r["v"] for r in raw_rows if r["mes"] == m) for m in meses_order}
 
     stock_by_modelo = defaultdict(int)
@@ -384,6 +506,16 @@ def build_data():
         "inv_locations": sorted(stock_by_loc.keys()),
         "prod_curve": prod_curve,
         "summary_prod": compute_summary_prod(prod_curve),
+        "production_plan": production_plan,
+        "summary_produccion": summary_produccion,
+        "summary_genero": summary_genero,
+        "velocity_months": vel_months,
+        "velocity_months_label": " · ".join(month_label(m) for m in vel_months),
+        "velocity_months_count": len(vel_months),
+        "high_season_factor": HIGH_SEASON_FACTOR,
+        "december_base_factor": DEC_BASE_FACTOR,
+        "stock_taller": sum(stock_taller.values()),
+        "lead_months": LEAD_MONTHS,
         "margarita": compute_margarita(raw_rows, mult=2.0),
         "tolon": compute_tolon(raw_rows),
         "date_range": (
@@ -431,6 +563,8 @@ def main():
     print(f"Meses: {len(data['meses_order'])} | es_parcial: {data['es_parcial']}")
     print(f"summary_prod: {data['summary_prod']}")
     print(f"prod_curve need_3m total: {sum(r['need_3m'] for r in data['prod_curve'])}")
+    print(f"production_plan produce total: {sum(r['produce'] for r in data['production_plan'])}")
+    print(f"velocity_months: {data['velocity_months_label']}")
 
 
 if __name__ == "__main__":
