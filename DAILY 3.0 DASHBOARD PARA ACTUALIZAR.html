@@ -217,8 +217,8 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="g2">
     <div class="card" style="grid-column:1/-1">
       <h3>🏭 Producción Sugerida por Variante</h3>
-      <div class="sub">Rotación base → ajustada (×<span id="hsFactorLabel">1.4</span> temporada alta) · Solo produce si cobertura &lt; 3 meses · Clic en color para detalle por talla</div>
-      <div id="propGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:10px"></div>
+      <div class="sub">Análisis de rotación y producción arriba · Detalle por género, color y talla abajo (clic en color para expandir)</div>
+      <div id="propGrid" style="display:flex;flex-direction:column;gap:12px;margin-top:10px"></div>
     </div>
   </div>
   <div class="card g1">
@@ -607,104 +607,116 @@ function makeRow(s,col,v,colV,tSug,stk,vel){
     stkBadge+cobBadge(stk,vel)+'</div>';
 }
 
+function getPlanColor(modelo,genero,color){
+  var plan=DATA.production_plan||[];
+  for(var i=0;i<plan.length;i++){if(plan[i].modelo===modelo&&plan[i].genero===genero&&plan[i].color===color)return plan[i];}
+  return null;
+}
+function getPlanTalla(planColor,talla){
+  if(!planColor||!planColor.tallas)return null;
+  for(var i=0;i<planColor.tallas.length;i++){if(planColor.tallas[i].talla===talla)return planColor.tallas[i];}
+  return null;
+}
+
 function rDecisiones(){
   var meses=_decMeses||2;
   var allRows=DATA.raw_rows;
   var filteredRows=allRows.filter(function(r){return(!_modelo||r.modelo===_modelo);});
-  var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5,'3XL':6,'6':10,'8':11,'10':12,'12':13,'14':14};
+  var modelos=ag(filteredRows,'modelo').map(function(x){return x.k;});
+  var pgEl=document.getElementById('propGrid');if(!pgEl)return;pgEl.innerHTML='';
 
-  var pgEl=document.getElementById('propGrid');
-  if(pgEl){
-    pgEl.innerHTML='';
+  var plan=(DATA.production_plan||[]).filter(function(r){return(!_modelo||r.modelo===_modelo);});
+  var totalProduce=plan.reduce(function(a,r){return a+r.produce;},0);
+  var totalVelBase=plan.reduce(function(a,r){return a+(r.v_mes_base||0);},0);
+  var totalVel=plan.reduce(function(a,r){return a+r.v_mes;},0);
+  var totalStk=plan.reduce(function(a,r){return a+r.stk;},0);
+  var cobGen=totalVel>0?Math.round(totalStk/totalVel*10)/10:0;
+  var hs=DATA.high_season_factor||1.4;
+  var decBase=DATA.december_base_factor||1.4;
+  var velLbl=DATA.velocity_months_label||('últimos '+(DATA.velocity_months_count||6)+' meses');
+  var velCount=DATA.velocity_months_count||6;
 
-    var plan=(DATA.production_plan||[]).filter(function(r){return(!_modelo||r.modelo===_modelo);});
-    var totalProduce=plan.reduce(function(a,r){return a+r.produce;},0);
-    var totalVelBase=plan.reduce(function(a,r){return a+(r.v_mes_base||0);},0);
-    var totalVel=plan.reduce(function(a,r){return a+r.v_mes;},0);
-    var totalStk=plan.reduce(function(a,r){return a+r.stk;},0);
-    var cobGen=totalVel>0?Math.round(totalStk/totalVel*10)/10:0;
-    var hs=DATA.high_season_factor||1.4;
-    var decBase=DATA.december_base_factor||1.4;
-    var velLbl=DATA.velocity_months_label||('últimos '+(DATA.velocity_months_count||6)+' meses');
-    var velCount=DATA.velocity_months_count||6;
-    var modelos=(_modelo?[_modelo]:DATA.filtros.modelos)||[];
-
-    var kpiCard=function(val,label,sub,color,bg,bdr){
-      return '<div style="background:'+(bg||'var(--s2)')+';border-radius:10px;padding:12px 14px;text-align:center;border:1px solid '+(bdr||'var(--brd)')+'">'
-        +'<div style="font-family:var(--fm);font-size:1.35rem;font-weight:800;color:'+(color||'var(--tx)')+'">'+val+'</div>'
-        +'<div style="font-size:.63rem;color:var(--mu);margin-top:2px">'+label+'</div>'
-        +(sub?'<div style="font-size:.58rem;color:var(--mu2);margin-top:3px;line-height:1.35">'+sub+'</div>':'')
-        +'</div>';
-    };
-
-    var headerHtml='<div style="display:flex;flex-direction:column;gap:12px">'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'
-      +kpiCard(Math.round(totalVelBase),'Rotación base','Promedio '+velCount+' meses · '+velLbl,'#a5b4fc')
-      +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')
-      +kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+(DATA.stock_taller||0).toLocaleString()+' und','#22d3ee')
-      +kpiCard(cobGen+'m','Cobertura prom.','Meses hasta agotarse (con rot. ajustada)','#f59e0b')
-      +kpiCard(totalProduce,'Unidades a producir','Solo variantes con cobertura &lt; 3 meses',totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
-      +'</div>'
-      +'<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55">'
-      +'<div style="font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem">📋 Metodología — rotación y producción</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">'
-      +'<div><strong style="color:var(--tx)">Rotación base</strong><br>Promedio mensual de ventas netas por talla en <em>'+velLbl+'</em> ('+velCount+' meses completos, sin mes parcial). Diciembre en la base se pondera ×'+decBase+'.</div>'
-      +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta). Es la velocidad usada para cobertura y producción.</div>'
-      +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br>Solo entra en el análisis lo que tiene <strong style="color:var(--tx)">cobertura &lt; 3 meses</strong>. Cantidad = rot. ajustada × 3 − stock actual.</div>'
-      +'<div><strong style="color:var(--tx)">Variantes activas</strong><br>Modelo Clásica Daily 3.0 · CAB y DAMA · Colores: Blanco, Negro, Verde Militar.</div>'
-      +'</div></div>'
+  var kpiCard=function(val,label,sub,color,bg,bdr){
+    return '<div style="background:'+(bg||'var(--s2)')+';border-radius:10px;padding:12px 14px;text-align:center;border:1px solid '+(bdr||'var(--brd)')+'">'
+      +'<div style="font-family:var(--fm);font-size:1.35rem;font-weight:800;color:'+(color||'var(--tx)')+'">'+val+'</div>'
+      +'<div style="font-size:.63rem;color:var(--mu);margin-top:2px">'+label+'</div>'
+      +(sub?'<div style="font-size:.58rem;color:var(--mu2);margin-top:3px;line-height:1.35">'+sub+'</div>':'')
       +'</div>';
+  };
 
-    pgEl.innerHTML+=headerHtml;
+  pgEl.innerHTML+='<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'
+    +kpiCard(Math.round(totalVelBase),'Rotación base','Promedio '+velCount+' meses · '+velLbl,'#a5b4fc')
+    +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')
+    +kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+(DATA.stock_taller||0).toLocaleString()+' und','#22d3ee')
+    +kpiCard(cobGen+'m','Cobertura prom.','Meses hasta agotarse (con rot. ajustada)','#f59e0b')
+    +kpiCard(totalProduce,'Unidades a producir','Solo variantes con cobertura &lt; 3 meses',totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
+    +'</div>'
+    +'<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55">'
+    +'<div style="font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem">📋 Metodología — rotación y producción</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">'
+    +'<div><strong style="color:var(--tx)">Rotación base</strong><br>Promedio mensual de ventas netas por talla en <em>'+velLbl+'</em> ('+velCount+' meses completos, sin mes parcial). Diciembre en la base se pondera ×'+decBase+'.</div>'
+    +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta). Es la velocidad usada para cobertura y producción.</div>'
+    +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br>Solo entra en el análisis lo que tiene <strong style="color:var(--tx)">cobertura &lt; 3 meses</strong>. Cantidad = rot. ajustada × 3 − stock actual.</div>'
+    +'<div><strong style="color:var(--tx)">Variantes activas</strong><br>Modelo Clásica Daily 3.0 · CAB y DAMA · Colores: Blanco, Negro, Verde Militar.</div>'
+    +'</div></div>'
+    +'</div>';
 
-    modelos.forEach(function(modelo){
-      var smry=DATA.summary_produccion&&DATA.summary_produccion[modelo];
-      if(!smry) return;
-      var cobM=smry.cob<3?'#ef4444':smry.cob<9?'#f59e0b':'#10b981';
-      var mCard='<div style="background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px;margin-bottom:12px">'
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-        +'<span style="font-size:.95rem;font-weight:800;color:var(--a2)">'+(MICO[modelo]||'')+' '+modelo+'</span>'
-        +'<span style="font-family:var(--fm);font-size:.71rem;color:var(--mu)">'+(smry.v_mes_base||0).toFixed(0)+' base → '+(smry.v_mes||0).toFixed(0)+'/mes ajust · stk '+smry.stk.toLocaleString()+'</span>'
-        +'<span style="margin-left:auto;font-family:var(--fm);font-size:.78rem;font-weight:800;color:'+cobM+'">'+smry.cob+'m cob</span>'
-        +(smry.produce>0?'<span style="background:rgba(245,158,11,.15);color:#f59e0b;border-radius:6px;padding:3px 10px;font-size:.7rem;font-weight:800">Producir '+smry.produce+' und</span>':'<span style="background:rgba(16,185,129,.12);color:#10b981;border-radius:6px;padding:3px 10px;font-size:.7rem">✓ Stock suficiente</span>')
-        +'</div>';
+  pgEl.innerHTML+='<div style="margin-top:4px;padding-top:14px;border-top:1px solid var(--brd)">'
+    +'<div style="font-family:var(--fh);font-size:.82rem;font-weight:800;color:var(--mu);margin-bottom:10px">🔍 Detalle por género, color y talla</div>';
 
-      ['CAB','DAMA'].forEach(function(genero){
-        var rows=plan.filter(function(r){return r.modelo===modelo&&r.genero===genero;});
-        if(!rows.length) return;
-        rows.sort(function(a,b){return b.v_mes-a.v_mes;});
-        var gStk=rows.reduce(function(a,r){return a+r.stk;},0);
-        var gVel=rows.reduce(function(a,r){return a+r.v_mes;},0);
-        var gProd=rows.reduce(function(a,r){return a+r.produce;},0);
-        mCard+='<div style="margin-bottom:10px"><div style="font-family:var(--fh);font-size:.78rem;font-weight:700;color:'+gcol(genero)+';margin-bottom:8px">'+(GICO[genero]||'')+' '+genero+' · '+(gVel).toFixed(0)+'/mes · stk '+gStk+(gProd>0?' · producir '+gProd:'')+'</div>';
-        mCard+=rows.map(function(cp){
-          var cob_c=cp.cob<3?'#ef4444':cp.cob<9?'#f59e0b':'#10b981';
-          var sortedT=cp.tallas.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
-          var tallaHtml=sortedT.map(function(t){
-            var tc=t.cob<3?'#ef4444':t.cob<9?'#f59e0b':'#10b981';
-            return '<div style="display:flex;align-items:center;gap:7px;padding:3px 8px 3px 14px;background:rgba(0,0,0,.15);border-radius:5px;margin-bottom:2px">'
-              +'<span style="font-family:var(--fm);font-size:.67rem;color:var(--mu);width:28px">'+t.talla+'</span>'
-              +'<span style="font-family:var(--fm);font-size:.63rem;color:var(--mu2)">'+(t.v_mes_base||0).toFixed(1)+' → '+t.v_mes.toFixed(1)+'/mes</span>'
-              +'<span style="font-family:var(--fm);font-size:.63rem;color:var(--mu2)">stk '+t.stk+'</span>'
-              +'<span style="font-family:var(--fm);font-size:.63rem;color:'+tc+';font-weight:700">'+t.cob+'m</span>'
-              +(t.produce>0?'<span style="margin-left:auto;background:rgba(245,158,11,.15);color:#f59e0b;border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700">+'+t.produce+' producir</span>':'<span style="margin-left:auto;font-size:.62rem;color:#10b981">✓</span>')
-              +'</div>';
-          }).join('');
-          return '<div style="background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
-            +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-            +'<span style="width:9px;height:9px;border-radius:50%;background:'+cn(cp.color)+';flex-shrink:0;border:1.5px solid rgba(255,255,255,.15)"></span>'
-            +'<span style="font-size:.73rem;font-weight:700">'+cp.color+'</span>'
-            +'<span style="font-family:var(--fm);font-size:.63rem;color:var(--mu2)">'+(cp.v_mes_base||0).toFixed(1)+' → '+cp.v_mes.toFixed(1)+'/mes ajust · stk '+cp.stk+'</span>'
-            +'<span style="font-family:var(--fm);font-size:.63rem;color:'+cob_c+';font-weight:700;margin-left:auto">'+cp.cob+'m cob</span>'
-            +(cp.produce>0?'<span style="background:rgba(245,158,11,.18);color:#f59e0b;border-radius:5px;padding:2px 8px;font-size:.65rem;font-weight:700">+'+cp.produce+'</span>':'<span style="background:rgba(16,185,129,.1);color:#10b981;border-radius:5px;padding:2px 8px;font-size:.65rem">OK</span>')
-            +'</div>'+tallaHtml+'</div>';
+  modelos.forEach(function(modelo){
+    var modRows=allRows.filter(function(r){return r.modelo===modelo;});
+    var generos=ag(modRows,'genero').map(function(x){return x.k;});
+    var cards=generos.map(function(genero){
+      var lRows=modRows.filter(function(r){return r.genero===genero;});
+      var lt=lRows.reduce(function(a,r){return a+r.v;},0);if(!lt)return'';
+      var gSummary=(DATA.summary_genero&&DATA.summary_genero[genero])||{};
+      var lineFc=Math.round(gSummary.v_mes||0);
+      var lProd=Math.round(gSummary.produce||0);
+      var gStk=gSummary.stk||gGeneroStk(modelo,genero);
+      var gCob=fmtCob(gStk,lineFc);
+      var cM={};lRows.forEach(function(r){cM[r.color]=(cM[r.color]||0)+r.v;});
+      var cA=Object.entries(cM).sort(function(a,b){return b[1]-a[1];});
+      var bars=cA.map(function(ce){
+        var col=ce[0],colV=ce[1],pct=lt>0?Math.round(colV/lt*1000)/10:0;
+        var cUid='pg_'+modelo.replace(/\W/g,'_')+'_'+genero+'_'+col.replace(/\W/g,'_');
+        var planColor=getPlanColor(modelo,genero,col);
+        var tM={};lRows.filter(function(r){return r.color===col;}).forEach(function(r){tM[r.talla]=(tM[r.talla]||0)+r.v;});
+        var tA=Object.entries(tM).sort(function(a,b){return b[1]-a[1];});
+        var cNS=planColor?Math.round(planColor.produce):0;
+        var cColorStk=planColor?planColor.stk:gColorStk(modelo,genero,col);
+        var colVel=planColor?planColor.v_mes:(getVel(genero,col,null,meses,modelo)*hs);
+        var det=tA.map(function(tv){
+          var planTalla=planColor?getPlanTalla(planColor,tv[0]):null;
+          var tSug=planTalla?Math.round(planTalla.produce):0;
+          var tStk=planTalla?planTalla.stk:gTallaStk(modelo,genero,col,tv[0]);
+          var tVel=planTalla?planTalla.v_mes:(getVel(genero,col,tv[0],meses,modelo)*hs);
+          return makeRow(tv[0],col,tv[1],colV,tSug,tStk,tVel);
         }).join('');
-        mCard+='</div>';
-      });
-      mCard+='</div>';
-      pgEl.innerHTML+=mCard;
-    });
-  }
+        return '<div style="margin-bottom:7px">'+
+          '<div data-pguid="'+cUid+'" style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:4px 5px;border-radius:6px">'+
+          '<span style="width:9px;height:9px;border-radius:50%;background:'+cn(col)+';flex-shrink:0;border:1.5px solid rgba(255,255,255,.15)"></span>'+
+          '<div style="font-size:0.73rem;font-weight:600;color:#e0e0f5;width:95px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+col+'</div>'+
+          '<div style="flex:1;background:var(--s3);border-radius:3px;height:10px;overflow:hidden;position:relative"><div style="height:10px;border-radius:3px;background:'+cn(col)+';width:'+pct+'%"></div><span style="position:absolute;left:5px;top:0;line-height:10px;font-size:0.62rem;font-weight:700;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.9)">'+pct+'%</span></div>'+
+          '<div style="color:var(--mu2);font-size:0.6rem;white-space:nowrap" title="Rotación ajustada mensual">'+colVel.toFixed(1)+'/m</div>'+
+          '<div style="color:#86efac;font-weight:700;font-size:0.7rem;width:44px;text-align:right">'+cNS+'u</div>'+
+          (cColorStk>0?'<div style="background:rgba(255,193,7,.15);border:1px solid #ffc10766;border-radius:5px;padding:1px 6px;color:#ffc107;font-size:0.62rem;font-weight:700;white-space:nowrap">📦'+cColorStk+'</div>':'')+
+          cobBadge(cColorStk,colVel)+
+          '<span style="color:var(--ac);font-size:0.62rem;width:10px">&#9658;</span></div>'+
+          '<div id="'+cUid+'" style="display:none;margin:2px 0 0 16px;padding:5px 7px;background:var(--s2);border-radius:5px;border-left:2px solid '+cn(col)+'44">'+
+          '<div style="font-size:0.59rem;color:var(--mu2);margin-bottom:3px;font-weight:600">TALLA &middot; % &middot; HIST &middot; <span style="color:#a5b4fc">VEL AJUST</span> &middot; PROD &middot; <span style="color:#ffc107">STK</span> &middot; COB</div>'+det+'</div></div>';
+      }).join('');
+      return '<div style="background:var(--s2);border-radius:10px;padding:13px;margin-bottom:8px">'+
+        '<div style="font-family:var(--fh);font-size:0.79rem;font-weight:800;color:var(--a2);margin-bottom:2px">'+(GICO[genero]||'')+' '+genero+
+        ' <span style="font-size:0.67rem;font-weight:400;color:var(--mu)">(rot. ajust. '+lineFc+' und/mes · 📦 '+gStk+' und · <span style="color:'+gCob.c+';font-weight:700">'+gCob.lbl+' cob</span>)</span></div>'+
+        '<div style="font-size:0.65rem;color:var(--mu2);margin-bottom:8px">&#127981; Producir: <strong style="color:#86efac">'+lProd+'</strong> und · Solo variantes con cobertura &lt; 3 meses</div>'+bars+'</div>';
+    }).filter(Boolean).join('');
+    if(!cards)return;
+    pgEl.innerHTML+='<div style="background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px;margin-bottom:12px">'
+      +'<div style="font-family:var(--fh);font-size:0.9rem;font-weight:800;color:var(--ac);margin-bottom:10px">'+(MICO[modelo]||'')+' '+modelo+'</div>'+cards+'</div>';
+  });
+  pgEl.innerHTML+='</div>';
 
   var hsLbl=document.getElementById('hsFactorLabel');if(hsLbl)hsLbl.textContent=DATA.high_season_factor||1.4;
   var hsLbl2=document.getElementById('hsFactorLabel2');if(hsLbl2)hsLbl2.textContent=DATA.high_season_factor||1.4;
