@@ -86,6 +86,15 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
 .hmt td{padding:8px 6px;text-align:center;border-radius:6px;font-size:0.77rem;font-weight:700;min-width:48px;cursor:default;transition:transform 0.12s,box-shadow 0.12s}
 .hmt td:hover{transform:scale(1.07);box-shadow:0 0 0 2px var(--ac)}
 .hmt .rl{text-align:left;white-space:nowrap;padding-right:10px;background:transparent!important;font-size:0.79rem;font-weight:500;color:var(--tx)}
+.xlt{width:100%;border-collapse:collapse;font-size:0.78rem}
+.xlt .xlt-title{background:#6abf4a;color:#111;font-weight:800;text-align:center;padding:8px 12px;border:1px solid #2d5016;font-family:var(--fh);font-size:0.82rem;letter-spacing:0.4px;text-transform:uppercase}
+.xlt .xlt-sub{background:#a8d5a2;color:#111;font-weight:700;padding:6px 10px;border:1px solid #2d5016;text-align:center}
+.xlt .xlt-sub.rl{text-align:left;font-style:italic}
+.xlt td,.xlt th{border:1px solid #2d5016;padding:6px 10px;text-align:center}
+.xlt .xlt-color{background:#e2f0e4;color:#111;font-weight:700;text-align:left;white-space:nowrap}
+.xlt .xlt-val{background:#fff;color:#111;font-weight:700}
+.xlt .xlt-zero{color:#aaa}
+.xlt .xlt-tot{background:#c8e6c9;color:#111;font-weight:800}
 .tkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px}
 .tkpi{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:11px;text-align:center}
 .tkpi .tv{font-family:var(--fh);font-size:1.15rem;font-weight:800;color:var(--ac)}
@@ -183,7 +192,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="g2">
     <div class="card" style="grid-column:1/-1">
       <h3>🏭 Producción Sugerida por Variante</h3>
-      <div class="sub">¿Necesita fabricar? · Desglose por color y talla · Manufacturado</div>
+      <div class="sub">Cantidades a producir por color y talla · Sublimado en formato producción</div>
       <div id="propGrid" style="display:flex;flex-direction:column;gap:14px;margin-top:10px"></div>
     </div>
   </div>
@@ -520,6 +529,39 @@ function makeRow(s,col,v,colV,tSug,stk){
     stkBadge+'</div>';
 }
 
+function renderProdExcelTable(modelo,genero,rows,TORD){
+  if(!rows.length) return '';
+  var tallaSet={};
+  rows.forEach(function(r){r.tallas.forEach(function(t){tallaSet[t.talla]=true;});});
+  var tallas=Object.keys(tallaSet).sort(function(a,b){return(TORD[a]||99)-(TORD[b]||99);});
+  var headerLabel='SHORT PLAYA '+modeloLabel(modelo).toUpperCase()+' '+genero;
+  var colTotals={};
+  tallas.forEach(function(t){colTotals[t]=0;});
+  var grandTotal=0;
+  var bodyRows=rows.map(function(cp){
+    var tMap={};
+    cp.tallas.forEach(function(t){tMap[t.talla]=t.produce||0;});
+    var rowTot=0;
+    var cells=tallas.map(function(t){
+      var v=tMap[t]||0;
+      colTotals[t]+=v;
+      rowTot+=v;
+      return '<td class="xlt-val'+(v===0?' xlt-zero':'')+'">'+(v||'')+'</td>';
+    }).join('');
+    grandTotal+=rowTot;
+    return '<tr><td class="xlt-color"><span class="chip" style="background:'+cn(cp.color)+'"></span>'+cp.color+'</td>'+cells+'<td class="xlt-tot">'+rowTot+'</td></tr>';
+  }).join('');
+  var totCells=tallas.map(function(t){return '<td class="xlt-tot">'+(colTotals[t]||'')+'</td>';}).join('');
+  return '<table class="xlt"><thead>'
+    +'<tr><th colspan="'+(tallas.length+2)+'" class="xlt-title">CANTIDADES POR COLORES</th></tr>'
+    +'<tr><th class="xlt-sub rl">'+headerLabel+'</th>'
+    +tallas.map(function(t){return '<th class="xlt-sub">'+t+'</th>';}).join('')
+    +'<th class="xlt-sub">Tot</th></tr></thead><tbody>'
+    +bodyRows
+    +'<tr><td class="xlt-tot" style="text-align:left">TOTAL</td>'+totCells+'<td class="xlt-tot">'+grandTotal+'</td></tr>'
+    +'</tbody></table>';
+}
+
 function rDecisiones(){
   var meses=_decMeses||2;
   var allRows=DATA.raw_rows;
@@ -583,6 +625,22 @@ function rDecisiones(){
         +'<span style="margin-left:auto;font-family:var(--fm);font-size:.78rem;font-weight:800;color:'+cobM+'">'+smry.cob+'m cob</span>'
         +(smry.produce>0?'<span style="background:rgba(245,158,11,.15);color:#f59e0b;border-radius:6px;padding:3px 10px;font-size:.7rem;font-weight:800">Producir '+smry.produce+' und</span>':'<span style="background:rgba(16,185,129,.12);color:#10b981;border-radius:6px;padding:3px 10px;font-size:.7rem">✓ Stock suficiente</span>')
         +'</div>';
+
+      if(modelo==='SHORT PLAYA SUBLIMADO'){
+        ['CAB','KIDS'].forEach(function(genero){
+          var rows=plan.filter(function(r){return r.modelo===modelo&&r.genero===genero;});
+          if(!rows.length) return;
+          rows.sort(function(a,b){return b.produce-a.produce||a.color.localeCompare(b.color);});
+          var gProd=rows.reduce(function(a,r){return a+r.produce;},0);
+          mCard+='<div style="margin-bottom:16px">'
+            +'<div style="font-family:var(--fh);font-size:.78rem;font-weight:700;color:'+gcol(genero)+';margin-bottom:8px">'+(GICO[genero]||'')+' '+genero+(gProd>0?' · producir '+gProd+' und':'')+'</div>'
+            +'<div class="hmw">'+renderProdExcelTable(modelo,genero,rows,TORD)+'</div>'
+            +'</div>';
+        });
+        mCard+='</div>';
+        pgEl.innerHTML+=mCard;
+        return;
+      }
 
       ['CAB','KIDS'].forEach(function(genero){
         var rows=plan.filter(function(r){return r.modelo===modelo&&r.genero===genero;});
