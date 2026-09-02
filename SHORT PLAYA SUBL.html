@@ -209,7 +209,7 @@ var ME_SHORT={october:'Oct',november:'Nov',december:'Dic',january:'Ene',february
 function mlbl(k){var p=k.split('-');return(ME_SHORT[p[0]]||p[0].slice(0,3))+' '+p[1].slice(-2);}
 var REAL_STORES=DATA.all_stores;
 var NEW_STORES=DATA.new_stores||['BARQUISIMETO'];
-var NEW_STORE_CAPS=DATA.new_store_caps||{'BARQUISIMETO':{base:'GRIETA',mult:1,label:'1× GRIETA'}};
+var NEW_STORE_CAPS=DATA.new_store_caps||{'BARQUISIMETO':{type:'avg',bases:['CHACAO','GRIETA'],label:'prom. CHACAO + GRIETA'}};
 var STORE_LABELS={'CERRO VERDE':'C.Verde','GRAND PLAZ':'Grand Plaz','GRIETA':'Grieta','SAMBIL':'Sambil','CHACAO':'Chacao','TOLON':'Tolón','WEB':'Web','PEDIDOS':'Pedidos','CORPORATIVO':'Corporativo','VELA':'Vela','BARQUISIMETO':'Barquisimeto','TALLER':'Taller'};
 var MODELO_ID={'SHORT PLAYA UNICOLOR':'UNICOLOR','SHORT PLAYA SUBLIMADO':'SUBLIMADO'};
 function dcBadge(modelo,color){if((DATA.colores_descontinuados||[]).indexOf(color)>=0)return' <span style="font-size:.58rem;background:rgba(107,114,128,.22);color:#9ca3af;border:1px solid rgba(156,163,175,.25);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">descontinuado</span>';return'';}
