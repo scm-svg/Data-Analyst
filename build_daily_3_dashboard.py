@@ -460,6 +460,43 @@ def compute_tolon(raw_rows):
     return {"v_base": v, "v_mes": round(v / len(base), 1) if base else 0}
 
 
+def compute_store_projection(raw_rows, stores, mult, meses, label):
+    monthly = defaultdict(lambda: defaultdict(float))
+    for r in raw_rows:
+        if r["tienda"] not in stores or r["mes"] not in meses:
+            continue
+        key = (r["modelo"], r["genero"], r["color"], r["talla"])
+        monthly[key][r["tienda"]] += r["v"]
+
+    n = max(len(meses), 1)
+    skus = []
+    total_v = 0.0
+    for key in sorted(monthly):
+        per_store = [monthly[key][s] / n for s in stores]
+        v_mes = round(sum(per_store) / len(stores) * mult * HIGH_SEASON_FACTOR, 2)
+        total_v += v_mes
+        modelo, genero, color, talla = key
+        skus.append({
+            "MODELO": modelo,
+            "GENERO": genero,
+            "COLOR": color,
+            "TALLA": talla,
+            "v_mes": v_mes,
+            "need_1m": max(0, round(v_mes * 1)),
+            "need_2m": max(0, round(v_mes * 2)),
+            "need_3m": max(0, round(v_mes * 3)),
+        })
+
+    return {
+        "v_mes": round(total_v, 1),
+        "need_1m": max(0, round(total_v * 1)),
+        "need_2m": max(0, round(total_v * 2)),
+        "need_3m": max(0, round(total_v * 3)),
+        "nota": label,
+        "skus": skus,
+    }
+
+
 def build_data():
     existing = load_existing_data()
     update_rows = read_ventas_update()
@@ -516,6 +553,29 @@ def build_data():
         "december_base_factor": DEC_BASE_FACTOR,
         "stock_taller": sum(stock_taller.values()),
         "lead_months": LEAD_MONTHS,
+        "new_stores": ["VELA", "BARQUISIMETO"],
+        "new_store_caps": {
+            "VELA": {"base": "GRIE", "mult": 1.5, "label": "1.5× GRIE"},
+            "BARQUISIMETO": {
+                "type": "avg",
+                "bases": ["SAMBIL CHACAO", "GRIE"],
+                "label": "prom. SAMBIL CHACAO + GRIE",
+            },
+        },
+        "barquisimeto": compute_store_projection(
+            raw_rows,
+            ["SAMBIL CHACAO", "GRIE"],
+            1,
+            vel_months,
+            f"prom. SAMBIL CHACAO + GRIE · factor temporada alta ×{HIGH_SEASON_FACTOR} · diciembre base ×{DEC_BASE_FACTOR}",
+        ),
+        "vela": compute_store_projection(
+            raw_rows,
+            ["GRIE"],
+            1.5,
+            vel_months,
+            f"1.5× GRIE · factor temporada alta ×{HIGH_SEASON_FACTOR}",
+        ),
         "margarita": compute_margarita(raw_rows, mult=2.0),
         "tolon": compute_tolon(raw_rows),
         "date_range": (
@@ -565,6 +625,7 @@ def main():
     print(f"prod_curve need_3m total: {sum(r['need_3m'] for r in data['prod_curve'])}")
     print(f"production_plan produce total: {sum(r['produce'] for r in data['production_plan'])}")
     print(f"velocity_months: {data['velocity_months_label']}")
+    print(f"barquisimeto v_mes: {data['barquisimeto']['v_mes']}")
 
 
 if __name__ == "__main__":
