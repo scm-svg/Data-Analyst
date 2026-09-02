@@ -36,6 +36,8 @@ DEFAULT_LAUNCH_COLORS_CONFIG = [
     },
 ]
 NEW_STORES = ["VELA", "BARQUISIMETO"]
+# Participación efectiva de tiendas nuevas en lanzamiento (ramp-up apertura → red ~200-220 und).
+LAUNCH_NEW_STORE_UPTAKE = 0.70
 
 
 def mes_sort_key(mes: str):
@@ -214,6 +216,13 @@ def resolve_store_share(store, shares, new_store_caps):
     return shares.get(store, 0)
 
 
+def launch_network_weight(store_weights, new_stores):
+    """Peso red lanzamiento: tiendas actuales al 100% + nuevas con ramp-up."""
+    existing = sum(w for s, w in store_weights.items() if s not in new_stores)
+    new = sum(w for s, w in store_weights.items() if s in new_stores)
+    return existing + new * LAUNCH_NEW_STORE_UPTAKE
+
+
 def line_velocity_adj(model_rows, genero, vel_months):
     weighted = 0.0
     weights = 0.0
@@ -306,10 +315,10 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 if s in NEW_STORES else shares.get(s, 0)
                 for s in reabast_stores
             }
-            network_weight = sum(store_weights.values())
+            network_weight = launch_network_weight(store_weights, NEW_STORES)
 
-            # Producción red completa: cada tienda = velocidad benchmark × participación × 3m.
-            # Tiendas nuevas suman su participación (VELA, Barquisimeto), sin normalizar ni excluir.
+            # Producción red completa: cada tienda = benchmark × participación × 3m.
+            # Tiendas nuevas incluidas con ramp-up (LAUNCH_NEW_STORE_UPTAKE).
             color_produce = 0.0
             for tr in talla_rows:
                 tr["produce"] = max(0, round(tr["v_mes"] * LEAD_MONTHS * network_weight))
@@ -317,7 +326,10 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
 
             if network_weight > 0:
                 for store in reabast_stores:
-                    store_monthly = color_v * store_weights[store]
+                    weight = store_weights[store]
+                    if store in NEW_STORES:
+                        weight *= LAUNCH_NEW_STORE_UPTAKE
+                    store_monthly = color_v * weight
                     store_total = round(store_monthly * LEAD_MONTHS)
                     if store_total < 1:
                         continue
@@ -341,7 +353,11 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                         "is_new_store": store in NEW_STORES,
                         "total": store_total,
                         "tallas": talla_dist,
-                        "share_pct": round(store_weights[store] / network_weight * 1000) / 10,
+                        "share_pct": round(
+                            (store_weights[store] * (
+                                LAUNCH_NEW_STORE_UPTAKE if store in NEW_STORES else 1
+                            )) / network_weight * 1000
+                        ) / 10,
                     })
 
             bench_label = " · ".join(benchmark_colors)
@@ -354,7 +370,8 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 "benchmark_colors": benchmark_colors,
                 "benchmark_note": (
                     f"Prom. top {top_n}: {bench_label} · red completa "
-                    f"(cada tienda = benchmark × participación × 3m; "
+                    f"(benchmark × participación × 3m; nuevas al "
+                    f"{int(LAUNCH_NEW_STORE_UPTAKE * 100)}% ramp-up; "
                     f"VELA 1.5× GRIETA · BARQUISIMETO prom. CHACAO+GRIETA)"
                 ),
                 "v_mes_base": round(color_v_base, 1),
@@ -464,6 +481,7 @@ def rebuild_data(data: dict) -> dict:
     data["december_base_factor"] = DEC_BASE_FACTOR
     data["new_store_caps"] = new_store_caps
     data["new_stores"] = NEW_STORES
+    data["launch_new_store_uptake"] = LAUNCH_NEW_STORE_UPTAKE
     data["barquisimeto"] = compute_store_projection(
         raw_rows,
         ["CHACAO", "GRIETA"],
