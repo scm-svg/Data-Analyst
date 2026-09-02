@@ -26,6 +26,15 @@ DEC_BASE_FACTOR = 1.4
 LEAD_MONTHS = 3
 UNICOLOR_ACTIVE = {"Verde Pino", "Azul Pizarra", "Azul Verdoso", "Marron", "Cereza"}
 SUBLIMADO_ACTIVE = {"Playuela", "Sal", "Tucupido", "Sombrero"}
+SUBLIMADO_COLOR_ORDER = ["Playuela", "Sal", "Tucupido", "Sombrero"]
+DEFAULT_LAUNCH_COLORS_CONFIG = [
+    {
+        "modelo": "SHORT PLAYA SUBLIMADO",
+        "color": "Nuevo color",
+        "display_after": "Sombrero",
+        "benchmark_top_n": 3,
+    },
+]
 
 
 def mes_sort_key(mes: str):
@@ -173,6 +182,112 @@ def compute_production_plan(raw_rows, stock, stock_taller_by_key, vel_months):
     return production_rows, summary, summary_genero
 
 
+def rank_colors(model_rows, genero, vel_months, exclude=None, top_n=3):
+    exclude = set(exclude or [])
+    color_v = defaultdict(float)
+    for r in model_rows:
+        if r["genero"] != genero or r["mes"] not in vel_months or r["color"] in exclude:
+            continue
+        if not r.get("activo", True):
+            continue
+        color_v[r["color"]] += r["v"] * month_weight(r["mes"])
+    ranked = sorted(color_v.items(), key=lambda x: -x[1])
+    return [color for color, _ in ranked[:top_n]]
+
+
+def compute_launch_plan(raw_rows, vel_months, configs):
+    launch_rows = []
+    for cfg in configs:
+        modelo = cfg["modelo"]
+        color = cfg["color"]
+        top_n = int(cfg.get("benchmark_top_n", 3))
+        after = cfg.get("display_after", "Sombrero")
+        model_rows = [r for r in raw_rows if r["modelo"] == modelo]
+
+        for genero in LINEAS:
+            benchmark_colors = rank_colors(
+                model_rows,
+                genero,
+                vel_months,
+                exclude={color},
+                top_n=top_n,
+            )
+            if not benchmark_colors:
+                continue
+
+            tallas = sorted(
+                {
+                    r["talla"] for r in model_rows
+                    if r["genero"] == genero and r["color"] in benchmark_colors
+                },
+                key=lambda t: (len(t), t),
+            )
+            talla_rows = []
+            color_v = color_v_base = color_produce = 0.0
+
+            for talla in tallas:
+                refs = [
+                    base_velocity(model_rows, genero, ref_color, talla, vel_months)
+                    for ref_color in benchmark_colors
+                ]
+                base_v = sum(refs) / len(refs)
+                v_mes_base = round(base_v, 1)
+                v_mes = round(base_v * HIGH_SEASON_FACTOR, 1)
+                produce = max(0, round(v_mes * LEAD_MONTHS))
+                talla_rows.append({
+                    "talla": talla,
+                    "v_mes_base": v_mes_base,
+                    "v_mes": v_mes,
+                    "stk": 0,
+                    "stk_taller": 0,
+                    "cob": 0,
+                    "produce": produce,
+                    "urgente": True,
+                    "benchmark_refs": [
+                        round(base_velocity(model_rows, genero, ref_color, talla, vel_months), 2)
+                        for ref_color in benchmark_colors
+                    ],
+                })
+                color_v += v_mes
+                color_v_base += v_mes_base
+                color_produce += produce
+
+            if not talla_rows:
+                continue
+
+            bench_label = " · ".join(benchmark_colors)
+            launch_rows.append({
+                "modelo": modelo,
+                "genero": genero,
+                "color": color,
+                "is_launch": True,
+                "display_after": after,
+                "benchmark_colors": benchmark_colors,
+                "benchmark_note": f"Prom. top {top_n}: {bench_label}",
+                "v_mes_base": round(color_v_base, 1),
+                "v_mes": round(color_v, 1),
+                "stk": 0,
+                "stk_taller": 0,
+                "cob": 0,
+                "produce": color_produce,
+                "tallas": talla_rows,
+            })
+
+    summary_launch = {}
+    for modelo in MODELS:
+        rows_m = [r for r in launch_rows if r["modelo"] == modelo]
+        if not rows_m:
+            continue
+        summary_launch[modelo] = {
+            "v_mes_base": round(sum(r["v_mes_base"] for r in rows_m), 1),
+            "v_mes": round(sum(r["v_mes"] for r in rows_m), 1),
+            "produce": sum(r["produce"] for r in rows_m),
+            "colors": sorted({r["color"] for r in rows_m}),
+        }
+
+    return launch_rows, summary_launch
+
+
 def compute_store_projection(raw_rows, stores, mult, meses, label):
     monthly = defaultdict(lambda: defaultdict(float))
     for r in raw_rows:
@@ -224,10 +339,18 @@ def rebuild_data(data: dict) -> dict:
     production_plan, summary_produccion, summary_genero = compute_production_plan(
         raw_rows, stock, stock_taller, vel_months
     )
+    launch_config = data.get("launch_colors_config") or DEFAULT_LAUNCH_COLORS_CONFIG
+    launch_production_plan, summary_launch = compute_launch_plan(
+        raw_rows, vel_months, launch_config
+    )
 
     data["production_plan"] = production_plan
     data["summary_produccion"] = summary_produccion
     data["summary_genero"] = summary_genero
+    data["launch_colors_config"] = launch_config
+    data["launch_production_plan"] = launch_production_plan
+    data["summary_launch"] = summary_launch
+    data["sublimado_color_order"] = SUBLIMADO_COLOR_ORDER
     data["velocity_months"] = vel_months
     data["velocity_months_label"] = " · ".join(month_label(m) for m in vel_months)
     data["velocity_months_count"] = len(vel_months)
@@ -311,7 +434,12 @@ def main():
     print(f"Wrote {HTML_PATH}")
     print(f"high_season_factor: {hs}")
     print(f"barquisimeto v_mes: {barq}")
+    launch_prod = sum(r["produce"] for r in data["launch_production_plan"])
     print(f"total produce: {prod}")
+    print(f"launch produce: {launch_prod}")
+    if data["launch_production_plan"]:
+        row = data["launch_production_plan"][0]
+        print(f"launch sample: {row['genero']} {row['color']} -> {row['produce']} und ({row['benchmark_note']})")
     print(f"new_store_caps BARQUISIMETO: {data['new_store_caps']['BARQUISIMETO']}")
 
 
