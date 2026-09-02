@@ -17,22 +17,26 @@ PARTIAL_MONTH = "septiembre-2026"
 VELOCITY_MONTHS_COUNT = 3
 BASE_STORE = "VELA"
 DECISION_STORES = ["VELA"]
-EXPANSION_STORES = ["VALENCIA", "BARQUISIMETO", "CARACAS"]
+EXPANSION_STORES = ["CARACAS", "VALENCIA", "BARQUISIMETO"]
+PROD_ZONE_ORDER = ["MARGARITA", "CARACAS", "VALENCIA", "BARQUISIMETO"]
 EXPANSION_CAPS = {
+    "CARACAS": {
+        "mult": 1.0,
+        "label": "Modelo exclusivo zona Caracas · incluye Manga Larga",
+        "zone_model": "Modelo Caracas",
+        "modelos": ["SPOTS MANGA CORTA", "SPOTS MANGA LARGA"],
+    },
     "VALENCIA": {
         "mult": 1.0,
         "label": "Modelo exclusivo zona Valencia",
         "zone_model": "Modelo Valencia",
+        "modelos": ["SPOTS MANGA CORTA"],
     },
     "BARQUISIMETO": {
         "mult": 1.0,
         "label": "Modelo exclusivo zona Barquisimeto",
         "zone_model": "Modelo Barquisimeto",
-    },
-    "CARACAS": {
-        "mult": 1.0,
-        "label": "Modelo exclusivo zona Caracas",
-        "zone_model": "Modelo Caracas",
+        "modelos": ["SPOTS MANGA CORTA"],
     },
 }
 ADDITIONAL_COLOR = "Color adicional"
@@ -232,8 +236,13 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         store_blanco = 0
         store_adicional = 0
         skus = []
+        allowed_modelos = set(cap.get("modelos", ["SPOTS MANGA CORTA", "SPOTS MANGA LARGA"]))
         for (modelo, genero, talla), v_base in sorted(groups.items()):
+            if modelo not in allowed_modelos:
+                continue
             v_adj = round(v_base * HIGH_SEASON_FACTOR * mult, 2)
+            need_1m = max(0, round(v_adj * 1))
+            need_2m = max(0, round(v_adj * 2))
             blanco_3m = max(0, round(v_adj * LEAD_MONTHS))
             adicional_3m = max(0, round(v_adj * ADDITIONAL_COLOR_FACTOR * LEAD_MONTHS))
             store_blanco += blanco_3m
@@ -247,6 +256,8 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
                     "talla": talla,
                     "color": "Blanco",
                     "v_mes": v_adj,
+                    "need_1m": need_1m,
+                    "need_2m": need_2m,
                     "need_3m": blanco_3m,
                 })
             if adicional_3m > 0:
@@ -258,6 +269,8 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
                     "talla": talla,
                     "color": ADDITIONAL_COLOR,
                     "v_mes": round(v_adj * ADDITIONAL_COLOR_FACTOR, 2),
+                    "need_1m": max(0, round(need_1m * ADDITIONAL_COLOR_FACTOR)),
+                    "need_2m": max(0, round(need_2m * ADDITIONAL_COLOR_FACTOR)),
                     "need_3m": adicional_3m,
                 })
         expansion["by_store"].append({
@@ -291,6 +304,89 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     return expansion
 
 
+def build_prod_zones(prod_curve, summary_prod, expansion):
+    """Curva de producción segmentada: Margarita → Caracas → Valencia → Barquisimeto."""
+    zones = []
+    margarita_rows = list(prod_curve)
+    zones.append({
+        "zone": "MARGARITA",
+        "label": "Margarita (VELA)",
+        "is_expansion": False,
+        "zone_model": None,
+        "note": "Diseños exclusivos zona · stock y cobertura reales",
+        "summary": {
+            "v_mes": round(sum(r["v_mes"] for r in margarita_rows), 1),
+            "stk_total": sum(r["stk_total"] for r in margarita_rows),
+            "stk_pt": sum(r["stk_pt"] for r in margarita_rows),
+            "need_1m": sum(r["need_1m"] for r in margarita_rows),
+            "need_2m": sum(r["need_2m"] for r in margarita_rows),
+            "need_3m": sum(r["need_3m"] for r in margarita_rows),
+        },
+        "by_modelo": {},
+    })
+    for mod in sorted({r["modelo"] for r in margarita_rows}):
+        rows_m = [r for r in margarita_rows if r["modelo"] == mod]
+        zones[-1]["by_modelo"][mod] = {
+            "summary": summary_prod.get(mod, {}),
+            "rows": rows_m,
+        }
+
+    store_map = {s["store"]: s for s in expansion.get("by_store", [])}
+    for store in [z for z in PROD_ZONE_ORDER if z != "MARGARITA"]:
+        es = store_map.get(store)
+        if not es:
+            continue
+        rows = []
+        for sku in es["skus"]:
+            v = sku["v_mes"]
+            rows.append({
+                "modelo": sku["modelo"],
+                "genero": sku["genero"],
+                "color": sku["color"],
+                "diseno": sku["color"],
+                "zone_model": sku.get("zone_model", es["zone_model"]),
+                "talla": sku["talla"],
+                "v_mes": v,
+                "v_mes_base": round(v / HIGH_SEASON_FACTOR, 2) if HIGH_SEASON_FACTOR else v,
+                "stk_total": 0,
+                "stk_pt": 0,
+                "cobertura": 0,
+                "need_1m": sku.get("need_1m", max(0, round(v))),
+                "need_2m": sku.get("need_2m", max(0, round(v * 2))),
+                "need_3m": sku["need_3m"],
+            })
+        zones.append({
+            "zone": store,
+            "label": store.title(),
+            "is_expansion": True,
+            "zone_model": es["zone_model"],
+            "note": es["label"],
+            "summary": {
+                "v_mes": round(sum(r["v_mes"] for r in rows), 1),
+                "stk_total": 0,
+                "stk_pt": 0,
+                "need_1m": sum(r["need_1m"] for r in rows),
+                "need_2m": sum(r["need_2m"] for r in rows),
+                "need_3m": sum(r["need_3m"] for r in rows),
+                "blanco": es["blanco"],
+                "adicional": es["adicional"],
+            },
+            "by_modelo": {},
+        })
+        for mod in sorted({r["modelo"] for r in rows}):
+            rows_m = [r for r in rows if r["modelo"] == mod]
+            zones[-1]["by_modelo"][mod] = {
+                "summary": {
+                    "v_mes": round(sum(r["v_mes"] for r in rows_m), 1),
+                    "need_1m": sum(r["need_1m"] for r in rows_m),
+                    "need_2m": sum(r["need_2m"] for r in rows_m),
+                    "need_3m": sum(r["need_3m"] for r in rows_m),
+                },
+                "rows": rows_m,
+            }
+    return zones
+
+
 def velocity_months_label(vel_months):
     short = {
         "enero": "Jun", "febrero": "Feb", "marzo": "Mar", "abril": "Abr",
@@ -322,6 +418,7 @@ def rebuild_data() -> dict:
     vel_months = velocity_months(meses_order)
     prod_curve, summary_prod = compute_prod_curve(raw_rows, stock, stock_taller, vel_months)
     expansion = compute_expansion(raw_rows, vel_months, prod_curve)
+    prod_zones = build_prod_zones(prod_curve, summary_prod, expansion)
 
     tiendas = sorted({r["tienda"] for r in raw_rows})
     real_stores = sorted({r["tienda"] for r in raw_rows if r["tienda"] not in {"PEDIDOS", "WEB", "TALLER"}})
@@ -364,6 +461,8 @@ def rebuild_data() -> dict:
         "velocity_months": vel_months,
         "velocity_months_label": " · ".join(velocity_months_label(vel_months)),
         "expansion": expansion,
+        "prod_zones": prod_zones,
+        "prod_zone_order": PROD_ZONE_ORDER,
         "expansion_stores": EXPANSION_STORES,
         "expansion_caps": EXPANSION_CAPS,
         "additional_color": ADDITIONAL_COLOR,
@@ -528,7 +627,7 @@ def patch_html(html: str, data: dict) -> str:
     # Decisiones sub text
     html = html.replace(
         '<div class="sub">Reabastecimiento por tienda (VELA, WEB, PEDIDOS) según ventas del período</div>',
-        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · expansión <strong style="color:#f97316">Valencia</strong>, <strong style="color:#f97316">Barquisimeto</strong> y <strong style="color:#f97316">Caracas</strong> · temp. alta ×<span id="hsFactorLabel">1.2</span></div>',
+        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · expansión <strong style="color:#f97316">Caracas</strong>, <strong style="color:#f97316">Valencia</strong> y <strong style="color:#f97316">Barquisimeto</strong> · temp. alta ×<span id="hsFactorLabel">1.2</span></div>',
     )
 
     # export CSV with diseno
@@ -561,7 +660,7 @@ def patch_html(html: str, data: dict) -> str:
         "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión — 3 zonas</strong><br>Cada zona tiene <strong style=\"color:var(--tx)\">modelo propio</strong>: Blanco + '+((DATA.additional_color)||'Color adicional')+' al <strong style=\"color:var(--tx)\">'+addPct+'%</strong> de Blanco (ref. movimiento Blanco VELA).</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
-        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Valencia · Barquisimeto · Caracas)</div>'\n"
+        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
         "      +'<div style=\"display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px\">'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1.2rem;font-weight:800;color:var(--tx)\">'+(exp.total_expansion||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">und total</span></div>'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#e4e4e7\">'+(exp.total_blanco||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">Blanco</span></div>'\n"
@@ -579,14 +678,108 @@ def patch_html(html: str, data: dict) -> str:
         flags=re.DOTALL,
     )
 
-    html = html.replace(
-        "      // group by color\n      var byColor={};\n      rows.forEach(function(r){\n        if(!byColor[r.color]) byColor[r.color]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0};\n        byColor[r.color].rows.push(r);\n        byColor[r.color].totalStk+=r.stk_total;\n        byColor[r.color].totalNeed1+=r.need_1m;\n        byColor[r.color].totalNeed2+=r.need_2m;\n        byColor[r.color].totalNeed3+=r.need_3m;\n        byColor[r.color].v_mes+=r.v_mes;\n      });\n      var colorKeys=Object.keys(byColor).sort(function(a,b){return byColor[b].v_mes-byColor[a].v_mes;});",
-        "      // group by diseño\n      var byColor={};\n      rows.forEach(function(r){\n        var dk=r.diseno||r.color;\n        if(!byColor[dk]) byColor[dk]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0};\n        byColor[dk].rows.push(r);\n        byColor[dk].totalStk+=r.stk_total;\n        byColor[dk].totalNeed1+=r.need_1m;\n        byColor[dk].totalNeed2+=r.need_2m;\n        byColor[dk].totalNeed3+=r.need_3m;\n        byColor[dk].v_mes+=r.v_mes;\n      });\n      var colorKeys=Object.keys(byColor).sort(function(a,b){return byColor[b].v_mes-byColor[a].v_mes;});",
+    prod_curve_js = r"""  // ── CURVA DE PRODUCCIÓN POR ZONA
+  var prodGrid=document.getElementById('propGrid');
+  if(prodGrid){
+    var zones=DATA.prod_zones||[];
+    prodGrid.innerHTML='';
+    prodGrid.style.display='flex';
+    prodGrid.style.flexDirection='column';
+    prodGrid.style.gap='14px';
+    zones.forEach(function(zn){
+      if(_modelo){
+        var hasMod=zn.by_modelo&&zn.by_modelo[_modelo];
+        if(!hasMod)return;
+      }
+      var sm=zn.summary||{};
+      var totalNeed=meses===1?sm.need_1m:meses===2?sm.need_2m:sm.need_3m;
+      var cob=(!zn.is_expansion&&sm.v_mes>0)?(sm.stk_total/sm.v_mes).toFixed(1):null;
+      var cobColor=cob?(cob<1?'#ef4444':cob<2?'#f59e0b':cob<3?'#3b82f6':'#10b981'):'#f97316';
+      var zoneBorder=zn.is_expansion?'rgba(249,115,22,.35)':'var(--brd)';
+      var zoneBg=zn.is_expansion?'rgba(249,115,22,.04)':'var(--surf)';
+      var modelos=Object.keys(zn.by_modelo||{}).sort();
+      if(_modelo)modelos=modelos.filter(function(m){return m===_modelo;});
+      var modelosHtml='';
+      modelos.forEach(function(mod){
+        var mdata=zn.by_modelo[mod];
+        var mrows=mdata.rows||[];
+        var byGroup={};
+        mrows.forEach(function(r){
+          var gk=zn.is_expansion?r.color:(r.diseno||r.color);
+          if(!byGroup[gk])byGroup[gk]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0};
+          byGroup[gk].rows.push(r);
+          byGroup[gk].totalStk+=r.stk_total||0;
+          byGroup[gk].totalNeed1+=r.need_1m||0;
+          byGroup[gk].totalNeed2+=r.need_2m||0;
+          byGroup[gk].totalNeed3+=r.need_3m||0;
+          byGroup[gk].v_mes+=r.v_mes||0;
+        });
+        var gKeys=Object.keys(byGroup).sort(function(a,b){return byGroup[b].v_mes-byGroup[a].v_mes;});
+        var groupsHtml=gKeys.map(function(gk){
+          var gd=byGroup[gk];
+          var gNeed=meses===1?gd.totalNeed1:meses===2?gd.totalNeed2:gd.totalNeed3;
+          var uid='pg_'+zn.zone+'_'+mod.replace(/\W/g,'_')+'_'+gk.replace(/\W/g,'_');
+          var col=gk==='Blanco'?'#e4e4e7':(gk.toLowerCase().indexOf('adicional')>=0?'#a5b4fc':cn(gk));
+          var sortedRows=gd.rows.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
+          var tallasHtml=sortedRows.map(function(r){
+            var tn=meses===1?r.need_1m:meses===2?r.need_2m:r.need_3m;
+            var tc=r.cobertura<1?'#ef4444':r.cobertura<2?'#f59e0b':r.cobertura<3?'#3b82f6':'#10b981';
+            if(zn.is_expansion)tc='#f97316';
+            return '<div style="display:flex;align-items:center;gap:6px;padding:3px 8px 3px 12px;background:rgba(0,0,0,.15);border-radius:5px;margin-bottom:2px">'
+              +'<span style="font-family:var(--fm);font-size:.68rem;color:var(--mu);width:28px">'+r.talla+'</span>'
+              +'<span style="font-family:var(--fm);font-size:.65rem;color:var(--mu2)">'+(GICO[r.genero]||'')+' '+r.genero+'</span>'
+              +'<span style="font-family:var(--fm);font-size:.65rem;color:var(--mu2)">'+r.v_mes.toFixed(1)+'/mes</span>'
+              +(zn.is_expansion?'':('<span style="font-family:var(--fm);font-size:.65rem;color:var(--mu2)">stk '+r.stk_total+'</span>'
+                +'<span style="font-family:var(--fm);font-size:.65rem;color:'+tc+';font-weight:700">'+r.cobertura.toFixed(1)+'m</span>'))
+              +(tn>0?'<span style="margin-left:auto;background:rgba(245,158,11,.15);color:#f59e0b;border-radius:4px;padding:1px 7px;font-size:.63rem;font-weight:700">+'+tn+' prod</span>':'<span style="margin-left:auto;font-size:.63rem;color:#10b981">✓ OK</span>')
+              +'</div>';
+          }).join('');
+          return '<div style="margin-bottom:6px">'
+            +'<div data-pguid="'+uid+'" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;background:rgba(0,0,0,.15)">'
+            +'<span style="width:9px;height:9px;border-radius:50%;background:'+col+';flex-shrink:0"></span>'
+            +'<span style="font-size:.73rem;font-weight:700;color:var(--tx)">'+gk+'</span>'
+            +'<span style="font-family:var(--fm);font-size:.64rem;color:var(--mu2)">'+gd.v_mes.toFixed(1)+'/mes</span>'
+            +(zn.is_expansion?'':'<span style="font-family:var(--fm);font-size:.64rem;color:var(--mu2)">stk '+gd.totalStk+'</span>')
+            +(gNeed>0?'<span style="background:rgba(245,158,11,.18);color:#f59e0b;border-radius:5px;padding:2px 8px;font-size:.66rem;font-weight:700;margin-left:auto">+'+gNeed+'</span>':'')
+            +'<span style="color:var(--ac);font-size:.62rem;margin-left:4px">&#9658;</span></div>'
+            +'<div id="'+uid+'" style="display:none;margin:4px 0 0 14px;padding:6px 8px;background:var(--s2);border-radius:6px;border-left:2px solid '+col+'44">'+tallasHtml+'</div></div>';
+        }).join('');
+        modelosHtml+='<div style="margin-bottom:10px">'
+          +'<div style="font-family:var(--fh);font-size:.8rem;font-weight:800;color:var(--a2);margin-bottom:8px">'+(MICO[mod]||'')+' '+mod+'</div>'
+          +groupsHtml+'</div>';
+      });
+      var card=document.createElement('div');
+      card.style.cssText='background:'+zoneBg+';border:1px solid '+zoneBorder+';border-radius:12px;padding:14px';
+      card.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">'
+        +'<h3 style="margin:0;font-family:var(--fh);font-size:.92rem">'+(zn.is_expansion?'🆕 ':'🏝️ ')+zn.label+'</h3>'
+        +(zn.zone_model?'<span style="font-size:.68rem;color:var(--mu2)">'+zn.zone_model+'</span>':'')
+        +(zn.is_expansion?'<span style="background:rgba(249,115,22,.15);color:#f97316;border-radius:4px;padding:2px 8px;font-size:.62rem;font-weight:700">Expansión</span>':'')
+        +'<span style="margin-left:auto;font-family:var(--fm);font-size:.78rem;font-weight:800;color:'+cobColor+'">'+(cob?cob+' meses cob':'Proyección '+totalNeed+' und')+'</span>'
+        +'</div>'
+        +(zn.note?'<div style="font-size:.65rem;color:var(--mu2);margin-bottom:10px">'+zn.note+'</div>':'')
+        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
+        +'<div style="text-align:center;background:rgba(99,102,241,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#818cf8">'+(sm.need_1m||0)+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 1 mes</div></div>'
+        +'<div style="text-align:center;background:rgba(245,158,11,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#f59e0b">'+(sm.need_2m||0)+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 2 meses</div></div>'
+        +'<div style="text-align:center;background:rgba(244,63,94,.1);border-radius:8px;padding:8px"><div style="font-family:var(--fm);font-size:1.1rem;font-weight:800;color:#f43f5e">'+(sm.need_3m||0)+'</div><div style="font-size:.63rem;color:var(--mu)">Producir 3 meses</div></div>'
+        +'</div>'
+        +(zn.is_expansion?'':'<div style="font-size:.67rem;color:var(--mu2);margin-bottom:8px">📦 PT taller: '+(sm.stk_pt||0)+' und &nbsp;·&nbsp; Base VELA × '+hs+' temp. alta · '+((DATA.velocity_months_label)||'')+'</div>')
+        +modelosHtml;
+      prodGrid.appendChild(card);
+    });
+  }
+
+"""
+    html = re.sub(
+        r"  // ── (?:PRODUCTION CURVE|CURVA DE PRODUCCIÓN POR ZONA).*?(?=  // ── REABASTECIMIENTO)",
+        lambda _m: prod_curve_js,
+        html,
+        count=1,
+        flags=re.DOTALL,
     )
 
     html = html.replace(
-        "'<div style=\"font-size:.67rem;color:var(--mu2);margin-bottom:8px\">📦 PT taller: '+smry.stk_pt+' und &nbsp;·&nbsp; Velocidad: meses cerrados (Jul parcial excluido)</div>'",
-        "'<div style=\"font-size:.67rem;color:var(--mu2);margin-bottom:8px\">📦 PT taller: '+smry.stk_pt+' und &nbsp;·&nbsp; Base VELA × '+hs+' temp. alta · '+((DATA.velocity_months_label)||'')+'</div>'",
+        "<h3>🏭 Curva de Producción por Modelo</h3>\n      <div class=\"sub\">Cobertura (meses) y producción neta por color/talla · CAB y DAMA</div>\n      <div id=\"propGrid\" style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:10px\"></div>",
+        "<h3>🏭 Curva de Producción por Zona</h3>\n      <div class=\"sub\">Margarita → Caracas → Valencia → Barquisimeto · diseños expandibles con variantes a producir</div>\n      <div id=\"propGrid\" style=\"display:flex;flex-direction:column;gap:14px;margin-top:10px\"></div>",
     )
 
     # Replace old MARGARITA reabast with expansion stores
@@ -717,9 +910,9 @@ def patch_html(html: str, data: dict) -> str:
 
     sub_new = (
         '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · '
-        'expansión <strong style="color:#f97316">Valencia</strong>, '
-        '<strong style="color:#f97316">Barquisimeto</strong> y '
-        '<strong style="color:#f97316">Caracas</strong> · temp. alta ×'
+        'expansión <strong style="color:#f97316">Caracas</strong>, '
+        '<strong style="color:#f97316">Valencia</strong> y '
+        '<strong style="color:#f97316">Barquisimeto</strong> · temp. alta ×'
         '<span id="hsFactorLabel">1.2</span></div>'
     )
     html = re.sub(
