@@ -11,16 +11,29 @@ HTML_PATH = Path(__file__).resolve().parent / "SPOTS DASHBOARD.html"
 VENTAS_PATH = Path(__file__).resolve().parent / "data" / "spots_ventas.csv"
 INV_PATH = Path(__file__).resolve().parent / "data" / "spots_inventario.csv"
 
-HIGH_SEASON_FACTOR = 1.4
+HIGH_SEASON_FACTOR = 1.2
 LEAD_MONTHS = 3
 PARTIAL_MONTH = "septiembre-2026"
 VELOCITY_MONTHS_COUNT = 3
 BASE_STORE = "VELA"
 DECISION_STORES = ["VELA"]
-EXPANSION_STORES = ["VALENCIA", "BARQUISIMETO"]
+EXPANSION_STORES = ["VALENCIA", "BARQUISIMETO", "CARACAS"]
 EXPANSION_CAPS = {
-    "VALENCIA": {"mult": 1.0, "label": "1× VELA Margarita"},
-    "BARQUISIMETO": {"mult": 0.85, "label": "0.85× VELA"},
+    "VALENCIA": {
+        "mult": 1.0,
+        "label": "Modelo exclusivo zona Valencia",
+        "zone_model": "Modelo Valencia",
+    },
+    "BARQUISIMETO": {
+        "mult": 1.0,
+        "label": "Modelo exclusivo zona Barquisimeto",
+        "zone_model": "Modelo Barquisimeto",
+    },
+    "CARACAS": {
+        "mult": 1.0,
+        "label": "Modelo exclusivo zona Caracas",
+        "zone_model": "Modelo Caracas",
+    },
 }
 ADDITIONAL_COLOR = "Color adicional"
 ADDITIONAL_COLOR_FACTOR = 0.70
@@ -178,7 +191,11 @@ def compute_prod_curve(raw_rows, stock, stock_taller, vel_months):
 
 
 def compute_expansion(raw_rows, vel_months, prod_rows):
-    """Proyección expansión: Blanco desde VELA + color adicional al 70%."""
+    """Proyección por zona: modelo propio Blanco + color adicional (70%).
+
+    Referencia de velocidad = movimiento Blanco VELA (mix talla/línea, sin diseños).
+    Los diseños actuales de VELA son exclusivos Margarita y NO van a otras zonas.
+    """
     store_rows = [r for r in raw_rows if r["tienda"] == BASE_STORE]
     expansion = {
         "base_store": BASE_STORE,
@@ -187,6 +204,10 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "high_season_factor": HIGH_SEASON_FACTOR,
         "lead_months": LEAD_MONTHS,
+        "vela_exclusive_note": (
+            "Diseños VELA (Nueva Esparta, Virgen del Valle, Manga Larga, etc.) "
+            "son exclusivos de la zona Margarita"
+        ),
         "by_store": [],
         "by_color": [],
         "total_blanco": 0,
@@ -194,28 +215,24 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         "total_expansion": 0,
     }
 
-    # Agrupar velocidad Blanco por modelo/genero/diseno/talla desde VELA
+    # Velocidad referencia: Blanco VELA agregado por línea/género/talla (sin diseño)
     groups = defaultdict(float)
     for r in store_rows:
         if r["color"].lower() != "blanco":
             continue
         if r["mes"] not in vel_months:
             continue
-        k = (r["modelo"], r["genero"], r["diseno"], r["talla"])
+        k = (r["modelo"], r["genero"], r["talla"])
         groups[k] += r["v"] / len(vel_months)
-
-    talla_mix = {}
-    total_v = sum(groups.values())
-    for k, v in groups.items():
-        talla_mix[k] = v / total_v if total_v > 0 else 0
 
     for store in EXPANSION_STORES:
         cap = EXPANSION_CAPS[store]
         mult = cap.get("mult", 1)
+        zone_model = cap.get("zone_model", f"Modelo {store.title()}")
         store_blanco = 0
         store_adicional = 0
         skus = []
-        for (modelo, genero, diseno, talla), v_base in sorted(groups.items()):
+        for (modelo, genero, talla), v_base in sorted(groups.items()):
             v_adj = round(v_base * HIGH_SEASON_FACTOR * mult, 2)
             blanco_3m = max(0, round(v_adj * LEAD_MONTHS))
             adicional_3m = max(0, round(v_adj * ADDITIONAL_COLOR_FACTOR * LEAD_MONTHS))
@@ -225,7 +242,8 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
                 skus.append({
                     "modelo": modelo,
                     "genero": genero,
-                    "diseno": diseno,
+                    "diseno": zone_model,
+                    "zone_model": zone_model,
                     "talla": talla,
                     "color": "Blanco",
                     "v_mes": v_adj,
@@ -235,7 +253,8 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
                 skus.append({
                     "modelo": modelo,
                     "genero": genero,
-                    "diseno": diseno,
+                    "diseno": zone_model,
+                    "zone_model": zone_model,
                     "talla": talla,
                     "color": ADDITIONAL_COLOR,
                     "v_mes": round(v_adj * ADDITIONAL_COLOR_FACTOR, 2),
@@ -244,6 +263,7 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         expansion["by_store"].append({
             "store": store,
             "label": cap.get("label", ""),
+            "zone_model": zone_model,
             "blanco": store_blanco,
             "adicional": store_adicional,
             "total": store_blanco + store_adicional,
@@ -255,13 +275,18 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     expansion["total_expansion"] = expansion["total_blanco"] + expansion["total_adicional"]
     expansion["by_color"] = [
         {"color": "Blanco", "need_3m": expansion["total_blanco"]},
-        {"color": ADDITIONAL_COLOR, "need_3m": expansion["total_adicional"],
-         "note": f"{int(ADDITIONAL_COLOR_FACTOR * 100)}% vs Blanco"},
+        {
+            "color": ADDITIONAL_COLOR,
+            "need_3m": expansion["total_adicional"],
+            "note": f"{int(ADDITIONAL_COLOR_FACTOR * 100)}% vs Blanco",
+        },
     ]
+    zones_label = ", ".join(EXPANSION_STORES)
     expansion["nota"] = (
-        f"Base {BASE_STORE} · vel. {', '.join(velocity_months_label(vel_months))} "
-        f"× {HIGH_SEASON_FACTOR} temp. alta · {LEAD_MONTHS}m cobertura · "
-        f"{ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}% de Blanco"
+        f"Ref. velocidad VELA Blanco ({', '.join(velocity_months_label(vel_months))}) "
+        f"× {HIGH_SEASON_FACTOR} temp. alta · {LEAD_MONTHS}m · {zones_label}. "
+        f"Cada zona: modelo propio Blanco + {ADDITIONAL_COLOR} al "
+        f"{int(ADDITIONAL_COLOR_FACTOR * 100)}%. Diseños VELA no se replican."
     )
     return expansion
 
@@ -382,7 +407,7 @@ def patch_html(html: str, data: dict) -> str:
     # Replace NEW_STORES config
     html = re.sub(
         r"var NEW_STORES=\['MARGARITA','TOLON'\];",
-        "var NEW_STORES=DATA.expansion_stores||['VALENCIA','BARQUISIMETO'];",
+        "var NEW_STORES=DATA.expansion_stores||['VALENCIA','BARQUISIMETO','CARACAS'];",
         html,
     )
     html = re.sub(
@@ -458,7 +483,7 @@ def patch_html(html: str, data: dict) -> str:
         "}",
         "function getLF(genero,meses,modelo){\n"
         "  var mO=DATA.meses_order.slice(-meses);\n"
-        "  var hs=DATA.high_season_factor||1.4;\n"
+        "  var hs=DATA.high_season_factor||1.2;\n"
         "  var r=DATA.raw_rows.filter(function(r){return r.tienda==='VELA'&&r.genero===genero&&r.modelo===modelo&&mO.indexOf(r.mes)>=0;});\n"
         "  return Math.round(r.reduce(function(a,x){return a+x.v;},0)/meses*hs);\n"
         "}",
@@ -503,7 +528,7 @@ def patch_html(html: str, data: dict) -> str:
     # Decisiones sub text
     html = html.replace(
         '<div class="sub">Reabastecimiento por tienda (VELA, WEB, PEDIDOS) según ventas del período</div>',
-        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · expansión <strong style="color:#f97316">Valencia</strong> y <strong style="color:#f97316">Barquisimeto</strong> · temp. alta ×<span id="hsFactorLabel">1.4</span></div>',
+        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · expansión <strong style="color:#f97316">Valencia</strong>, <strong style="color:#f97316">Barquisimeto</strong> y <strong style="color:#f97316">Caracas</strong> · temp. alta ×<span id="hsFactorLabel">1.2</span></div>',
     )
 
     # export CSV with diseno
@@ -513,31 +538,45 @@ def patch_html(html: str, data: dict) -> str:
     )
 
     # Decisiones: methodology + expansion + diseno grouping
-    html = html.replace(
-        "function rDecisiones(){\n  var meses=_decMeses||2;",
+    dec_methodology_js = (
         "function rDecisiones(){\n  var meses=_decMeses||2;\n"
-        "  var hs=DATA.high_season_factor||1.4;\n"
+        "  var hs=DATA.high_season_factor||1.2;\n"
         "  var hsLbl=document.getElementById('hsFactorLabel');if(hsLbl)hsLbl.textContent=hs;\n"
         "  var decHdr=document.getElementById('decMethodology');\n"
         "  if(decHdr){\n"
         "    var velLbl=DATA.velocity_months_label||'';\n"
         "    var exp=DATA.expansion||{};\n"
         "    var addPct=Math.round((DATA.additional_color_factor||0.7)*100);\n"
+        "    var zoneCards=(exp.by_store||[]).map(function(z){\n"
+        "      return '<div style=\"background:rgba(0,0,0,.12);border-radius:8px;padding:8px 10px\">'\n"
+        "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <span style=\"color:var(--tx)\">'+(z.zone_model||'')+'</span>'\n"
+        "        +'<div style=\"font-size:.64rem;margin-top:4px\">'+z.total+' und · Blanco <strong>'+z.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+z.adicional+'</strong></div></div>';\n"
+        "    }).join('');\n"
         "    decHdr.innerHTML='<div style=\"background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem\">📋 Metodología — rotación y producción</div>'\n"
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px\">'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda</strong><br>Velocidad base = ventas <strong style=\"color:var(--tx)\">VELA Margarita</strong> en '+velLbl+' (sin '+((DATA.partial_month||'mes parcial').split('-')[0])+').</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Velocidad base = ventas <strong style=\"color:var(--tx)\">VELA Margarita</strong> en '+velLbl+' (sin '+((DATA.partial_month||'mes parcial').split('-')[0])+').</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Temporada alta</strong><br>Rotación ajustada = base × <strong style=\"color:var(--tx)\">'+hs+'</strong> para cobertura y producción.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión Valencia + Barquisimeto</strong><br>Proyección 3 meses desde movimiento Blanco en VELA. <strong style=\"color:var(--tx)\">'+((DATA.additional_color)||'Color adicional')+'</strong> al <strong style=\"color:var(--tx)\">'+addPct+'%</strong> de Blanco (30% menos).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Diseños exclusivos Margarita</strong><br>Nueva Esparta, Virgen del Valle, Manga Larga, etc. <strong style=\"color:var(--tx)\">no van</strong> a Valencia, Barquisimeto ni Caracas.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión — 3 zonas</strong><br>Cada zona tiene <strong style=\"color:var(--tx)\">modelo propio</strong>: Blanco + '+((DATA.additional_color)||'Color adicional')+' al <strong style=\"color:var(--tx)\">'+addPct+'%</strong> de Blanco (ref. movimiento Blanco VELA).</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
-        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses</div>'\n"
+        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Valencia · Barquisimeto · Caracas)</div>'\n"
         "      +'<div style=\"display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px\">'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1.2rem;font-weight:800;color:var(--tx)\">'+(exp.total_expansion||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">und total</span></div>'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#e4e4e7\">'+(exp.total_blanco||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">Blanco</span></div>'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#a5b4fc\">'+(exp.total_adicional||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">'+((DATA.additional_color)||'Color adicional')+'</span></div>'\n"
-        "      +'</div><div style=\"font-size:.65rem;color:var(--mu2)\">'+(exp.nota||'')+'</div></div>';\n"
-        "  }\n",
+        "      +'</div>'\n"
+        "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px\">'+zoneCards+'</div>'\n"
+        "      +'<div style=\"font-size:.65rem;color:var(--mu2)\">'+(exp.nota||'')+'</div></div>';\n"
+        "  }\n"
+    )
+    html = re.sub(
+        r"function rDecisiones\(\)\{\s*var meses=_decMeses\|\|2;.*?(?=\n  var TORD=)",
+        dec_methodology_js,
+        html,
+        count=1,
+        flags=re.DOTALL,
     )
 
     html = html.replace(
@@ -616,26 +655,26 @@ def patch_html(html: str, data: dict) -> str:
       +'</div>';
   }"""
 
-    new_reabast = """  // ── REABASTECIMIENTO VELA + expansión Valencia / Barquisimeto
+    new_reabast = """  // ── REABASTECIMIENTO VELA + expansión Valencia / Barquisimeto / Caracas
   var reabastGrid=document.getElementById('reabastGrid');
   if(reabastGrid){
     var tiendaData={};
     // VELA histórico (solo tienda física)
     var velaRows=DATA.raw_rows.filter(function(r){return r.tienda==='VELA';});
     var swVela=getSW(velaRows,'CAB','SPOTS MANGA CORTA');
-    tiendaData['VELA']={v:velaRows.reduce(function(a,r){return a+r.v;},0),items:{},proyectada:false,nota:'Tienda ancla · Margarita'};
+    tiendaData['VELA']={v:velaRows.reduce(function(a,r){return a+r.v;},0),items:{},proyectada:false,nota:'Tienda ancla · Margarita · diseños exclusivos zona'};
     velaRows.forEach(function(r){
       var k=(r.diseno||r.color)+' / '+r.talla+' · '+r.genero;
       tiendaData['VELA'].items[k]=(tiendaData['VELA'].items[k]||0)+r.v;
     });
-    // Tiendas expansión desde DATA.expansion
+    // Tiendas expansión desde DATA.expansion (modelo propio por zona)
     (DATA.expansion&&DATA.expansion.by_store||[]).forEach(function(es){
       var items={};
       es.skus.forEach(function(s){
-        var k=s.color+' / '+s.talla+' · '+s.genero+' · '+(s.diseno||'');
+        var k=s.color+' / '+s.talla+' · '+s.genero+' · '+(s.zone_model||s.diseno||'');
         items[k]=(items[k]||0)+s.need_3m;
       });
-      tiendaData[es.store+' 🆕']={v:es.total,blanco:es.blanco,adicional:es.adicional,items:items,proyectada:true,nota:es.label};
+      tiendaData[es.store+' 🆕']={v:es.total,blanco:es.blanco,adicional:es.adicional,zone_model:es.zone_model,items:items,proyectada:true,nota:es.label};
     });
     var tiendas=Object.keys(tiendaData).sort(function(a,b){return tiendaData[b].v-tiendaData[a].v;});
     reabastGrid.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">'
@@ -649,7 +688,7 @@ def patch_html(html: str, data: dict) -> str:
           +'<span style="font-weight:700;font-size:.8rem">🏪 '+t+'</span>'
           +(isNew?'<span style="background:rgba(249,115,22,.15);color:#f97316;border-radius:4px;padding:1px 6px;font-size:.61rem">Expansión</span>':'')
           +'</div>'
-          +(td.nota?'<div style="font-size:.62rem;color:var(--mu2);margin-bottom:6px">'+td.nota+'</div>':'')
+          +(td.nota?'<div style="font-size:.62rem;color:var(--mu2);margin-bottom:6px">'+td.nota+(td.zone_model?' · <strong style="color:var(--tx)">'+td.zone_model+'</strong>':'')+'</div>':'')
           +(isNew?'<div style="font-size:.64rem;color:var(--mu);margin-bottom:8px">'+td.v+' und · Blanco <strong>'+td.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+td.adicional+'</strong></div>'
             :'<div style="font-family:var(--fm);font-size:.68rem;color:var(--mu);margin-bottom:8px">'+td.v+' und vendidas (histórico)</div>')
           +topItems.map(function(k){
@@ -665,8 +704,35 @@ def patch_html(html: str, data: dict) -> str:
 
     if old_reabast in html:
         html = html.replace(old_reabast, new_reabast)
+    elif "// ── REABASTECIMIENTO VELA + expansión" in html:
+        html = re.sub(
+            r"  // ── REABASTECIMIENTO VELA \+ expansión.*?(?=\n\}\n\nfunction renderReabast)",
+            new_reabast.rstrip(),
+            html,
+            count=1,
+            flags=re.DOTALL,
+        )
     else:
         print("WARN: reabast block not found for replacement")
+
+    sub_new = (
+        '<div class="sub">Foco tienda <strong style="color:var(--tx)">VELA Margarita</strong> · '
+        'expansión <strong style="color:#f97316">Valencia</strong>, '
+        '<strong style="color:#f97316">Barquisimeto</strong> y '
+        '<strong style="color:#f97316">Caracas</strong> · temp. alta ×'
+        '<span id="hsFactorLabel">1.2</span></div>'
+    )
+    html = re.sub(
+        r'<div class="sub">Foco tienda.*?id="hsFactorLabel">[^<]+</span></div>',
+        sub_new,
+        html,
+        count=1,
+    )
+    html = html.replace("DATA.high_season_factor||1.4", "DATA.high_season_factor||1.2")
+    html = html.replace(
+        "DATA.expansion_stores||['VALENCIA','BARQUISIMETO']",
+        "DATA.expansion_stores||['VALENCIA','BARQUISIMETO','CARACAS']",
+    )
 
     # Add decMethodology container
     if 'id="decMethodology"' not in html:
