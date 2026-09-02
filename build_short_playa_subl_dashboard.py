@@ -268,7 +268,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 base_v = sum(refs) / len(refs)
                 v_mes_base = round(base_v, 1)
                 v_mes = round(base_v * HIGH_SEASON_FACTOR, 1)
-                produce_qty = max(0, round(v_mes * LEAD_MONTHS))
                 talla_v_map[talla] = v_mes
                 talla_rows.append({
                     "talla": talla,
@@ -277,7 +276,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                     "stk": 0,
                     "stk_taller": 0,
                     "cob": 0,
-                    "produce": produce_qty,
+                    "produce": 0,
                     "urgente": True,
                     "benchmark_refs": [
                         round(base_velocity(model_rows, genero, ref_color, talla, vel_months), 2)
@@ -286,7 +285,6 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 })
                 color_v += v_mes
                 color_v_base += v_mes_base
-                color_produce += produce_qty
 
             if not talla_rows:
                 continue
@@ -308,10 +306,19 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 if s in NEW_STORES else shares.get(s, 0)
                 for s in reabast_stores
             }
-            total_w = sum(store_weights.values())
-            if total_w > 0:
+            network_weight = sum(store_weights.values())
+
+            # Producción red completa: cada tienda = velocidad benchmark × participación × 3m.
+            # Tiendas nuevas suman su participación (VELA, Barquisimeto), sin normalizar ni excluir.
+            color_produce = 0.0
+            for tr in talla_rows:
+                tr["produce"] = max(0, round(tr["v_mes"] * LEAD_MONTHS * network_weight))
+                color_produce += tr["produce"]
+
+            if network_weight > 0:
                 for store in reabast_stores:
-                    store_total = round(color_produce * store_weights[store] / total_w)
+                    store_monthly = color_v * store_weights[store]
+                    store_total = round(store_monthly * LEAD_MONTHS)
                     if store_total < 1:
                         continue
                     talla_dist = []
@@ -334,7 +341,7 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                         "is_new_store": store in NEW_STORES,
                         "total": store_total,
                         "tallas": talla_dist,
-                        "share_pct": round(store_weights[store] / total_w * 1000) / 10,
+                        "share_pct": round(store_weights[store] / network_weight * 1000) / 10,
                     })
 
             bench_label = " · ".join(benchmark_colors)
@@ -347,7 +354,8 @@ def compute_launch_plan(raw_rows, vel_months, configs, new_store_caps, decision_
                 "benchmark_colors": benchmark_colors,
                 "benchmark_note": (
                     f"Prom. top {top_n}: {bench_label} · red completa "
-                    f"(VELA 1.5× GRIETA · BARQUISIMETO prom. CHACAO+GRIETA)"
+                    f"(cada tienda = benchmark × participación × 3m; "
+                    f"VELA 1.5× GRIETA · BARQUISIMETO prom. CHACAO+GRIETA)"
                 ),
                 "v_mes_base": round(color_v_base, 1),
                 "v_mes": round(color_v, 1),
