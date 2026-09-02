@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Cuadro · Capacidad instalada y plan de maquinaria</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--a2:#f75b8a;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--or:#f97316;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+body.light{--bg:#f5f6fa;--surf:#fff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;--tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5;--ac:#4f5fe8;--a2:#e14b7a;--gr:#2e9e5e;--rd:#dc3545;--yw:#c99200;--or:#ea6a0a}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0d0e13 0%,#191a2d 55%,#0d0e13 100%);border-bottom:1px solid var(--brd);padding:16px 36px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3 100%)}
+.hdr-l h1{font-family:var(--fh);font-size:1.35rem;font-weight:800;letter-spacing:-.4px}
+.hdr-l h1 em{color:var(--ac);font-style:normal}
+.hdr-l p{color:var(--mu);font-size:.74rem;margin-top:2px}
+.hdr-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:8px 12px;text-align:center;min-width:88px}
+.kpib .kv{font-family:var(--fh);font-size:1.18rem;font-weight:800;line-height:1}
+.kpib .kl{font-size:.6rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.theme-btn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb)}
+.tabs{display:flex;gap:2px;padding:10px 36px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:9px 14px;font-family:var(--fh);font-size:.74rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;border-radius:6px 6px 0 0}
+.tab.active{color:var(--tx);border-bottom-color:var(--ac);background:var(--s2)}
+.content{padding:18px 36px 40px;max-width:1440px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+.g1{margin-bottom:12px}
+@media(max-width:1100px){.g4,.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:780px){.g2,.g3,.g4{grid-template-columns:1fr}.content,.tabs,.hdr{padding-left:14px;padding-right:14px}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:14px 16px}
+.card h3{font-family:var(--fh);font-size:.86rem;font-weight:700;margin-bottom:2px}
+.sub{font-size:.68rem;color:var(--mu);margin-bottom:10px}
+.cw{position:relative;height:230px}.cw.t{height:280px}.cw.s{height:170px}
+.dec{border-left:3px solid var(--ac);background:var(--s2);border-radius:8px;padding:10px 12px;font-size:.8rem;color:var(--tx);margin-top:8px}
+.dec b{color:var(--ac)}
+.dec.warn{border-left-color:var(--rd)}
+.dec.ok{border-left-color:var(--gr)}
+.dec.amb{border-left-color:var(--yw)}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th{font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);padding:6px 7px;text-align:left;border-bottom:1px solid var(--brd)}
+td{padding:6px 7px;border-bottom:1px solid var(--brd);vertical-align:top}
+tr:last-child td{border:none}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--fh);font-weight:700;white-space:nowrap}
+.tag{display:inline-block;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:99px}
+.t-ok{background:rgba(76,175,118,.18);color:var(--gr)}
+.t-amb{background:rgba(255,193,7,.18);color:var(--yw)}
+.t-red{background:rgba(239,68,68,.18);color:var(--rd)}
+.tot td{font-weight:800;background:var(--s2);color:var(--tx)}
+.scen{border:1px solid var(--brd);border-radius:12px;padding:14px;background:var(--s2)}
+.scen .lab{font-size:.62rem;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);font-weight:700}
+.scen .big{font-family:var(--fh);font-size:1.7rem;font-weight:800;line-height:1.1;margin:6px 0 4px}
+.scen .delta{font-size:.78rem;font-weight:700}
+.up{color:var(--gr)}.dn{color:var(--rd)}.neu{color:var(--mu)}
+.barrow{display:flex;align-items:center;gap:8px;margin:6px 0}
+.barrow .nm{width:72px;font-size:.72rem;color:var(--mu)}
+.track{flex:1;height:8px;background:var(--s3);border-radius:99px;overflow:hidden}
+.fill{height:100%;border-radius:99px}
+.footer{text-align:center;color:var(--mu);font-size:.66rem;padding:12px 36px 24px;border-top:1px solid var(--brd)}
+.scroll{overflow:auto}
+@media print{
+  .theme-btn,.tabs{display:none!important}
+  .sec{display:block!important;break-inside:avoid;margin-bottom:18px}
+  body{background:#fff!important;color:#111!important}
+}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-l">
+    <h1>Capacidad instalada · <em>Cuadro</em></h1>
+    <p>Dashboard del informe · solo cifras, tablas, gráficos y decisiones · fuente: Informe de capacidad e inversión en maquinaria</p>
+  </div>
+  <div class="hdr-r">
+    <div class="kpib"><div class="kv" style="color:var(--ac)">2.940</div><div class="kl">Ops/día teórica</div></div>
+    <div class="kpib"><div class="kv" style="color:var(--gr)">2.649</div><div class="kl">Ops/día real</div></div>
+    <div class="kpib"><div class="kv" style="color:var(--rd)">−290</div><div class="kl">Pérdida / día · 10%</div></div>
+    <div class="kpib"><div class="kv" style="color:var(--a2)">16,14%</div><div class="kl">Reproceso QA</div></div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️ Light</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="st('diag')">1 · Diagnóstico</button>
+  <button class="tab" onclick="st('prob')">2 · Problema</button>
+  <button class="tab" onclick="st('imp')">3 · Impacto</button>
+  <button class="tab" onclick="st('plan')">4 · Plan de inversión</button>
+  <button class="tab" onclick="st('dem')">5 · Demanda</button>
+  <button class="tab" onclick="st('dec')">7 · Decisiones</button>
+</div>
+
+<div class="content">
+
+<!-- ═══════ 1 DIAGNÓSTICO ═══════ -->
+<div class="sec active" id="sec-diag">
+  <div class="g4">
+    <div class="card"><div class="sub">Capacidad diaria</div><div class="scen"><div class="lab">Teórica → Real</div><div class="big">2.940 → 2.649</div><div class="delta dn">−291 ops/día</div></div></div>
+    <div class="card"><div class="sub">Capacidad mensual (×20 d)</div><div class="scen"><div class="lab">Teórica → Real</div><div class="big">58.800 → 52.980</div><div class="delta dn">−5.820 ops/mes</div></div></div>
+    <div class="card"><div class="sub">Utilización</div><div class="scen"><div class="lab">No es métrica de éxito</div><div class="big">90%</div><div class="delta neu">Pérdida estructural 10%</div></div></div>
+    <div class="card"><div class="sub">Estatus del taller (informe)</div><div class="scen"><div class="lab">Teórico 100%</div><div class="big" style="font-size:1.25rem">64%</div><div class="delta dn">Inactivo o parcial</div></div></div>
+  </div>
+  <div class="g2">
+    <div class="card"><h3>Teórica vs real por línea</h3><div class="sub">Ops/día · suma L1–L4 = 2.940 / 2.649</div><div class="cw t"><canvas id="cLineas"></canvas></div></div>
+    <div class="card"><h3>Pérdida por línea</h3><div class="sub">L3 concentra el tapón de ruedo</div><div class="cw t"><canvas id="cPerdida"></canvas></div>
+      <div class="dec warn"><b>Decisión.</b> 90% de utilización = saturación de un techo recortado, no eficiencia.</div>
+    </div>
+  </div>
+  <div class="card g1">
+    <h3>Detalle de operaciones por línea</h3>
+    <div class="sub">Estudios de tiempo · Overlock L2 al 80% y Collaret L3 al 50% por alerta de operador</div>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Línea</th><th>Máquina</th><th>Operación</th><th>Estatus</th><th class="num">Teórica</th><th class="num">Real</th><th class="num">Δ</th></tr></thead>
+      <tbody id="opsBody"></tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ 2 PROBLEMA ═══════ -->
+<div class="sec" id="sec-prob">
+  <div class="g3">
+    <div class="card">
+      <h3>Colapso L3 y L4</h3>
+      <div class="sub">Collareteras de ruedo inactivas o al 50%</div>
+      <table>
+        <tr><td>L3 Ruedo</td><td><span class="tag t-amb">50%</span></td><td class="num">101 → 50,5</td></tr>
+        <tr><td>L3 Ruedo extra</td><td><span class="tag t-red">Inactiva</span></td><td class="num">100 → 0</td></tr>
+        <tr><td>L4 Ruedo extra</td><td><span class="tag t-red">Inactiva</span></td><td class="num">100 → 0</td></tr>
+        <tr><td>L2 Overlock</td><td><span class="tag t-amb">80%</span></td><td class="num">190 → 150</td></tr>
+      </table>
+      <div class="dec warn"><b>Decisión.</b> WIP masivo inmoviliza capital. Prioridad: ruedo L3/L4.</div>
+    </div>
+    <div class="card">
+      <h3>Cuello invisible · Rectas</h3>
+      <div class="sub">No entra al KPI de 2.940 ops/día</div>
+      <div class="scen" style="margin-top:8px"><div class="lab">Rectas operativas / líneas</div><div class="big">2 / 4</div><div class="delta dn">Recurso compartido saturado</div></div>
+      <div class="dec amb" style="margin-top:10px"><b>Decisión.</b> En Clásica y Basic Line el techo real es más estrecho que el KPI general. Las 4 líneas compiten por 2 rectas.</div>
+    </div>
+    <div class="card">
+      <h3>Reproceso QA · Costura</h3>
+      <div class="sub">Remate / Pedidos QA</div>
+      <div class="cw s"><canvas id="cQa"></canvas></div>
+      <table>
+        <tr><td>Inspeccionadas</td><td class="num">10.502</td></tr>
+        <tr><td>Rechazadas</td><td class="num">1.695</td></tr>
+        <tr><td>Tasa</td><td class="num" style="color:var(--rd)">16,14%</td></tr>
+      </table>
+      <div class="dec warn"><b>Decisión.</b> 16 de cada 100 prendas se retrabajan: consumen máquina y gente que deberían hacer prenda nueva.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Defectología · costos ocultos a monetizar</h3>
+    <div class="g3" style="margin:0">
+      <div class="scen"><div class="lab">Costura ondulada</div><div class="delta dn" style="margin-top:8px">Diferenciales gastados deforman la pieza</div></div>
+      <div class="scen"><div class="lab">Manchas de aceite</div><div class="delta dn" style="margin-top:8px">Segundas o lavado extra</div></div>
+      <div class="scen"><div class="lab">Operación fantasma</div><div class="delta dn" style="margin-top:8px">Limpieza de hilo / remate manual · no está en el 90%</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ 3 IMPACTO ═══════ -->
+<div class="sec" id="sec-imp">
+  <div class="g3">
+    <div class="card">
+      <h3>Riesgo de mercado</h3>
+      <div class="sub">Nueva tienda ≈ movimiento Cerro Verde</div>
+      <div class="scen"><div class="lab">Hoy ya hay déficit</div><div class="big" style="font-size:1.15rem">Apertura sin modernizar = colapso mayor</div></div>
+      <div class="dec warn"><b>Decisión.</b> No abrir la tienda confirmada sobre el techo actual.</div>
+    </div>
+    <div class="card">
+      <h3>Riesgo financiero</h3>
+      <div class="sub">Diciembre operando al “máximo”</div>
+      <div class="scen"><div class="lab">Piezas no fabricadas</div><div class="big">648</div><div class="delta dn">Pérdida directa de margen bruto</div></div>
+      <div class="dec"><b>Dato.</b> 27% del parque es chatarra que se deprecia sin aportar un segundo de valor.</div>
+    </div>
+    <div class="card">
+      <h3>Erosión de marca</h3>
+      <div class="sub">Tijera manual · cortes accidentales</div>
+      <div class="scen"><div class="lab">Temporada alta</div><div class="big" style="font-size:1.2rem">Oct – Dic</div><div class="delta dn">Fill-rate de tienda afectado</div></div>
+      <div class="dec amb"><b>Decisión.</b> La calidad de costura es el diferenciador en Venezuela. No se negocia por parque obsoleto.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Pérdida de diciembre vs techo real</h3>
+    <div class="sub">648 piezas = el hueco que ya se materializó en pico</div>
+    <div class="cw s"><canvas id="cDic"></canvas></div>
+  </div>
+</div>
+
+<!-- ═══════ 4 PLAN — COMPARACIÓN 3 ANÁLISIS ═══════ -->
+<div class="sec" id="sec-plan">
+  <div class="card g1">
+    <h3>Mix ponderado de planificación</h3>
+    <div class="sub">50% MAR · 35% RIO · 15% Basic Line · picos con quiebre de stock. El cuerpo cita RIO 9 ops; las tablas de escenario usan 6 ops.</div>
+    <div class="g2" style="margin:0">
+      <div class="cw s"><canvas id="cMix"></canvas></div>
+      <div>
+        <div class="barrow"><span class="nm">MAR · 7 ops</span><div class="track"><div class="fill" style="width:50%;background:var(--ac)"></div></div><b>50%</b></div>
+        <div class="barrow"><span class="nm">RIO · 6 ops</span><div class="track"><div class="fill" style="width:35%;background:var(--gr)"></div></div><b>35%</b></div>
+        <div class="barrow"><span class="nm">Basic · 12 ops</span><div class="track"><div class="fill" style="width:15%;background:var(--or)"></div></div><b>15%</b></div>
+        <div class="dec" style="margin-top:14px"><b>Regla.</b> No planificar sobre un promedio plano. El mix 50/35/15 es el modelo de los tres escenarios.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="g3">
+    <div class="scen" style="border-color:#ef444455">
+      <div class="lab">4.1 Actual · cuello + mermas</div>
+      <div class="big">6.491</div>
+      <div class="delta neu">piezas/mes mix · MAR 95/línea (techo ruedo; plan pide 105)</div>
+    </div>
+    <div class="scen" style="border-color:#5b6af755">
+      <div class="lab">4.2 Sustitución · JACK K7</div>
+      <div class="big" style="color:var(--ac)">7.202</div>
+      <div class="delta up">+711 pzas · +11,0% vs actual · MAR llega a 105</div>
+    </div>
+    <div class="scen" style="border-color:#4caf7655">
+      <div class="lab">4.3 Incorporación · expansión de línea</div>
+      <div class="big" style="color:var(--gr)">8.940</div>
+      <div class="delta up">+2.449 pzas · +37,7% vs actual · módulos continuos</div>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div class="card"><h3>Producción diaria por línea</h3><div class="sub">Piezas / línea · los tres análisis</div><div class="cw t"><canvas id="cDaily"></canvas></div></div>
+    <div class="card"><h3>Volumen mensual del mix 50/35/15</h3><div class="sub">Piezas proyectadas · no capacidad exclusiva</div><div class="cw t"><canvas id="cVol"></canvas></div></div>
+  </div>
+
+  <div class="card g1">
+    <h3>Tabla comparativa centralizada</h3>
+    <div class="sub">Misma base de mix. Capacidad máxima exclusiva = si la línea produjera solo ese modelo.</div>
+    <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Modelo</th>
+          <th class="num">Mix</th>
+          <th class="num">Actual /día</th>
+          <th class="num">K7 /día</th>
+          <th class="num">Exp. /día</th>
+          <th class="num">Actual mix/mes</th>
+          <th class="num">K7 mix/mes</th>
+          <th class="num">Exp. mix/mes</th>
+          <th class="num">Δ K7 vs Act.</th>
+          <th class="num">Δ Exp. vs Act.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>MAR (7 ops)</td><td class="num">50%</td>
+          <td class="num">95</td><td class="num">105</td><td class="num">130</td>
+          <td class="num">3.796</td><td class="num">4.200</td><td class="num">5.200</td>
+          <td class="num up">+404</td><td class="num up">+1.404</td>
+        </tr>
+        <tr>
+          <td>RIO (6 ops)</td><td class="num">35%</td>
+          <td class="num">73</td><td class="num">82</td><td class="num">101</td>
+          <td class="num">2.041</td><td class="num">2.296</td><td class="num">2.828</td>
+          <td class="num up">+255</td><td class="num up">+787</td>
+        </tr>
+        <tr>
+          <td>Basic (12 ops)</td><td class="num">15%</td>
+          <td class="num">55</td><td class="num">61</td><td class="num">76</td>
+          <td class="num">654</td><td class="num">712</td><td class="num">912</td>
+          <td class="num up">+58</td><td class="num up">+258</td>
+        </tr>
+        <tr class="tot">
+          <td>TOTAL mix</td><td class="num">100%</td>
+          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          <td class="num">6.491</td><td class="num">7.202</td><td class="num">8.940</td>
+          <td class="num up">+711</td><td class="num up">+2.449</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <h3>Capacidad máxima mensual exclusiva</h3>
+      <div class="sub">Si toda la línea corre un solo modelo</div>
+      <div class="cw"><canvas id="cMax"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Qué decide cada análisis</h3>
+      <div class="dec warn"><b>Actual.</b> Plan pide 105 MAR/línea; el ruedo estanca en 95 por la merma del 10%.</div>
+      <div class="dec"><b>JACK K7 (sustitución).</b> Elimina la merma del 10%. Corte de hilo + succión destrancan la estación final. La línea llega a 105 sin WIP. Cierra el hueco de calidad (ondas, aceite, operación fantasma).</div>
+      <div class="dec ok"><b>Incorporación.</b> Módulos completos y continuos (sin saltos de operaria). Salto de rendimiento bruto: 8.940 vs 6.491. Es el escenario de escalar con 1–3 tiendas, no solo de reparar el techo.</div>
+      <div class="dec amb"><b>Lectura conjunta.</b> K7 recupera el techo. Incorporación compra crecimiento. Sustituir sin incorporar deja el pico de red nueva sin cupo.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ 5 DEMANDA ═══════ -->
+<div class="sec" id="sec-dem">
+  <div class="g3">
+    <div class="card"><div class="scen"><div class="lab">Red actual Dic-2025</div><div class="big">58.800</div><div class="delta dn">Déficit 5.900 ops/mes</div></div></div>
+    <div class="card"><div class="scen"><div class="lab">+1 tienda (La Grieta)</div><div class="big">69.732</div><div class="delta dn">Déficit 16.752 ops/mes</div></div></div>
+    <div class="card"><div class="scen"><div class="lab">+3 tiendas / año</div><div class="big">87.166</div><div class="delta dn">Déficit 34.186 ops/mes</div></div></div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <h3>Demanda vs techo real 52.980</h3>
+      <div class="sub">Déficits del informe = demanda − capacidad real actual</div>
+      <div class="cw t"><canvas id="cDem"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Los 8.940 alcanzan la red?</h3>
+      <div class="sub">Incorporación cierra el pico actual; no cierra +3 tiendas si el mix se traduce a ops</div>
+      <table>
+        <thead><tr><th>Red</th><th class="num">Demanda ops</th><th class="num">Déficit vs real</th></tr></thead>
+        <tbody>
+          <tr><td>Actual Dic-2025</td><td class="num">58.800</td><td class="num dn">5.900</td></tr>
+          <tr><td>+1 tienda (La Grieta)</td><td class="num">69.732</td><td class="num dn">16.752</td></tr>
+          <tr><td>+3 tiendas/año</td><td class="num">87.166</td><td class="num dn">34.186</td></tr>
+        </tbody>
+      </table>
+      <div class="dec warn"><b>Decisión.</b> Recuperar el 100% (58.800 ops/mes) empata el pico de hoy. La red nueva exige Incorporación, no solo K7.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ 7 DECISIONES ═══════ -->
+<div class="sec" id="sec-dec">
+  <div class="g2">
+    <div class="card">
+      <h3>Decisiones operativas</h3>
+      <div class="dec amb"><b>Pico, no promedio.</b> Bestsellers disparan 1,5×–2,5× en diciembre. Dimensionar el taller al pico.</div>
+      <div class="dec"><b>Órdenes en operaciones.</b> No disparar 10.500 piezas complejas contra un techo de básicas.</div>
+      <div class="dec warn"><b>Satélite = riesgo de marca.</b> Centralizar producción interna. Cuadro responsable nacional.</div>
+    </div>
+    <div class="card">
+      <h3>Decisiones de inversión</h3>
+      <div class="dec ok"><b>Fase A · JACK K7.</b> Sustituir defectuosas/lentas. 6.491 → 7.202 pzas mix. Quita merma 10% y operación fantasma.</div>
+      <div class="dec ok"><b>Fase B · Incorporación.</b> Módulos continuos. 7.202 → 8.940. Condición para 1 tienda confirmada y rumbo a 3/año.</div>
+      <div class="dec"><b>Mitigar CAPEX.</b> Liquidar maquinaria inactiva.</div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <h3>Márgenes de incertidumbre</h3>
+      <div class="dec amb"><b>Productos nuevos.</b> Ops y capacidad reales no determinadas (diseño, tela, secuencia). Reservar holgura.</div>
+      <div class="dec amb"><b>Corporativos.</b> Demanda súbita sobre el mismo techo.</div>
+    </div>
+    <div class="card">
+      <h3>Pedido en una línea</h3>
+      <div class="scen">
+        <div class="lab">Secuencia</div>
+        <div class="big" style="font-size:1.05rem;font-family:var(--fb);font-weight:700;line-height:1.35">K7 ahora (recuperar 105 MAR y 16,14% de reproceso) → incorporar módulos antes de la tienda nueva → vender el 27% inactivo para abatir CAPEX.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<div class="footer">Fuente única: Informe de Capacidad Instalada y Justificación de Inversión en Maquinaria de Costura — Cuadro. Cifras de escenario según tablas del documento. Déficits de demanda vs capacidad real 52.980 ops/mes.</div>
+
+<script>
+Chart.register(ChartDataLabels);
+const C={ac:'#5b6af7',gr:'#4caf76',rd:'#ef4444',yw:'#ffc107',or:'#f97316',tx:'#f0f0f5',mu:'#7a7b95'};
+function tx(){return document.body.classList.contains('light')?'#1a1a2e':'#f0f0f5'}
+function mu(){return document.body.classList.contains('light')?'#6b6c85':'#7a7b95'}
+function grid(){return document.body.classList.contains('light')?'rgba(0,0,0,.06)':'rgba(255,255,255,.06)'}
+
+const OPS=[
+  ['Línea 1','Overlock','Unión / Montaje','Disponible',190,190],
+  ['Línea 1','Collaret','Recubrir Cuello','Disponible',196,196],
+  ['Línea 1','Overlock','Montaje / Cierre','Disponible',198,198],
+  ['Línea 1','Collaret','Ruedo','Disponible',101,101],
+  ['Línea 2','Overlock','Unión / Montaje','80%',190,150],
+  ['Línea 2','Collaret','Recubrir Cuello','Disponible',196,196],
+  ['Línea 2','Overlock','Montaje / Cierre','Disponible',198,198],
+  ['Línea 2','Collaret','Ruedo','Disponible',101,101],
+  ['Línea 3','Overlock','Unión / Montaje','Disponible',190,190],
+  ['Línea 3','Collaret','Recubrir Cuello','Disponible',196,196],
+  ['Línea 3','Overlock','Montaje / Cierre','Disponible',198,198],
+  ['Línea 3','Collaret','Ruedo','50%',101,50.5],
+  ['Línea 3','Collaret','Ruedo','Inactiva',100,0],
+  ['Línea 4','Overlock','Unión / Montaje','Disponible',190,190],
+  ['Línea 4','Collaret','Recubrir Cuello','Disponible',196,196],
+  ['Línea 4','Overlock','Montaje / Cierre','Disponible',198,198],
+  ['Línea 4','Collaret','Ruedo','Disponible',101,101],
+  ['Línea 4','Collaret','Ruedo','Inactiva',100,0],
+];
+
+function fmt(n){return n.toLocaleString('es-VE',{maximumFractionDigits:n%1?1:0})}
+function tag(est){
+  if(est==='Disponible') return '<span class="tag t-ok">Disponible</span>';
+  if(est==='Inactiva') return '<span class="tag t-red">Inactiva</span>';
+  return '<span class="tag t-amb">'+est+'</span>';
+}
+
+(function buildOps(){
+  const tb=document.getElementById('opsBody');
+  let totT=0,totR=0,last='';
+  OPS.forEach(r=>{
+    const [lin,maq,op,est,t,re]=r;
+    totT+=t; totR+=re;
+    const d=t-re;
+    tb.insertAdjacentHTML('beforeend',`<tr>
+      <td>${lin===last?'':lin}</td><td>${maq}</td><td>${op}</td><td>${tag(est)}</td>
+      <td class="num">${fmt(t)}</td><td class="num">${fmt(re)}</td>
+      <td class="num ${d?'dn':''}">${d?('−'+fmt(d)):'0'}</td></tr>`);
+    last=lin;
+  });
+  tb.insertAdjacentHTML('beforeend',`<tr class="tot"><td colspan="4">TOTAL L1–L4</td>
+    <td class="num">${fmt(totT)}</td><td class="num">${fmt(totR)}</td>
+    <td class="num dn">−${fmt(totT-totR)}</td></tr>`);
+})();
+
+const charts={};
+function destroyAll(){Object.values(charts).forEach(c=>c&&c.destroy())}
+
+function bo(){
+  return {
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{labels:{color:tx(),font:{family:'DM Sans',size:11},boxWidth:10}},
+      datalabels:{color:tx(),font:{family:'Syne',weight:'700',size:10},
+        formatter:v=>v? (Number.isInteger(v)?v.toLocaleString('es-VE'):v):''}
+    },
+    scales:{
+      x:{ticks:{color:mu(),font:{size:10}},grid:{color:grid()}},
+      y:{ticks:{color:mu(),font:{size:10}},grid:{color:grid()},beginAtZero:true}
+    }
+  };
+}
+
+function makeCharts(){
+  destroyAll();
+  const teo=[685,685,785,785], real=[685,645,634.5,685];
+  charts.cLineas=new Chart(document.getElementById('cLineas'),{
+    type:'bar',
+    data:{labels:['Línea 1','Línea 2','Línea 3','Línea 4'],
+      datasets:[
+        {label:'Teórica',data:teo,backgroundColor:C.ac,borderRadius:4},
+        {label:'Real',data:real,backgroundColor:C.gr,borderRadius:4}
+      ]},
+    options:bo()
+  });
+  charts.cPerdida=new Chart(document.getElementById('cPerdida'),{
+    type:'bar',
+    data:{labels:['L1','L2','L3','L4'],
+      datasets:[{label:'Pérdida ops/día',data:[0,40,150.5,100],backgroundColor:[C.gr,C.yw,C.rd,C.or],borderRadius:4}]},
+    options:{...bo(),plugins:{...bo().plugins,legend:{display:false}},indexAxis:'y'}
+  });
+  charts.cQa=new Chart(document.getElementById('cQa'),{
+    type:'doughnut',
+    data:{labels:['OK 8.807','Reproceso 1.695'],
+      datasets:[{data:[8807,1695],backgroundColor:[C.gr,C.rd],borderWidth:0}]},
+    options:{plugins:{legend:{labels:{color:tx(),font:{size:10},boxWidth:10}},datalabels:{display:false}},cutout:'62%'}
+  });
+  charts.cDic=new Chart(document.getElementById('cDic'),{
+    type:'bar',
+    data:{labels:['Fabricable en pico','No fabricadas Dic'],
+      datasets:[{data:[6491,648],backgroundColor:[C.ac,C.rd],borderRadius:6}]},
+    options:{...bo(),plugins:{...bo().plugins,legend:{display:false}},indexAxis:'y'}
+  });
+  charts.cMix=new Chart(document.getElementById('cMix'),{
+    type:'doughnut',
+    data:{labels:['MAR 50%','RIO 35%','Basic 15%'],
+      datasets:[{data:[50,35,15],backgroundColor:[C.ac,C.gr,C.or],borderWidth:0}]},
+    options:{plugins:{legend:{labels:{color:tx(),font:{size:11},boxWidth:10}},datalabels:{color:'#fff',font:{weight:'700',size:11},formatter:v=>v+'%'}},cutout:'55%'}
+  });
+  charts.cDaily=new Chart(document.getElementById('cDaily'),{
+    type:'bar',
+    data:{labels:['MAR','RIO','Basic'],
+      datasets:[
+        {label:'Actual',data:[95,73,55],backgroundColor:C.rd,borderRadius:4},
+        {label:'JACK K7',data:[105,82,61],backgroundColor:C.ac,borderRadius:4},
+        {label:'Incorporación',data:[130,101,76],backgroundColor:C.gr,borderRadius:4}
+      ]},
+    options:bo()
+  });
+  charts.cVol=new Chart(document.getElementById('cVol'),{
+    type:'bar',
+    data:{labels:['MAR 50%','RIO 35%','Basic 15%','TOTAL mix'],
+      datasets:[
+        {label:'Actual',data:[3796,2041,654,6491],backgroundColor:C.rd,borderRadius:4},
+        {label:'JACK K7',data:[4200,2296,712,7202],backgroundColor:C.ac,borderRadius:4},
+        {label:'Incorporación',data:[5200,2828,912,8940],backgroundColor:C.gr,borderRadius:4}
+      ]},
+    options:bo()
+  });
+  charts.cMax=new Chart(document.getElementById('cMax'),{
+    type:'bar',
+    data:{labels:['MAR','RIO','Basic'],
+      datasets:[
+        {label:'Actual',data:[7592,5832,4360],backgroundColor:C.rd,borderRadius:4},
+        {label:'JACK K7',data:[8400,6560,4880],backgroundColor:C.ac,borderRadius:4},
+        {label:'Incorporación',data:[10400,8080,6080],backgroundColor:C.gr,borderRadius:4}
+      ]},
+    options:bo()
+  });
+  charts.cDem=new Chart(document.getElementById('cDem'),{
+    type:'bar',
+    data:{labels:['Red actual','+1 tienda','+3 tiendas/año'],
+      datasets:[
+        {label:'Demanda ops/mes',data:[58800,69732,87166],backgroundColor:C.or,borderRadius:4},
+        {label:'Techo real 52.980',data:[52980,52980,52980],backgroundColor:C.ac,borderRadius:4},
+        {label:'Déficit',data:[5900,16752,34186],backgroundColor:C.rd,borderRadius:4}
+      ]},
+    options:bo()
+  });
+}
+
+function st(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  const map={diag:0,prob:1,imp:2,plan:3,dem:4,dec:5};
+  document.querySelectorAll('.tab')[map[id]].classList.add('active');
+  location.hash=id;
+  setTimeout(()=>{Object.values(charts).forEach(c=>c&&c.resize())},40);
+}
+function toggleTheme(){
+  document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent=document.body.classList.contains('light')?'🌙 Dark':'☀️ Light';
+  makeCharts();
+}
+makeCharts();
+const boot=(location.hash||'#diag').replace('#','');
+if(['diag','prob','imp','plan','dem','dec'].includes(boot) && boot!=='diag'){
+  st(boot);
+}
+</script>
+</body>
+</html>

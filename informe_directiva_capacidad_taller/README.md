@@ -1,25 +1,16 @@
-# Informe directiva — capacidad del taller y compra de maquinaria
+# Dashboard de capacidad e inversión — Cuadro
 
-Borrador para sesión de directiva de Cuadro (Crecoindustrias, C.A.), septiembre 2026.
+Abrir `dashboard_capacidad_maquinaria.html`.
 
-## Cómo usarlo
+Pestañas = secciones del informe Word. Solo números, tablas, gráficos y decisiones.
 
-1. Abrir `INFORME_DIRECTIVA_CAPACIDAD_MAQUINARIA.html` en el navegador.
-2. Imprimir / Guardar PDF (botón arriba o Ctrl+P).
-3. Llevar a la sesión el Excel `anexos/Calculos_capacidad_taller_Cuadro.xlsx` para las preguntas de número.
-4. Las capturas del dashboard oficial están en `anexos/dashboards/`.
+| Pestaña | Contenido |
+|---|---|
+| 1 Diagnóstico | 2.940 vs 2.649 ops/día · detalle por línea |
+| 2 Problema | L3/L4 ruedo, 2 rectas / 4 líneas, reproceso 16,14% |
+| 3 Impacto | 648 piezas no fabricadas · 27% chatarra · tienda ≈ Cerro Verde |
+| 4 Plan de inversión | Comparación Actual vs JACK K7 vs Incorporación |
+| 5 Demanda | 58.800 / 69.732 / 87.166 ops y déficits |
+| 7 Decisiones | Pico, ops, satélite, liquidación, corporativos |
 
-## Guion de 12 minutos
-
-1. KPIs 2.900 vs 2.617 (90%) y gráfico por línea — L3 se come el 52% de la pérdida.
-2. Pico Dic-2025: 58.109 ops vs 52.340 reales. Una tienda 1× Grieta = +11,6k ops en pico.
-3. Calidad: ondas, aceite, ruedos, hilo. 3 máquinas paradas por piezas (~40 pzas/día). Jack por stock local.
-4. Pedido: Fase 1 recuperar el −283 (collareteras de ruedo + overlock L2). Fase 2 cotizar módulos de 5 máquinas. No aprobar capex cerrado sin cotización ni % de reproceso.
-
-## Convención de unidad
-
-Capacidad en **operaciones / día**. Mes = × 20 días hábiles (mismo criterio del correo a Valentina Herrera). Piezas = ops ÷ 8,90 (mix pico Dic-2025).
-
-## Qué no está cerrado
-
-Cotización Jack, % reproceso, minutos en mesa de remate, ops de Explore Pants / Jacket 2.0, forecast firme de tiendas, capacidad de Línea 5. Lista priorizada en la hoja `06_Datos_faltantes` del Excel y en la sección 8 del HTML.
+Fuente única: *Informe de Capacidad Instalada y Justificación de Inversión en Maquinaria de Costura — Cuadro*.
