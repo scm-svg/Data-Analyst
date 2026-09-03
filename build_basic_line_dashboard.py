@@ -20,7 +20,7 @@ TALLA_ORDER = ["XS", "S", "M", "L", "XL", "2XL", "3XL"]
 MODEL_PREFIX = "BASIC LINE"
 LINEAS = ["CAB", "DAMA"]
 DECISION_EXCLUDE = {"TALLER", "WEB", "PEDIDOS", "CORPORATIVO"}
-PARTIAL_MONTH = "septiembre-2026"
+EXCLUDED_MONTH_PREFIXES = ("septiembre",)
 VELOCITY_MONTHS_COUNT = 6
 HIGH_SEASON_FACTOR = 1.4
 DEC_BASE_FACTOR = 1.4
@@ -33,9 +33,17 @@ def is_excluded_color(color: str) -> bool:
     return c in EXCLUDED_COLORS
 
 
+def is_excluded_month(mes: str) -> bool:
+    part = str(mes).split("-", 1)[0].lower()
+    return any(part == prefix or part.startswith(prefix) for prefix in EXCLUDED_MONTH_PREFIXES)
+
+
 def sanitize_data(data: dict) -> dict:
-    """Remove dirty colors from every embedded structure."""
-    data["raw_rows"] = [r for r in data["raw_rows"] if not is_excluded_color(r["color"])]
+    """Remove dirty colors and excluded months from every embedded structure."""
+    data["raw_rows"] = [
+        r for r in data["raw_rows"]
+        if not is_excluded_color(r["color"]) and not is_excluded_month(r["mes"])
+    ]
     data["inv_rows"] = [r for r in data["inv_rows"] if not is_excluded_color(r["color"])]
 
     data["stock"] = {
@@ -69,6 +77,7 @@ def sanitize_data(data: dict) -> dict:
     data["stock_total"] = sum(data["stock"].values())
     data["stock_taller"] = sum(data["stock_by_loc"].get("TALLER", {}).values())
     data["stock_pt_total"] = data["stock_taller"]
+    data["meses_order"] = sorted({r["mes"] for r in data["raw_rows"]}, key=mes_sort_key)
     data["meses_und"] = {m: sum(r["v"] for r in data["raw_rows"] if r["mes"] == m) for m in data["meses_order"]}
 
     modelos = sorted({r["modelo"] for r in data["raw_rows"]})
@@ -249,7 +258,7 @@ def venta_row_from_csv(row: dict) -> dict | None:
     if qty == 0:
         return None
     mes = parse_mes(row)
-    if not mes:
+    if not mes or is_excluded_month(mes):
         return None
     talla = get_col(row, "TALLA", "talla")
     if not talla:
@@ -311,10 +320,9 @@ def read_inventario():
 
 
 def velocity_months(meses_order: list) -> list:
-    if PARTIAL_MONTH in meses_order and meses_order.index(PARTIAL_MONTH) >= VELOCITY_MONTHS_COUNT:
-        i = meses_order.index(PARTIAL_MONTH)
-        return meses_order[i - VELOCITY_MONTHS_COUNT : i]
-    return meses_order[-VELOCITY_MONTHS_COUNT:]
+    if len(meses_order) >= VELOCITY_MONTHS_COUNT:
+        return meses_order[-VELOCITY_MONTHS_COUNT:]
+    return meses_order[:]
 
 
 def month_weight(mes: str) -> float:
@@ -545,7 +553,7 @@ def build_data():
     all_stores = decision_stores
     stock_pt_total = sum(stock_by_loc.get("TALLER", {}).values())
     last_mes = meses_order[-1] if meses_order else ""
-    es_parcial = last_mes == PARTIAL_MONTH
+    es_parcial = False
 
     data = {
         "raw_rows": raw_rows,
