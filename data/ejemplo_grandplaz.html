@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GRANDPLAZ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#07090f;--su:#0d0f1a;--s2:#131623;--s3:#191d2d;--bd:#232940;
+  --ac:#6366f1;--a2:#818cf8;--gr:#10b981;--re:#f43f5e;--am:#f59e0b;
+  --mu:#677099;--m2:#3d4566;--tx:#d5ddf5;
+  --fh:'Syne',sans-serif;--fm:'DM Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:var(--fh);min-height:100vh}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--s2)}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+
+.hdr{display:flex;align-items:center;gap:12px;padding:13px 24px;
+  background:linear-gradient(135deg,#090c1c,#0f1228);
+  border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:200}
+.badge{background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;
+  padding:6px 14px;font-size:.7rem;font-weight:800;letter-spacing:.1em;color:#fff;flex-shrink:0}
+.hdr h1{font-size:.95rem;font-weight:700}
+.hdr p{font-size:.61rem;color:var(--mu);margin-top:1px}
+
+.krow{display:flex;gap:9px;padding:14px 24px;overflow-x:auto}
+.kpi{background:var(--su);border:1px solid var(--bd);border-radius:11px;padding:12px 16px;flex:1;min-width:110px}
+.kv{font-size:1.5rem;font-weight:800;font-family:var(--fm);line-height:1}
+.kl{font-size:.59rem;color:var(--mu);margin-top:4px;text-transform:uppercase;letter-spacing:.07em}
+.c-bl .kv{color:var(--a2)}.c-gr .kv{color:var(--gr)}.c-am .kv{color:var(--am)}.c-re .kv{color:var(--re)}
+
+.tabs{display:flex;gap:1px;padding:0 24px;border-bottom:1px solid var(--bd);overflow-x:auto}
+.tab{padding:9px 15px;font-size:.72rem;font-weight:700;color:var(--mu);background:none;
+  border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;
+  font-family:var(--fh);transition:color .12s}
+.tab.on{color:var(--a2);border-bottom-color:var(--ac)}
+.tab:hover:not(.on){color:var(--tx)}
+
+.page{padding:18px 24px}
+.sec{display:none}.sec.on{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.g21{display:grid;grid-template-columns:3fr 2fr;gap:13px}
+.card{background:var(--su);border:1px solid var(--bd);border-radius:13px;padding:17px}
+.ct{font-size:.64rem;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+.ct em{color:var(--a2);font-style:normal}
+.cw{position:relative}.h220{height:220px}
+
+.fbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;
+  background:var(--su);border:1px solid var(--bd);border-radius:11px;padding:9px 13px;margin-bottom:12px}
+.fb-l{font-size:.6rem;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+.sep{width:1px;height:18px;background:var(--bd);flex-shrink:0}
+.chip{padding:4px 10px;border-radius:20px;font-size:.64rem;font-weight:700;cursor:pointer;
+  border:1px solid var(--bd);background:var(--s2);color:var(--mu);transition:all .12s;white-space:nowrap;font-family:var(--fh)}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.chip:hover:not(.on){border-color:var(--ac);color:var(--a2)}
+.srch{flex:1;min-width:130px;padding:6px 11px;background:var(--s2);border:1px solid var(--bd);
+  border-radius:8px;color:var(--tx);font-size:.72rem;font-family:var(--fh);outline:none}
+.srch:focus{border-color:var(--ac)}
+.srch::placeholder{color:var(--m2)}
+.sbtn{padding:4px 10px;border-radius:6px;font-size:.63rem;font-weight:700;cursor:pointer;
+  border:1px solid var(--bd);background:var(--s2);color:var(--mu);transition:all .12s;font-family:var(--fh)}
+.sbtn.on{background:var(--ac);border-color:var(--ac);color:#fff}
+
+/* expandable items */
+.xi{border:1px solid transparent;border-radius:9px;overflow:hidden;cursor:pointer;margin-bottom:3px;transition:border-color .12s}
+.xi:hover:not(.open){border-color:rgba(99,102,241,.25)}
+.xi.open{border-color:var(--bd)}
+.xh{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--s2);transition:background .12s}
+.xi.open .xh{background:var(--s3)}
+.xb{display:none;background:var(--su);padding:11px 13px;border-top:1px solid var(--bd)}
+.xi.open .xb{display:block}
+.xa{font-size:.57rem;color:var(--m2);flex-shrink:0;transition:transform .15s}
+.xi.open .xa{transform:rotate(180deg)}
+
+/* product fields */
+.prk{font-family:var(--fm);font-size:.58rem;color:var(--m2);width:19px;text-align:right;flex-shrink:0}
+.pnm{flex:1;font-size:.73rem;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ptrk{display:flex;height:5px;border-radius:3px;overflow:hidden;gap:1px;width:80px;flex-shrink:0}
+.prt{font-size:.59rem;font-weight:700;border-radius:4px;padding:2px 6px;flex-shrink:0;min-width:34px;text-align:center}
+.pH{background:rgba(16,185,129,.15);color:var(--gr)}.pM{background:rgba(245,158,11,.15);color:var(--am)}
+.pL{background:rgba(244,63,94,.12);color:var(--re)}.pZ{background:rgba(100,110,140,.1);color:var(--mu)}
+.pv{font-family:var(--fm);font-size:.68rem;font-weight:700;width:29px;text-align:right;flex-shrink:0}
+.ps{font-family:var(--fm);font-size:.59rem;color:var(--mu);width:35px;text-align:right;flex-shrink:0}
+
+/* rotation fields */
+.rrk{font-family:var(--fm);font-size:.59rem;color:var(--m2);width:22px;text-align:right;flex-shrink:0}
+.rnm{flex:1;font-size:.73rem;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rtrk{display:flex;height:8px;background:var(--bd);border-radius:4px;overflow:hidden;gap:1px;flex:2;max-width:200px;min-width:80px}
+.rts{height:8px}.rtu{height:8px;opacity:.2}
+.rrot{font-family:var(--fm);font-size:.7rem;font-weight:800;width:36px;text-align:right;flex-shrink:0}
+.rvs{font-family:var(--fm);font-size:.59rem;color:var(--mu);width:66px;text-align:right;flex-shrink:0}
+
+/* variant panel */
+.vt{font-size:.59rem;color:var(--mu);text-transform:uppercase;letter-spacing:.07em;
+  margin-bottom:9px;padding-bottom:5px;border-bottom:1px solid var(--bd)}
+.vrow{background:var(--s2);border-radius:7px;margin-bottom:4px;overflow:hidden}
+.vhd{display:flex;align-items:center;gap:7px;padding:6px 10px}
+.vgen{font-size:.57rem;color:var(--mu);background:var(--s3);border-radius:3px;padding:1px 5px;flex-shrink:0}
+.vcl{font-size:.69rem;font-weight:700;flex:1}
+.vbw{flex:1;height:4px;background:var(--bd);border-radius:2px;max-width:90px}
+.vbf{height:4px;border-radius:2px}
+.vpt{font-family:var(--fm);font-size:.62rem;color:var(--mu);flex-shrink:0;min-width:31px;text-align:right}
+.vnm{font-family:var(--fm);font-size:.66rem;font-weight:700;flex-shrink:0;min-width:24px;text-align:right}
+.trow{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 19px;background:var(--bg)}
+.tlb{font-family:var(--fm);font-size:.59rem;color:var(--mu);width:23px}
+.tbw{flex:1;height:3px;background:var(--s3);border-radius:2px;max-width:70px}
+.tbf{height:3px;border-radius:2px;background:var(--a2)}
+.tnm{font-family:var(--fm);font-size:.59rem;color:var(--mu);min-width:19px;text-align:right}
+
+/* rotation segments */
+.rseg{display:flex;align-items:center;gap:8px;padding:9px 0 6px;border-bottom:1px solid;margin-bottom:5px;flex-wrap:wrap}
+.rsl{font-size:.63rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:3px 10px;border-radius:20px}
+.rsc{font-size:.62rem;color:var(--mu);font-family:var(--fm)}
+.rss{font-size:.61rem;color:var(--m2);margin-left:auto;font-family:var(--fm)}
+
+/* top10 */
+.t10r{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bd)}
+.t10k{font-family:var(--fm);font-size:.59rem;color:var(--m2);width:16px;text-align:right}
+.t10n{flex:1;font-size:.71rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t10bw{width:70px;height:4px;background:var(--bd);border-radius:2px;overflow:hidden;flex-shrink:0}
+.t10bf{height:4px;border-radius:2px}
+
+/* inventory table */
+.itbl{width:100%;border-collapse:collapse;font-size:.71rem}
+.itbl th{padding:7px 10px;text-align:left;color:var(--mu);font-weight:700;font-size:.6rem;
+  text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd);
+  position:sticky;top:0;background:var(--su)}
+.itbl td{padding:7px 10px;border-bottom:1px solid #0d1020}
+.itbl tr:hover td{background:var(--s2)}
+.num{text-align:right;font-family:var(--fm)}
+
+/* decisions */
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.dbox{background:var(--s2);border-radius:12px;padding:14px;border-left:3px solid}
+.dbox h4{font-size:.71rem;font-weight:800;margin-bottom:2px}
+.dbox p{font-size:.6rem;color:var(--mu);margin-bottom:9px}
+.di{font-size:.68rem;padding:5px 8px;border-radius:6px;background:var(--su);margin-bottom:4px;
+  display:flex;justify-content:space-between;align-items:center;gap:7px}
+.di strong{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.di small{font-family:var(--fm);color:var(--mu);font-size:.6rem;flex-shrink:0}
+
+@media(max-width:680px){.g2,.g21,.dg{grid-template-columns:1fr}.page{padding:12px 14px}.hdr{padding:11px 14px}.tabs{padding:0 12px}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="badge">🏬 GRANDPLAZ</div>
+  <div><h1>Dashboard de Tienda</h1><p>Oct 2025 — Abr 2026 · 7 meses</p></div>
+</div>
+
+<div class="krow" id="krow"></div>
+
+<div class="tabs">
+  <button class="tab on"  onclick="GT('resumen',this)">📊 Resumen</button>
+  <button class="tab"     onclick="GT('rotacion',this)">🔄 Rotación</button>
+  <button class="tab"     onclick="GT('productos',this)">🛍️ Productos</button>
+  <button class="tab"     onclick="GT('inventario',this)">📦 Inventario</button>
+  <button class="tab"     onclick="GT('decisiones',this)">🎯 Decisiones</button>
+</div>
+
+<div class="page">
+
+<!-- ══ RESUMEN ══ -->
+<div class="sec on" id="sec-resumen">
+  <div class="g21" style="margin-bottom:13px">
+    <div class="card">
+      <div class="ct">📈 Ventas mensuales <em>· unidades</em></div>
+      <div class="cw h220"><canvas id="cMon"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ct">🏷️ Distribución <em>· top 15 modelos</em></div>
+      <div class="cw h220"><canvas id="cTop"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:0">
+    <div class="ct">🔄 Rotación de productos <em>· click para expandir cada segmento · azul=vendido gris=stock</em></div>
+    <div id="rotMatrix"></div>
+  </div>
+</div>
+
+<!-- ══ ROTACIÓN ══ -->
+<div class="sec" id="sec-rotacion">
+  <div style="display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="kpi c-gr" style="padding:10px 14px;min-width:0;flex:1">
+      <div class="kv" id="rk-h"></div><div class="kl">Rota bien &gt;60%</div></div>
+    <div class="kpi c-am" style="padding:10px 14px;min-width:0;flex:1">
+      <div class="kv" id="rk-m"></div><div class="kl">Media 30–60%</div></div>
+    <div class="kpi c-re" style="padding:10px 14px;min-width:0;flex:1">
+      <div class="kv" id="rk-l"></div><div class="kl">Baja &lt;30%</div></div>
+    <div class="kpi" style="padding:10px 14px;min-width:0;flex:1">
+      <div class="kv" id="rk-z" style="color:var(--mu)"></div><div class="kl">Sin ventas</div></div>
+  </div>
+  <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+    <span class="fb-l">Ordenar</span>
+    <button class="sbtn on" id="sb-r" onclick="SS('r')">% Rotación</button>
+    <button class="sbtn" id="sb-v" onclick="SS('v')">Ventas</button>
+    <button class="sbtn" id="sb-s" onclick="SS('s')">Stock</button>
+    <input class="srch" id="rSrch" placeholder="🔍 Buscar modelo..." oninput="RR()" style="max-width:230px">
+    <span style="font-size:.61rem;color:var(--m2);font-family:var(--fm);margin-left:auto">
+      <span style="color:var(--gr)">■</span> vendido &nbsp;<span style="color:var(--m2)">■</span> stock
+    </span>
+  </div>
+  <div id="rotList" style="overflow-y:auto;padding-right:3px;max-height:calc(100vh - 330px)"></div>
+</div>
+
+<!-- ══ PRODUCTOS ══ -->
+<div class="sec" id="sec-productos">
+  <div class="fbar">
+    <span class="fb-l">Mes</span>
+    <div id="pMF" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+    <div class="sep"></div>
+    <span class="fb-l">Estado</span>
+    <span class="chip on" data-rf="" onclick="SPR(this)">Todos</span>
+    <span class="chip" data-rf="h" onclick="SPR(this)">Alta rot.</span>
+    <span class="chip" data-rf="m" onclick="SPR(this)">Media</span>
+    <span class="chip" data-rf="l" onclick="SPR(this)">Baja</span>
+    <span class="chip" data-rf="z" onclick="SPR(this)">Sin ventas</span>
+    <div class="sep"></div>
+    <input class="srch" id="pSrch" placeholder="🔍 Buscar modelo..." oninput="RP()">
+  </div>
+  <div style="font-size:.63rem;color:var(--mu);margin-bottom:9px;display:flex;gap:10px;align-items:center">
+    <span id="pCnt"></span>
+    <span style="font-family:var(--fm)"><span style="color:var(--a2)">■</span> vendido &nbsp;<span style="color:var(--m2)">■</span> stock</span>
+  </div>
+  <div id="pList" style="overflow-y:auto;padding-right:3px;max-height:calc(100vh - 300px)"></div>
+</div>
+
+<!-- ══ INVENTARIO ══ -->
+<div class="sec" id="sec-inventario">
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <input class="srch" id="iSrch" placeholder="🔍 Buscar modelo..." oninput="RI()" style="flex:1;min-width:150px">
+    <span class="chip on" data-if="" onclick="SIF(this,'')">Todos</span>
+    <span class="chip" data-if="v" onclick="SIF(this,'v')">Con ventas</span>
+    <span class="chip" data-if="n" onclick="SIF(this,'n')">Sin ventas</span>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto;max-height:calc(100vh - 260px);overflow-y:auto">
+      <table class="itbl">
+        <thead><tr><th>#</th><th>Modelo</th><th class="num">Vendido</th>
+        <th class="num">Stock Piso</th><th class="num">Rotación</th><th>Estado</th></tr></thead>
+        <tbody id="iBdy"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DECISIONES ══ -->
+<div class="sec" id="sec-decisiones">
+  <div class="dg" style="margin-bottom:13px">
+    <div class="dbox" style="border-color:var(--gr)">
+      <h4 style="color:var(--gr)">🟢 REPONER</h4>
+      <p>Stock agotado con demanda activa comprobada</p>
+      <div id="dBuy"></div></div>
+    <div class="dbox" style="border-color:var(--ac)">
+      <h4 style="color:var(--a2)">🔵 MANTENER</h4>
+      <p>Rotación sana — monitoreo mensual</p>
+      <div id="dHold"></div></div>
+    <div class="dbox" style="border-color:var(--am)">
+      <h4 style="color:var(--am)">🟡 ACTIVAR</h4>
+      <p>Stock alto, pocas ventas — promover o reubicar</p>
+      <div id="dAct"></div></div>
+    <div class="dbox" style="border-color:var(--re)">
+      <h4 style="color:var(--re)">🔴 SIN MOVIMIENTO</h4>
+      <p>Sin ninguna venta — evaluar traslado o devolución</p>
+      <div id="dLiq"></div></div>
+  </div>
+  <div class="card">
+    <div class="ct">📊 Todos los modelos <em>· ventas</em> vs <em style="color:var(--m2)">stock</em></div>
+    <div style="overflow-y:auto;max-height:360px" id="dBar"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const D={"V":2293,"S":2267,"M":95,"mes":["Oct","Nov","Dic","Ene","Feb","Mar","Abr"],"mon":[256,336,764,140,276,272,249],"tL":["MAR ORIGINAL","TOALLA ESTAMPADA","RIO ORIGINAL","EXPLORE PANTS","JACKET","CUADRO JACKET 2.0","TOTE BAG","TOALLA PLAYA","DRY BAG 30L","TRAVEL BACKPACK","TOALLA CLIP 2.0","TOALLA ESTAMPADA 2.0","SHORT PLAYA ESTAMPADO","TOALLA SPORT","CREW SOCKS","Resto"],"tV":[284,166,162,148,111,84,83,62,54,49,47,41,39,39,37,887],"P":[{"n":"MAR ORIGINAL","v":284,"s":220,"r":56,"m":[25,43,90,16,46,32,32],"vars":[{"color":"Azul Marino","v":21,"tallas":[{"talla":"L","v":9},{"talla":"M","v":6},{"talla":"2XL","v":3},{"talla":"S","v":2},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Blanco","v":21,"tallas":[{"talla":"L","v":7},{"talla":"M","v":5},{"talla":"S","v":5},{"talla":"XL","v":4}],"genero":"CAB"},{"color":"Negro","v":21,"tallas":[{"talla":"M","v":7},{"talla":"2XL","v":5},{"talla":"L","v":4},{"talla":"XL","v":3},{"talla":"S","v":2}],"genero":"CAB"},{"color":"Azul Lavanda","v":16,"tallas":[{"talla":"L","v":4},{"talla":"XL","v":4},{"talla":"M","v":3},{"talla":"S","v":3},{"talla":"2XL","v":2}],"genero":"CAB"},{"color":"Azul Lavanda","v":16,"tallas":[{"talla":"M","v":7},{"talla":"S","v":5},{"talla":"XS","v":2},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Blanco","v":16,"tallas":[{"talla":"S","v":5},{"talla":"M","v":4},{"talla":"XL","v":3},{"talla":"L","v":2},{"talla":"XS","v":2}],"genero":"DAMA"},{"color":"Verde Militar","v":12,"tallas":[{"talla":"M","v":5},{"talla":"L","v":3},{"talla":"S","v":2},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Verde Militar","v":11,"tallas":[{"talla":"L","v":5},{"talla":"2XL","v":2},{"talla":"M","v":2},{"talla":"XL","v":2}],"genero":"CAB"},{"color":"Azul Marino","v":11,"tallas":[{"talla":"M","v":4},{"talla":"S","v":2},{"talla":"XL","v":2},{"talla":"XS","v":2},{"talla":"L","v":1}],"genero":"DAMA"},{"color":"Blanco","v":11,"tallas":[{"talla":"10","v":2},{"talla":"4","v":2},{"talla":"6","v":2},{"talla":"8","v":2},{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"2","v":1}],"genero":"KIDS"},{"color":"Aguamarina","v":10,"tallas":[{"talla":"M","v":6},{"talla":"L","v":2},{"talla":"XL","v":2}],"genero":"CAB"},{"color":"Negro","v":9,"tallas":[{"talla":"L","v":3},{"talla":"M","v":3},{"talla":"S","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Púrpura","v":8,"tallas":[{"talla":"XL","v":3},{"talla":"S","v":2},{"talla":"XS","v":2},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Aguamarina","v":8,"tallas":[{"talla":"12","v":2},{"talla":"8","v":2},{"talla":"10","v":1},{"talla":"14","v":1},{"talla":"2","v":1},{"talla":"4","v":1}],"genero":"KIDS"},{"color":"Azul Marino","v":8,"tallas":[{"talla":"2","v":2},{"talla":"4","v":2},{"talla":"6","v":2},{"talla":"8","v":2}],"genero":"KIDS"},{"color":"Gris Claro","v":7,"tallas":[{"talla":"M","v":5},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Rosado Pastel","v":7,"tallas":[{"talla":"M","v":3},{"talla":"S","v":3},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Azul Lavanda","v":7,"tallas":[{"talla":"12","v":2},{"talla":"2","v":2},{"talla":"10","v":1},{"talla":"4","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Rosado Pastel","v":7,"tallas":[{"talla":"2","v":2},{"talla":"4","v":2},{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Verde Militar","v":7,"tallas":[{"talla":"14","v":2},{"talla":"6","v":2},{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"2","v":1}],"genero":"KIDS"},{"color":"Azul Rey","v":6,"tallas":[{"talla":"L","v":2},{"talla":"M","v":2},{"talla":"XL","v":2}],"genero":"CAB"},{"color":"Azul Rey","v":5,"tallas":[{"talla":"S","v":3},{"talla":"XL","v":2}],"genero":"DAMA"},{"color":"Rojo","v":5,"tallas":[{"talla":"L","v":3},{"talla":"M","v":2}],"genero":"DAMA"},{"color":"Gris Claro","v":5,"tallas":[{"talla":"4","v":2},{"talla":"14","v":1},{"talla":"2","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Coral Neón","v":4,"tallas":[{"talla":"M","v":3},{"talla":"L","v":1}],"genero":"CAB"},{"color":"Rojo","v":4,"tallas":[{"talla":"M","v":2},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Vinotinto","v":4,"tallas":[{"talla":"M","v":2},{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Gris Claro","v":4,"tallas":[{"talla":"L","v":2},{"talla":"M","v":2}],"genero":"DAMA"},{"color":"Negro","v":4,"tallas":[{"talla":"4","v":2},{"talla":"10","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Aguamarina","v":2,"tallas":[{"talla":"M","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Coral Neón","v":2,"tallas":[{"talla":"S","v":2}],"genero":"DAMA"},{"color":"Lila","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Amarillo Neón","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Cielo","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Cielo","v":1,"tallas":[{"talla":"14","v":1}],"genero":"KIDS"}]},{"n":"TOALLA ESTAMPADA","v":166,"s":17,"r":91,"m":[31,44,55,4,3,10,19],"vars":[{"color":"Cayo de Agua","v":40,"tallas":[],"genero":""},{"color":"Avila","v":31,"tallas":[],"genero":""},{"color":"Roraima","v":27,"tallas":[],"genero":""},{"color":"Choroni","v":21,"tallas":[],"genero":""},{"color":"Candy","v":18,"tallas":[],"genero":""},{"color":"Oceano","v":13,"tallas":[],"genero":""},{"color":"Retro","v":9,"tallas":[],"genero":""},{"color":"Bitacora","v":7,"tallas":[],"genero":""}]},{"n":"RIO ORIGINAL","v":162,"s":234,"r":41,"m":[20,19,42,8,21,36,16],"vars":[{"color":"Azul Lavanda","v":13,"tallas":[{"talla":"4","v":6},{"talla":"2","v":2},{"talla":"6","v":2},{"talla":"1","v":1},{"talla":"10","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Blanco","v":11,"tallas":[{"talla":"S","v":3},{"talla":"XL","v":3},{"talla":"M","v":2},{"talla":"XS","v":2},{"talla":"L","v":1}],"genero":"DAMA"},{"color":"Azul Marino","v":9,"tallas":[{"talla":"XL","v":4},{"talla":"S","v":2},{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Rojo","v":9,"tallas":[{"talla":"M","v":4},{"talla":"XL","v":3},{"talla":"2XL","v":1},{"talla":"L","v":1}],"genero":"CAB"},{"color":"Lila","v":9,"tallas":[{"talla":"4","v":3},{"talla":"6","v":3},{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Azul Rey","v":8,"tallas":[{"talla":"6","v":3},{"talla":"1","v":1},{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"4","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Azul Marino","v":7,"tallas":[{"talla":"4","v":2},{"talla":"6","v":2},{"talla":"1","v":1},{"talla":"2","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Blanco","v":6,"tallas":[{"talla":"S","v":2},{"talla":"XL","v":2},{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Rey","v":6,"tallas":[{"talla":"S","v":3},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Amarillo Neón","v":6,"tallas":[{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"4","v":1},{"talla":"6","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Azul Turquesa","v":5,"tallas":[{"talla":"2XL","v":2},{"talla":"M","v":2},{"talla":"L","v":1}],"genero":"CAB"},{"color":"Azul Marino","v":5,"tallas":[{"talla":"M","v":2},{"talla":"S","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Lila","v":5,"tallas":[{"talla":"M","v":2},{"talla":"XS","v":2},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Rojo","v":5,"tallas":[{"talla":"XS","v":2},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Negro","v":5,"tallas":[{"talla":"10","v":2},{"talla":"2","v":1},{"talla":"4","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Púrpura","v":5,"tallas":[{"talla":"10","v":1},{"talla":"14","v":1},{"talla":"4","v":1},{"talla":"6","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Rojo","v":5,"tallas":[{"talla":"4","v":2},{"talla":"12","v":1},{"talla":"6","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Azul Rey","v":4,"tallas":[{"talla":"L","v":2},{"talla":"M","v":2}],"genero":"CAB"},{"color":"Negro","v":4,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Verde Militar","v":4,"tallas":[{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Azul Lavanda","v":4,"tallas":[{"talla":"S","v":2},{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Negro","v":4,"tallas":[{"talla":"XS","v":2},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":4,"tallas":[{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"2","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Verde Militar","v":3,"tallas":[{"talla":"S","v":3}],"genero":"DAMA"},{"color":"Aguamarina","v":3,"tallas":[{"talla":"2","v":1},{"talla":"4","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Rosado Pastel","v":3,"tallas":[{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"2","v":1}],"genero":"KIDS"},{"color":"Azul Lavanda","v":2,"tallas":[{"talla":"XL","v":2}],"genero":"CAB"},{"color":"Gris Claro","v":2,"tallas":[{"talla":"XL","v":2}],"genero":"DAMA"},{"color":"Verde Militar","v":2,"tallas":[{"talla":"10","v":1},{"talla":"14","v":1}],"genero":"KIDS"},{"color":"Vinotinto","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Amarillo Neón","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Azul Turquesa","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Fucsia","v":1,"tallas":[{"talla":"6","v":1}],"genero":"KIDS"}]},{"n":"EXPLORE PANTS","v":148,"s":76,"r":66,"m":[17,18,44,12,15,17,25],"vars":[{"color":"Negro","v":21,"tallas":[{"talla":"M","v":8},{"talla":"S","v":6},{"talla":"L","v":4},{"talla":"XL","v":3}],"genero":"CAB"},{"color":"Kaki","v":16,"tallas":[{"talla":"M","v":5},{"talla":"S","v":5},{"talla":"L","v":3},{"talla":"XS","v":2},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Negro","v":15,"tallas":[{"talla":"M","v":4},{"talla":"XL","v":4},{"talla":"XS","v":3},{"talla":"L","v":2},{"talla":"S","v":2}],"genero":"DAMA"},{"color":"Azul Marino","v":14,"tallas":[{"talla":"L","v":4},{"talla":"M","v":4},{"talla":"S","v":3},{"talla":"XL","v":3}],"genero":"CAB"},{"color":"Kaki","v":11,"tallas":[{"talla":"L","v":3},{"talla":"M","v":3},{"talla":"S","v":3},{"talla":"XL","v":2}],"genero":"CAB"},{"color":"Verde Militar","v":10,"tallas":[{"talla":"S","v":3},{"talla":"XL","v":3},{"talla":"L","v":2},{"talla":"M","v":2}],"genero":"CAB"},{"color":"Azul Marino","v":9,"tallas":[{"talla":"L","v":3},{"talla":"XL","v":3},{"talla":"S","v":2},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Verde Militar","v":9,"tallas":[{"talla":"M","v":4},{"talla":"L","v":3},{"talla":"S","v":2}],"genero":"DAMA"},{"color":"Gris Claro","v":8,"tallas":[{"talla":"XS","v":4},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Negro","v":7,"tallas":[{"talla":"6","v":3},{"talla":"4","v":2},{"talla":"10","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Gris Oscuro","v":6,"tallas":[{"talla":"M","v":3},{"talla":"L","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Gris Claro","v":5,"tallas":[{"talla":"L","v":3},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Gris Oscuro","v":5,"tallas":[{"talla":"M","v":2},{"talla":"XL","v":2},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Verde Militar","v":5,"tallas":[{"talla":"6","v":2},{"talla":"8","v":2},{"talla":"4","v":1}],"genero":"KIDS"},{"color":"Azul Marino","v":4,"tallas":[{"talla":"8","v":2},{"talla":"12","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Gris Claro","v":3,"tallas":[{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"8","v":1}],"genero":"KIDS"}]},{"n":"JACKET","v":111,"s":39,"r":74,"m":[19,12,61,3,4,9,3],"vars":[{"color":"Kaki","v":12,"tallas":[{"talla":"M","v":4},{"talla":"S","v":4},{"talla":"L","v":2},{"talla":"2XL","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Negro","v":12,"tallas":[{"talla":"XS","v":4},{"talla":"M","v":3},{"talla":"S","v":3},{"talla":"L","v":2}],"genero":"DAMA"},{"color":"Aguamarina","v":12,"tallas":[{"talla":"12","v":3},{"talla":"8","v":3},{"talla":"10","v":2},{"talla":"4","v":2},{"talla":"6","v":2}],"genero":"KIDS"},{"color":"Verde Militar","v":8,"tallas":[{"talla":"L","v":3},{"talla":"XL","v":2},{"talla":"2XL","v":1},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Aguamarina","v":8,"tallas":[{"talla":"S","v":3},{"talla":"M","v":2},{"talla":"XS","v":2},{"talla":"L","v":1}],"genero":"DAMA"},{"color":"Pink","v":8,"tallas":[{"talla":"12","v":2},{"talla":"6","v":2},{"talla":"10","v":1},{"talla":"2","v":1},{"talla":"4","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Azul Marino","v":7,"tallas":[{"talla":"S","v":2},{"talla":"XL","v":2},{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Negro","v":7,"tallas":[{"talla":"L","v":3},{"talla":"XL","v":2},{"talla":"2XL","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Negro","v":7,"tallas":[{"talla":"12","v":3},{"talla":"10","v":2},{"talla":"4","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Verde Militar","v":7,"tallas":[{"talla":"8","v":3},{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"2","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Kaki","v":6,"tallas":[{"talla":"L","v":3},{"talla":"XS","v":2},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Verde Militar","v":6,"tallas":[{"talla":"M","v":3},{"talla":"S","v":2},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Pink","v":4,"tallas":[{"talla":"M","v":2},{"talla":"XS","v":2}],"genero":"DAMA"},{"color":"Vinotinto","v":3,"tallas":[{"talla":"L","v":2},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Turquesa","v":2,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Verde Neon","v":2,"tallas":[{"talla":"M","v":2}],"genero":"DAMA"}]},{"n":"CUADRO JACKET 2.0","v":84,"s":78,"r":52,"m":[0,0,9,6,29,22,18],"vars":[{"color":"NEGRO","v":14,"tallas":[{"talla":"L","v":4},{"talla":"M","v":4},{"talla":"2XL","v":2},{"talla":"S","v":2},{"talla":"XL","v":2}],"genero":"CAB"},{"color":"BLANCO","v":10,"tallas":[{"talla":"S","v":4},{"talla":"M","v":3},{"talla":"L","v":2},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"AZUL POLO","v":9,"tallas":[{"talla":"XS","v":4},{"talla":"L","v":2},{"talla":"S","v":2},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"NEGRO","v":7,"tallas":[{"talla":"S","v":3},{"talla":"XS","v":3},{"talla":"L","v":1}],"genero":"DAMA"},{"color":"AZUL POLO","v":6,"tallas":[{"talla":"L","v":3},{"talla":"S","v":2},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"VERDE MILITAR","v":6,"tallas":[{"talla":"M","v":3},{"talla":"XL","v":2},{"talla":"2XL","v":1}],"genero":"CAB"},{"color":"VERDE MILITAR","v":6,"tallas":[{"talla":"M","v":3},{"talla":"XS","v":2},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"BLANCO","v":4,"tallas":[{"talla":"M","v":2},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"AGUAMARINA","v":4,"tallas":[{"talla":"S","v":2},{"talla":"M","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"AGUAMARINA","v":4,"tallas":[{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"2","v":1},{"talla":"4","v":1}],"genero":"KIDS"},{"color":"AZUL POLO","v":4,"tallas":[{"talla":"4","v":4}],"genero":"KIDS"},{"color":"MAGENTA","v":3,"tallas":[{"talla":"L","v":2},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"MAGENTA","v":3,"tallas":[{"talla":"10","v":1},{"talla":"4","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"NEGRO","v":3,"tallas":[{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"AGUAMARINA","v":1,"tallas":[{"talla":"XL","v":1}],"genero":"CAB"}]},{"n":"TOTE BAG","v":83,"s":13,"r":86,"m":[4,25,41,6,1,2,4],"vars":[{"color":"Negro","v":23,"tallas":[],"genero":""},{"color":"Gris Claro","v":21,"tallas":[],"genero":""},{"color":"Verde Militar","v":13,"tallas":[],"genero":""},{"color":"Azul Rey","v":11,"tallas":[],"genero":""},{"color":"Blanco","v":9,"tallas":[],"genero":""},{"color":"Amarillo","v":5,"tallas":[],"genero":""},{"color":"Rojo","v":1,"tallas":[],"genero":""}]},{"n":"TOALLA PLAYA","v":62,"s":18,"r":78,"m":[9,8,38,1,1,1,4],"vars":[{"color":"Aguamarina","v":17,"tallas":[],"genero":""},{"color":"Azul Marino","v":14,"tallas":[],"genero":""},{"color":"Negro","v":9,"tallas":[],"genero":""},{"color":"Gris Claro","v":6,"tallas":[],"genero":""},{"color":"Azul Rey","v":5,"tallas":[],"genero":""},{"color":"Verde Militar","v":5,"tallas":[],"genero":""},{"color":"Morado","v":3,"tallas":[],"genero":""},{"color":"Rojo","v":2,"tallas":[],"genero":""},{"color":"Magenta","v":1,"tallas":[],"genero":""}]},{"n":"DRY BAG 30L","v":54,"s":17,"r":76,"m":[11,10,12,4,6,7,4],"vars":[{"color":"Camu","v":13,"tallas":[],"genero":""},{"color":"Gris Claro","v":10,"tallas":[],"genero":""},{"color":"Verde Militar","v":8,"tallas":[],"genero":""},{"color":"Negro","v":7,"tallas":[],"genero":""},{"color":"Blanco","v":5,"tallas":[],"genero":""},{"color":"Azul Rey","v":4,"tallas":[],"genero":""},{"color":"Amarillo","v":3,"tallas":[],"genero":""},{"color":"Naranja","v":2,"tallas":[],"genero":""},{"color":"Rojo","v":2,"tallas":[],"genero":""}]},{"n":"TRAVEL BACKPACK","v":49,"s":2,"r":96,"m":[7,15,12,6,1,1,7],"vars":[{"color":"Gris Claro","v":18,"tallas":[],"genero":""},{"color":"Verde Militar","v":14,"tallas":[],"genero":""},{"color":"Azul Marino","v":11,"tallas":[],"genero":""},{"color":"Negro","v":6,"tallas":[],"genero":""}]},{"n":"TOALLA CLIP 2.0","v":47,"s":19,"r":71,"m":[8,6,23,2,2,5,1],"vars":[{"color":"Azul Marino","v":9,"tallas":[],"genero":""},{"color":"Azul Cielo","v":8,"tallas":[],"genero":""},{"color":"Verde Agua","v":8,"tallas":[],"genero":""},{"color":"Gris Claro","v":6,"tallas":[],"genero":""},{"color":"Negro","v":6,"tallas":[],"genero":""},{"color":"Verde Grama","v":6,"tallas":[],"genero":""},{"color":"Rojo","v":3,"tallas":[],"genero":""},{"color":"Blanco","v":1,"tallas":[],"genero":""}]},{"n":"TOALLA ESTAMPADA 2.0","v":41,"s":30,"r":58,"m":[0,0,0,1,16,13,11],"vars":[{"color":"Waves","v":9,"tallas":[],"genero":""},{"color":"Beat","v":8,"tallas":[],"genero":""},{"color":"Canaima","v":6,"tallas":[],"genero":""},{"color":"Caribe","v":6,"tallas":[],"genero":""},{"color":"Pico Bolivar","v":5,"tallas":[],"genero":""},{"color":"Morrocoy","v":4,"tallas":[],"genero":""},{"color":"Stripes","v":2,"tallas":[],"genero":""},{"color":"Margarita","v":1,"tallas":[],"genero":""}]},{"n":"SHORT PLAYA ESTAMPADO","v":39,"s":20,"r":66,"m":[4,5,14,3,8,4,1],"vars":[{"color":"PLAYUELA","v":7,"tallas":[{"talla":"2XL","v":2},{"talla":"XL","v":2},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"TUCUPIDO","v":7,"tallas":[{"talla":"8","v":2},{"talla":"1","v":1},{"talla":"12","v":1},{"talla":"14","v":1},{"talla":"2","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"SOMBRERO","v":6,"tallas":[{"talla":"12","v":2},{"talla":"1","v":1},{"talla":"14","v":1},{"talla":"4","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"SAL","v":5,"tallas":[{"talla":"4","v":2},{"talla":"10","v":1},{"talla":"12","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"SOMBRERO","v":4,"tallas":[{"talla":"2XL","v":2},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"PLAYUELA","v":4,"tallas":[{"talla":"14","v":2},{"talla":"10","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"SAL","v":3,"tallas":[{"talla":"L","v":2},{"talla":"M","v":1}],"genero":"CAB"},{"color":"TUCUPIDO","v":3,"tallas":[{"talla":"M","v":2},{"talla":"L","v":1}],"genero":"CAB"}]},{"n":"TOALLA SPORT","v":39,"s":2,"r":95,"m":[6,3,17,2,8,2,1],"vars":[{"color":"Azul Rey","v":8,"tallas":[],"genero":""},{"color":"Rojo","v":8,"tallas":[],"genero":""},{"color":"Gris Claro","v":6,"tallas":[],"genero":""},{"color":"Magenta","v":4,"tallas":[],"genero":""},{"color":"Amarillo","v":3,"tallas":[],"genero":""},{"color":"Verde Militar","v":3,"tallas":[],"genero":""},{"color":"Aguamarina","v":2,"tallas":[],"genero":""},{"color":"Azul Marino","v":2,"tallas":[],"genero":""},{"color":"Verde Menta","v":2,"tallas":[],"genero":""},{"color":"Negro","v":1,"tallas":[],"genero":""}]},{"n":"CREW SOCKS","v":37,"s":35,"r":51,"m":[0,0,16,5,5,3,8],"vars":[{"color":"Negro","v":27,"tallas":[],"genero":"CAB"},{"color":"Negro","v":5,"tallas":[],"genero":"KIDS"},{"color":"Blanco","v":3,"tallas":[],"genero":"CAB"},{"color":"Blanco","v":1,"tallas":[],"genero":"DAMA"},{"color":"Negro","v":1,"tallas":[],"genero":"DAMA"}]},{"n":"SHORT SPORT","v":36,"s":28,"r":56,"m":[4,2,13,7,4,5,1],"vars":[{"color":"Azul Marino","v":7,"tallas":[{"talla":"M","v":3},{"talla":"L","v":2},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Gris Claro","v":7,"tallas":[{"talla":"M","v":2},{"talla":"S","v":2},{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Negro","v":6,"tallas":[{"talla":"M","v":2},{"talla":"S","v":2},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Azul Marino","v":5,"tallas":[{"talla":"10","v":2},{"talla":"14","v":2},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Gris Claro","v":4,"tallas":[{"talla":"12","v":2},{"talla":"14","v":2}],"genero":"KIDS"},{"color":"Blanco","v":2,"tallas":[{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Blanco","v":2,"tallas":[{"talla":"4","v":2}],"genero":"KIDS"},{"color":"Verde Militar","v":2,"tallas":[{"talla":"12","v":1},{"talla":"14","v":1}],"genero":"KIDS"},{"color":"Negro","v":1,"tallas":[{"talla":"14","v":1}],"genero":"KIDS"}]},{"n":"CUADRO TAG","v":35,"s":54,"r":39,"m":[0,7,10,0,0,7,11],"vars":[{"color":"Rutas","v":12,"tallas":[],"genero":""},{"color":"Colina","v":4,"tallas":[],"genero":""},{"color":"Cumbre","v":4,"tallas":[],"genero":""},{"color":"Nautico","v":4,"tallas":[],"genero":""},{"color":"Peaceful","v":4,"tallas":[],"genero":""},{"color":"Sunset","v":4,"tallas":[],"genero":""},{"color":"Sunrise","v":3,"tallas":[],"genero":""}]},{"n":"DRY BAG 5L","v":35,"s":6,"r":85,"m":[4,7,13,2,0,4,5],"vars":[{"color":"Blanco","v":12,"tallas":[],"genero":""},{"color":"Verde Militar","v":7,"tallas":[],"genero":""},{"color":"Camu","v":6,"tallas":[],"genero":""},{"color":"Gris Claro","v":5,"tallas":[],"genero":""},{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Azul Cielo","v":2,"tallas":[],"genero":""}]},{"n":"HAT","v":35,"s":10,"r":78,"m":[0,0,0,2,15,13,5],"vars":[{"color":"Kaki","v":18,"tallas":[],"genero":""},{"color":"Negro","v":10,"tallas":[],"genero":""},{"color":"Azul Rey","v":4,"tallas":[],"genero":""},{"color":"Vinotinto","v":3,"tallas":[],"genero":""}]},{"n":"MESH CAP","v":34,"s":1,"r":97,"m":[2,24,6,0,2,0,0],"vars":[{"color":"Army","v":8,"tallas":[],"genero":""},{"color":"Niebla","v":7,"tallas":[],"genero":""},{"color":"Peach","v":5,"tallas":[],"genero":""},{"color":"Aguamarina","v":4,"tallas":[],"genero":""},{"color":"Mustard","v":4,"tallas":[],"genero":""},{"color":"Caramel","v":3,"tallas":[],"genero":""},{"color":"Dark Orange","v":3,"tallas":[],"genero":""}]},{"n":"LLAVERO SNAP","v":33,"s":33,"r":50,"m":[5,4,20,1,3,0,0],"vars":[{"color":"Verde Neon","v":7,"tallas":[],"genero":""},{"color":"Azul Rey","v":6,"tallas":[],"genero":""},{"color":"Lila","v":5,"tallas":[],"genero":""},{"color":"Vinotinto","v":5,"tallas":[],"genero":""},{"color":"Gris Claro","v":3,"tallas":[],"genero":""},{"color":"Magenta","v":3,"tallas":[],"genero":""},{"color":"Azul Turquesa","v":2,"tallas":[],"genero":""},{"color":"Verde Militar","v":2,"tallas":[],"genero":""}]},{"n":"DRY BAG 10L","v":32,"s":16,"r":67,"m":[3,3,18,1,4,0,3],"vars":[{"color":"Azul Rey","v":7,"tallas":[],"genero":""},{"color":"Camu","v":7,"tallas":[],"genero":""},{"color":"Verde Militar","v":7,"tallas":[],"genero":""},{"color":"Blanco","v":6,"tallas":[],"genero":""},{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Gris Claro","v":2,"tallas":[],"genero":""}]},{"n":"FALDA SARA","v":26,"s":38,"r":41,"m":[7,1,5,2,1,5,5],"vars":[{"color":"Azul Marino","v":6,"tallas":[{"talla":"6","v":3},{"talla":"14","v":2},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Gris Claro","v":4,"tallas":[{"talla":"6","v":2},{"talla":"12","v":1},{"talla":"14","v":1}],"genero":"KIDS"},{"color":"Negro","v":4,"tallas":[{"talla":"6","v":3},{"talla":"10","v":1}],"genero":"KIDS"},{"color":"Gris Claro","v":3,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Azul Marino","v":2,"tallas":[{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":2,"tallas":[{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":2,"tallas":[{"talla":"12","v":1},{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Azul Marino - Azul Marino","v":1,"tallas":[{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Negro","v":1,"tallas":[{"talla":"L","v":1}],"genero":"DAMA"},{"color":"Azul Rey","v":1,"tallas":[{"talla":"6","v":1}],"genero":"KIDS"}]},{"n":"CLASSIC POLO","v":25,"s":31,"r":45,"m":[2,3,18,1,0,1,0],"vars":[{"color":"Azul Marino","v":8,"tallas":[{"talla":"L","v":4},{"talla":"2XL","v":1},{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":""},{"color":"Blanco","v":5,"tallas":[{"talla":"L","v":2},{"talla":"M","v":2},{"talla":"XL","v":1}],"genero":""},{"color":"Gris Claro - Plomo Plata","v":5,"tallas":[{"talla":"M","v":2},{"talla":"XL","v":2},{"talla":"L","v":1}],"genero":""},{"color":"Beige - Oxford Tan","v":3,"tallas":[{"talla":"L","v":2},{"talla":"XL","v":1}],"genero":""},{"color":"Rojo","v":3,"tallas":[{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":""},{"color":"Azul Turquesa - Azul Turquesa","v":1,"tallas":[{"talla":"2XL","v":1}],"genero":""}]},{"n":"VESTIDO GEMMA","v":25,"s":20,"r":56,"m":[4,3,8,3,2,3,2],"vars":[{"color":"Morado","v":9,"tallas":[{"talla":"L","v":3},{"talla":"M","v":3},{"talla":"S","v":2},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Azul Marino","v":4,"tallas":[{"talla":"M","v":2},{"talla":"S","v":2}],"genero":"DAMA"},{"color":"Verde Militar","v":4,"tallas":[{"talla":"M","v":3},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":3,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Negro","v":3,"tallas":[{"talla":"M","v":2},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Azul Cielo","v":2,"tallas":[{"talla":"M","v":2}],"genero":"DAMA"}]},{"n":"CUADRO BAND","v":24,"s":446,"r":5,"m":[1,7,5,2,7,0,2],"vars":[{"color":"Azul Cielo","v":5,"tallas":[],"genero":""},{"color":"Tie Dye Negro","v":4,"tallas":[],"genero":""},{"color":"Azul Rey","v":3,"tallas":[],"genero":""},{"color":"Blanco","v":2,"tallas":[],"genero":""},{"color":"Fucsia","v":2,"tallas":[],"genero":""},{"color":"Negro","v":2,"tallas":[],"genero":""},{"color":"Slime","v":2,"tallas":[],"genero":""},{"color":"Azul Turquesa","v":1,"tallas":[],"genero":""},{"color":"Morado","v":1,"tallas":[],"genero":""},{"color":"Naranja","v":1,"tallas":[],"genero":""},{"color":"Verde Manzana","v":1,"tallas":[],"genero":""}]},{"n":"PONCHO","v":22,"s":14,"r":61,"m":[9,1,2,1,1,1,7],"vars":[{"color":"Azul Cielo","v":7,"tallas":[],"genero":"KIDS"},{"color":"Verde Agua","v":7,"tallas":[],"genero":"KIDS"},{"color":"Gris Claro","v":4,"tallas":[],"genero":"KIDS"},{"color":"Azul Marino","v":2,"tallas":[],"genero":"KIDS"},{"color":"Magenta","v":2,"tallas":[],"genero":"KIDS"}]},{"n":"SHORT PLAYA","v":22,"s":61,"r":27,"m":[3,2,0,0,6,6,5],"vars":[{"color":"Azul Pizarra","v":5,"tallas":[{"talla":"L","v":2},{"talla":"M","v":2},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Cereza","v":4,"tallas":[{"talla":"M","v":2},{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Aguamarina","v":2,"tallas":[{"talla":"6","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Gris Azulado","v":2,"tallas":[{"talla":"12","v":1},{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Aguamarina","v":1,"tallas":[{"talla":"2XL","v":1}],"genero":"CAB"},{"color":"Azul Rey","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Coral","v":1,"tallas":[{"talla":"L","v":1}],"genero":"CAB"},{"color":"Marron","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Rojo","v":1,"tallas":[{"talla":"2XL","v":1}],"genero":"CAB"},{"color":"Azul Marino","v":1,"tallas":[{"talla":"10","v":1}],"genero":"KIDS"},{"color":"Azul Rey","v":1,"tallas":[{"talla":"6","v":1}],"genero":"KIDS"},{"color":"Rojo","v":1,"tallas":[{"talla":"8","v":1}],"genero":"KIDS"},{"color":"Verde Oliva","v":1,"tallas":[{"talla":"6","v":1}],"genero":"KIDS"}]},{"n":"BUCKET HAT ESTAMPADO","v":21,"s":1,"r":95,"m":[1,3,13,1,1,2,0],"vars":[{"color":"Lago","v":7,"tallas":[],"genero":""},{"color":"Bitacora","v":5,"tallas":[],"genero":""},{"color":"Oceano","v":4,"tallas":[],"genero":""},{"color":"Honey","v":3,"tallas":[],"genero":""},{"color":"Retro","v":2,"tallas":[],"genero":""}]},{"n":"CLASICA ORIGINAL","v":21,"s":1,"r":95,"m":[3,2,8,4,1,3,0],"vars":[{"color":"Verde Militar","v":6,"tallas":[{"talla":"M","v":3},{"talla":"L","v":2},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Blanco","v":4,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Gris Claro","v":3,"tallas":[{"talla":"M","v":3}],"genero":"CAB"},{"color":"Negro","v":3,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Azul Rey","v":2,"tallas":[{"talla":"L","v":2}],"genero":"CAB"},{"color":"Azul Marino","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Gris Claro","v":1,"tallas":[{"talla":"4","v":1}],"genero":"KIDS"},{"color":"Verde Militar","v":1,"tallas":[{"talla":"4","v":1}],"genero":"KIDS"}]},{"n":"PACKING SET PRO","v":20,"s":7,"r":74,"m":[0,0,7,2,8,1,2],"vars":[{"color":"Negro","v":8,"tallas":[],"genero":""},{"color":"Verde Militar","v":7,"tallas":[],"genero":""},{"color":"Kaki","v":5,"tallas":[],"genero":""}]},{"n":"BASIC LINE OVERSIZED","v":19,"s":20,"r":49,"m":[0,0,11,2,1,1,4],"vars":[{"color":"Ivory","v":11,"tallas":[{"talla":"M","v":4},{"talla":"S","v":3},{"talla":"XS","v":2},{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Black","v":5,"tallas":[{"talla":"M","v":2},{"talla":"S","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"CAB"},{"color":"Peanut","v":3,"tallas":[{"talla":"S","v":2},{"talla":"L","v":1}],"genero":"CAB"}]},{"n":"SUNNY CORD 2.0","v":19,"s":53,"r":26,"m":[1,5,6,1,4,0,2],"vars":[{"color":"Blanco","v":4,"tallas":[],"genero":""},{"color":"Blanco/Negro","v":4,"tallas":[],"genero":""},{"color":"Rojo","v":4,"tallas":[],"genero":""},{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Naranja","v":2,"tallas":[],"genero":""},{"color":"Lila","v":1,"tallas":[],"genero":""},{"color":"Morado","v":1,"tallas":[],"genero":""}]},{"n":"CLASICA DAILY 3.0","v":18,"s":4,"r":82,"m":[8,2,2,0,3,2,1],"vars":[{"color":"Blanco","v":6,"tallas":[{"talla":"XS","v":3},{"talla":"S","v":2},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Negro","v":4,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Negro","v":4,"tallas":[{"talla":"S","v":2},{"talla":"XS","v":2}],"genero":"DAMA"},{"color":"Verde Militar","v":3,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Blanco","v":1,"tallas":[{"talla":"S","v":1}],"genero":"CAB"}]},{"n":"NOAH SPORT LITE","v":17,"s":23,"r":42,"m":[4,2,5,1,1,1,3],"vars":[{"color":"Blanco","v":6,"tallas":[{"talla":"M","v":2},{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Vinotinto - Mulled Wine","v":4,"tallas":[{"talla":"2XL","v":2},{"talla":"M","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Azul Lago - Cosmic Teal","v":3,"tallas":[{"talla":"L","v":2},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Rey - Bright Royal","v":3,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Coral Neón - Neón Fire","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"}]},{"n":"PACKING SET","v":17,"s":0,"r":100,"m":[3,9,5,0,0,0,0],"vars":[{"color":"Azul Marino","v":10,"tallas":[],"genero":""},{"color":"Negro","v":4,"tallas":[],"genero":""},{"color":"Gris Claro","v":3,"tallas":[],"genero":""}]},{"n":"TRAVEL BAG 40L","v":17,"s":16,"r":52,"m":[1,3,6,1,1,2,3],"vars":[{"color":"Negro","v":6,"tallas":[],"genero":""},{"color":"Gris Oscuro","v":5,"tallas":[],"genero":""},{"color":"Rojo","v":3,"tallas":[],"genero":""},{"color":"Azul Rey","v":2,"tallas":[],"genero":""},{"color":"Azul Marino","v":1,"tallas":[],"genero":""}]},{"n":"ANKLE SOCKS","v":15,"s":18,"r":45,"m":[1,0,4,6,0,1,3],"vars":[{"color":"Negro","v":8,"tallas":[],"genero":"CAB"},{"color":"Blanco","v":4,"tallas":[],"genero":"CAB"},{"color":"Negro","v":3,"tallas":[],"genero":"DAMA"}]},{"n":"KID HAT","v":15,"s":5,"r":75,"m":[0,0,0,2,3,7,3],"vars":[{"color":"Azul Cielo","v":5,"tallas":[],"genero":""},{"color":"Coral","v":5,"tallas":[],"genero":""},{"color":"Kaki","v":5,"tallas":[],"genero":""}]},{"n":"CLASICA MOTION","v":14,"s":2,"r":88,"m":[1,2,11,0,0,0,0],"vars":[{"color":"Verde","v":6,"tallas":[{"talla":"L","v":3},{"talla":"S","v":2},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul","v":4,"tallas":[{"talla":"2XL","v":1},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Negro","v":4,"tallas":[{"talla":"XL","v":2},{"talla":"2XL","v":1},{"talla":"M","v":1}],"genero":"CAB"}]},{"n":"MINI BAG","v":14,"s":6,"r":70,"m":[1,1,6,1,0,3,2],"vars":[{"color":"Bronce","v":5,"tallas":[],"genero":""},{"color":"Camel","v":5,"tallas":[],"genero":""},{"color":"Negro","v":2,"tallas":[],"genero":""},{"color":"Verde Menta","v":2,"tallas":[],"genero":""}]},{"n":"TRAVEL BAG 18L","v":14,"s":14,"r":50,"m":[0,2,5,0,2,4,1],"vars":[{"color":"Verde Neon","v":6,"tallas":[],"genero":""},{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Azul Marino","v":2,"tallas":[],"genero":""},{"color":"Azul Rey","v":2,"tallas":[],"genero":""},{"color":"Rojo","v":1,"tallas":[],"genero":""}]},{"n":"CUADRO BAND VENEZUELA","v":13,"s":0,"r":100,"m":[0,2,0,0,0,11,0],"vars":[{"color":"N/A","v":13,"tallas":[],"genero":""}]},{"n":"MIKA SPORT LITE","v":13,"s":50,"r":21,"m":[4,0,5,1,0,2,1],"vars":[{"color":"Blanco","v":6,"tallas":[{"talla":"S","v":4},{"talla":"L","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Azul Lago - Cosmic Teal","v":4,"tallas":[{"talla":"M","v":2},{"talla":"L","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Vinotinto - Mulled Wine","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Coral Neón - Neón Fire","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"BASIC LINE CROP TEE","v":12,"s":18,"r":40,"m":[0,1,7,2,1,0,1],"vars":[{"color":"Ivory","v":5,"tallas":[{"talla":"S","v":3},{"talla":"M","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Peanut","v":5,"tallas":[{"talla":"XS","v":3},{"talla":"M","v":2}],"genero":"DAMA"},{"color":"Black","v":2,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"BUCKET HAT","v":12,"s":0,"r":100,"m":[4,3,4,1,0,0,0],"vars":[{"color":"Verde Pino","v":5,"tallas":[],"genero":""},{"color":"Kaki","v":4,"tallas":[],"genero":""},{"color":"Lila","v":3,"tallas":[],"genero":""}]},{"n":"NO SHOW SOCKS","v":12,"s":25,"r":32,"m":[0,1,3,2,6,0,0],"vars":[{"color":"Negro","v":4,"tallas":[],"genero":"CAB"},{"color":"Negro","v":4,"tallas":[],"genero":"DAMA"},{"color":"Blanco","v":3,"tallas":[],"genero":"CAB"},{"color":"Blanco","v":1,"tallas":[],"genero":"DAMA"}]},{"n":"ANDRE MOTION","v":11,"s":3,"r":79,"m":[0,1,6,0,1,3,0],"vars":[{"color":"Azul","v":4,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Negro","v":3,"tallas":[{"talla":"L","v":1},{"talla":"XL","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Verde","v":2,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blue","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Purple","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"ACTIVE DUO","v":9,"s":41,"r":18,"m":[3,1,3,0,0,0,2],"vars":[{"color":"Gris","v":4,"tallas":[{"talla":"L","v":2},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Blanco","v":2,"tallas":[{"talla":"M","v":2}],"genero":"CAB"},{"color":"Lavanda","v":2,"tallas":[{"talla":"M","v":2}],"genero":"CAB"},{"color":"Blanco","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"DOMINIC BIO MOVE","v":9,"s":27,"r":25,"m":[0,2,5,0,1,0,1],"vars":[{"color":"Negro - Ultra Black","v":4,"tallas":[{"talla":"S","v":3},{"talla":"L","v":1}],"genero":"CAB"},{"color":"Blanco","v":2,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Gris Claro - Cinza Clean","v":2,"tallas":[{"talla":"2XL","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Grisáceo - Dusty Denim","v":1,"tallas":[{"talla":"2XL","v":1}],"genero":"CAB"}]},{"n":"EXPLORE SHORT","v":9,"s":0,"r":100,"m":[1,1,2,0,4,1,0],"vars":[{"color":"Negro","v":3,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Azul Marino","v":2,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Gris","v":1,"tallas":[{"talla":"S","v":1}],"genero":"CAB"},{"color":"Negro","v":1,"tallas":[{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Gris","v":1,"tallas":[{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Verde Militar","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"}]},{"n":"MAYA SPORT LITE","v":9,"s":29,"r":24,"m":[2,2,4,0,0,1,0],"vars":[{"color":"Vinotinto - Mulled Wine","v":5,"tallas":[{"talla":"XS","v":2},{"talla":"L","v":1},{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Azul Lago - Cosmic Teal","v":2,"tallas":[{"talla":"L","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":2,"tallas":[{"talla":"L","v":1},{"talla":"XS","v":1}],"genero":"DAMA"}]},{"n":"TOALLA WAFFLE","v":9,"s":7,"r":56,"m":[3,3,2,1,0,0,0],"vars":[{"color":"Blanco","v":4,"tallas":[],"genero":""},{"color":"Verde Grama","v":3,"tallas":[],"genero":""},{"color":"Verde Agua","v":2,"tallas":[],"genero":""}]},{"n":"HEADBAND","v":8,"s":19,"r":30,"m":[1,2,2,0,3,0,0],"vars":[{"color":"Aguamarina/Negro","v":2,"tallas":[],"genero":""},{"color":"Amarillo/Lila","v":2,"tallas":[],"genero":""},{"color":"Blanco/Negro","v":2,"tallas":[],"genero":""},{"color":"Azul Marino/Rojo","v":1,"tallas":[],"genero":""},{"color":"Azul Oceano/Blanco","v":1,"tallas":[],"genero":""}]},{"n":"LANYARD PRO","v":8,"s":36,"r":18,"m":[1,1,4,0,2,0,0],"vars":[{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Verde Militar","v":2,"tallas":[],"genero":""},{"color":"Vinotinto","v":2,"tallas":[],"genero":""},{"color":"Lila","v":1,"tallas":[],"genero":""}]},{"n":"PONCHO ADULTO","v":8,"s":7,"r":53,"m":[0,0,0,1,3,0,4],"vars":[{"color":"AZUL","v":4,"tallas":[],"genero":""},{"color":"AGUAMARINA","v":2,"tallas":[],"genero":""},{"color":"VERDE","v":2,"tallas":[],"genero":""}]},{"n":"SUN HAT","v":8,"s":6,"r":57,"m":[0,1,6,0,0,0,1],"vars":[{"color":"Verde Militar","v":5,"tallas":[],"genero":""},{"color":"Negro","v":3,"tallas":[],"genero":""}]},{"n":"CLASSIC BACKPACK","v":7,"s":2,"r":78,"m":[0,2,3,0,2,0,0],"vars":[{"color":"Azul Marino","v":2,"tallas":[],"genero":""},{"color":"Negro","v":2,"tallas":[],"genero":""},{"color":"Verde Militar","v":2,"tallas":[],"genero":""},{"color":"Gris Oscuro","v":1,"tallas":[],"genero":""}]},{"n":"FIT CAP","v":7,"s":9,"r":44,"m":[1,1,0,0,1,3,1],"vars":[{"color":"Negro","v":3,"tallas":[],"genero":""},{"color":"Azul Marino","v":2,"tallas":[],"genero":""},{"color":"Blanco","v":2,"tallas":[],"genero":""}]},{"n":"OVERGRIP","v":7,"s":13,"r":35,"m":[1,0,3,2,0,1,0],"vars":[{"color":"Negro","v":5,"tallas":[],"genero":""},{"color":"Blanco","v":2,"tallas":[],"genero":""}]},{"n":"VISERA","v":7,"s":0,"r":100,"m":[1,6,0,0,0,0,0],"vars":[{"color":"Azul Marino","v":4,"tallas":[],"genero":""},{"color":"Blanco","v":2,"tallas":[],"genero":""},{"color":"Gris Oscuro","v":1,"tallas":[],"genero":""}]},{"n":"CLASICA SPORT","v":6,"s":0,"r":100,"m":[1,0,3,1,1,0,0],"vars":[{"color":"Verde Militar - Verde Hoja","v":2,"tallas":[{"talla":"2XL","v":1},{"talla":"S","v":1}],"genero":"CAB"},{"color":"Azul Marino - Azul Cori","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"},{"color":"Azul Mazari - Azul Mazari","v":1,"tallas":[{"talla":"L","v":1}],"genero":"CAB"},{"color":"Gris Claro - Gris Ceniza","v":1,"tallas":[{"talla":"14","v":1}],"genero":"KIDS"},{"color":"Verde Militar - Verde Hoja","v":1,"tallas":[{"talla":"14","v":1}],"genero":"KIDS"}]},{"n":"DAD CAP","v":6,"s":8,"r":43,"m":[0,0,2,1,3,0,0],"vars":[{"color":"Gris Oscuro","v":3,"tallas":[],"genero":""},{"color":"Marron","v":2,"tallas":[],"genero":""},{"color":"Verde Militar","v":1,"tallas":[],"genero":""}]},{"n":"ZENIT REDONDO","v":6,"s":1,"r":86,"m":[0,0,0,0,2,2,2],"vars":[{"color":"Terra","v":5,"tallas":[],"genero":""},{"color":"Ocean","v":1,"tallas":[],"genero":""}]},{"n":"BASIC LINE SHORT","v":5,"s":8,"r":38,"m":[0,1,4,0,0,0,0],"vars":[{"color":"Peanut","v":4,"tallas":[{"talla":"M","v":2},{"talla":"S","v":2}],"genero":"DAMA"},{"color":"Black","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"}]},{"n":"SHORT SPORT R1","v":5,"s":12,"r":29,"m":[0,0,0,0,1,2,2],"vars":[{"color":"Gris Oscuro","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Negro","v":2,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"DAMA"},{"color":"Gris","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"CLASICA ADVANCE","v":4,"s":5,"r":44,"m":[0,0,3,0,0,1,0],"vars":[{"color":"Azul","v":2,"tallas":[{"talla":"L","v":1},{"talla":"M","v":1}],"genero":"CAB"},{"color":"Gris Claro","v":2,"tallas":[{"talla":"2XL","v":1},{"talla":"M","v":1}],"genero":"CAB"}]},{"n":"MAFE SPORT","v":4,"s":0,"r":100,"m":[2,1,0,0,0,1,0],"vars":[{"color":"Rosa Palo -  Rosa Seca","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Verde Agua - Azul Óleo","v":1,"tallas":[{"talla":"XL","v":1}],"genero":"DAMA"},{"color":"Verde Militar - Verde Hoja","v":1,"tallas":[{"talla":"XL","v":1}],"genero":"DAMA"}]},{"n":"PORTAVASOS","v":4,"s":0,"r":100,"m":[0,0,4,0,0,0,0],"vars":[{"color":"LILA","v":2,"tallas":[],"genero":""},{"color":"BLACK ABSTRACT","v":1,"tallas":[],"genero":""},{"color":"CORAL","v":1,"tallas":[],"genero":""}]},{"n":"PRO CAP","v":4,"s":8,"r":33,"m":[0,0,0,1,0,0,3],"vars":[{"color":"Blanco","v":2,"tallas":[],"genero":""},{"color":"Negro","v":2,"tallas":[],"genero":""}]},{"n":"ADVANCE GEO DOMINIC","v":3,"s":0,"r":100,"m":[0,0,0,0,0,0,3],"vars":[{"color":"Negro","v":2,"tallas":[{"talla":"L","v":1},{"talla":"XL","v":1}],"genero":"CAB"},{"color":"Azul Cobalto","v":1,"tallas":[{"talla":"L","v":1}],"genero":"CAB"}]},{"n":"BASIC LINE PANT","v":3,"s":9,"r":25,"m":[0,0,1,1,1,0,0],"vars":[{"color":"Black","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Peanut","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"CAMO CAP","v":3,"s":6,"r":33,"m":[0,0,0,0,0,3,0],"vars":[{"color":"Azul Marino","v":1,"tallas":[],"genero":""},{"color":"Gris Claro","v":1,"tallas":[],"genero":""},{"color":"Verde Militar","v":1,"tallas":[],"genero":""}]},{"n":"CLÁSICA SPORT","v":3,"s":0,"r":100,"m":[0,0,2,0,1,0,0],"vars":[{"color":"Negro","v":2,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Verde Militar - Verde Hoja","v":1,"tallas":[{"talla":"M","v":1}],"genero":"DAMA"}]},{"n":"HELEN BIO MOVE","v":3,"s":29,"r":9,"m":[0,0,1,0,1,0,1],"vars":[{"color":"Negro - Ultra Black","v":2,"tallas":[{"talla":"M","v":1},{"talla":"S","v":1}],"genero":"DAMA"},{"color":"Blanco","v":1,"tallas":[{"talla":"S","v":1}],"genero":"DAMA"}]},{"n":"MAFE ADVANCE","v":3,"s":4,"r":43,"m":[0,1,0,0,2,0,0],"vars":[{"color":"Azul","v":2,"tallas":[{"talla":"S","v":1},{"talla":"XS","v":1}],"genero":"DAMA"},{"color":"Gris Claro","v":1,"tallas":[{"talla":"XS","v":1}],"genero":"DAMA"}]},{"n":"URBAN COTTON TOP SAY YES","v":3,"s":4,"r":43,"m":[0,0,1,1,1,0,0],"vars":[{"color":"Azul Marino","v":3,"tallas":[{"talla":"S","v":2},{"talla":"XS","v":1}],"genero":"DAMA"}]},{"n":"CAP SOLID","v":2,"s":0,"r":100,"m":[1,0,1,0,0,0,0],"vars":[{"color":"Arena","v":2,"tallas":[],"genero":""}]},{"n":"ECO BAG","v":2,"s":8,"r":20,"m":[0,0,0,0,0,1,1],"vars":[{"color":"Ondas/Verde","v":1,"tallas":[],"genero":""},{"color":"Palmeras/Azul","v":1,"tallas":[],"genero":""}]},{"n":"EXPLORE CAP","v":2,"s":7,"r":22,"m":[0,0,0,2,0,0,0],"vars":[{"color":"Kaki","v":1,"tallas":[],"genero":""},{"color":"Vinotinto","v":1,"tallas":[],"genero":""}]},{"n":"MAXI TOTE","v":2,"s":0,"r":100,"m":[0,0,2,0,0,0,0],"vars":[{"color":"Azul Rey","v":2,"tallas":[],"genero":""}]},{"n":"SUNNY CORD ORIGINAL","v":2,"s":0,"r":100,"m":[0,0,0,0,0,0,2],"vars":[{"color":"Negro","v":2,"tallas":[],"genero":""}]},{"n":"URBAN COTTON OVERSIZED SUNSET","v":2,"s":6,"r":25,"m":[0,0,0,0,2,0,0],"vars":[{"color":"L","v":1,"tallas":[],"genero":"CAB"},{"color":"M","v":1,"tallas":[],"genero":"CAB"}]},{"n":"ZENIT CUADRADO","v":2,"s":5,"r":29,"m":[0,0,0,0,0,2,0],"vars":[{"color":"Acqua","v":1,"tallas":[],"genero":""},{"color":"Black","v":1,"tallas":[],"genero":""}]},{"n":"ADVANCE GEO MAYA","v":1,"s":0,"r":100,"m":[0,0,0,0,0,1,0],"vars":[{"color":"Amarillo","v":1,"tallas":[{"talla":"XS","v":1}],"genero":"DAMA"}]},{"n":"CLASICA PADEL SPORT","v":1,"s":0,"r":100,"m":[1,0,0,0,0,0,0],"vars":[{"color":"Negro","v":1,"tallas":[{"talla":"M","v":1}],"genero":"CAB"}]},{"n":"LANYARD","v":1,"s":45,"r":2,"m":[0,0,0,0,0,1,0],"vars":[{"color":"Verde Agua","v":1,"tallas":[],"genero":""}]},{"n":"TOP MOVA","v":1,"s":16,"r":6,"m":[0,0,0,0,1,0,0],"vars":[{"color":"Verde Militar - Green Night","v":1,"tallas":[{"talla":"S","v":1}],"genero":""}]},{"n":"URBAN COTTON TOP GRAY BLOCK","v":1,"s":5,"r":17,"m":[0,0,0,1,0,0,0],"vars":[{"color":"S","v":1,"tallas":[],"genero":"DAMA"}]},{"n":"CLASICA ACTIVE","v":0,"s":2,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]},{"n":"CUADRO BAND ELASTIC","v":0,"s":4,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]},{"n":"DANI ACTIVE","v":0,"s":7,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]},{"n":"LEGGING MOVA","v":0,"s":21,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]},{"n":"SABRI SPORT","v":0,"s":2,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]},{"n":"URBAN COTTON TOP VINTAGE GRIS","v":0,"s":5,"r":0,"m":[0,0,0,0,0,0,0],"vars":[]}]};
+const P=D.P, MES=D.mes;
+
+// ── utils
+function rc(r){return r>=60?'var(--gr)':r>=30?'var(--am)':r>0?'var(--re)':'var(--mu)'}
+function rb(r){const c=r>=60?'pH':r>=30?'pM':r>0?'pL':'pZ';return`<span class="prt ${c}">${r}%</span>`}
+
+// toggle one xi — close others in same parent
+function TG(el){
+  const was=el.classList.contains('open');
+  el.parentElement.querySelectorAll('.xi.open').forEach(x=>x.classList.remove('open'));
+  if(!was) el.classList.add('open');
+}
+
+// variant panel HTML
+function VP(p){
+  if(!p.vars||!p.vars.length) return`<div class="vt">Sin desglose disponible</div>`;
+  const hasG=p.vars.some(v=>v.genero), hasT=p.vars.some(v=>v.tallas&&v.tallas.length);
+  const ttl=hasG&&hasT?'Género · Color · Talla':hasT?'Color · Talla':hasG?'Género · Color':'Color';
+  return`<div class="vt">${ttl} &nbsp;·&nbsp; ${p.v} und totales</div><div>${
+    p.vars.slice(0,20).map(v=>{
+      const pct=Math.round(v.v/p.v*100);
+      const mx=v.tallas&&v.tallas.length?Math.max(...v.tallas.map(t=>t.v),1):1;
+      return`<div class="vrow"><div class="vhd">
+        ${v.genero?`<span class="vgen">${v.genero}</span>`:''}
+        <span class="vcl">${v.color}</span>
+        <div class="vbw"><div class="vbf" style="width:${pct}%;background:var(--a2)"></div></div>
+        <span class="vpt">${pct}%</span><span class="vnm">${v.v}</span>
+      </div>${v.tallas&&v.tallas.length?v.tallas.slice(0,8).map(t=>
+        `<div class="trow"><span class="tlb">${t.talla}</span>
+        <div class="tbw"><div class="tbf" style="width:${Math.round(t.v/mx*100)}%"></div></div>
+        <span class="tnm">${t.v}</span></div>`).join(''):''}</div>`;
+    }).join('')
+  }</div>`;
+}
+
+// rotation variant panel
+function VPr(p,col){
+  if(!p.vars||!p.vars.length)
+    return`<div style="font-size:.66rem;color:var(--mu)">${p.v===0?'Sin ventas en el período':'Sin desglose disponible'}</div>`;
+  return`<div class="vt" style="margin-bottom:8px">${p.v} unidades · ${p.vars.length} variantes</div>
+  <div style="display:flex;flex-wrap:wrap;gap:7px">${p.vars.slice(0,16).map(v=>{
+    const pct=p.v>0?Math.round(v.v/p.v*100):0;
+    const th=v.tallas&&v.tallas.length?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">`+
+      v.tallas.slice(0,6).map(t=>`<span style="background:var(--s3);border-radius:4px;padding:2px 6px;font-size:.58rem;font-family:var(--fm)"><b style="color:${col}">${t.talla}</b> ${t.v}</span>`).join('')+'</div>':'';
+    return`<div style="background:var(--s2);border-radius:7px;padding:6px 9px;min-width:100px;font-size:.67rem">
+      <div style="font-weight:700;margin-bottom:2px">${v.genero?`<span style="font-size:.56rem;color:var(--mu);font-weight:400">${v.genero}</span> `:''}${v.color}</div>
+      <div style="font-family:var(--fm);font-size:.62rem;color:${col}">${pct}% · ${v.v} und</div>
+      <div style="height:3px;border-radius:2px;background:${col};width:${pct}%;max-width:100%;margin-top:3px"></div>
+      ${th}</div>`;
+  }).join('')}</div>`;
+}
+
+// ── TABS
+function GT(id,el){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('sec-'+id).classList.add('on');
+  if(el) el.classList.add('on');
+  const fn={rotacion:RR,productos:RP,inventario:RI};
+  if(fn[id]) fn[id]();
+}
+
+// ── KPIs
+(function(){
+  const noS=P.filter(p=>p.v===0&&p.s>0).length;
+  const ag=P.filter(p=>p.s===0&&p.v>0).length;
+  [{v:D.V.toLocaleString(),l:'Unidades Vendidas',c:'c-bl'},
+   {v:D.S.toLocaleString(),l:'Stock en Piso',c:''},
+   {v:D.M,l:'Modelos Activos',c:''},
+   {v:Math.round(D.V/7)+'/mes',l:'Promedio Mensual',c:'c-gr'},
+   // Sin Ventas KPI removed
+   // Stock Agotado removed
+  ].forEach(k=>{
+    const d=document.createElement('div');
+    d.className=`kpi ${k.c}`;
+    d.innerHTML=`<div class="kv">${k.v}</div><div class="kl">${k.l}</div>`;
+    document.getElementById('krow').appendChild(d);
+  });
+})();
+
+// ── CHARTS
+const CG={color:'#191d30'}, CT={color:'#677099',font:{size:10}};
+const PAL=['#6366f1','#8b5cf6','#ec4899','#10b981','#3b82f6','#f59e0b','#ef4444',
+           '#22d3ee','#84cc16','#f97316','#a78bfa','#34d399','#fb923c','#60a5fa','#e879f9','#64748b'];
+
+new Chart(document.getElementById('cMon'),{type:'bar',data:{labels:MES,datasets:[{data:D.mon,
+  backgroundColor:D.mon.map((v,i)=>i===2?'rgba(99,102,241,.85)':'rgba(99,102,241,.2)'),
+  borderColor:D.mon.map((v,i)=>i===2?'#818cf8':'rgba(99,102,241,.35)'),
+  borderWidth:1,borderRadius:7}]},options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw} und`}}},
+  scales:{x:{grid:{color:CG.color},ticks:CT},y:{grid:{color:CG.color},ticks:CT}}}});
+
+new Chart(document.getElementById('cTop'),{type:'doughnut',data:{
+  labels:D.tL,datasets:[{data:D.tV,backgroundColor:PAL,borderWidth:0,hoverOffset:5}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+  plugins:{legend:{display:true,position:'right',
+    labels:{color:'#677099',font:{size:8},boxWidth:7,padding:4,usePointStyle:true}},
+    tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw} und`}}}}});
+
+const RG={h:P.filter(p=>p.r>=60),m:P.filter(p=>p.r>=30&&p.r<60),l:P.filter(p=>p.r>0&&p.r<30),z:P.filter(p=>p.r===0)};
+// cSeg removed
+
+// top10 list removed
+
+// ── ROTACIÓN
+let _srt='r';
+function SS(m){
+  _srt=m;document.querySelectorAll('.sbtn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('sb-'+m).classList.add('on');RR();
+}
+function RR(){
+  const q=(document.getElementById('rSrch').value||'').toLowerCase();
+  let prods=P.filter(p=>!q||p.n.toLowerCase().includes(q));
+  if(_srt==='r') prods=[...prods].sort((a,b)=>b.r-a.r);
+  else if(_srt==='v') prods=[...prods].sort((a,b)=>b.v-a.v);
+  else prods=[...prods].sort((a,b)=>b.s-a.s);
+  const mx=Math.max(...prods.map(p=>p.v+p.s),1);
+  const segs=[
+    {lb:'Rota bien',sub:'>60% vendido',col:'var(--gr)',bg:'rgba(16,185,129,.1)',fl:p=>p.r>=60},
+    {lb:'Rotación media',sub:'30–60% vendido',col:'var(--am)',bg:'rgba(245,158,11,.08)',fl:p=>p.r>=30&&p.r<60},
+    {lb:'Baja rotación',sub:'<30% — stock acumulado',col:'var(--re)',bg:'rgba(244,63,94,.08)',fl:p=>p.r>0&&p.r<30},
+    {lb:'Sin ventas',sub:'stock sin movimiento',col:'var(--mu)',bg:'rgba(100,110,140,.07)',fl:p=>p.r===0},
+  ];
+  ['h','m','l','z'].forEach((k,i)=>{
+    const grp=[RG.h,RG.m,RG.l,RG.z][i];
+    document.getElementById('rk-'+k).textContent=grp.length+' modelos';
+  });
+  let html='';
+  segs.forEach((seg,si)=>{
+    const items=prods.filter(seg.fl);
+    if(!items.length) return;
+    const tv=items.reduce((a,p)=>a+p.v,0), ts=items.reduce((a,p)=>a+p.s,0);
+    const segId='rseg'+si;
+    const isOpenByDefault=si===0;
+    html+=`<div style="margin-bottom:6px">
+      <div id="${segId}H" onclick="tgRotSeg('${segId}')" style="display:flex;align-items:center;gap:10px;
+        padding:10px 14px;border-radius:10px;cursor:pointer;background:${seg.bg};
+        border:1px solid ${seg.col}25;user-select:none;margin-bottom:3px"
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        <div style="flex:1">
+          <span style="font-size:.75rem;font-weight:800;color:${seg.col}">${seg.lb}</span>
+          <span style="font-size:.62rem;color:var(--mu);margin-left:8px">${seg.sub}</span>
+        </div>
+        <span style="font-family:var(--fm);font-size:.67rem;color:${seg.col};flex-shrink:0">${items.length} modelos · ${tv}v · ${ts}s</span>
+        <span id="${segId}A" style="font-size:.6rem;color:var(--m2);transition:transform .15s;flex-shrink:0">${isOpenByDefault?'▴':'▾'}</span>
+      </div>
+      <div id="${segId}B" style="display:${isOpenByDefault?'flex':'none'};flex-direction:column;gap:3px;padding-left:8px">
+        ${items.map((p,pi)=>{
+          const gr=prods.indexOf(p)+1, vW=Math.round(p.v/mx*100), sW=Math.round(p.s/mx*100);
+          const id='r'+si+'_'+pi;
+          return`<div class="xi" id="${id}" onclick="TG(this)">
+            <div class="xh">
+              <span class="rrk">${gr}</span>
+              <span class="rnm">${p.n}</span>
+              <div class="rtrk">
+                <div class="rts" style="width:${vW}%;background:${seg.col}"></div>
+                <div class="rtu" style="width:${sW}%;background:${seg.col}"></div>
+              </div>
+              <span class="rrot" style="color:${seg.col}">${p.r}%</span>
+              <span class="rvs">${p.v}v · ${p.s}s</span>
+              <span class="xa">▾</span>
+            </div>
+            <div class="xb">${VPr(p,seg.col)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+  document.getElementById('rotList').innerHTML=html;
+}
+
+// ── PRODUCTOS
+let _pM='',_pR='';
+(function(){
+  document.getElementById('pMF').innerHTML=
+    `<span class="chip on" data-m="" onclick="SPM(this)">Todos</span>`+
+    MES.map(m=>`<span class="chip" data-m="${m}" onclick="SPM(this)">${m}</span>`).join('');
+})();
+function SPM(el){document.querySelectorAll('#pMF .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');_pM=el.dataset.m;RP();}
+function SPR(el){document.querySelectorAll('[data-rf]').forEach(c=>c.classList.remove('on'));el.classList.add('on');_pR=el.dataset.rf;RP();}
+function RP(){
+  const q=(document.getElementById('pSrch').value||'').toLowerCase();
+  const mi=_pM?MES.indexOf(_pM):-1;
+  let prods=P.filter(p=>{
+    const mq=!q||p.n.toLowerCase().includes(q);
+    const mr=!_pR||(_pR==='h'&&p.r>=60)||(_pR==='m'&&p.r>=30&&p.r<60)||(_pR==='l'&&p.r>0&&p.r<30)||(_pR==='z'&&p.r===0);
+    return mq&&mr;
+  }).map(p=>({...p,_t:mi>=0?p.m[mi]:p.v}));
+  if(mi>=0) prods=prods.filter(p=>p._t>0);
+  prods.sort((a,b)=>b._t-a._t);
+  const mx=Math.max(...prods.map(p=>p._t+(mi>=0?0:p.s)),1);
+  document.getElementById('pCnt').textContent=`${prods.length} modelos`;
+  document.getElementById('pList').innerHTML=prods.map((p,i)=>{
+    const col=rc(p.r), vW=Math.round(p._t/mx*100), sW=mi>=0?0:Math.round(p.s/mx*100);
+    const body=mi>=0?`<div class="vt">Mes: ${MES[mi]} — ${p._t} unidades</div>
+      <div style="font-size:.67rem;color:var(--mu)">Selecciona "Todos" para el desglose completo.</div>`:VP(p);
+    return`<div class="xi" onclick="TG(this)">
+      <div class="xh">
+        <span class="prk">${i+1}</span>
+        <span class="pnm">${p.n}</span>
+        <div class="ptrk">
+          <div style="width:${vW}%;height:5px;background:${col};border-radius:3px;min-width:${p._t>0?2:0}px"></div>
+          <div style="width:${sW}%;height:5px;background:${col};opacity:.2;border-radius:3px;min-width:${p.s>0&&mi<0?2:0}px"></div>
+        </div>
+        ${mi<0?rb(p.r):''}
+        <span class="pv" style="color:${col}">${p._t}</span>
+        <span class="ps">${p.s} stk</span>
+        <span class="xa">▾</span>
+      </div>
+      <div class="xb">${body}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── INVENTARIO
+let _iF='';
+function SIF(el,f){document.querySelectorAll('[data-if]').forEach(c=>c.classList.remove('on'));el.classList.add('on');_iF=f;RI();}
+function RI(){
+  const q=(document.getElementById('iSrch').value||'').toLowerCase();
+  const rows=P.filter(p=>p.s>0).filter(p=>{
+    const mq=!q||p.n.toLowerCase().includes(q);
+    const mf=!_iF||(_iF==='v'&&p.v>0)||(_iF==='n'&&p.v===0);
+    return mq&&mf;
+  }).sort((a,b)=>b.s-a.s);
+  document.getElementById('iBdy').innerHTML=rows.map((p,i)=>`<tr>
+    <td style="color:var(--m2);font-family:var(--fm);font-size:.58rem">${i+1}</td>
+    <td><strong style="${p.v===0?'color:var(--re)':''}">${p.n}</strong></td>
+    <td class="num" style="color:var(--a2)">${p.v||'—'}</td>
+    <td class="num" style="font-weight:700;color:${p.s>=10?'var(--tx)':p.s>=4?'var(--am)':'var(--re)'}">${p.s}</td>
+    <td class="num">${p.v>0?rb(p.r):`<span class="prt pZ">—</span>`}</td>
+    <td style="font-size:.62rem">${p.v>0?`<span style="color:var(--gr)">✓ Con ventas</span>`:`<span style="color:var(--re)">⚠ Sin ventas</span>`}</td>
+  </tr>`).join('');
+}
+
+// ── DECISIONES
+(function(){
+  const buy=P.filter(p=>p.s===0&&p.v>=5).sort((a,b)=>b.v-a.v);
+  const hold=P.filter(p=>p.r>=35&&p.r<75&&p.s>0&&p.v>5).slice(0,8);
+  const act=P.filter(p=>p.r>0&&p.r<35&&p.s>=3).sort((a,b)=>b.s-a.s).slice(0,8);
+  const liq=P.filter(p=>p.r===0&&p.s>0).sort((a,b)=>b.s-a.s);
+  const fi=l=>l.slice(0,8).map(p=>`<div class="di"><strong>${p.n}</strong>
+    <small>${p.v>0?p.v+'v ':''} ${p.s>0?p.s+'s ':''} ${p.r>0?p.r+'%':''}</small></div>`).join('')||
+    '<p style="color:var(--mu);font-size:.68rem">—</p>';
+  document.getElementById('dBuy').innerHTML=fi(buy);
+  document.getElementById('dHold').innerHTML=fi(hold);
+  document.getElementById('dAct').innerHTML=fi(act);
+  document.getElementById('dLiq').innerHTML=fi(liq);
+  const mx=Math.max(...P.map(p=>p.v+p.s),1);
+  document.getElementById('dBar').innerHTML=P.map(p=>{
+    const col=rc(p.r);
+    return`<div style="margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+        <span style="font-size:.68rem;font-weight:600">${p.n}</span>
+        <span style="font-family:var(--fm);font-size:.6rem;color:var(--mu)">${p.v}v · ${p.s}s · ${p.r}%</span>
+      </div>
+      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px">
+        <div style="width:${Math.round(p.v/mx*100)}%;background:${col};border-radius:3px;min-width:${p.v>0?2:0}px"></div>
+        <div style="width:${Math.round(p.s/mx*100)}%;background:${col};opacity:.18;border-radius:3px;min-width:${p.s>0?2:0}px"></div>
+      </div></div>`;
+  }).join('');
+})();
+
+
+// ── RESUMEN ROTATION MATRIX
+(function buildRotMatrix(){
+  const segs=[
+    {lb:'🟢 Rota bien',sub:'&gt;60% vendido — se mueve solo',col:'var(--gr)',bg:'rgba(16,185,129,.1)',fl:p=>p.r>=60},
+    {lb:'🟡 Rotación media',sub:'30–60% vendido',col:'var(--am)',bg:'rgba(245,158,11,.08)',fl:p=>p.r>=30&&p.r<60},
+    {lb:'🔴 Baja rotación',sub:'&lt;30% — stock acumulado',col:'var(--re)',bg:'rgba(244,63,94,.08)',fl:p=>p.r>0&&p.r<30},
+    {lb:'⚫ Sin ventas',sub:'stock en piso sin movimiento',col:'var(--mu)',bg:'rgba(100,110,140,.07)',fl:p=>p.r===0},
+  ];
+  const mx=Math.max(...P.map(p=>p.v+p.s),1);
+  const container=document.getElementById('rotMatrix');
+  let html='';
+  segs.forEach((seg,si)=>{
+    const items=P.filter(seg.fl).sort((a,b)=>b.v-a.v);
+    if(!items.length) return;
+    const tv=items.reduce((a,p)=>a+p.v,0), ts=items.reduce((a,p)=>a+p.s,0);
+    const sid='rsm'+si;
+    html+=`<div style="margin-bottom:4px">
+      <div id="${sid}hdr" onclick="tgSeg('${sid}')" style="display:flex;align-items:center;gap:10px;
+        padding:11px 14px;border-radius:10px;cursor:pointer;background:${seg.bg};
+        border:1px solid ${seg.col}25;transition:opacity .12s;user-select:none"
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        <div style="flex:1">
+          <span style="font-size:.76rem;font-weight:800;color:${seg.col}">${seg.lb}</span>
+          <span style="font-size:.63rem;color:var(--mu);margin-left:8px">${seg.sub}</span>
+        </div>
+        <span style="font-family:var(--fm);font-size:.68rem;color:${seg.col};flex-shrink:0">${items.length} modelos · ${tv}v · ${ts}s</span>
+        <span id="${sid}arr" style="font-size:.6rem;color:var(--m2);transition:transform .15s;flex-shrink:0">▾</span>
+      </div>
+      <div id="${sid}body" style="display:none;padding:6px 0 4px 10px;flex-direction:column;gap:2px">
+        ${items.map(p=>{
+          const vW=Math.round(p.v/mx*100), sW=Math.round(p.s/mx*100);
+          return`<div style="display:flex;align-items:center;gap:9px;padding:6px 10px;
+            border-radius:7px;background:var(--s2)">
+            <span style="font-size:.71rem;font-weight:700;flex:1;min-width:0;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.n}</span>
+            <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;gap:1px;
+              width:120px;flex-shrink:0">
+              <div style="width:${vW}%;height:7px;background:${seg.col};border-radius:3px;min-width:${p.v>0?2:0}px"></div>
+              <div style="width:${sW}%;height:7px;background:${seg.col};opacity:.2;border-radius:3px;min-width:${p.s>0?2:0}px"></div>
+            </div>
+            <span style="font-family:var(--fm);font-size:.68rem;font-weight:800;color:${seg.col};width:34px;text-align:right">${p.r}%</span>
+            <span style="font-family:var(--fm);font-size:.61rem;color:var(--mu);width:66px;text-align:right">${p.v}v · ${p.s}s</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+  container.innerHTML=html;
+  // open first segment by default
+  tgSeg('rsm0');
+})();
+
+function tgRotSeg(id){
+  const body=document.getElementById(id+'B');
+  const arr=document.getElementById(id+'A');
+  if(!body||!arr) return;
+  const isOpen=body.style.display==='flex';
+  body.style.display=isOpen?'none':'flex';
+  arr.textContent=isOpen?'▾':'▴';
+}
+
+function tgSeg(id){
+  const body=document.getElementById(id+'body');
+  const arr=document.getElementById(id+'arr');
+  if(!body||!arr) return;
+  const isOpen=body.style.display!=='none'&&body.style.display!=='';
+  body.style.display=isOpen?'none':'flex';
+  arr.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+
+// ── INIT
+RR(); RP(); RI();
+</script>
+</body>
+</html>
