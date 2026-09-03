@@ -887,6 +887,14 @@ payload = {
 with open(os.path.join(BASE, "datos_modelo.json"), "w", encoding="utf-8") as f:
     json.dump(payload, f, ensure_ascii=False, indent=1)
 
+# El dashboard se abre con file://, donde fetch() está bloqueado por CORS.
+# Se emite el mismo payload como script cargable con <script src>.
+with open(os.path.join(BASE, "datos_modelo.js"), "w", encoding="utf-8") as f:
+    f.write("/* Generado por modelo_capacidad.py — no editar a mano. */\n")
+    f.write("const DATA = ")
+    json.dump(payload, f, ensure_ascii=False, indent=1)
+    f.write(";\n")
+
 # ---------------------------------------------------------------------------
 # 9. RESUMEN EN CONSOLA
 # ---------------------------------------------------------------------------

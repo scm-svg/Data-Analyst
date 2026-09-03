@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cuadro · Dashboard de capacidad en piezas y selección de maquinaria</title>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/chartjs-plugin-datalabels.min.js"></script>
+<script src="datos_modelo.js"></script>
+<style>
+  :root{
+    --bg:#0E1621; --panel:#16232F; --panel2:#1D2D3B; --line:#2A3D4E;
+    --txt:#E8EEF2; --dim:#94A7B5; --acc:#4C8DD9; --ok:#3FBF8F; --warn:#E8A33D;
+    --bad:#EC5A4E; --violet:#8E7BE0;
+  }
+  body.light{
+    --bg:#F4F6F8; --panel:#FFFFFF; --panel2:#F0F3F6; --line:#DCE3E9;
+    --txt:#12263A; --dim:#5A6B78; --acc:#2C6E9B; --ok:#1F8A6A; --warn:#B4801A;
+    --bad:#C0392B; --violet:#6A57C4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font-family:"Segoe UI",system-ui,-apple-system,sans-serif;font-size:14px;
+       transition:background .25s,color .25s}
+  .wrap{max-width:1400px;margin:0 auto;padding:18px 20px 70px}
+
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;
+         justify-content:space-between;margin-bottom:16px}
+  .brand .t{font-size:1.32rem;font-weight:700;letter-spacing:-.01em}
+  .brand .s{color:var(--dim);font-size:.82rem;margin-top:3px;max-width:72ch}
+  .toggle{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+          border-radius:9px;padding:8px 13px;cursor:pointer;font-size:.82rem;font-weight:600}
+  .toggle:hover{border-color:var(--acc)}
+
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:16px}
+  @media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:660px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .kpi .n{font-size:1.55rem;font-weight:700;line-height:1.1;letter-spacing:-.02em}
+  .kpi .l{color:var(--dim);font-size:.74rem;margin-top:5px;line-height:1.35}
+  .kpi.a .n{color:var(--acc)} .kpi.o .n{color:var(--ok)}
+  .kpi.w .n{color:var(--warn)} .kpi.b .n{color:var(--bad)}
+
+  nav.tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;
+           border-bottom:1px solid var(--line);padding-bottom:11px}
+  .tab{background:transparent;border:1px solid var(--line);color:var(--dim);
+       border-radius:999px;padding:7px 15px;cursor:pointer;font-size:.82rem;font-weight:600}
+  .tab:hover{color:var(--txt);border-color:var(--acc)}
+  .tab.on{background:var(--acc);border-color:var(--acc);color:#fff}
+
+  section.page{display:none} section.page.on{display:block}
+
+  .row{display:grid;gap:13px;margin-bottom:13px}
+  .c1{grid-template-columns:1fr}
+  .c2{grid-template-columns:1fr 1fr}
+  .c3{grid-template-columns:repeat(3,1fr)}
+  .c21{grid-template-columns:2fr 1fr}
+  .c12{grid-template-columns:1fr 2fr}
+  @media(max-width:1020px){.c2,.c3,.c21,.c12{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 17px}
+  .card h3{margin:0 0 3px;font-size:.98rem;font-weight:700}
+  .card .sub{color:var(--dim);font-size:.76rem;margin-bottom:12px}
+  .chart{position:relative;height:290px}
+  .chart.tall{height:360px}
+  .chart.short{height:220px}
+
+  table{width:100%;border-collapse:collapse;font-size:.79rem}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:.72rem;text-transform:uppercase;
+     letter-spacing:.05em;white-space:nowrap}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tr.tot td{background:var(--panel2);font-weight:700}
+  .neg{color:var(--bad);font-weight:700} .pos{color:var(--ok);font-weight:700}
+
+  .chip{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:4px}
+  .c-ok{background:rgba(63,191,143,.16);color:var(--ok)}
+  .c-bad{background:rgba(236,90,78,.16);color:var(--bad)}
+  .c-warn{background:rgba(232,163,61,.16);color:var(--warn)}
+  .c-dim{background:rgba(148,167,181,.16);color:var(--dim)}
+
+  .dec{background:var(--panel2);border-left:3px solid var(--acc);border-radius:8px;
+       padding:10px 13px;margin-top:12px;font-size:.81rem;color:var(--dim);line-height:1.5}
+  .dec b{color:var(--txt)}
+  .dec.bad{border-left-color:var(--bad)} .dec.ok{border-left-color:var(--ok)}
+  .dec.warn{border-left-color:var(--warn)}
+
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .ctrl label{color:var(--dim);font-size:.76rem;font-weight:600;margin-right:2px}
+  select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+         border-radius:7px;padding:7px 10px;font-size:.81rem;font-family:inherit;font-weight:600}
+  select:focus{outline:none;border-color:var(--acc)}
+
+  .matrix{overflow-x:auto}
+  .matrix table{font-size:.75rem;min-width:640px}
+  .matrix td.cell{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+
+  footer{color:var(--dim);font-size:.75rem;margin-top:26px;padding-top:14px;
+         border-top:1px solid var(--line);line-height:1.6}
+  a{color:var(--acc)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:.92em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="t">Capacidad instalada del taller · <span style="color:var(--acc)">en piezas</span></div>
+    <div class="s">Cuadro · Crecoindustrias, C.A. — techo actual, dos propuestas de maquinaria y
+      déficit contra la demanda regular, el pico de diciembre y la apertura de tiendas.
+      Corte septiembre 2026 · 20 días hábiles.</div>
+  </div>
+  <button class="toggle" id="theme">Modo claro</button>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<nav class="tabs">
+  <button class="tab on" data-p="p1">1 · Techo actual</button>
+  <button class="tab" data-p="p2">2 · Cuello de botella</button>
+  <button class="tab" data-p="p3">3 · Calidad</button>
+  <button class="tab" data-p="p4">4 · Propuestas</button>
+  <button class="tab" data-p="p5">5 · Déficit</button>
+  <button class="tab" data-p="p6">6 · Decisión</button>
+</nav>
+
+<!-- ============ 1 · TECHO ACTUAL ============ -->
+<section class="page on" id="p1">
+  <div class="row c21">
+    <div class="card">
+      <h3>Los tres techos del taller</h3>
+      <div class="sub">Piezas por mes · el pico de diciembre queda por encima de los tres</div>
+      <div class="chart" id="ch_techos"></div>
+      <div class="dec bad"><b>Lectura.</b> Aunque las 22 máquinas volvieran al 100% mañana,
+        el taller llegaría a 7.693 piezas contra 8.576 de demanda en diciembre.
+        <b>Reparar no cierra el pico</b>: el techo teórico del layout actual ya está por debajo.</div>
+    </div>
+    <div class="card">
+      <h3>Composición del techo</h3>
+      <div class="sub">De la capacidad teórica a la pieza vendible</div>
+      <table id="t_comp"></table>
+      <div class="dec"><b>El descuento de calidad</b> no es contable: son horas de máquina y de
+        operaria que se van en retrabajar prenda ya hecha.</div>
+    </div>
+  </div>
+
+  <div class="row c2">
+    <div class="card">
+      <h3>Por qué contar piezas y no operaciones</h3>
+      <div class="sub">El método de suma de operaciones sobreestima el techo</div>
+      <div class="chart short" id="ch_metodo"></div>
+      <div class="dec warn"><b>Regla de planificación.</b> Sumar las operaciones de todas las
+        máquinas supone que la capacidad es intercambiable. No lo es: la línea produce al ritmo de
+        su estación más lenta. <b>Sobreestimación: +10,1%</b>, unas 657 piezas al mes que nadie
+        puede entregar.</div>
+    </div>
+    <div class="card">
+      <h3>Tasa de producción por línea y día</h3>
+      <div class="sub">Piezas/línea/día medidas en campo, por estado técnico del parque</div>
+      <div class="chart short" id="ch_tasas"></div>
+      <div class="dec"><b>A</b> parque actual · <b>B</b> parque íntegro o máquina nueva de
+        sustitución · <b>C</b> módulo continuo de 5 máquinas sin mesa de remate.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 · CUELLO DE BOTELLA ============ -->
+<section class="page" id="p2">
+  <div class="row c2">
+    <div class="card">
+      <h3>El ruedo nace a la mitad del overlock</h3>
+      <div class="sub">Operaciones/día por estación · no es una avería, es el diseño de la línea</div>
+      <div class="chart" id="ch_estaciones"></div>
+      <div class="dec bad"><b>Decisión.</b> Comprar overlock no mueve el techo.
+        La collaretera de ruedo es la estación que limita la línea, y tres de las cuatro máquinas
+        caídas son precisamente collareteras de ruedo.</div>
+    </div>
+    <div class="card">
+      <h3>Teórica contra real, por línea</h3>
+      <div class="sub">Operaciones/día · Línea 1 demuestra que el 100% es alcanzable</div>
+      <div class="chart" id="ch_lineas"></div>
+      <div class="dec warn"><b>Desbalanceo.</b> L3 y L4 se diseñaron con dos ruedos y prometen 785,
+        pero el segundo ruedo está apagado en las dos. Nunca cumplieron esa promesa ni un día.</div>
+    </div>
+  </div>
+
+  <div class="row c12">
+    <div class="card">
+      <h3>Las cuatro máquinas que fallan</h3>
+      <div class="sub">Concentran 290,5 operaciones/día de pérdida</div>
+      <table id="t_criticas"></table>
+    </div>
+    <div class="card">
+      <h3>Capacidad máxima exclusiva</h3>
+      <div class="sub">Piezas/mes si las 4 líneas corrieran un solo modelo · el techo en piezas
+        depende del mix, no sólo de la máquina</div>
+      <div class="chart short" id="ch_exclusiva"></div>
+      <div class="dec"><b>Por eso una meta en piezas planas es engañosa.</b> Un Basic Line cuesta
+        el doble de máquina que un RIO. La orden de producción tiene que declarar el mix.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3 · CALIDAD ============ -->
+<section class="page" id="p3">
+  <div class="row c3">
+    <div class="card">
+      <h3>Reproceso QA medido</h3>
+      <div class="sub">Promedio mensual abril–agosto 2026</div>
+      <div class="chart short" id="ch_qa"></div>
+      <table id="t_qa" style="margin-top:8px"></table>
+    </div>
+    <div class="card">
+      <h3>Lo que se lleva el retrabajo</h3>
+      <div class="sub">Capacidad bruta contra capacidad neta de primera calidad</div>
+      <div class="chart short" id="ch_peaje"></div>
+      <div class="dec warn"><b>16 de cada 100 prendas</b> vuelven a ocupar máquina y gente.
+        Esa capacidad no produce ninguna pieza nueva.</div>
+    </div>
+    <div class="card">
+      <h3>Sensibilidad del supuesto</h3>
+      <div class="sub">Capacidad neta según el contenido de retrabajo</div>
+      <div class="chart short" id="ch_sens"></div>
+      <div class="dec ok"><b>Robustez.</b> En todo el rango de 20% a 100% el orden de los
+        escenarios no cambia y el diagnóstico se mantiene. Sólo se mueve el margen de 2.1b.</div>
+    </div>
+  </div>
+
+  <div class="row c1">
+    <div class="card">
+      <h3>Defectología: por qué la máquina nueva baja la tasa y no sólo sube el ritmo</h3>
+      <div class="sub">Los siete defectos documentados son atribuibles a la condición del parque,
+        no al método ni al operario</div>
+      <table id="t_defectos"></table>
+      <div class="dec"><b>Supuesto declarado.</b> Los escenarios con parque nuevo se modelan con
+        6,0% de reproceso residual, no con 0%: asume que sólo se elimina el 62% de los rechazos y
+        que el resto viene de tela, corte, patrón o manipulación.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 · PROPUESTAS ============ -->
+<section class="page" id="p4">
+  <div class="row c1">
+    <div class="card">
+      <h3>Los siete escenarios contra las dos demandas</h3>
+      <div class="sub">Piezas de primera calidad por mes · la línea roja es el pico de diciembre</div>
+      <div class="chart tall" id="ch_escenarios"></div>
+      <div class="dec ok"><b>Frontera de decisión.</b> El primer escenario que cruza el pico de
+        diciembre es <b>2.1b</b>, y lo hace por 43 piezas: empata, no sobra.
+        Con una tienda nueva encima, el primero que cruza es <b>2.2b</b>.</div>
+    </div>
+  </div>
+
+  <div class="row c1">
+    <div class="card">
+      <h3>Tabla comparativa centralizada</h3>
+      <div class="sub">Misma base de mix 50/35/15 y 20 días hábiles en todos los escenarios</div>
+      <table id="t_escenarios"></table>
+    </div>
+  </div>
+
+  <div class="row c2">
+    <div class="card">
+      <h3>Rendimiento marginal del capex</h3>
+      <div class="sub">Piezas/mes de primera calidad ganadas por cada máquina comprada</div>
+      <div class="chart" id="ch_rendimiento"></div>
+      <div class="dec warn"><b>Advertencia.</b> Mide eficiencia técnica, no valor económico.
+        Falta el precio por tipo de máquina y el margen bruto por pieza: con esos dos datos esta
+        tabla se convierte en payback.</div>
+    </div>
+    <div class="card">
+      <h3>Paquete de compra por fase</h3>
+      <div class="sub">Qué máquina, cuántas y qué problema ataca</div>
+      <div style="max-height:400px;overflow-y:auto"><table id="t_compra"></table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5 · DÉFICIT ============ -->
+<section class="page" id="p5">
+  <div class="row c1">
+    <div class="card">
+      <div class="ctrl">
+        <label for="selEsc">Escenario de inversión</label>
+        <select id="selEsc"></select>
+        <label for="selDem" style="margin-left:12px">Período de demanda</label>
+        <select id="selDem"></select>
+      </div>
+      <div id="box_res" class="kpis" style="margin-bottom:14px"></div>
+      <div class="chart" id="ch_deficit"></div>
+      <div class="dec" id="dec_deficit"></div>
+    </div>
+  </div>
+
+  <div class="row c1">
+    <div class="card">
+      <h3>Matriz completa de déficit</h3>
+      <div class="sub">Superávit (+) o déficit (−) de piezas de primera calidad por mes ·
+        capacidad neta menos demanda</div>
+      <div class="matrix"><table id="t_matriz"></table></div>
+      <div class="dec bad"><b>La frontera cruza la tabla en diagonal.</b> Cada tienda nueva exige
+        subir un peldaño de inversión. Una sola tienda consume 1.594 piezas del pico: más del doble
+        de lo que aporta reparar el parque completo (685).</div>
+    </div>
+  </div>
+
+  <div class="row c2">
+    <div class="card">
+      <h3>Cobertura por escenario</h3>
+      <div class="sub">Capacidad neta ÷ demanda · por debajo de 1,00 no se cubre</div>
+      <div class="chart" id="ch_cobertura"></div>
+    </div>
+    <div class="card">
+      <h3>Los seis escenarios de demanda</h3>
+      <div class="sub">El pico es 2,07 veces la demanda regular</div>
+      <table id="t_demanda"></table>
+      <div class="dec warn"><b>Dimensionar al pico, no al promedio.</b> Un taller ajustado al mes
+        promedio está sobredimensionado once meses y quebrado en el mes que decide el año.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 · DECISIÓN ============ -->
+<section class="page" id="p6">
+  <div class="row c1">
+    <div class="card">
+      <h3>Escalera de decisión</h3>
+      <div class="sub">Qué escenario de inversión cubre qué red comercial, en mes pico</div>
+      <div class="chart tall" id="ch_escalera"></div>
+    </div>
+  </div>
+
+  <div class="row c3">
+    <div class="card">
+      <h3>Fase 1 · Cerrar el pico de hoy</h3>
+      <div class="sub">Se aprueba ahora</div>
+      <div class="dec ok" style="margin-top:0">
+        <b>Comprar las 12 máquinas de 2.1b.</b> Módulos continuos para L3 y L4, overlock de unión
+        para L2, segunda collaretera de ruedo para L1 y L2. Más el kit de repuestos con suministro
+        local y <b>la dotación de 2 operarios</b> para los overlock de cuellos, que están parados
+        por gente y no por avería.<br><br>
+        Resultado: <b>8.619 piezas/mes</b>. Cubre el diciembre de la red actual por 43 piezas.<br><br>
+        No se pide el monto: falta cotización.
+      </div>
+    </div>
+    <div class="card">
+      <h3>Fase 2 · Comprar la red nueva</h3>
+      <div class="sub">Se aprueba cotizar</div>
+      <div class="dec warn" style="margin-top:0">
+        <b>Cotizar 2.2b</b> (33 máquinas) y presentarla junto al plan de aperturas de Comercial.
+        La condición de apertura de la tienda confirmada es que 2.2b esté <b>aprobada</b>,
+        no sólo cotizada.<br><br>
+        Resultado: <b>11.827 piezas/mes</b>. Cubre el pico con una tienda nueva por 1.657 piezas.<br><br>
+        Comprar sólo 2.1b y abrir la tienda deja un déficit de <b>1.551 piezas</b> en su primer
+        diciembre.
+      </div>
+    </div>
+    <div class="card">
+      <h3>Paralelo · Abatir el capex</h3>
+      <div class="sub">Sin dependencias</div>
+      <div class="dec" style="margin-top:0">
+        <b>Inventario del parque a nivel de serie</b> con valor en libros, y lote de salida de las
+        2 collareteras chatarra más las que se sustituyan.<br><br>
+        El 9% del parque se deprecia hoy sin producir un segundo de valor. Sin este paso el taller
+        financia máquina nueva y además conserva y mantiene la vieja.<br><br>
+        Canibalizar lo que la marca nueva no cubra, vender el resto.
+      </div>
+    </div>
+  </div>
+
+  <div class="row c2">
+    <div class="card">
+      <h3>Reglas de planificación que salen del análisis</h3>
+      <div class="sub">Aplicables desde el próximo ciclo, sin esperar la compra</div>
+      <table>
+        <tbody>
+          <tr><td><b>Dimensionar al pico.</b> El pico es 2,07× el mes regular.</td></tr>
+          <tr><td><b>No lanzar órdenes en piezas planas.</b> 8.576 piezas de mix pesado y 8.576 de mix ligero son dos talleres distintos.</td></tr>
+          <tr><td><b>Nunca planificar con la suma de operaciones.</b> Sobreestima el techo en 10,1%.</td></tr>
+          <tr><td><b>Asignar cupo a la línea de shorts.</b> Sin techo medido, cada orden desplaza producción de punto de forma invisible.</td></tr>
+          <tr><td><b>Reservar holgura</b> para producto nuevo y corporativos: caen sobre el mismo techo, no encima de él.</td></tr>
+          <tr><td><b>Reportar en dos columnas siempre:</b> piezas del mix y operaciones.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Datos que faltan para cerrar el capex</h3>
+      <div class="sub">El diagnóstico y el volumen están sostenidos; el monto no</div>
+      <div style="max-height:330px;overflow-y:auto"><table id="t_faltantes"></table></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Fuente única: modelo <code>modelo_capacidad.py</code>, alimentado por Máquinas activas ·
+  Reporte de máquinas · Muestra de campo · Operaciones por línea · Operaciones por producto ·
+  Análisis de tasa de retrocesos QA · Informe de capacidad instalada y justificación de inversión
+  en maquinaria de costura · Justificación técnica de calidad.
+  Memoria de cálculo en <code>anexos/Modelo_Capacidad_Piezas_Cuadro.xlsx</code>.
+  Documento completo en <a href="INFORME_CAPACIDAD_PIEZAS.html">INFORME_CAPACIDAD_PIEZAS.html</a>.
+  Los factores de red nueva son escenarios, no forecast firmado por Comercial.
+</footer>
+
+</div>
+
+<script>
+/* ------------------------------------------------------------------ */
+/* Utilidades                                                          */
+/* ------------------------------------------------------------------ */
+Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels', {display:false});
+
+const fmt  = v => Math.round(v).toLocaleString('es-VE');
+const fmtS = v => (v>0?'+':'') + Math.round(v).toLocaleString('es-VE');
+const pct  = (v,d=1) => (v*100).toFixed(d).replace('.',',') + '%';
+const dec  = (v,d=2) => v.toFixed(d).replace('.',',');
+
+const ESC = DATA.escenarios;
+const byKey = k => ESC.find(e => e.clave === k);
+const NOM = {S0:'Actual real', S0T:'Actual teórica', S21a:'2.1a corta mínima',
+             S21b:'2.1b corta recomendada', S22a:'2.2a · 4 módulos',
+             S22b:'2.2b · 5 módulos + shorts', S22c:'2.2c · 6 módulos + shorts'};
+const COL = {S0:'#E8A33D', S0T:'#94A7B5', S21a:'#6FA8DC', S21b:'#4C8DD9',
+             S22a:'#57C4A0', S22b:'#3FBF8F', S22c:'#2A9070'};
+
+let charts = {};
+function css(v){ return getComputedStyle(document.body).getPropertyValue(v).trim(); }
+
+function mk(id, cfg){
+  const host = document.getElementById(id);
+  if(!host) return;
+  if(charts[id]) charts[id].destroy();
+  host.innerHTML = '<canvas></canvas>';
+  charts[id] = new Chart(host.querySelector('canvas'), cfg);
+}
+
+function baseOpts(extra={}){
+  const grid = css('--line'), tick = css('--dim'), txt = css('--txt');
+  return Object.assign({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{labels:{color:tick, boxWidth:12, font:{size:11}}},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:txt, bodyColor:txt,
+               borderColor:grid, borderWidth:1, padding:9}
+    },
+    scales:{
+      x:{ticks:{color:tick, font:{size:10.5}}, grid:{color:grid, drawOnChartArea:false}},
+      y:{ticks:{color:tick, font:{size:10.5},
+                callback:v=>v.toLocaleString('es-VE')}, grid:{color:grid}}
+    }
+  }, extra);
+}
+function dlab(color, fn){
+  return {display:true, color:color||css('--txt'), anchor:'end', align:'end',
+          offset:2, font:{size:10.5, weight:'700'}, formatter:fn||(v=>fmt(v))};
+}
+function linea(y, color, label){
+  return {type:'line', label:label, data:null, borderColor:color, borderWidth:2,
+          borderDash:[6,4], pointRadius:0, fill:false};
+}
+
+/* ------------------------------------------------------------------ */
+/* KPIs de cabecera                                                    */
+/* ------------------------------------------------------------------ */
+const s0 = byKey('S0'), s0t = byKey('S0T'), s21b = byKey('S21b'), s22b = byKey('S22b');
+const defPico = s0.total_neto - DATA.demanda.pico;
+
+document.getElementById('kpis').innerHTML = [
+  ['a', fmt(s0.total_neto), 'Piezas/mes de primera<br>que el taller entrega hoy'],
+  ['w', fmt(s0t.total_neto), 'Techo teórico en piezas<br>con las 22 máquinas al 100%'],
+  ['o', dec(s0.total_neto/DATA.demanda.regular)+'×', 'Cobertura de la demanda regular<br>de '+fmt(DATA.demanda.regular)+' piezas'],
+  ['b', fmtS(defPico), 'Déficit en el pico de diciembre<br>de '+fmt(DATA.demanda.pico)+' piezas'],
+  ['b', pct(DATA.calidad.tasa,2), 'Reproceso QA medido<br>'+fmt(DATA.calidad.rechazadas)+' de '+fmt(DATA.calidad.inspeccionadas)]
+].map(([c,n,l]) => `<div class="kpi ${c}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+/* ------------------------------------------------------------------ */
+/* Tablas estáticas                                                    */
+/* ------------------------------------------------------------------ */
+document.getElementById('t_comp').innerHTML = `
+<thead><tr><th>Concepto</th><th class="num">Teórica</th><th class="num">Real</th></tr></thead>
+<tbody>
+  <tr><td>Líneas 1–4 · tejido de punto</td><td class="num">7.228</td><td class="num">6.504</td></tr>
+  <tr><td>Línea de shorts y pants</td><td class="num">900</td><td class="num">900</td></tr>
+  <tr class="tot"><td>Bruto · sale de línea</td><td class="num">${fmt(s0t.total_bruto)}</td><td class="num">${fmt(s0.total_bruto)}</td></tr>
+  <tr><td>Descuento por retrabajo QA</td><td class="num neg">−435</td><td class="num neg">−396</td></tr>
+  <tr class="tot"><td>Neto · pieza vendible</td><td class="num">${fmt(s0t.total_neto)}</td><td class="num">${fmt(s0.total_neto)}</td></tr>
+  <tr><td>Pérdida por estado del parque</td><td class="num" colspan="2"><span class="neg">685 piezas/mes</span></td></tr>
+</tbody>`;
+
+document.getElementById('t_criticas').innerHTML = `
+<thead><tr><th>Línea</th><th>Máquina</th><th>Estatus</th>
+<th class="num">Teórica</th><th class="num">Real</th><th class="num">Pérdida</th></tr></thead>
+<tbody>` + DATA.criticas.map(c => {
+  const cls = c.Estatus === 'Inactiva' ? 'c-bad' : 'c-warn';
+  return `<tr><td>${c['Línea']}</td><td>${c['Máquina']}</td>
+  <td><span class="chip ${cls}">${c.Estatus}</span></td>
+  <td class="num">${dec(c['Teórica ops/día'],0)}</td>
+  <td class="num">${String(c['Real ops/día']).replace('.',',')}</td>
+  <td class="num neg">${String(c['Pérdida ops/día']).replace('.',',')}</td></tr>`;
+}).join('') + `<tr class="tot"><td colspan="3">Total</td><td class="num">491</td>
+<td class="num">200,5</td><td class="num">290,5</td></tr></tbody>`;
+
+document.getElementById('t_qa').innerHTML = `
+<tbody>
+  <tr><td>Piezas inspeccionadas</td><td class="num">${fmt(DATA.calidad.inspeccionadas)}</td></tr>
+  <tr><td>Piezas rechazadas</td><td class="num neg">${fmt(DATA.calidad.rechazadas)}</td></tr>
+  <tr class="tot"><td>Tasa de reproceso</td><td class="num">${pct(DATA.calidad.tasa,2)}</td></tr>
+  <tr><td>Contenido de retrabajo supuesto</td><td class="num">${pct(DATA.calidad.contenido,0)}</td></tr>
+  <tr><td>Factor neto de primera calidad</td><td class="num">${dec(DATA.calidad.factor_actual,4)}</td></tr>
+  <tr><td>Reproceso residual con parque nuevo</td><td class="num">${pct(DATA.calidad.reproceso_nuevo,1)}</td></tr>
+</tbody>`;
+
+document.getElementById('t_defectos').innerHTML = `
+<thead><tr><th>Defecto</th><th>Causa en la máquina actual</th><th>Qué lo elimina</th></tr></thead>
+<tbody>
+<tr><td>Costura ondulada o estirada</td><td>Transporte diferencial desgastado; crítico en Microfibra, BioFlow y fitness</td><td>Diferencial de precisión y motor servo</td></tr>
+<tr><td>Ruedos abiertos</td><td>Remate manual deficiente</td><td>Remate automático</td></tr>
+<tr><td>Hilos sueltos y limpieza de hilo</td><td>Sin corte ni succión: hay una etapa completa que no entra a ningún reporte</td><td>Corte y succión de hilo en la estación</td></tr>
+<tr><td>Manchas de aceite</td><td>Lubricación no controlada; golpea Blanco, Aguamarina y Amarillo Pastel</td><td>Lubricación sellada</td></tr>
+<tr><td>Cortes accidentales de tela</td><td>Tijera manual sobre la máquina</td><td>Corte integrado: la tijera sale de la línea</td></tr>
+<tr><td>Puntadas saltadas y rotura de hilo</td><td>Desgaste de mecanismo y tensión inestable</td><td>Control electrónico de tensión</td></tr>
+<tr><td>Fruncido en montaje de manga</td><td>Diferencial sin ajuste fino</td><td>Diferencial regulable</td></tr>
+</tbody>`;
+
+document.getElementById('t_escenarios').innerHTML = `
+<thead><tr><th>Clave</th><th>Configuración</th><th class="num">Máq.<br>nuevas</th>
+<th class="num">Bruto<br>pzas/mes</th><th class="num">Reproceso</th>
+<th class="num">Neto<br>pzas/mes</th><th class="num">Δ vs hoy</th><th class="num">Δ %</th>
+<th class="num">Pzas por<br>máquina</th><th class="num">Pico dic.<br>red actual</th></tr></thead>
+<tbody>` + ESC.map(e => {
+  const d = e.total_neto - DATA.demanda.pico;
+  return `<tr${e.clave==='S21b'?' class="tot"':''}>
+    <td><b>${e.clave}</b></td><td>${e.nota}</td>
+    <td class="num">${e.maquinas_nuevas||'—'}</td>
+    <td class="num">${fmt(e.total_bruto)}</td>
+    <td class="num">${pct(e.tasa_reproceso,2)}</td>
+    <td class="num"><b>${fmt(e.total_neto)}</b></td>
+    <td class="num ${e.delta_neto>0?'pos':''}">${e.delta_neto?fmtS(e.delta_neto):'—'}</td>
+    <td class="num">${e.delta_neto?pct(e.delta_pct):'—'}</td>
+    <td class="num">${e.pzas_por_maquina?fmt(e.pzas_por_maquina):'—'}</td>
+    <td class="num ${d<0?'neg':'pos'}">${fmtS(d)}</td></tr>`;
+}).join('') + '</tbody>';
+
+document.getElementById('t_compra').innerHTML = `
+<thead><tr><th>Fase</th><th>Ítem</th><th class="num">Máq.</th><th>Por qué</th></tr></thead>
+<tbody>` + DATA.compra.map(c => `<tr>
+  <td><span class="chip c-dim">${c.Fase}</span></td>
+  <td><b>${c['Ítem']}</b><br><span style="color:var(--dim);font-size:.94em">${c.Detalle}</span></td>
+  <td class="num">${c['Máquinas nuevas']||'0'}</td>
+  <td style="color:var(--dim)">${c['Por qué']}</td></tr>`).join('') + '</tbody>';
+
+document.getElementById('t_demanda').innerHTML = `
+<thead><tr><th>Escenario de demanda</th><th class="num">Piezas/mes</th>
+<th class="num">vs regular</th><th class="num">Cobertura hoy</th></tr></thead>
+<tbody>` + DATA.demanda.escenarios.map(d => {
+  const cob = s0.total_neto / d.piezas;
+  return `<tr><td>${d.label}</td><td class="num"><b>${fmt(d.piezas)}</b></td>
+  <td class="num">${dec(d.piezas/DATA.demanda.regular)}×</td>
+  <td class="num ${cob<1?'neg':'pos'}">${dec(cob)}×</td></tr>`;
+}).join('') + '</tbody>';
+
+document.getElementById('t_faltantes').innerHTML = `
+<thead><tr><th>Pri.</th><th>Dato</th><th>Para qué</th><th>Dueño</th></tr></thead>
+<tbody>` + DATA.faltantes.map(f => {
+  const cls = f.Prioridad.startsWith('P0') ? 'c-bad' : f.Prioridad.startsWith('P1') ? 'c-warn' : 'c-dim';
+  return `<tr><td><span class="chip ${cls}">${f.Prioridad}</span></td>
+  <td><b>${f.Dato}</b></td><td style="color:var(--dim)">${f['Para qué']}</td>
+  <td style="color:var(--dim)">${f['Dueño']}</td></tr>`;
+}).join('') + '</tbody>';
+
+/* Matriz de déficit */
+(function(){
+  const th = ESC.map(e => `<th class="num">${e.clave}</th>`).join('');
+  const rows = DATA.deficit.map(r => {
+    const cells = ESC.map(e => {
+      const v = r[e.clave];
+      const a = Math.min(Math.abs(v)/5700, 1);
+      const bg = v < 0 ? `rgba(236,90,78,${(0.10+a*0.42).toFixed(2)})`
+                       : `rgba(63,191,143,${(0.10+a*0.42).toFixed(2)})`;
+      return `<td class="cell" style="background:${bg}">${fmtS(v)}</td>`;
+    }).join('');
+    return `<tr><td>${r.demanda}</td><td class="num">${fmt(r.piezas_dem)}</td>${cells}</tr>`;
+  }).join('');
+  document.getElementById('t_matriz').innerHTML =
+    `<thead><tr><th>Escenario de demanda</th><th class="num">Demanda</th>${th}</tr></thead><tbody>${rows}</tbody>`;
+})();
+
+/* ------------------------------------------------------------------ */
+/* Panel interactivo de déficit                                        */
+/* ------------------------------------------------------------------ */
+const selE = document.getElementById('selEsc'), selD = document.getElementById('selDem');
+selE.innerHTML = ESC.map(e => `<option value="${e.clave}">${NOM[e.clave]}</option>`).join('');
+selD.innerHTML = DATA.demanda.escenarios.map(d => `<option value="${d.clave}">${d.label}</option>`).join('');
+selE.value = 'S21b'; selD.value = 'D4';
+
+function pintaDeficit(){
+  const e = byKey(selE.value);
+  const d = DATA.demanda.escenarios.find(x => x.clave === selD.value);
+  const gap = e.total_neto - d.piezas;
+  const cob = e.total_neto / d.piezas;
+  const dias = d.piezas / (e.total_neto / DATA.dias);
+
+  document.getElementById('box_res').innerHTML = [
+    ['a', fmt(e.total_neto), 'Capacidad neta de<br>' + NOM[e.clave]],
+    ['w', fmt(d.piezas), 'Demanda de<br>' + d.label],
+    [gap < 0 ? 'b' : 'o', fmtS(gap), gap < 0 ? 'Piezas que faltan<br>cada mes' : 'Piezas de holgura<br>cada mes'],
+    [cob < 1 ? 'b' : 'o', dec(cob) + '×', 'Cobertura de la demanda'],
+    [dias > DATA.dias ? 'b' : 'o', dec(dias, 1),
+     'Días de taller que exige<br>contra ' + DATA.dias + ' hábiles disponibles']
+  ].map(([c, n, l]) => `<div class="kpi ${c}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+  const txt = gap < 0
+    ? `<b>No cubre.</b> ${NOM[e.clave]} entrega ${fmt(e.total_neto)} piezas de primera y la demanda
+       de ${d.label.toLowerCase()} pide ${fmt(d.piezas)}. Faltan <b>${fmt(-gap)} piezas cada mes</b>.
+       Al ritmo de este escenario, esa demanda exige <b>${dec(dias,1)} días</b> de taller y el mes
+       sólo tiene ${DATA.dias}: no hay turno, hora extra ni prioridad que invente
+       ${dec(dias - DATA.dias,1)} días de calendario.`
+    : `<b>Cubre.</b> ${NOM[e.clave]} entrega ${fmt(e.total_neto)} piezas de primera contra
+       ${fmt(d.piezas)} de demanda: sobran <b>${fmt(gap)} piezas</b> (cobertura ${dec(cob)}×).
+       Esa demanda consume ${dec(dias,1)} de los ${DATA.dias} días hábiles del mes.
+       ${gap < 300 ? '<b>Ojo: el margen es inferior a un día de producción.</b> Léase como «empata», no como «sobra».' : ''}`;
+  const box = document.getElementById('dec_deficit');
+  box.className = 'dec ' + (gap < 0 ? 'bad' : gap < 300 ? 'warn' : 'ok');
+  box.innerHTML = txt;
+
+  mk('ch_deficit', {
+    type:'bar',
+    data:{
+      labels: DATA.demanda.escenarios.map(x => x.label),
+      datasets:[
+        {label:'Demanda', data:DATA.demanda.escenarios.map(x => x.piezas),
+         backgroundColor:DATA.demanda.escenarios.map(x =>
+           x.clave === d.clave ? '#E8A33D' : 'rgba(232,163,61,.34)'), borderRadius:4,
+         datalabels:dlab(css('--dim'))},
+        {label:'Capacidad neta · ' + NOM[e.clave],
+         data:DATA.demanda.escenarios.map(() => e.total_neto),
+         type:'line', borderColor:COL[e.clave], borderWidth:2.5, pointRadius:0, fill:false}
+      ]
+    },
+    options: baseOpts({plugins:{
+      legend:{labels:{color:css('--dim'), boxWidth:12, font:{size:11}}},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'),
+               bodyColor:css('--txt'), borderColor:css('--line'), borderWidth:1}
+    }})
+  });
+}
+selE.onchange = selD.onchange = pintaDeficit;
+
+/* ------------------------------------------------------------------ */
+/* Gráficos                                                            */
+/* ------------------------------------------------------------------ */
+function pintaTodo(){
+  const dimC = css('--dim');
+
+  mk('ch_techos', {
+    type:'bar',
+    data:{labels:['Teórica\n(parque íntegro)','Real\n(parque hoy)','Neta de primera\n(tras retrabajo)'],
+      datasets:[{data:[s0t.total_bruto, s0.total_bruto, s0.total_neto],
+        backgroundColor:['#4C8DD9','#E8A33D','#EC5A4E'], borderRadius:5,
+        datalabels:dlab()},
+        {label:'Pico diciembre '+fmt(DATA.demanda.pico), data:[DATA.demanda.pico,DATA.demanda.pico,DATA.demanda.pico],
+         type:'line', borderColor:'#EC5A4E', borderWidth:2, borderDash:[6,4], pointRadius:0},
+        {label:'Demanda regular '+fmt(DATA.demanda.regular), data:[DATA.demanda.regular,DATA.demanda.regular,DATA.demanda.regular],
+         type:'line', borderColor:'#3FBF8F', borderWidth:2, borderDash:[3,3], pointRadius:0}]},
+    options: baseOpts({plugins:{
+      legend:{labels:{color:dimC, boxWidth:12, filter:i=>i.datasetIndex>0, font:{size:11}}},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1}}})
+  });
+
+  mk('ch_metodo', {
+    type:'bar',
+    data:{labels:['Suma de operaciones\n52.990 ÷ 7,40','Cuello de botella\n81,30 × 20 × 4'],
+      datasets:[{data:[DATA.ops.pzas_metodo_ops, DATA.ops.pzas_metodo_cuello],
+        backgroundColor:['#EC5A4E','#3FBF8F'], borderRadius:5, datalabels:dlab()}]},
+    options: baseOpts({indexAxis:'y', plugins:{legend:{display:false},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1}}})
+  });
+
+  mk('ch_tasas', {
+    type:'bar',
+    data:{labels:['MAR (7 ops)','RIO (6 ops)','Basic Line (12 ops)','MIX ponderado'],
+      datasets:[
+        {label:'A · parque actual', backgroundColor:'#E8A33D', borderRadius:4,
+         data:[DATA.tasas.A_real.MAR, DATA.tasas.A_real.RIO, DATA.tasas.A_real['Basic Line'], DATA.tasa_mix.A]},
+        {label:'B · íntegro / sustitución', backgroundColor:'#4C8DD9', borderRadius:4,
+         data:[DATA.tasas.B_teor.MAR, DATA.tasas.B_teor.RIO, DATA.tasas.B_teor['Basic Line'], DATA.tasa_mix.B]},
+        {label:'C · módulo continuo', backgroundColor:'#3FBF8F', borderRadius:4,
+         data:[DATA.tasas.C_modulo.MAR, DATA.tasas.C_modulo.RIO, DATA.tasas.C_modulo['Basic Line'], DATA.tasa_mix.C]}]},
+    options: baseOpts()
+  });
+
+  mk('ch_estaciones', {
+    type:'bar',
+    data:{labels:['Overlock\nUnión/Montaje','Collaret recubrir +\nOverlock cierre\n(media de 394)','Collaretera\nde ruedo'],
+      datasets:[{data:[190, 197, 101],
+        backgroundColor:['#4C8DD9','#4C8DD9','#EC5A4E'], borderRadius:5,
+        datalabels:dlab()}]},
+    options: baseOpts({plugins:{legend:{display:false},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1}}})
+  });
+
+  mk('ch_lineas', {
+    type:'bar',
+    data:{labels:DATA.lineas_ops.map(l => l['Línea']),
+      datasets:[
+        {label:'Teórica', backgroundColor:'rgba(76,141,217,.45)', borderRadius:4,
+         data:DATA.lineas_ops.map(l => l['Teórica ops/día'])},
+        {label:'Real', backgroundColor:'#4C8DD9', borderRadius:4,
+         data:DATA.lineas_ops.map(l => l['Real ops/día']), datalabels:dlab()}]},
+    options: baseOpts()
+  });
+
+  mk('ch_exclusiva', {
+    type:'bar',
+    data:{labels:DATA.exclusiva.map(e => e.Modelo),
+      datasets:[
+        {label:'Parque actual', backgroundColor:'#E8A33D', borderRadius:4,
+         data:DATA.exclusiva.map(e => e['Actual 4 líneas/mes'])},
+        {label:'Módulo continuo', backgroundColor:'#3FBF8F', borderRadius:4,
+         data:DATA.exclusiva.map(e => e['Módulo 4 líneas/mes'])}]},
+    options: baseOpts()
+  });
+
+  mk('ch_qa', {
+    type:'doughnut',
+    data:{labels:['Aprobadas','Rechazadas y retrabajadas'],
+      datasets:[{data:[DATA.calidad.inspeccionadas - DATA.calidad.rechazadas, DATA.calidad.rechazadas],
+        backgroundColor:['#3FBF8F','#EC5A4E'], borderWidth:0}]},
+    options:{responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{legend:{position:'bottom', labels:{color:dimC, boxWidth:11, font:{size:10.5}}},
+        tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+                 borderColor:css('--line'), borderWidth:1},
+        datalabels:{display:true, color:'#fff', font:{size:12, weight:'700'},
+          formatter:(v,c)=> c.dataIndex===1 ? pct(DATA.calidad.tasa,2) : ''}}}
+  });
+
+  const kk = ['S0','S21a','S21b','S22a','S22b','S22c'];
+  mk('ch_peaje', {
+    type:'bar',
+    data:{labels:kk.map(k => NOM[k].replace(' · ','\n')),
+      datasets:[
+        {label:'Bruto', backgroundColor:'rgba(148,167,181,.5)', borderRadius:4,
+         data:kk.map(k => byKey(k).total_bruto)},
+        {label:'Neto de primera', backgroundColor:'#3FBF8F', borderRadius:4,
+         data:kk.map(k => byKey(k).total_neto)}]},
+    options: baseOpts()
+  });
+
+  mk('ch_sens', {
+    type:'line',
+    data:{labels:DATA.sensibilidad.map(s => pct(s['Contenido de retrabajo'],0)),
+      datasets:['S0','S21b','S22b','S22c'].map(k => ({
+        label:NOM[k], borderColor:COL[k], backgroundColor:COL[k], borderWidth:2.4,
+        pointRadius:3, tension:.25, fill:false,
+        data:DATA.sensibilidad.map(s => s[k])}))},
+    options: baseOpts()
+  });
+
+  mk('ch_escenarios', {
+    type:'bar',
+    data:{labels:ESC.map(e => NOM[e.clave].replace(' · ','\n') + '\n' +
+                    (e.maquinas_nuevas ? e.maquinas_nuevas + ' máq.' : 'sin inversión')),
+      datasets:[
+        {label:'Capacidad neta de primera', data:ESC.map(e => e.total_neto),
+         backgroundColor:ESC.map(e => COL[e.clave]), borderRadius:5, datalabels:dlab()},
+        {label:'Pico diciembre '+fmt(DATA.demanda.pico), type:'line',
+         data:ESC.map(() => DATA.demanda.pico), borderColor:'#EC5A4E', borderWidth:2.2,
+         borderDash:[6,4], pointRadius:0},
+        {label:'Pico + 1 tienda '+fmt(Math.round(DATA.demanda.pico*DATA.demanda.f_1t)), type:'line',
+         data:ESC.map(() => Math.round(DATA.demanda.pico*DATA.demanda.f_1t)),
+         borderColor:'#8E7BE0', borderWidth:2.2, borderDash:[4,4], pointRadius:0},
+        {label:'Demanda regular '+fmt(DATA.demanda.regular), type:'line',
+         data:ESC.map(() => DATA.demanda.regular), borderColor:'#3FBF8F', borderWidth:2,
+         borderDash:[3,3], pointRadius:0}]},
+    options: baseOpts({plugins:{
+      legend:{labels:{color:dimC, boxWidth:12, filter:i=>i.datasetIndex>0, font:{size:11}}},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1}}})
+  });
+
+  const conM = ESC.filter(e => e.maquinas_nuevas > 0);
+  mk('ch_rendimiento', {
+    type:'bar',
+    data:{labels:conM.map(e => e.clave + '\n' + e.maquinas_nuevas + ' máq.'),
+      datasets:[{data:conM.map(e => Math.round(e.pzas_por_maquina)),
+        backgroundColor:conM.map(e => COL[e.clave]), borderRadius:5, datalabels:dlab()}]},
+    options: baseOpts({plugins:{legend:{display:false},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1,
+               callbacks:{label:c=>c.parsed.y+' piezas/mes por máquina'}}}})
+  });
+
+  mk('ch_cobertura', {
+    type:'bar',
+    data:{labels:DATA.cobertura.map(c => c.demanda),
+      datasets:['S0','S21b','S22b','S22c'].map(k => ({
+        label:NOM[k], backgroundColor:COL[k], borderRadius:4,
+        data:DATA.cobertura.map(c => +c[k].toFixed(2))}))},
+    options: baseOpts({indexAxis:'y', scales:{
+      x:{ticks:{color:dimC, font:{size:10.5}}, grid:{color:css('--line')},
+         title:{display:true, text:'Cobertura · 1,00 = se cubre exactamente', color:dimC,
+                font:{size:10.5}}},
+      y:{ticks:{color:dimC, font:{size:10}}, grid:{display:false}}}})
+  });
+
+  mk('ch_escalera', {
+    type:'bar',
+    data:{labels:['Red actual','+1 tienda','+3 tiendas/año'],
+      datasets:[
+        {label:'Demanda regular', backgroundColor:'rgba(63,191,143,.4)', borderRadius:4,
+         data:[DATA.demanda.regular, Math.round(DATA.demanda.regular*DATA.demanda.f_1t),
+               Math.round(DATA.demanda.regular*DATA.demanda.f_3t)], datalabels:dlab(dimC)},
+        {label:'Demanda pico diciembre', backgroundColor:'rgba(236,90,78,.62)', borderRadius:4,
+         data:[DATA.demanda.pico, Math.round(DATA.demanda.pico*DATA.demanda.f_1t),
+               Math.round(DATA.demanda.pico*DATA.demanda.f_3t)], datalabels:dlab()},
+        ...['S0','S21b','S22b','S22c'].map((k,i) => ({
+          label:NOM[k] + ' · ' + fmt(byKey(k).total_neto), type:'line',
+          data:[0,1,2].map(() => byKey(k).total_neto),
+          borderColor:COL[k], borderWidth:2.4,
+          borderDash:[[0,0],[7,4],[10,3,3,3],[3,3]][i], pointRadius:0}))]},
+    options: baseOpts({plugins:{
+      legend:{labels:{color:dimC, boxWidth:12, font:{size:10.5}}},
+      tooltip:{backgroundColor:css('--panel2'), titleColor:css('--txt'), bodyColor:css('--txt'),
+               borderColor:css('--line'), borderWidth:1}}})
+  });
+
+  pintaDeficit();
+}
+
+/* ------------------------------------------------------------------ */
+/* Navegación y tema                                                   */
+/* ------------------------------------------------------------------ */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+  document.getElementById(t.dataset.p).classList.add('on');
+  Object.values(charts).forEach(c => c.resize());
+});
+
+document.getElementById('theme').onclick = () => {
+  document.body.classList.toggle('light');
+  document.getElementById('theme').textContent =
+    document.body.classList.contains('light') ? 'Modo oscuro' : 'Modo claro';
+  pintaTodo();
+};
+
+pintaTodo();
+</script>
+</body>
+</html>
