@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Planificación Jabón Microfibra — Logística</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#1a2332; --muted:#5c6b7a; --line:#d7dee7; --bg:#f3f6f9; --card:#fff;
+  --accent:#0e6b5c; --accent2:#1f4e79; --warn:#9a6700; --bad:#9b1c1c; --ok:#0f6b3a;
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:'DM Sans',system-ui,sans-serif; color:var(--ink); background:
+  radial-gradient(1200px 500px at 10% -10%, #d9efe9 0%, transparent 55%),
+  radial-gradient(900px 400px at 100% 0%, #dce7f5 0%, transparent 50%),
+  var(--bg); line-height:1.45; }
+.wrap { max-width:1100px; margin:0 auto; padding:32px 20px 64px; }
+h1 { font-family:'Fraunces',Georgia,serif; font-size:clamp(1.6rem,3vw,2.2rem); margin:0 0 8px; color:var(--accent2); }
+.sub { color:var(--muted); margin:0 0 28px; max-width:820px; }
+.grid { display:grid; gap:16px; }
+.g5 { grid-template-columns:repeat(5,1fr); }
+.g2 { grid-template-columns:1.2fr .8fr; }
+@media(max-width:900px){ .g5,.g2 { grid-template-columns:1fr; } }
+.card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; box-shadow:0 8px 24px rgba(26,35,50,.04); }
+.card h3 { margin:0 0 6px; font-size:.95rem; }
+.rank { font-size:.75rem; font-weight:700; color:var(--accent); letter-spacing:.04em; text-transform:uppercase; }
+.metric { font-family:'Fraunces',Georgia,serif; font-size:1.35rem; margin:4px 0; }
+.muted { color:var(--muted); font-size:.86rem; }
+section { margin:28px 0; }
+section h2 { font-family:'Fraunces',Georgia,serif; font-size:1.25rem; color:var(--accent2); margin:0 0 12px; }
+table { width:100%; border-collapse:collapse; font-size:.88rem; background:var(--card); border-radius:12px; overflow:hidden; border:1px solid var(--line); }
+th,td { padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+th { background:#1f4e79; color:#fff; font-weight:600; }
+tr:last-child td { border-bottom:0; }
+.tag { display:inline-block; padding:2px 8px; border-radius:6px; font-size:.75rem; font-weight:600; }
+.ok { background:#d8f3e3; color:var(--ok); }
+.warn { background:#fff3cd; color:var(--warn); }
+.bad { background:#fde2e1; color:var(--bad); }
+.info { background:#e7f0fa; color:var(--accent2); }
+.kpi { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+.kpi .card { min-width:160px; flex:1; }
+.note { background:#fff8e8; border:1px solid #f0d9a0; border-radius:12px; padding:12px 14px; color:#6b4e00; font-size:.9rem; }
+.foot { margin-top:28px; color:var(--muted); font-size:.8rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Jabón Microfibra — Feedback Logística</h1>
+  <p class="sub">Análisis de rotación, riesgo de inmovilización y proyección de pedido de tela. Ventas Oct 2025–Jul 2026 (10 meses), inventario PT + MP actual, boom kg/prenda. Lead time tela: <strong>45 días</strong>.</p>
+
+  <div class="kpi">
+    <div class="card"><div class="muted">Ventas periodo</div><div class="metric">26,427 und</div></div>
+    <div class="card"><div class="muted">Consumo teórico tela</div><div class="metric">~1,111 kg/mes</div></div>
+    <div class="card"><div class="muted">Stock MP actual</div><div class="metric">4,158 kg</div></div>
+    <div class="card"><div class="muted">Pedido sugerido 90d</div><div class="metric">~349 kg*</div><div class="muted">*solo colores con reposición justificada + decisión comercial</div></div>
+  </div>
+
+  <section>
+    <h2>1) Cinco colores innegociables</h2>
+    <div class="grid g5">
+<div class="card"><div class="rank">#1</div><h3>Negro</h3><div class="metric">16.1%</div><div class="muted">~337 und/mes (últ. 3 meses)</div><p class="muted" style="margin-top:8px">Core absoluto. Máxima rotación. Riesgo de obsolescencia bajo pese a stock alto.</p></div><div class="card"><div class="rank">#2</div><h3>Blanco</h3><div class="metric">13.1%</div><div class="muted">~304 und/mes (últ. 3 meses)</div><p class="muted" style="margin-top:8px">Básico permanente. Tendencia estable. Mejor perfil riesgo/volumen junto a Negro.</p></div><div class="card"><div class="rank">#3</div><h3>Azul Marino</h3><div class="metric">12.2%</div><div class="muted">~234 und/mes (últ. 3 meses)</div><p class="muted" style="margin-top:8px">Tercer color en ventas y consumo de tela. Demanda estructural unisex.</p></div><div class="card"><div class="rank">#4</div><h3>Verde Militar</h3><div class="metric">7.5%</div><div class="muted">~189 und/mes (últ. 3 meses)</div><p class="muted" style="margin-top:8px">Alta rotación con la mejor estabilidad (-6.6%). Único top que SÍ necesita reposición MP.</p></div><div class="card"><div class="rank">#5</div><h3>Azul Rey</h3><div class="metric">5.6%</div><div class="muted">~131 und/mes (últ. 3 meses)</div><p class="muted" style="margin-top:8px">Demanda estable, menor sesgo moda que Lila/Lavanda. Seguro para catálogo microfibra.</p></div>
+    </div>
+    <p class="note" style="margin-top:14px"><strong>Por qué no Lila ni Azul Lavanda:</strong> juntos suman ~17% histórico, pero caen <strong>-66%</strong> y <strong>-51%</strong> en los últimos 3 meses vs su promedio previo. Alta rotación pasada ≠ bajo riesgo a futuro. Quedan como ampliación condicional a mediano plazo.</p>
+  </section>
+
+  <section>
+    <h2>2) Rotación / riesgo (lectura logística)</h2>
+    <table>
+      <thead><tr><th>Segmento</th><th>Colores</th><th>Implicación</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag ok">Alta rotación / bajo riesgo</span></td><td>Blanco</td><td>Mantener en catálogo y en nueva versión microfibra sin duda.</td></tr>
+        <tr><td><span class="tag warn">Alta rotación / sobrestock tienda</span></td><td>Negro, Azul Marino, Verde Militar, Azul Rey</td><td>Venden bien; priorizar circular PT (taller→tiendas) antes de inflar más tela en Negro/Blanco/Marino/Rey.</td></tr>
+        <tr><td><span class="tag warn">Rotación media / riesgo moda</span></td><td>Lila, Azul Lavanda, Aguamarina, Rojo</td><td>No “innegociables”. Ampliar solo con sell-through reciente confirmado.</td></tr>
+        <tr><td><span class="tag bad">Riesgo inmovilización / periféricos</span></td><td>Vinotinto (cob. alta), Púrpura, Amarillo Neón, Fucsia, neones, pasteles bajos</td><td>No comprometer tela nueva salvo plan comercial claro. Fucsia: 90 kg MP vs ~2 kg/mes → sobreinventario.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3) Consumo y proyección de pedido (LT 45d)</h2>
+    <p class="muted">Demanda = promedio May–Jul 2026. Objetivo cobertura MP = 75 días (45 LT + 30 seguridad). Escenario amplio = 90 días.</p>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Pedido operativo recomendado ahora</h3>
+        <table>
+          <thead><tr><th>Color</th><th>Cob. MP</th><th>Pedido 75d</th><th>Pedido 90d</th></tr></thead>
+          <tbody>
+            <tr><td>Verde Militar</td><td><span class="tag bad">~50 d</span></td><td>70 kg</td><td>113 kg</td></tr>
+            <tr><td>Rosado Pastel</td><td><span class="tag bad">~49 d</span></td><td>16 kg</td><td>26 kg</td></tr>
+            <tr><td colspan="2"><strong>Subtotal operativo</strong></td><td><strong>86 kg</strong></td><td><strong>139 kg</strong></td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top:10px">Negro, Blanco, Azul Marino y Azul Rey: <strong>no pedir</strong> (152–213 días de cobertura MP).</p>
+      </div>
+      <div class="card">
+        <h3>Pendiente decisión comercial (sin MP hoy)</h3>
+        <table>
+          <thead><tr><th>Color</th><th>Share</th><th>Si se mantienen → 90d</th></tr></thead>
+          <tbody>
+            <tr><td>Rojo</td><td>4.6%</td><td>103 kg</td></tr>
+            <tr><td>Púrpura</td><td>3.4%</td><td>72 kg</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top:10px">Tienen boom y ventas, pero <strong>0 kg</strong> en alm. materia prima. No montar pedido hasta confirmar que entran a la nueva versión microfibra. Resto de colores sin MP (neones, turquesa, etc.) = no pedir.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4) Cantidades clave por color (top)</h2>
+    <table>
+      <thead><tr><th>Color</th><th>Share</th><th>Und/mes últ3</th><th>Inv tiendas</th><th>Inv taller</th><th>Días cob. tiendas</th><th>Inv MP kg</th><th>Kg/mes últ3</th><th>Días cob. MP</th></tr></thead>
+      <tbody>
+<tr><td>Negro</td><td>16.1%</td><td>337</td><td>1370</td><td>1694</td><td>122</td><td>760</td><td>150</td><td>152</td></tr><tr><td>Blanco</td><td>13.1%</td><td>304</td><td>1188</td><td>1103</td><td>117</td><td>864</td><td>129</td><td>200</td></tr><tr><td>Azul Marino</td><td>12.2%</td><td>234</td><td>939</td><td>904</td><td>120</td><td>711</td><td>104</td><td>206</td></tr><tr><td>Lila</td><td>8.6%</td><td>97</td><td>559</td><td>388</td><td>173</td><td>188</td><td>36</td><td>158</td></tr><tr><td>Azul Lavanda</td><td>8.3%</td><td>127</td><td>699</td><td>781</td><td>165</td><td>221</td><td>57</td><td>117</td></tr><tr><td>Verde Militar</td><td>7.5%</td><td>189</td><td>815</td><td>864</td><td>129</td><td>142</td><td>85</td><td>50</td></tr><tr><td>Azul Rey</td><td>5.6%</td><td>131</td><td>717</td><td>706</td><td>164</td><td>390</td><td>55</td><td>213</td></tr><tr><td>Aguamarina</td><td>5.2%</td><td>88</td><td>1005</td><td>714</td><td>341</td><td>364</td><td>37</td><td>295</td></tr><tr><td>Rojo</td><td>4.6%</td><td>79</td><td>915</td><td>784</td><td>346</td><td>0</td><td>34</td><td>—</td></tr><tr><td>Vinotinto</td><td>4.3%</td><td>107</td><td>875</td><td>512</td><td>245</td><td>175</td><td>46</td><td>114</td></tr><tr><td>Gris Claro</td><td>3.7%</td><td>79</td><td>374</td><td>183</td><td>141</td><td>163</td><td>39</td><td>127</td></tr><tr><td>Púrpura</td><td>3.4%</td><td>71</td><td>577</td><td>406</td><td>245</td><td>0</td><td>24</td><td>—</td></tr><tr><td>Rosado Pastel</td><td>2.3%</td><td>57</td><td>424</td><td>372</td><td>222</td><td>31</td><td>19</td><td>49</td></tr><tr><td>Amarillo Neón</td><td>2.1%</td><td>48</td><td>589</td><td>738</td><td>371</td><td>58</td><td>21</td><td>83</td></tr><tr><td>Fucsia</td><td>0.3%</td><td>5</td><td>0</td><td>0</td><td>—</td><td>90</td><td>2</td><td>1282</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5) Mejora continua</h2>
+    <div class="card">
+      <ol>
+        <li>Revisar ranking con ventana móvil 90 días (detecta moda: caso Lila/Lavanda).</li>
+        <li>Separar siempre Taller PT vs tiendas en el tablero (~48% del PT está en taller).</li>
+        <li>Completar boom de Clásica Dama/Kids, Andre, Dani, Zoe Kids (~11% und sin boom exacto).</li>
+        <li>Política MP: objetivo 75 días; no reponer si cobertura &gt; 150 días.</li>
+        <li>Ampliación mediano plazo condicional: Lila, Azul Lavanda, Vinotinto, Rojo, Púrpura — solo con sell-through reciente y limpieza de sobrestock.</li>
+      </ol>
+    </div>
+  </section>
+
+  <p class="foot">Fuente: MODELOS MICROFIBRA JABON VENTAS OCT2025-ALL2026 · INV_MICROFIBRA_MODELOS_ACTUALIZADO · inventario_materia_prima_tela_jabon_ACTUALIZADO · BOOM MODELOS MICROFIBRA. Entregable Excel: Planificacion_Microfibra_Jabon_LOGISTICA.xlsx</p>
+</div>
+</body>
+</html>
