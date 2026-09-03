@@ -33,6 +33,78 @@ def is_excluded_color(color: str) -> bool:
     return c in EXCLUDED_COLORS
 
 
+def sanitize_data(data: dict) -> dict:
+    """Remove dirty colors from every embedded structure."""
+    data["raw_rows"] = [r for r in data["raw_rows"] if not is_excluded_color(r["color"])]
+    data["inv_rows"] = [r for r in data["inv_rows"] if not is_excluded_color(r["color"])]
+
+    data["stock"] = {
+        k: v for k, v in data["stock"].items()
+        if not is_excluded_color(k.split("/")[2] if k.count("/") >= 3 else "")
+    }
+    data["stock_by_loc"] = {
+        loc: {k: v for k, v in items.items() if not is_excluded_color(k.split("/")[2] if k.count("/") >= 3 else "")}
+        for loc, items in data["stock_by_loc"].items()
+    }
+
+    data["production_plan"] = [r for r in data["production_plan"] if not is_excluded_color(r["color"])]
+    data["prod_curve"] = [r for r in data["prod_curve"] if not is_excluded_color(r["color"])]
+
+    for store_key in ("barquisimeto", "vela"):
+        if store_key in data and "skus" in data[store_key]:
+            skus = [s for s in data[store_key]["skus"] if not is_excluded_color(s.get("COLOR", ""))]
+            data[store_key]["skus"] = skus
+            data[store_key]["v_mes"] = round(sum(s["v_mes"] for s in skus), 1)
+            data[store_key]["need_1m"] = sum(s["need_1m"] for s in skus)
+            data[store_key]["need_2m"] = sum(s["need_2m"] for s in skus)
+            data[store_key]["need_3m"] = sum(s["need_3m"] for s in skus)
+
+    data["stock_by_modelo"] = defaultdict(int)
+    for k, v in data["stock"].items():
+        data["stock_by_modelo"][k.split("/")[0]] += v
+    data["stock_by_modelo"] = dict(data["stock_by_modelo"])
+
+    data["filtros"]["colores"] = sorted({r["color"] for r in data["raw_rows"]})
+    data["total"] = sum(r["v"] for r in data["raw_rows"])
+    data["stock_total"] = sum(data["stock"].values())
+    data["stock_taller"] = sum(data["stock_by_loc"].get("TALLER", {}).values())
+    data["stock_pt_total"] = data["stock_taller"]
+    data["meses_und"] = {m: sum(r["v"] for r in data["raw_rows"] if r["mes"] == m) for m in data["meses_order"]}
+
+    modelos = sorted({r["modelo"] for r in data["raw_rows"]})
+    data["summary_produccion"] = {
+        modelo: {
+            "v_mes_base": round(sum(r["v_mes_base"] for r in data["production_plan"] if r["modelo"] == modelo), 1),
+            "v_mes": round(sum(r["v_mes"] for r in data["production_plan"] if r["modelo"] == modelo), 1),
+            "stk": sum(r["stk"] for r in data["production_plan"] if r["modelo"] == modelo),
+            "stk_taller": sum(r["stk_taller"] for r in data["production_plan"] if r["modelo"] == modelo),
+            "produce": sum(r["produce"] for r in data["production_plan"] if r["modelo"] == modelo),
+        }
+        for modelo in modelos
+    }
+    for modelo, summary in data["summary_produccion"].items():
+        v_mes = summary["v_mes"]
+        summary["cob"] = round(summary["stk"] / v_mes, 1) if v_mes > 0 else 999
+
+    data["summary_genero"] = {}
+    for genero in LINEAS:
+        rows_g = [r for r in data["production_plan"] if r["genero"] == genero]
+        g_v = sum(r["v_mes"] for r in rows_g)
+        g_v_base = sum(r["v_mes_base"] for r in rows_g)
+        g_stk = sum(r["stk"] for r in rows_g)
+        g_prod = sum(r["produce"] for r in rows_g)
+        data["summary_genero"][genero] = {
+            "v_mes_base": round(g_v_base, 1),
+            "v_mes": round(g_v, 1),
+            "stk": g_stk,
+            "cob": round(g_stk / g_v, 1) if g_v > 0 else 999,
+            "produce": g_prod,
+        }
+
+    data["summary_prod"] = compute_summary_prod(data["prod_curve"])
+    return data
+
+
 def read_csv(path: Path):
     for enc in ("utf-8-sig", "latin-1", "cp1252"):
         try:
@@ -475,7 +547,7 @@ def build_data():
     last_mes = meses_order[-1] if meses_order else ""
     es_parcial = last_mes == PARTIAL_MONTH
 
-    return {
+    data = {
         "raw_rows": raw_rows,
         "stock": stock,
         "stock_by_loc": stock_by_loc,
@@ -537,6 +609,7 @@ def build_data():
             if meses_order else ""
         ),
     }
+    return sanitize_data(data)
 
 
 def build_html(data: dict) -> str:
