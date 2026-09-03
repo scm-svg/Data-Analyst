@@ -25,6 +25,12 @@ VELOCITY_MONTHS_COUNT = 6
 HIGH_SEASON_FACTOR = 1.4
 DEC_BASE_FACTOR = 1.4
 LEAD_MONTHS = 3
+EXCLUDED_COLORS = {"marron", "crema"}
+
+
+def is_excluded_color(color: str) -> bool:
+    c = str(color).strip().lower().replace("ó", "o").replace("á", "a")
+    return c in EXCLUDED_COLORS
 
 
 def read_csv(path: Path):
@@ -179,10 +185,13 @@ def venta_row_from_csv(row: dict) -> dict | None:
     genero = norm_genero(get_col(row, "GENERO", "genero"))
     if not genero:
         return None
+    color = norm_color(get_col(row, "COLOR", "color"))
+    if is_excluded_color(color):
+        return None
     return {
         "tienda": norm_tienda(get_col(row, "tienda / ubicación", "tienda/ubicación")),
         "genero": genero,
-        "color": norm_color(get_col(row, "COLOR", "color")),
+        "color": color,
         "talla": talla,
         "mes": mes,
         "modelo": modelo,
@@ -208,6 +217,8 @@ def read_inventario():
             continue
         genero = norm_genero(get_col(row, "GENERO"))
         color = norm_color(get_col(row, "COLOR"))
+        if is_excluded_color(color):
+            continue
         talla = get_col(row, "TALLA")
         qty = round(parse_num(get_col(row, "Cantidad en inventario")))
         if qty == 0:
