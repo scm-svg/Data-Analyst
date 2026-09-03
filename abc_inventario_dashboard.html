@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Matriz ABC · Inventario & Ventas</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0a0b10;--surf:#12131a;--s2:#1a1b24;--s3:#22232e;--brd:#2e3040;
+  --tx:#eef0f8;--mu:#8b8da8;--mu2:#5c5e78;
+  --a:#22d3ee;--b:#fbbf24;--c:#f472b6;--gr:#34d399;--ac:#6366f1;
+  --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(99,102,241,.12),transparent);}
+.hdr{border-bottom:1px solid var(--brd);padding:16px 32px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.hdr h1{font-family:var(--fh);font-size:1.35rem;font-weight:800;letter-spacing:-0.3px}
+.hdr h1 em{color:var(--a);font-style:normal}
+#subtitle{color:var(--mu);font-size:0.78rem;margin-top:4px}
+.kpi-bar{display:flex;gap:8px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:8px 12px;text-align:center;min-width:72px;
+  background-image:linear-gradient(145deg,rgba(255,255,255,.03),transparent);}
+.kpib .kv{font-family:var(--fh);font-size:1.1rem;font-weight:800;color:var(--a)}
+.kpib .kl{font-size:0.58rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.kpib .ksub{font-size:0.55rem;color:var(--mu2)}
+.mbar,.fbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:8px 32px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mbar-lbl,.fbar label{font-size:0.62rem;color:var(--mu);text-transform:uppercase;font-weight:600}
+.mbtn{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:18px;padding:5px 11px;font-size:0.72rem;cursor:pointer;transition:.15s}
+.mbtn:hover{border-color:var(--ac);color:var(--tx)}
+.mbtn.active{background:linear-gradient(135deg,var(--ac),#4f46e5);color:#fff;border-color:transparent;font-weight:600}
+.fbar select,.fbar input{background:var(--s3);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:5px 9px;font-size:0.76rem}
+.fbtn{background:var(--ac);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:0.76rem}
+.tabs{display:flex;gap:0;padding:10px 32px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:7px 12px;font-family:var(--fh);font-size:0.72rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:var(--tx);border-bottom-color:var(--a)}
+.content{padding:18px 32px;max-width:1680px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.g1{margin-bottom:12px}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,.25);}
+.card h3{font-family:var(--fh);font-size:0.82rem;margin-bottom:2px}
+.sub{font-size:0.66rem;color:var(--mu);margin-bottom:10px}
+.chart-row{display:grid;grid-template-columns:1fr 140px;gap:12px;align-items:center}
+.cw{position:relative;height:200px}
+.cw.s{height:160px}
+.side-legend{font-size:0.72rem;line-height:1.55}
+.side-legend div{margin-bottom:6px;padding:6px 8px;border-radius:8px;background:var(--s2);border:1px solid var(--brd)}
+.side-legend strong{font-family:var(--fh);font-size:0.85rem}
+.rt,.ct{width:100%;border-collapse:collapse;font-size:0.74rem}
+.rt th,.ct th{font-size:0.58rem;text-transform:uppercase;color:var(--mu);padding:5px 6px;text-align:left;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf);z-index:1}
+.rt td,.ct td{padding:5px 6px;border-bottom:1px solid var(--brd);vertical-align:middle}
+.ct tr:hover td{background:rgba(99,102,241,.06)}
+.cscroll{max-height:480px;overflow:auto}
+.abc{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;font-weight:800;font-family:var(--fh);border-radius:6px;font-size:0.68rem}
+.abc-A{background:rgba(34,211,238,.2);color:var(--a);border:1px solid rgba(34,211,238,.45)}
+.abc-B{background:rgba(251,191,36,.15);color:var(--b);border:1px solid rgba(251,191,36,.4)}
+.abc-C{background:rgba(244,114,182,.15);color:var(--c);border:1px solid rgba(244,114,182,.4)}
+.xyz{display:inline-block;font-size:.68rem;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.xyz-X{background:rgba(52,211,153,.15);color:#34d399}
+.xyz-Y{background:rgba(251,191,36,.12);color:#fbbf24}
+.xyz-Z{background:rgba(248,113,113,.12);color:#f87171}
+.abc-dash{background:rgba(120,120,140,.12);color:var(--mu);border:1px solid var(--brd)}
+.mig-cell{text-align:center;padding:4px!important}
+.mig-dot{display:inline-flex;width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800}
+.mig-dot.A{background:rgba(34,211,238,.25);color:var(--a);box-shadow:0 0 0 1px rgba(34,211,238,.35)}
+.mig-dot.B{background:rgba(251,191,36,.2);color:var(--b)}
+.mig-dot.C{background:rgba(244,114,182,.2);color:var(--c)}
+.mig-dot.-{background:var(--s3);color:var(--mu2);font-size:0.55rem}
+.trend-up{color:var(--gr);font-weight:700;font-size:0.7rem}
+.trend-dn{color:var(--c);font-weight:700;font-size:0.7rem}
+.expander{cursor:pointer;user-select:none;color:var(--a);font-weight:700;width:22px;display:inline-block}
+.row-model td{background:rgba(255,255,255,.02);font-weight:600}
+.row-variant td{padding-left:28px!important;font-size:0.7rem;color:var(--mu)}
+.row-stable td{opacity:.88}
+.cap-card{border-radius:10px;padding:12px;border:1px solid var(--brd);background:var(--s2)}
+.cap-card.a{border-color:rgba(34,211,238,.35)}
+.cap-card.b{border-color:rgba(251,191,36,.3)}
+.cap-card.c{border-color:rgba(244,114,182,.35)}
+.cap-card .big{font-family:var(--fh);font-size:1.35rem;font-weight:800}
+.cap-card .lbl{font-size:0.62rem;color:var(--mu);text-transform:uppercase}
+.bar-stack{display:flex;height:28px;border-radius:8px;overflow:hidden;margin:8px 0}
+.bar-stack span{display:flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;color:#0a0b10}
+.diag{padding:10px;border-radius:8px;font-size:0.72rem;line-height:1.45;margin-top:8px}
+.diag.r{background:rgba(244,114,182,.1);border:1px solid rgba(244,114,182,.25)}
+.diag.g{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.25)}
+.diag.m{background:rgba(120,120,140,.1);border:1px solid var(--brd)}
+.mx-grid{display:grid;grid-template-columns:72px 1fr 1fr 1fr;gap:4px;font-size:0.68rem}
+.mx-h{font-weight:700;text-align:center;padding:6px 4px;color:var(--mu)}
+.mx-cell{border-radius:8px;padding:8px 6px;text-align:center;min-height:64px;border:1px solid var(--brd)}
+.mx-cell.mx-click{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.mx-cell.mx-click:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.qcard.mx-click{cursor:pointer}
+.qcard.mx-click:hover{border-color:var(--a)}
+.mx-cell .n{font-family:var(--fh);font-size:1.1rem;font-weight:800}
+.mx-cell .v{font-size:0.62rem;color:var(--mu);margin-top:2px}
+.mx-AA,.mx-AX{background:rgba(34,211,238,.18)}.mx-AB,.mx-AY,.mx-BA,.mx-BX{background:rgba(255,255,255,.04)}
+.mx-AC,.mx-AZ{background:rgba(34,211,238,.08)}.mx-BB,.mx-BY{background:rgba(251,191,36,.08)}
+.mx-BC,.mx-BZ,.mx-CA,.mx-CX{background:rgba(244,114,182,.06)}.mx-CB,.mx-CY,.mx-CC,.mx-CZ{background:rgba(244,114,182,.14)}
+.mx-BB{background:rgba(251,191,36,.12)}.mx-BC,.mx-CB{background:rgba(244,114,182,.1)}
+.mx-CA{background:rgba(251,191,36,.08)}.mx-CC{background:rgba(244,114,182,.16)}
+.qcard{padding:10px;border-radius:8px;border:1px solid var(--brd);margin-bottom:8px;background:var(--s2);font-size:0.72rem;line-height:1.45}
+.qcard h4{font-family:var(--fh);font-size:0.78rem;margin-bottom:4px}
+.qcard .ex{font-size:0.65rem;color:var(--a);margin-top:4px}
+#loadErr{display:none;background:rgba(244,114,182,.12);border:1px solid var(--c);margin:10px 32px;padding:10px;border-radius:8px}
+#periodWarn{display:none;margin:0 32px 10px;padding:8px;background:rgba(251,191,36,.1);border:1px solid var(--b);border-radius:8px;color:var(--b);font-size:0.76rem}
+.footer{text-align:center;color:var(--mu2);font-size:0.62rem;padding:12px;border-top:1px solid var(--brd)}
+@media(max-width:960px){.g2,.g3,.chart-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <h1>Matriz <em>ABC</em> · Inventario</h1>
+    <p id="subtitle">Cargando…</p>
+  </div>
+  <div class="kpi-bar" id="kpiBar"></div>
+</div>
+<div id="loadErr"></div>
+<div id="periodWarn">Seleccioná al menos un mes con datos.</div>
+<div class="mbar">
+  <span class="mbar-lbl">Período</span><div id="presetChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+</div>
+<div class="mbar">
+  <span class="mbar-lbl">Meses</span><div id="monthChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <span id="periodSelectionLabel" style="margin-left:6px;color:var(--a);font-size:0.72rem"></span>
+</div>
+<div class="fbar">
+  <label>Modelo</label><select id="fModel"></select>
+  <label>Tienda</label><select id="fStore"></select>
+  <label>Categoría</label><select id="fCat"></select>
+  <label>Ubicación stock</label><select id="fLoc" title="Filtra stock y capital por almacén. La clasificación ABC no cambia."></select>
+  <label>Clase</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+  <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…" size="16">
+  <button class="fbtn" type="button" id="btnExport">CSV</button>
+  <button class="fbtn" type="button" id="btnReset" style="background:var(--s3);color:var(--tx);border:1px solid var(--brd)">Limpiar</button>
+</div>
+<div class="tabs">
+  <button class="tab active" data-tab="resumen" onclick="AbcDashboard.st('resumen')">Resumen</button>
+  <button class="tab" data-tab="clasificacion" onclick="AbcDashboard.st('clasificacion')">Clasificación ABC</button>
+  <button class="tab" data-tab="catalogo" onclick="AbcDashboard.st('catalogo')">Catálogo</button>
+  <button class="tab" data-tab="evolucion" onclick="AbcDashboard.st('evolucion')">Migración mensual</button>
+  <button class="tab" data-tab="capital" onclick="AbcDashboard.st('capital')">Capital e inventario</button>
+  <button class="tab" data-tab="sinventa" onclick="AbcDashboard.st('sinventa')">Sin venta + stock</button>
+  <button class="tab" data-tab="matriz" onclick="AbcDashboard.st('matriz')">Matriz cruzada</button>
+  <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas</button>
+</div>
+<div class="content">
+  <section class="sec active" id="sec-resumen">
+    <div class="g2">
+      <div class="card">
+        <h3>SKUs por clase</h3><div class="sub">Pareto 80/15/5 por venta USD · activos solo con stock → C</div>
+        <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
+      </div>
+      <div class="card">
+        <h3>Ingresos netos por clase</h3><div class="sub">Participación de ingresos netos (venta − costo) por clase ABC</div>
+        <div class="chart-row"><div class="cw"><canvas id="cDonutMarg"></canvas></div><div class="side-legend" id="legendMarg"></div></div>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación de la venta valorizada por clase ABC</div>
+        <div class="cw s"><canvas id="cMarginBar"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Premisas vs resultado</h3><div class="sub">Cuadro de control acordado</div>
+        <div id="premisaCompare"></div>
+      </div>
+    </div>
+  </section>
+  <section class="sec" id="sec-clasificacion">
+    <div class="card">
+      <h3>Clasificación ABC — productos</h3>
+      <div class="sub" id="classTableSub"></div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th>#</th><th>Producto</th><th>ABC</th><th>Demanda (XYZ)</th><th>Ingreso bruto</th><th>Ingresos netos</th><th>% venta</th><th>Unidades</th><th>% mgn de ganancia</th>
+      </tr></thead><tbody id="classBody"></tbody></table></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-catalogo">
+    <div class="card">
+      <h3>Catálogo por modelo</h3>
+      <div class="sub">Expandir fila → variantes (SKU). Clase C incluye activos con stock sin venta en el período.</div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th></th><th>ABC</th><th>Modelo / variante</th><th>Ingreso bruto</th><th>Und.</th><th>Stock</th><th>Demanda</th>
+      </tr></thead><tbody id="catalogBody"></tbody></table></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-evolucion">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <h3>Migración ABC por producto</h3>
+        <div class="sub" id="migLegend" style="margin:0">
+          <span class="mig-dot A">A</span> Intocable &nbsp;
+          <span class="mig-dot B">B</span> Media &nbsp;
+          <span class="mig-dot C">C</span> Lastre &nbsp;
+          <span class="mig-dot -">—</span> Sin venta acum.
+        </div>
+      </div>
+      <div class="sub" id="migSub">ABC acumulativo: venta valorizada acumulada desde el inicio del período (Planity). No recalcula solo el mes aislado.</div>
+      <div class="cscroll"><table class="ct" id="migTable"><thead id="migHead"></thead><tbody id="migBody"></tbody></table></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-capital">
+    <div class="g3" id="capitalCards"></div>
+    <div class="g1 card">
+      <h3>Capital retenido vs stock productivo</h3>
+      <div class="sub">Unidades y valor estimado (stock × costo unitario) por clase ABC</div>
+      <div class="g2" style="margin-top:10px">
+        <div><div class="sub">Stock físico (unidades)</div><div id="stockBar"></div></div>
+        <div><div class="sub">Valor en inventario ($)</div><div id="valueBar"></div></div>
+      </div>
+      <div id="capitalDiag" style="margin-top:12px"></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-sinventa">
+    <div class="g3" id="sinVentaKpis"></div>
+    <div class="card">
+      <h3>Sin venta en período + stock</h3>
+      <div class="sub" id="sinVentaSub">Productos con inventario pero sin ventas en el período seleccionado</div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th></th><th>Modelo</th><th>SKUs</th><th>Stock und.</th><th>Valor est.</th>
+      </tr></thead><tbody id="sinVentaBody"></tbody></table></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-matriz">
+    <div class="g2">
+      <div class="card">
+        <h3>Matriz cruzada: ABC × XYZ</h3>
+        <div class="sub">Valor económico (venta USD, Pareto 80/15/5) × variabilidad de demanda (CV unidades mensuales). Clic en cuadrante para ver SKUs.</div>
+        <div id="crossMatrix"></div>
+        <div id="crossDetail" class="card" style="margin-top:12px;background:var(--s2);padding:12px"></div>
+      </div>
+      <div class="card">
+        <h3>¿Cómo leer cada cuadrante?</h3>
+        <div class="sub">Acciones sugeridas — alineado con Planity ABC-XYZ</div>
+        <div id="crossAnalysis" class="cscroll" style="max-height:520px"></div>
+      </div>
+    </div>
+  </section>
+  <section class="sec" id="sec-alertas">
+    <div class="card">
+      <h3>Estado ABC por modelo — Jun vs Jul</h3>
+      <div class="sub" id="alertCount">Todos los modelos evaluados en migración mensual: clase en junio vs julio 2026.</div>
+      <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>Jun → Jul</th><th>Estado</th><th>Período</th><th>Venta acumulada</th><th>Venta último mes</th><th>Stock und.</th><th>Detalle</th></tr></thead><tbody id="alertBody"></tbody></table></div>
+    </div>
+  </section>
+</div>
+<div class="footer">ABC score combinado venta/ganancia/rotación · XYZ por CV · migración acumulativa · modelos normalizados</div>
+<!--INJECT_APP-->
+</body>
+</html>
