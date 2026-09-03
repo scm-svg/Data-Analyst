@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Gerencial</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .table-container { max-height: 500px; overflow-y: auto; }
+    thead th { position: sticky; top: 0; background-color: #1f2937; color: white; z-index: 10; }
+    .estado-red { background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
+    .estado-green { background-color: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
+    .estado-yellow { background-color: #fef08a; color: #854d0e; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
+    .prio-urgente { background-color: #b91c1c; color: #ffffff; border: 1px solid #7f1d1d;}
+    .prio-alta { background-color: #fecaca; color: #991b1b; border: 1px solid #f87171;}
+    .prio-media { background-color: #fef08a; color: #854d0e; border: 1px solid #facc15;}
+    .prio-baja { background-color: #bfdbfe; color: #1e3a8a; border: 1px solid #60a5fa;}
+    .prio-sin { background-color: #e5e7eb; color: #374151; }
+    .drill-down { display: none; background-color: #f8fafc; }
+    .drill-down.active { display: table-row; }
+    #filtros-bar { position: relative; }
+    .filtro-item { display: flex; flex-direction: column; }
+    .filtro-toggle-btn { cursor: pointer; }
+    .filtro-panel { top: 100%; left: 0; }
+    .filtro-opciones label:hover { background-color: #f3f4f6; }
+    .filtro-opcion-row.hidden { display: none; }
+    .sim-item-cant:focus, .sim-item-cap:focus, .sim-item-linea:focus { outline: 2px solid #3b82f6; background-color: #eff6ff; }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <nav class="bg-white shadow-md p-4 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-extrabold text-gray-800">🏭 Dashboard Maestro</h1>
+        <p class="text-xs text-gray-500" id="status-text">Cargando datos en vivo...</p>
+      </div>
+      <div class="mt-4 md:mt-0 flex space-x-2">
+        <input type="text" id="globalSearch" placeholder="🔍 Buscar SKU / Modelo..." class="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64">
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto mt-3">
+      <div id="filtros-bar" class="bg-gray-900 rounded-lg px-4 py-3 flex flex-wrap items-end gap-4"></div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto mt-6 px-4">
+    <div class="border-b border-gray-200">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button onclick="switchTab('tab-backlog')" id="btn-tab-backlog" class="tab-btn border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">📋 1. Backlog y Prioridades</button>
+        <button onclick="switchTab('tab-planta')" id="btn-tab-planta" class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">⚙️ 2. Ejecución de Planta</button>
+        <button onclick="switchTab('tab-proy')" id="btn-tab-proy" class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">📅 3. Proyecciones (Acumulado)</button>
+        <button onclick="switchTab('tab-sim')" id="btn-tab-sim" class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">🧪 4. Simulador de Escenarios</button>
+      </nav>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto mt-6 px-4 mb-10">
+
+    <div id="tab-backlog" class="tab-content block space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white p-5 rounded-lg shadow-sm border-l-4 border-blue-500">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase">Total Piezas Solicitadas</h3>
+          <p class="text-2xl font-bold text-gray-800" id="bl-solicitadas">0</p>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm border-l-4 border-red-500">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase">Faltante Actual</h3>
+          <p class="text-2xl font-bold text-gray-800" id="bl-faltante">0</p>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm border-l-4 border-yellow-500">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase">Órdenes (MOs) Activas</h3>
+          <p class="text-2xl font-bold text-gray-800" id="bl-mos">0</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col items-center justify-center">
+          <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Faltante por Prioridad</h2>
+          <div class="w-full h-80 relative"><canvas id="chartPrioridad"></canvas></div>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col items-center justify-center">
+          <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Composición de Producción por Modelo</h2>
+          <div class="w-full h-80 relative"><canvas id="chartModelos"></canvas></div>
+        </div>
+      </div>
+      <div class="bg-white p-5 rounded-lg shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-4">Detalle "Por Hacer" (Drill-Down)</h2>
+        <div class="table-container border rounded">
+          <table class="min-w-full text-sm text-left">
+            <thead>
+              <tr>
+                <th class="px-2 py-2 w-8"></th>
+                <th class="px-3 py-2">Producto</th>
+                <th class="px-3 py-2 text-center">Cant. Solicitada</th>
+                <th class="px-3 py-2 text-center">Prioridad</th>
+                <th class="px-3 py-2 text-center">Fecha Salida</th>
+                <th class="px-3 py-2 text-center">Faltante</th>
+                <th class="px-3 py-2 text-center">% Producido</th>
+              </tr>
+            </thead>
+            <tbody id="tb-backlog" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-planta" class="tab-content hidden space-y-6">
+      <div class="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+        <h2 class="text-lg font-bold text-gray-800 flex items-center space-x-2">
+          <span>Tableros de Ejecución</span>
+          <span id="label-fecha-semana" class="ml-4 text-xs font-semibold text-blue-800 bg-blue-100 px-3 py-1 rounded shadow-inner">--</span>
+        </h2>
+        <div class="flex space-x-2 mt-4 md:mt-0">
+          <select id="select-semana" class="border p-2 rounded-md bg-gray-50 focus:ring-blue-500 focus:outline-none font-bold" onchange="renderPlanta()">
+            <option value="Semana 1">Semana 1 (Planificación)</option>
+            <option value="Semana 2">Semana 2</option>
+            <option value="Semana 3">Semana 3</option>
+            <option value="Semana 4">Semana 4</option>
+            <option value="Semana 5">Semana 5</option>
+          </select>
+          <select id="select-dia" class="border p-2 rounded-md bg-gray-50 focus:ring-blue-500 focus:outline-none font-bold text-gray-600" onchange="renderPlanta()">
+            <option value="todos">📅 Toda la Semana</option>
+            <option value="lunes">Lunes</option>
+            <option value="martes">Martes</option>
+            <option value="miercoles">Miércoles</option>
+            <option value="jueves">Jueves</option>
+            <option value="viernes">Viernes</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col justify-center">
+          <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Distribución de Líneas (por Modelo)</h2>
+          <div class="w-full h-80 relative"><canvas id="chartCarga"></canvas></div>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col justify-center">
+          <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Distribución por Días (por Modelo)</h2>
+          <div class="w-full h-80 relative"><canvas id="chartDias"></canvas></div>
+        </div>
+      </div>
+      <div class="bg-white p-5 rounded-lg shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-4">Resumen Ejecutivo de la Semana (Drill-Down por SKU)</h2>
+        <div class="table-container border rounded">
+          <table class="min-w-full text-sm text-left">
+            <thead>
+              <tr>
+                <th class="px-2 py-2 w-8"></th>
+                <th class="px-3 py-2">Modelo / SKU</th>
+                <th class="px-3 py-2 text-center">Meta (Faltante)</th>
+                <th class="px-3 py-2 text-center">Planificado</th>
+                <th class="px-3 py-2 text-center">% Cobertura</th>
+                <th class="px-3 py-2 text-center">Pendiente 🚨</th>
+              </tr>
+            </thead>
+            <tbody id="tb-resumen" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-proy" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-lg shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-1">Matriz de Calor (Drill-Down) — valores ACUMULADOS</h2>
+        <p class="text-xs text-gray-500 mb-4">Cada columna S1–S5 muestra el acumulado hasta la semana en que se alcanza la meta. Después no se repite el mismo número.</p>
+        <div class="table-container border rounded">
+          <table class="min-w-full text-xs text-left">
+            <thead>
+              <tr>
+                <th class="px-2 py-2 w-8"></th>
+                <th class="px-2 py-2">Modelo / SKU</th>
+                <th class="px-2 py-2 text-center">Meta</th>
+                <th class="px-2 py-2 text-center">Acum S1</th>
+                <th class="px-2 py-2 text-center">Acum S2</th>
+                <th class="px-2 py-2 text-center">Acum S3</th>
+                <th class="px-2 py-2 text-center">Acum S4</th>
+                <th class="px-2 py-2 text-center">Acum S5</th>
+                <th class="px-2 py-2 text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tb-proy" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-white p-5 rounded-lg shadow-sm">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-4">
+          <h2 class="text-sm font-bold text-gray-800">Evolución de Producción Planificada por Modelo (Acumulado, 5 Semanas)</h2>
+          <select id="select-top-modelos" class="border p-2 rounded-md bg-gray-50 text-xs font-bold" onchange="renderProyeccionLineChart()">
+            <option value="8">Top 8 modelos con mayor meta</option>
+            <option value="15">Top 15 modelos con mayor meta</option>
+            <option value="9999">Todos los modelos (filtrados por búsqueda)</option>
+          </select>
+        </div>
+        <div class="w-full h-96 relative"><canvas id="chartProyLineas"></canvas></div>
+      </div>
+    </div>
+
+    <div id="tab-sim" class="tab-content hidden space-y-6">
+      <div class="bg-white p-5 rounded-lg shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-1">🧪 Simulador "¿Qué pasaría si...?"</h2>
+        <p class="text-xs text-gray-500 mb-4">
+          Este simulador es 100% local (no modifica tus hojas de cálculo). Puedes seleccionar <b>varios modelos/SKUs a la vez</b>;
+          la capacidad y la línea de producción de cada uno se autocompletan desde la pestaña "Por Hacer". Este módulo <b>no</b> se ve afectado por los filtros de la barra superior.
+        </p>
+        <div class="flex flex-wrap items-end gap-2 mb-4">
+          <div>
+            <label class="text-[10px] font-semibold text-gray-500 block mb-1">Cargar planificación actual hasta</label>
+            <select id="sim-carga-hasta-semana" class="border rounded-md text-xs px-2 py-2">
+              <option value="1">Semana 1</option>
+              <option value="2">Semanas 1-2</option>
+              <option value="3">Semanas 1-3</option>
+              <option value="4">Semanas 1-4</option>
+              <option value="5" selected>Todas (1-5)</option>
+            </select>
+          </div>
+          <button onclick="cargarSimulacionInicial()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-md text-xs shadow">🔄 Cargar simulación con planificación actual</button>
+          <button onclick="reiniciarSimulador()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-md text-xs shadow">♻️ Reiniciar todo a 0</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="text-xs font-semibold text-gray-600">Semanas disponibles (horizonte)</label>
+            <input type="number" id="sim-semanas" class="w-full border p-2 rounded mt-1 text-sm" value="5" min="1" max="8">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">Fecha de inicio (lunes)</label>
+            <input type="date" id="sim-fecha-inicio" class="w-full border p-2 rounded mt-1 text-sm">
+          </div>
+        </div>
+        <div class="mb-3">
+          <input type="text" id="sim-buscador" placeholder="🔍 Filtrar la lista de modelos/SKUs del simulador..." class="w-full border p-2 rounded text-xs" oninput="filtrarListaSimulador()">
+        </div>
+        <div class="flex flex-wrap items-end gap-2 mb-3 bg-gray-50 border rounded p-2">
+          <div>
+            <label class="text-[10px] font-semibold text-gray-500 block mb-1">Aplicar a filas ☑ seleccionadas</label>
+            <select id="sim-bulk-campo" class="border rounded text-xs px-2 py-1.5">
+              <option value="cant">Cantidad a producir</option>
+              <option value="cap">Cap/día (por línea)</option>
+              <option value="linea">Línea de producción</option>
+            </select>
+          </div>
+          <input type="text" id="sim-bulk-valor" placeholder="Valor a aplicar..." class="border rounded text-xs px-2 py-1.5 w-32">
+          <button onclick="aplicarValorMasivoSim()" class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-1.5 rounded">📋 Aplicar a seleccionados</button>
+        </div>
+        <div class="table-container border rounded" style="max-height:320px;">
+          <table class="min-w-full text-xs text-left">
+            <thead>
+              <tr>
+                <th class="px-2 py-2 w-8 text-center"><input type="checkbox" id="sim-select-all" onclick="toggleSeleccionarTodoSim(this)"></th>
+                <th class="px-2 py-2">Modelo</th>
+                <th class="px-2 py-2">Descripción del Producto (Modelo-Género-Color-Talla)</th>
+                <th class="px-2 py-2 text-center">Cantidad a producir</th>
+                <th class="px-2 py-2 text-center">Cap/día (por línea)</th>
+                <th class="px-2 py-2 text-center">Línea de producción</th>
+              </tr>
+            </thead>
+            <tbody id="sim-items-body" class="divide-y"></tbody>
+          </table>
+        </div>
+        <button onclick="ejecutarSimulacionMulti()" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md text-sm shadow">▶️ Simular Escenario</button>
+      </div>
+      <div id="sim-resultados" class="hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500"><h3 class="text-xs font-semibold text-gray-500 uppercase">Piezas Asignadas</h3><p class="text-xl font-bold text-gray-800" id="sim-cap-total">0</p></div>
+          <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><h3 class="text-xs font-semibold text-gray-500 uppercase">Cobertura del Horizonte</h3><p class="text-xl font-bold text-gray-800" id="sim-cobertura">0%</p></div>
+          <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><h3 class="text-xs font-semibold text-gray-500 uppercase">Piezas Sin Cubrir</h3><p class="text-xl font-bold text-gray-800" id="sim-sin-cubrir">0</p></div>
+          <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500"><h3 class="text-xs font-semibold text-gray-500 uppercase">Fecha Estimada de Término</h3><p class="text-lg font-bold text-gray-800" id="sim-fecha-termino">--</p></div>
+        </div>
+        <div class="flex justify-end">
+          <div>
+            <label class="text-[10px] font-semibold text-gray-500 block mb-1 text-right">Filtrar gráficos de Líneas/Días por semana</label>
+            <select id="sim-filtro-semana" class="border rounded-md text-xs px-2 py-1.5 font-semibold" onchange="renderizarGraficosSimulados()">
+              <option value="todas">Todas las semanas</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col justify-center">
+            <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Distribución de Líneas (Simulada)</h2>
+            <div class="w-full h-80 relative"><canvas id="chartSimLineas"></canvas></div>
+          </div>
+          <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col justify-center">
+            <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Distribución por Días (Simulada)</h2>
+            <div class="w-full h-80 relative"><canvas id="chartSimDias"></canvas></div>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm">
+          <h2 class="text-sm font-bold text-gray-800 mb-4 text-center">Evolución de Producción Planificada por Modelo (Simulada, Acumulada)</h2>
+          <div class="w-full h-80 relative"><canvas id="chartSimEvo"></canvas></div>
+        </div>
+        <div class="bg-white p-5 rounded-lg shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-bold text-gray-800">Detalle por Semana</h2>
+            <span class="text-xs text-gray-400">Doble desglose: Semana → Modelos → SKUs</span>
+          </div>
+          <table class="min-w-full text-sm text-left border">
+            <thead class="bg-gray-800 text-white">
+              <tr>
+                <th class="px-3 py-2">Semana</th>
+                <th class="px-3 py-2 text-center">Fecha (Lunes)</th>
+                <th class="px-3 py-2 text-center">Piezas Planificadas</th>
+                <th class="px-3 py-2 text-center">Acumulado</th>
+                <th class="px-3 py-2 text-center">Restante</th>
+              </tr>
+            </thead>
+            <tbody id="sim-tabla-semanas" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let rawData = {};
+    let chartPrio = null, chartModelos = null, chartCarga = null, chartDias = null, chartProyLineas = null;
+    let chartSimLineas = null, chartSimDias = null, chartSimEvo = null;
+    let simState = null;
+    const gPalette = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#06b6d4', '#f97316', '#64748b', '#14b8a6', '#ec4899', '#f43f5e', '#84cc16'];
+
+    function debounce(fn, wait) {
+      let t;
+      return function(...args) {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), wait);
+      };
+    }
+
+    let filtros = { modelos: [], skus: [], generos: [], colores: [], tallas: [], prioridades: [], lineas: [] };
+    const FILTROS_DEF = [
+      { key: 'modelos',     label: 'Modelo',    placeholder: 'Todos los modelos' },
+      { key: 'generos',     label: 'Género',     placeholder: 'Todos' },
+      { key: 'colores',     label: 'Color',      placeholder: 'Todos' },
+      { key: 'prioridades', label: 'Prioridad',  placeholder: 'Todas' },
+      { key: 'lineas',      label: 'Línea',      placeholder: 'Todas' }
+    ];
+
+    window.onload = function() {
+      google.script.run.withSuccessHandler(initDashboard).withFailureHandler(onDashboardError).obtenerDatosDashboardCompleto();
+      document.getElementById('globalSearch').addEventListener('input', debounce(renderAll, 300));
+      var hoy = new Date();
+      document.getElementById('sim-fecha-inicio').value = hoy.toISOString().substring(0,10);
+    };
+
+    function onDashboardError(err) {
+      document.getElementById('status-text').innerText = "❌ Error cargando datos: " + (err && err.message ? err.message : err);
+      document.getElementById('status-text').classList.replace("text-gray-500", "text-red-600");
+    }
+
+    function initDashboard(jsonStr) {
+      const parsed = JSON.parse(jsonStr);
+      document.getElementById('status-text').innerText = "✅ Datos Sincronizados" + (parsed.version ? " (v" + parsed.version + ")" : "");
+      document.getElementById('status-text').classList.replace("text-gray-500", "text-green-600");
+      rawData = parsed.data;
+      construirFiltrosBar();
+      renderAll();
+      poblarListaSimulador();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(e => e.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+      document.querySelectorAll('.tab-btn').forEach(e => {
+        e.classList.remove('border-blue-500', 'text-blue-600');
+        e.classList.add('border-transparent', 'text-gray-500');
+      });
+      document.getElementById('btn-' + tabId).classList.remove('border-transparent', 'text-gray-500');
+      document.getElementById('btn-' + tabId).classList.add('border-blue-500', 'text-blue-600');
+      if (tabId === 'tab-proy') renderProyeccionLineChart();
+    }
+
+    function toggleDrill(id) {
+      document.querySelectorAll('.' + id).forEach(e => e.classList.toggle('active'));
+    }
+
+    function formatDate(ms) {
+      if (!ms) return "--";
+      let d = new Date(ms);
+      if (isNaN(d)) return ms;
+      return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function getSafeNum(val) {
+      if(val === '--' || val === '' || val === null || val === undefined || isNaN(val)) return 0;
+      return Number(val);
+    }
+
+    function getPrioWeight(p) {
+      if (p === 'Urgente') return 1;
+      if (p === 'Alta') return 2;
+      if (p === 'Media') return 3;
+      if (p === 'Baja') return 4;
+      return 5;
+    }
+
+    function getPrioBadge(p) {
+      let cls = "prio-sin";
+      if (p === 'Urgente') cls = "prio-urgente";
+      if (p === 'Alta') cls = "prio-alta";
+      if (p === 'Media') cls = "prio-media";
+      if (p === 'Baja') cls = "prio-baja";
+      return `<span class="px-3 py-1 rounded text-xs font-bold shadow-sm ${cls}">${p}</span>`;
+    }
+
+    function getEstBadge(estado) {
+      if (!estado) return "";
+      let cls = "estado-yellow";
+      if (estado.indexOf("✅") !== -1) cls = "estado-green";
+      if (estado.indexOf("🚨") !== -1) cls = "estado-red";
+      return `<span class="${cls}">${estado}</span>`;
+    }
+
+    function getWeekDaysDates(dateStr) {
+      if(!dateStr) return ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+      let parts = dateStr.split("/");
+      let y = new Date().getFullYear();
+      let d = new Date(y, parseInt(parts[1])-1, parseInt(parts[0]));
+      let days = [];
+      for(let i=0; i<5; i++){
+        let nd = new Date(d);
+        nd.setDate(d.getDate() + i);
+        days.push(nd.getDate().toString().padStart(2, '0') + "/" + (nd.getMonth()+1).toString().padStart(2, '0'));
+      }
+      return days;
+    }
+
+    function ejesApiladosSinGridSinEjeY() {
+      return {
+        x: { stacked: true, grid: { display: false }, border: { display: true } },
+        y: { stacked: true, display: false, grid: { display: false }, beginAtZero: true }
+      };
+    }
+    function estiloBarraRedondeada(dataset) {
+      dataset.borderRadius = 6;
+      dataset.borderSkipped = false;
+      dataset.barPercentage = 0.75;
+      dataset.categoryPercentage = 0.75;
+      return dataset;
+    }
+
+    function construirFiltrosBar() {
+      const cont = document.getElementById('filtros-bar');
+      cont.innerHTML = '';
+      const op = rawData.opcionesFiltro || {};
+
+      FILTROS_DEF.forEach(def => {
+        const wrap = document.createElement('div');
+        wrap.className = 'relative filtro-item';
+        wrap.dataset.key = def.key;
+        wrap.innerHTML = `
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">${def.label}</span>
+          <button type="button" class="filtro-toggle-btn flex items-center justify-between gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white text-xs font-semibold rounded-md px-3 py-2 min-w-[160px] w-full">
+            <span class="filtro-value-text truncate">${def.placeholder}</span>
+            <svg class="w-3 h-3 flex-shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+          </button>
+          <div class="filtro-panel hidden absolute z-50 mt-1 bg-white text-gray-800 rounded-md shadow-xl border w-64 p-2">
+            <input type="text" class="filtro-search w-full text-xs border rounded px-2 py-1 mb-2" placeholder="Escribir para buscar...">
+            <div class="flex justify-between mb-2 px-0.5">
+              <button type="button" class="text-[10px] text-blue-600 font-semibold hover:underline filtro-sel-todos">Seleccionar todos</button>
+              <button type="button" class="text-[10px] text-gray-500 font-semibold hover:underline filtro-sel-ninguno">Ninguno</button>
+            </div>
+            <div class="filtro-opciones max-h-48 overflow-y-auto space-y-0.5"></div>
+          </div>
+        `;
+        cont.appendChild(wrap);
+
+        const opcionesCont = wrap.querySelector('.filtro-opciones');
+        (op[def.key] || []).forEach(valor => {
+          const lab = document.createElement('label');
+          lab.className = 'flex items-center gap-2 text-xs px-1 py-1 hover:bg-gray-100 rounded cursor-pointer filtro-opcion-row';
+          lab.dataset.texto = valor.toLowerCase();
+          const chk = document.createElement('input');
+          chk.type = 'checkbox'; chk.className = 'filtro-chk'; chk.value = valor;
+          const span = document.createElement('span'); span.textContent = valor;
+          lab.appendChild(chk); lab.appendChild(span);
+          opcionesCont.appendChild(lab);
+        });
+
+        const btn = wrap.querySelector('.filtro-toggle-btn');
+        const panel = wrap.querySelector('.filtro-panel');
+        const search = wrap.querySelector('.filtro-search');
+
+        panel.addEventListener('click', e => e.stopPropagation());
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const estabaAbierto = !panel.classList.contains('hidden');
+          cerrarTodosLosPaneles();
+          if (!estabaAbierto) {
+            panel.classList.remove('hidden');
+            search.value = '';
+            filtrarOpcionesPanel(wrap);
+            search.focus();
+          }
+        });
+        search.addEventListener('input', () => filtrarOpcionesPanel(wrap));
+        wrap.querySelector('.filtro-sel-todos').addEventListener('click', e => {
+          e.stopPropagation();
+          wrap.querySelectorAll('.filtro-opcion-row:not(.hidden) .filtro-chk').forEach(c => c.checked = true);
+        });
+        wrap.querySelector('.filtro-sel-ninguno').addEventListener('click', e => {
+          e.stopPropagation();
+          wrap.querySelectorAll('.filtro-opcion-row .filtro-chk').forEach(c => c.checked = false);
+        });
+      });
+
+      const limpiar = document.createElement('button');
+      limpiar.type = 'button';
+      limpiar.className = 'text-[10px] text-gray-400 hover:text-white underline ml-auto mb-2';
+      limpiar.textContent = 'Limpiar filtros';
+      limpiar.addEventListener('click', e => { e.stopPropagation(); limpiarTodosLosFiltros(); });
+      cont.appendChild(limpiar);
+
+      document.addEventListener('click', () => cerrarTodosLosPaneles());
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarTodosLosPaneles(); });
+    }
+
+    function filtrarOpcionesPanel(wrap) {
+      const q = wrap.querySelector('.filtro-search').value.toLowerCase();
+      wrap.querySelectorAll('.filtro-opcion-row').forEach(row => {
+        row.classList.toggle('hidden', !!q && row.dataset.texto.indexOf(q) === -1);
+      });
+    }
+
+    function cerrarTodosLosPaneles() {
+      let huboAlgunoAbierto = false;
+      document.querySelectorAll('.filtro-panel').forEach(p => {
+        if (!p.classList.contains('hidden')) huboAlgunoAbierto = true;
+        p.classList.add('hidden');
+      });
+      if (huboAlgunoAbierto) aplicarFiltrosDesdeBar();
+    }
+
+    function aplicarFiltrosDesdeBar() {
+      const nuevo = { modelos: [], skus: [], generos: [], colores: [], tallas: [], prioridades: [], lineas: [] };
+      document.querySelectorAll('.filtro-item').forEach(wrap => {
+        const key = wrap.dataset.key;
+        const seleccion = Array.from(wrap.querySelectorAll('.filtro-chk:checked')).map(c => c.value);
+        nuevo[key] = seleccion;
+        const valTxt = wrap.querySelector('.filtro-value-text');
+        const def = FILTROS_DEF.find(d => d.key === key);
+        if (seleccion.length === 0) valTxt.textContent = def.placeholder;
+        else if (seleccion.length === 1) valTxt.textContent = seleccion[0];
+        else valTxt.textContent = seleccion.length + ' seleccionados';
+      });
+      filtros = nuevo;
+      renderAll();
+    }
+
+    function limpiarTodosLosFiltros() {
+      document.querySelectorAll('.filtro-chk').forEach(c => c.checked = false);
+      aplicarFiltrosDesdeBar();
+    }
+
+    function hayFiltrosActivos() {
+      return filtros.modelos.length || filtros.skus.length || filtros.generos.length ||
+             filtros.colores.length || filtros.tallas.length || filtros.prioridades.length || filtros.lineas.length;
+    }
+
+    function pasaFiltroBacklogItem(d) {
+      if (filtros.modelos.length && !filtros.modelos.includes(d.modelo)) return false;
+      if (filtros.skus.length && !filtros.skus.includes(d.sku)) return false;
+      if (filtros.generos.length && !filtros.generos.includes(d.genero)) return false;
+      if (filtros.colores.length && !filtros.colores.includes(d.color)) return false;
+      if (filtros.tallas.length && !filtros.tallas.includes(d.talla)) return false;
+      if (filtros.prioridades.length && !filtros.prioridades.includes(d.prioridad)) return false;
+      if (filtros.lineas.length) {
+        const lineasSku = String(d.linea || "").split(/[,;/|]+/).map(x => x.trim()).filter(x => x !== "");
+        if (!lineasSku.some(l => filtros.lineas.includes(l))) return false;
+      }
+      return true;
+    }
+
+    function backlogFiltrado() {
+      const base = rawData.backlog || [];
+      if (!hayFiltrosActivos()) return base;
+      return base.filter(pasaFiltroBacklogItem);
+    }
+
+    function modelosPermitidosSet() {
+      if (!hayFiltrosActivos()) return null;
+      return new Set(backlogFiltrado().map(d => d.modelo));
+    }
+
+    function renderAll() {
+      renderBacklog();
+      renderPlanta();
+      renderProyecciones();
+    }
+
+    function renderBacklog() {
+      const q = document.getElementById('globalSearch').value.toLowerCase();
+      let sol = 0, falt = 0, mos = new Set();
+      let prioCount = { "Urgente": 0, "Alta": 0, "Media": 0, "Baja": 0, "Sin Asignar": 0 };
+      const tbody = document.getElementById('tb-backlog');
+      tbody.innerHTML = "";
+
+      let modelosMap = {};
+      backlogFiltrado().forEach(d => {
+        if(q && !d.sku.toLowerCase().includes(q) && !d.detalle.toLowerCase().includes(q) && !d.modelo.toLowerCase().includes(q)) return;
+        sol += d.solicitada; falt += d.faltante;
+        if(d.mo) d.mo.split(",").forEach(m => mos.add(m.trim()));
+        if(prioCount[d.prioridad] !== undefined && d.faltante > 0) prioCount[d.prioridad] += d.faltante;
+
+        if (!modelosMap[d.modelo]) {
+          modelosMap[d.modelo] = { modelo: d.modelo, prioridad: d.prioridad, fechaSalida: d.fechaSalida, solicitada: 0, producida: 0, faltante: 0, skus: [] };
+        }
+        modelosMap[d.modelo].solicitada += d.solicitada;
+        modelosMap[d.modelo].producida += d.producida;
+        modelosMap[d.modelo].faltante += d.faltante;
+        modelosMap[d.modelo].skus.push(d);
+      });
+
+      let modelosArray = Object.values(modelosMap).sort((a, b) => getPrioWeight(a.prioridad) - getPrioWeight(b.prioridad));
+      let mLabels = [], mData = [], mColors = [], colorIdx = 0;
+
+      modelosArray.forEach((m, idx) => {
+        let pctMod = m.solicitada > 0 ? ((m.producida / m.solicitada) * 100).toFixed(1) : 0;
+        let drillId = 'drill-bl-' + idx;
+        if (m.solicitada > 0) {
+          mLabels.push(m.modelo); mData.push(m.solicitada);
+          mColors.push(gPalette[colorIdx % gPalette.length]); colorIdx++;
+        }
+        let icon = m.skus.length > 0 ? "⊞" : "−";
+        let cursor = m.skus.length > 0 ? "cursor-pointer hover:bg-gray-100" : "";
+        let action = m.skus.length > 0 ? `onclick="toggleDrill('${drillId}')"` : "";
+        tbody.innerHTML += `
+          <tr class="${cursor} bg-white border-b" ${action}>
+            <td class="px-2 py-3 text-blue-600 font-bold text-center">${icon}</td>
+            <td class="px-3 py-3 font-bold text-gray-900">${m.modelo}</td>
+            <td class="px-3 py-3 text-center text-gray-700">${m.solicitada.toLocaleString()}</td>
+            <td class="px-3 py-3 text-center">${getPrioBadge(m.prioridad)}</td>
+            <td class="px-3 py-3 text-center text-xs font-semibold text-gray-600">${formatDate(m.fechaSalida)}</td>
+            <td class="px-3 py-3 text-center font-bold text-gray-800">${m.faltante.toLocaleString()}</td>
+            <td class="px-3 py-3 text-center font-bold text-blue-600">${pctMod}%</td>
+          </tr>
+        `;
+        m.skus.forEach(s => {
+          let pctSku = s.solicitada > 0 ? ((s.producida / s.solicitada) * 100).toFixed(1) : 0;
+          tbody.innerHTML += `
+            <tr class="drill-down ${drillId} text-gray-600 border-b border-gray-100 bg-gray-50">
+              <td class="px-2 py-2"></td>
+              <td class="px-3 py-2 pl-6 font-mono text-[11px]">${s.sku} | ${s.detalle}</td>
+              <td class="px-3 py-2 text-center text-xs">${s.solicitada.toLocaleString()}</td>
+              <td class="px-3 py-2 text-center text-xs"></td>
+              <td class="px-3 py-2 text-center text-xs">${formatDate(s.fechaSalida)}</td>
+              <td class="px-3 py-2 text-center font-semibold text-xs text-red-500">${s.faltante.toLocaleString()}</td>
+              <td class="px-3 py-2 text-center text-xs">${pctSku}%</td>
+            </tr>
+          `;
+        });
+      });
+
+      document.getElementById('bl-solicitadas').innerText = sol.toLocaleString();
+      document.getElementById('bl-faltante').innerText = falt.toLocaleString();
+      document.getElementById('bl-mos').innerText = mos.size;
+
+      const ctxPrio = document.getElementById('chartPrioridad').getContext('2d');
+      if(chartPrio) chartPrio.destroy();
+      chartPrio = new Chart(ctxPrio, {
+        type: 'doughnut',
+        data: { labels: ['Urgente', 'Alta', 'Media', 'Baja', 'Sin Asignar'], datasets: [{ data: [prioCount["Urgente"], prioCount["Alta"], prioCount["Media"], prioCount["Baja"], prioCount["Sin Asignar"]], backgroundColor: ['#b91c1c', '#f87171', '#facc15', '#60a5fa', '#9ca3af'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 10 } } } }
+      });
+
+      const ctxMod = document.getElementById('chartModelos').getContext('2d');
+      if(chartModelos) chartModelos.destroy();
+      chartModelos = new Chart(ctxMod, {
+        type: 'pie',
+        data: { labels: mLabels, datasets: [{ data: mData, backgroundColor: mColors }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 }, padding: 8, usePointStyle: true } } } }
+      });
+    }
+
+    function renderPlanta() {
+      const sem = document.getElementById('select-semana').value;
+      const dia = document.getElementById('select-dia').value;
+      const dataSemRaw = (rawData.semanas && rawData.semanas[sem]) || { carga: [], resumen: [] };
+      const q = document.getElementById('globalSearch').value.toLowerCase();
+      const modPermitidos = modelosPermitidosSet();
+
+      const dataSem = {
+        carga: dataSemRaw.carga.filter(c => {
+          if (modPermitidos && !modPermitidos.has(c.modelo)) return false;
+          if (filtros.lineas.length) {
+            const numLinea = String(c.linea).replace(/[^0-9]/g, '');
+            if (!filtros.lineas.includes(numLinea)) return false;
+          }
+          return true;
+        }),
+        resumen: dataSemRaw.resumen.filter(r => !modPermitidos || modPermitidos.has(r.modelo))
+      };
+
+      const fechaBase = (rawData.fechasSemanas && rawData.fechasSemanas[sem]) ? rawData.fechasSemanas[sem] : null;
+      const diasNombres = ["lunes", "martes", "miercoles", "jueves", "viernes"];
+      const diasLabels = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+      const diasFechas = getWeekDaysDates(fechaBase);
+
+      let labelEl = document.getElementById('label-fecha-semana');
+      if (dia === 'todos') labelEl.innerText = fechaBase ? "📅 Semana del " + fechaBase : "📅 Fecha no disponible";
+      else {
+        let idxDia = diasNombres.indexOf(dia);
+        labelEl.innerText = "📅 Día Seleccionado: " + diasLabels[idxDia] + " " + diasFechas[idxDia];
+      }
+
+      let lineasSet = new Set(), modelosMapCarga = {};
+      dataSem.carga.forEach(c => {
+        let valToUse = (dia === 'todos') ? c.total : (c.dias[dia] || 0);
+        if (valToUse > 0) {
+          lineasSet.add(c.linea);
+          if(!modelosMapCarga[c.modelo]) modelosMapCarga[c.modelo] = {};
+          modelosMapCarga[c.modelo][c.linea] = (modelosMapCarga[c.modelo][c.linea] || 0) + valToUse;
+        }
+      });
+      let lineasArr = Array.from(lineasSet).sort();
+
+      let diasAAmostrar = (dia === 'todos') ? diasNombres : [dia];
+      let diasLabelsAmostrar = (dia === 'todos') ? diasLabels.map((l, i) => l + " (" + diasFechas[i] + ")") : [diasLabels[diasNombres.indexOf(dia)] + " (" + diasFechas[diasNombres.indexOf(dia)] + ")"];
+      let modelosMapDias = {};
+      dataSem.carga.forEach(c => {
+        if(!modelosMapDias[c.modelo]) modelosMapDias[c.modelo] = {};
+        diasAAmostrar.forEach(dKey => {
+           modelosMapDias[c.modelo][dKey] = (modelosMapDias[c.modelo][dKey] || 0) + (c.dias[dKey] || 0);
+        });
+      });
+
+      let sortedModels = Array.from(new Set([...Object.keys(modelosMapCarga), ...Object.keys(modelosMapDias)])).sort();
+      let colorByMod = {};
+      sortedModels.forEach((m, i) => colorByMod[m] = gPalette[i % gPalette.length]);
+
+      let datasetsLineas = [];
+      for(let mod in modelosMapCarga) {
+        datasetsLineas.push(estiloBarraRedondeada({ label: mod, data: lineasArr.map(l => modelosMapCarga[mod][l] || 0), backgroundColor: colorByMod[mod] }));
+      }
+      let datasetsDias = [];
+      for(let mod in modelosMapDias) {
+        let dataArr = diasAAmostrar.map(dKey => modelosMapDias[mod][dKey] || 0);
+        if(dataArr.some(v => v > 0)) datasetsDias.push(estiloBarraRedondeada({ label: mod, data: dataArr, backgroundColor: colorByMod[mod] }));
+      }
+
+      const ctx1 = document.getElementById('chartCarga').getContext('2d');
+      if(chartCarga) chartCarga.destroy();
+      chartCarga = new Chart(ctx1, {
+        type: 'bar', data: { labels: lineasArr, datasets: datasetsLineas },
+        options: { responsive: true, maintainAspectRatio: false, scales: ejesApiladosSinGridSinEjeY(), plugins: { legend: { position: 'right', labels: {boxWidth: 10, font: {size: 10}} } } }
+      });
+
+      const ctx2 = document.getElementById('chartDias').getContext('2d');
+      if(chartDias) chartDias.destroy();
+      chartDias = new Chart(ctx2, {
+        type: 'bar', data: { labels: diasLabelsAmostrar, datasets: datasetsDias },
+        options: { responsive: true, maintainAspectRatio: false, scales: ejesApiladosSinGridSinEjeY(), plugins: { legend: { position: 'right', labels: {boxWidth: 10, font: {size: 10}} } } }
+      });
+
+      const tbody = document.getElementById('tb-resumen');
+      tbody.innerHTML = "";
+      let weekNum = parseInt(sem.replace(/\D/g, '')) || 1;
+
+      let dynamicResumen = dataSem.resumen.map(d => {
+        let skus = (rawData.proySku || []).filter(s => s.modelo === d.modelo);
+        if (skus.length === 0) {
+            let backlogSkus = (rawData.backlog || []).filter(b => b.modelo === d.modelo);
+            skus = backlogSkus.map(b => ({ sku: b.sku, detalle: b.detalle, modelo: b.modelo, meta: b.faltante, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, acumulado: true }));
+        }
+        let skusCalculated = skus.map(s => {
+          let skuPlanStr = 0;
+          if(weekNum === 1 && dia !== 'todos') {
+             skuPlanStr = (rawData.skuDiarioS1 && rawData.skuDiarioS1[s.sku]) ? (rawData.skuDiarioS1[s.sku][dia] || 0) : 0;
+          } else if(weekNum === 1 && dia === 'todos') {
+             let v1 = valorSemana(s, 1);
+             let v2 = (rawData.skuDiarioS1 && rawData.skuDiarioS1[s.sku]) ? rawData.skuDiarioS1[s.sku].total : 0;
+             skuPlanStr = Math.max(v1, v2);
+          } else if (dia === 'todos') {
+             skuPlanStr = valorSemana(s, weekNum);
+          } else {
+             skuPlanStr = "N/D (Diario)";
+          }
+          let numPlan = typeof skuPlanStr === 'number' ? skuPlanStr : 0;
+          let skuPend = (dia === 'todos') ? Math.max(0, (Number(s.meta) || 0) - numPlan) : "-";
+          return { ...s, planCalcStr: skuPlanStr, planNum: numPlan, pendStr: skuPend };
+        });
+        skusCalculated.sort((a,b) => b.planNum - a.planNum);
+        let dPlan = skusCalculated.reduce((acc, s) => acc + s.planNum, 0);
+        return { ...d, skus: skusCalculated, dynamicPlan: dPlan, dynamicPct: d.meta > 0 ? (dPlan / d.meta) : 0, dynamicPend: d.meta - dPlan };
+      });
+
+      dynamicResumen.sort((a, b) => b.dynamicPlan - a.dynamicPlan);
+      dynamicResumen.forEach((d, idx) => {
+        if(q && !d.modelo.toLowerCase().includes(q)) return;
+        if(d.dynamicPlan === 0 && d.meta === 0) return;
+        let pendCls = d.dynamicPend > 0 ? "text-red-600 font-bold bg-red-50" : "text-gray-500 font-semibold";
+        let drillId = 'drill-re-' + idx;
+        let icon = d.skus.length > 0 ? "⊞" : "−";
+        let cursor = d.skus.length > 0 ? "cursor-pointer hover:bg-gray-100" : "";
+        let action = d.skus.length > 0 ? `onclick="toggleDrill('${drillId}')"` : "";
+        tbody.innerHTML += `
+          <tr class="${cursor} border-b bg-white" ${action}>
+            <td class="px-2 py-3 text-blue-600 font-bold text-center w-8">${icon}</td>
+            <td class="px-3 py-3 font-bold text-gray-900">${d.modelo}</td>
+            <td class="px-3 py-3 text-center">${d.meta.toLocaleString()}</td>
+            <td class="px-3 py-3 text-center text-blue-600 font-bold text-lg">${d.dynamicPlan.toLocaleString()}</td>
+            <td class="px-3 py-3 text-center font-semibold">${(d.dynamicPct * 100).toFixed(0)}%</td>
+            <td class="px-3 py-3 text-center ${pendCls}">${d.dynamicPend.toLocaleString()}</td>
+          </tr>
+        `;
+        d.skus.forEach(s => {
+          tbody.innerHTML += `
+            <tr class="drill-down ${drillId} text-gray-600 border-b border-gray-100 bg-gray-50">
+              <td class="px-2 py-2"></td>
+              <td class="px-3 py-2 pl-6 font-mono text-[11px]">${s.sku} | ${s.detalle}</td>
+              <td class="px-3 py-2 text-center text-xs">${(Number(s.meta) || 0).toLocaleString()}</td>
+              <td class="px-3 py-2 text-center text-blue-500 font-bold text-xs">${typeof s.planCalcStr === 'number' ? s.planCalcStr.toLocaleString() : s.planCalcStr}</td>
+              <td class="px-3 py-2 text-center text-xs">-</td>
+              <td class="px-3 py-2 text-center text-xs text-red-500">${typeof s.pendStr === 'number' && s.pendStr > 0 ? s.pendStr.toLocaleString() : s.pendStr}</td>
+            </tr>
+          `;
+        });
+      });
+    }
+
+    /** Semanal (delta) a partir de valores que pueden venir ya acumulados. */
+    function valorSemana(m, n) {
+      const vals = [getSafeNum(m.s1), getSafeNum(m.s2), getSafeNum(m.s3), getSafeNum(m.s4), getSafeNum(m.s5)];
+      const acum = serieComoAcumulada(m);
+      if (n <= 1) return acum[0];
+      return Math.max(0, acum[n-1] - acum[n-2]);
+    }
+
+    function serieComoAcumulada(m) {
+      const vals = [getSafeNum(m.s1), getSafeNum(m.s2), getSafeNum(m.s3), getSafeNum(m.s4), getSafeNum(m.s5)];
+      const noDecrece = vals.every((v, i) => i === 0 || v === 0 || vals[i-1] === 0 || v + 0.001 >= vals[i-1]);
+      if (m.acumulado === true || noDecrece) {
+        let last = 0;
+        return vals.map(v => { if (v > 0) last = v; return last; });
+      }
+      let c = 0;
+      return vals.map(v => { c += v; return c; });
+    }
+
+    function calcularSerieAcumulada(m) {
+      const acum = serieComoAcumulada(m);
+      const meta = Number(m.meta) || 0;
+      const startIdx = acum.findIndex(v => v > 0);
+      if (startIdx === -1) return acum.map(() => null);
+      let previo = 0;
+      let metaAlcanzada = false;
+      return acum.map((v, i) => {
+        if (i < startIdx || metaAlcanzada) return null;
+        if (!v || v === previo) return null;
+        previo = v;
+        if (meta > 0 && v >= meta) metaAlcanzada = true;
+        return v;
+      });
+    }
+
+    function renderProyecciones() {
+      const q = document.getElementById('globalSearch').value.toLowerCase();
+      const tbody = document.getElementById('tb-proy');
+      tbody.innerHTML = "";
+      const modPermitidos = modelosPermitidosSet();
+      const proyModelo = (rawData.proyModelo || []).filter(m => !modPermitidos || modPermitidos.has(m.modelo));
+      const proySku = rawData.proySku || [];
+      const backlog = rawData.backlog || [];
+
+      if ((rawData.proyModelo || []).length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="px-3 py-6 text-center text-gray-400 text-sm">
+          No hay datos en la pestaña "Proyeccion". Corre "Generar Planificación" y vuelve a abrir este dashboard.</td></tr>`;
+        return;
+      }
+
+      proyModelo.forEach((mod, idx) => {
+        if(q && !mod.modelo.toLowerCase().includes(q)) return;
+        let drillId = 'drill-pr-' + idx;
+        let skus = proySku.filter(s => s.modelo === mod.modelo);
+        if (skus.length === 0) {
+            skus = backlog.filter(b => b.modelo === mod.modelo).map(b => ({
+                sku: b.sku, detalle: b.detalle, modelo: b.modelo, meta: b.faltante,
+                s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, estado: "— Sin programar"
+            }));
+        }
+        const a = calcularSerieAcumulada(mod);
+        let icon = skus.length > 0 ? "⊞" : "−";
+        let cursor = skus.length > 0 ? "cursor-pointer hover:bg-gray-100" : "";
+        let action = skus.length > 0 ? `onclick="toggleDrill('${drillId}')"` : "";
+        tbody.innerHTML += `
+          <tr class="${cursor} bg-white border-b" ${action}>
+            <td class="px-2 py-2 text-blue-600 font-bold text-center">${icon}</td>
+            <td class="px-2 py-2 font-bold">${mod.modelo}</td>
+            <td class="px-2 py-2 text-center font-bold">${mod.meta}</td>
+            <td class="px-2 py-2 text-center">${a[0] || '--'}</td><td class="px-2 py-2 text-center">${a[1] || '--'}</td>
+            <td class="px-2 py-2 text-center">${a[2] || '--'}</td><td class="px-2 py-2 text-center">${a[3] || '--'}</td>
+            <td class="px-2 py-2 text-center">${a[4] || '--'}</td>
+            <td class="px-2 py-2 text-center">${getEstBadge(mod.estado)}</td>
+          </tr>
+        `;
+        skus.forEach(s => {
+          const as = calcularSerieAcumulada(s);
+          tbody.innerHTML += `
+            <tr class="drill-down ${drillId} text-gray-600 border-b border-gray-100 bg-gray-50">
+              <td class="px-2 py-2"></td><td class="px-2 py-2 pl-6 font-mono text-[10px]">${s.sku} - ${s.detalle}</td>
+              <td class="px-2 py-2 text-center">${s.meta}</td>
+              <td class="px-2 py-2 text-center">${as[0] || '--'}</td><td class="px-2 py-2 text-center">${as[1] || '--'}</td>
+              <td class="px-2 py-2 text-center">${as[2] || '--'}</td><td class="px-2 py-2 text-center">${as[3] || '--'}</td>
+              <td class="px-2 py-2 text-center">${as[4] || '--'}</td>
+              <td class="px-2 py-2 text-center text-[10px]">${getEstBadge(s.estado || "")}</td>
+            </tr>
+          `;
+        });
+      });
+      renderProyeccionLineChart();
+    }
+
+    function renderProyeccionLineChart() {
+      const canvas = document.getElementById('chartProyLineas');
+      if (!canvas) return;
+      const q = document.getElementById('globalSearch').value.toLowerCase();
+      const topSel = document.getElementById('select-top-modelos');
+      const topN = topSel ? parseInt(topSel.value, 10) : 8;
+      const modPermitidos = modelosPermitidosSet();
+      let modelos = (rawData.proyModelo || [])
+        .filter(m => !modPermitidos || modPermitidos.has(m.modelo))
+        .filter(m => !q || m.modelo.toLowerCase().includes(q));
+      modelos = modelos.slice().sort((a, b) => (Number(b.meta) || 0) - (Number(a.meta) || 0)).slice(0, topN);
+      const fechasSemanas = rawData.fechasSemanas || {};
+      const labels = [1,2,3,4,5].map(n => {
+        let f = fechasSemanas["Semana " + n];
+        return "Sem " + n + (f ? " (" + f + ")" : "");
+      });
+      const datasets = modelos.map((m, i) => ({
+        label: m.modelo, data: calcularSerieAcumulada(m),
+        borderColor: gPalette[i % gPalette.length], backgroundColor: gPalette[i % gPalette.length],
+        tension: 0.25, spanGaps: false, fill: false
+      }));
+      if (chartProyLineas) chartProyLineas.destroy();
+      chartProyLineas = new Chart(canvas.getContext('2d'), {
+        type: 'line', data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Piezas acumuladas' } } },
+          plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } }
+        }
+      });
+    }
+
+    function poblarListaSimulador() {
+      const cont = document.getElementById('sim-items-body');
+      cont.innerHTML = "";
+      const vistos = new Set();
+      (rawData.backlog || []).forEach(b => {
+        const key = b.modelo + '||' + b.sku;
+        if (vistos.has(key)) return;
+        vistos.add(key);
+        const desc = [b.modelo, b.genero, b.color, b.talla].filter(x => x && x !== '--').join(' - ');
+        const tr = document.createElement('tr');
+        tr.className = "sim-item-row";
+        tr.dataset.modelo = b.modelo;
+        tr.dataset.sku = b.sku;
+        tr.dataset.busqueda = (b.modelo + ' ' + b.sku + ' ' + desc).toLowerCase();
+        tr.innerHTML = `
+          <td class="px-2 py-1 text-center"><input type="checkbox" class="sim-item-chk"></td>
+          <td class="px-2 py-1 text-xs font-semibold">${b.modelo}</td>
+          <td class="px-2 py-1 text-xs text-gray-600 sim-item-desc">${desc} <span class="text-gray-400 font-mono text-[10px]">(${b.sku})</span></td>
+          <td class="px-2 py-1 text-center"><input type="number" class="sim-item-cant border rounded px-1 w-24 text-xs text-center" value="${b.faltante || 0}" data-faltante="${b.faltante || 0}" min="0" onpaste="manejarPegadoMasivo(event,this)"></td>
+          <td class="px-2 py-1 text-center"><input type="number" class="sim-item-cap border rounded px-1 w-20 text-xs text-center" value="${b.cap || 100}" min="1" onpaste="manejarPegadoMasivo(event,this)"></td>
+          <td class="px-2 py-1 text-center"><input type="text" class="sim-item-linea border rounded px-1 w-20 text-xs text-center" value="${(b.linea||'').replace(/"/g,'&quot;')}" placeholder="Todas" onpaste="manejarPegadoMasivo(event,this)"></td>
+        `;
+        cont.appendChild(tr);
+      });
+      const master = document.getElementById('sim-select-all');
+      if (master) master.checked = false;
+    }
+
+    function filtrarListaSimulador() {
+      const q = document.getElementById('sim-buscador').value.toLowerCase();
+      document.querySelectorAll('.sim-item-row').forEach(tr => {
+        tr.style.display = (!q || tr.dataset.busqueda.includes(q)) ? '' : 'none';
+      });
+    }
+
+    function toggleSeleccionarTodoSim(masterChk) {
+      document.querySelectorAll('.sim-item-row').forEach(tr => {
+        if (tr.style.display === 'none') return;
+        const chk = tr.querySelector('.sim-item-chk');
+        if (chk) chk.checked = masterChk.checked;
+      });
+    }
+
+    function aplicarValorMasivoSim() {
+      const campo = document.getElementById('sim-bulk-campo').value;
+      const valor = document.getElementById('sim-bulk-valor').value;
+      if (valor === '') { alert('Escribe un valor para aplicar.'); return; }
+      const claseCampo = campo === 'cant' ? '.sim-item-cant' : campo === 'cap' ? '.sim-item-cap' : '.sim-item-linea';
+      const seleccionados = document.querySelectorAll('.sim-item-chk:checked');
+      if (seleccionados.length === 0) { alert('Marca el checkbox de al menos una fila para aplicar el valor.'); return; }
+      seleccionados.forEach(chk => {
+        const input = chk.closest('tr').querySelector(claseCampo);
+        if (input) input.value = valor;
+      });
+    }
+
+    function manejarPegadoMasivo(e, inputEl) {
+      const seleccionados = document.querySelectorAll('.sim-item-chk:checked');
+      if (seleccionados.length <= 1) return;
+      const texto = (e.clipboardData || window.clipboardData).getData('text').trim();
+      if (!texto || texto.indexOf('\n') !== -1 || texto.indexOf('\t') !== -1) return;
+      e.preventDefault();
+      const clase = Array.from(inputEl.classList).find(c => c.indexOf('sim-item-') === 0);
+      seleccionados.forEach(chk => {
+        const input = chk.closest('tr').querySelector('.' + clase);
+        if (input) input.value = texto;
+      });
+    }
+
+    function cargarSimulacionInicial() {
+      poblarListaSimulador();
+      const nSemanas = Number(document.getElementById('sim-carga-hasta-semana').value) || 5;
+      const proySku = rawData.proySku || [];
+      document.querySelectorAll('.sim-item-row').forEach(tr => {
+        const modelo = tr.dataset.modelo, sku = tr.dataset.sku;
+        const chk = tr.querySelector('.sim-item-chk');
+        const cantInput = tr.querySelector('.sim-item-cant');
+        let cant = 0;
+        if (nSemanas >= 5) {
+          cant = Number(cantInput.dataset.faltante) || 0;
+        } else {
+          const fila = proySku.find(s => s.modelo === modelo && s.sku === sku);
+          if (fila) {
+            const acum = serieComoAcumulada(fila);
+            cant = acum[nSemanas - 1] || 0;
+          }
+        }
+        cantInput.value = cant;
+        chk.checked = cant > 0;
+      });
+      ejecutarSimulacionMulti();
+    }
+
+    function reiniciarSimulador() {
+      document.querySelectorAll('.sim-item-chk').forEach(chk => chk.checked = false);
+      document.querySelectorAll('.sim-item-cant').forEach(inp => inp.value = 0);
+      const master = document.getElementById('sim-select-all');
+      if (master) master.checked = false;
+      simState = null;
+      document.getElementById('sim-resultados').classList.add('hidden');
+    }
+
+    function ejecutarSimulacionMulti() {
+      const semanas = Math.min(8, Math.max(1, Number(document.getElementById('sim-semanas').value) || 1));
+      const fechaInicioStr = document.getElementById('sim-fecha-inicio').value;
+      const totalDias = 5 * semanas;
+      const items = Array.from(document.querySelectorAll('.sim-item-chk:checked')).map(chk => {
+        const tr = chk.closest('tr');
+        const lineasTxt = (tr.querySelector('.sim-item-linea').value || '').trim();
+        const lineasPermitidas = lineasTxt.split(/[,;/|]+/).map(s => s.trim()).filter(s => s !== '');
+        return {
+          modelo: tr.dataset.modelo, sku: tr.dataset.sku,
+          detalle: tr.querySelector('.sim-item-desc').textContent.trim(),
+          cantidad: Math.max(0, Number(tr.querySelector('.sim-item-cant').value) || 0),
+          cap: Math.max(1, Number(tr.querySelector('.sim-item-cap').value) || 1),
+          lineas: lineasPermitidas
+        };
+      }).filter(it => it.cantidad > 0);
+      if (items.length === 0) { alert("Selecciona al menos un modelo/SKU con cantidad mayor a cero."); return; }
+      const todasLineas = Array.from(new Set(items.flatMap(it => it.lineas.length ? it.lineas : ['1','2','3','4','5']))).sort();
+      items.sort((a, b) => b.cantidad - a.cantidad);
+      const carga = {}; todasLineas.forEach(l => carga[l] = new Array(totalDias).fill(0));
+      const lineaPorMO = {};
+      items.forEach(item => {
+        item.plan = new Array(totalDias).fill(0);
+        item.planLinea = {}; todasLineas.forEach(l => item.planLinea[l] = new Array(totalDias).fill(0));
+        item.restante = item.cantidad;
+        const clave = item.sku;
+        if (!lineaPorMO[clave]) {
+          const sus = item.lineas.length ? item.lineas.filter(l => carga[l] !== undefined) : todasLineas;
+          sus.sort((a,b) => carga[a][0] - carga[b][0]);
+          lineaPorMO[clave] = sus[0] || todasLineas[0];
+        }
+        const linFija = lineaPorMO[clave];
+        for (let d = 0; d < totalDias && item.restante > 0; d++) {
+          const avail = 1 - carga[linFija][d];
+          if (avail <= 0.001) continue;
+          const piezas = Math.min(item.restante, Math.floor(avail * item.cap));
+          if (piezas > 0) {
+            item.plan[d] += piezas;
+            item.planLinea[linFija][d] += piezas;
+            carga[linFija][d] += piezas / item.cap;
+            item.restante -= piezas;
+          }
+        }
+      });
+      const fechaInicio = fechaInicioStr ? new Date(fechaInicioStr + "T00:00:00") : new Date();
+      const filasSemana = [];
+      for (let s = 0; s < semanas; s++) {
+        let planSemana = 0;
+        items.forEach(item => { for (let d = s * 5; d < s * 5 + 5; d++) planSemana += item.plan[d]; });
+        filasSemana.push({ semana: s + 1, plan: planSemana });
+      }
+      let acumulado = 0;
+      const totalCant = items.reduce((a, i) => a + i.cantidad, 0);
+      filasSemana.forEach(f => {
+        acumulado += f.plan; f.acumulado = acumulado; f.restante = Math.max(0, totalCant - acumulado);
+        const fechaSemana = new Date(fechaInicio); fechaSemana.setDate(fechaSemana.getDate() + (f.semana - 1) * 7);
+        f.fecha = fechaSemana.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      });
+      simState = { items, totalDias, semanas, todasLineas, fechaInicio, filasSemana };
+      poblarSelectSemanaSim(semanas);
+      renderResultadosSimulacion();
+    }
+
+    function poblarSelectSemanaSim(semanas) {
+      const sel = document.getElementById('sim-filtro-semana');
+      const val = sel.value;
+      sel.innerHTML = '<option value="todas">Todas las semanas</option>';
+      for (let s = 1; s <= semanas; s++) {
+        const opt = document.createElement('option');
+        opt.value = String(s); opt.textContent = 'Semana ' + s;
+        sel.appendChild(opt);
+      }
+      if (Array.from(sel.options).some(o => o.value === val)) sel.value = val;
+    }
+
+    function agregarPorModelo(items, totalDias, todasLineas) {
+      const map = {};
+      items.forEach(it => {
+        if (!map[it.modelo]) {
+          map[it.modelo] = { planLinea: {}, plan: new Array(totalDias).fill(0), cantidad: 0 };
+          todasLineas.forEach(l => map[it.modelo].planLinea[l] = new Array(totalDias).fill(0));
+        }
+        for (let d = 0; d < totalDias; d++) {
+          map[it.modelo].plan[d] += it.plan[d];
+          todasLineas.forEach(l => { map[it.modelo].planLinea[l][d] += (it.planLinea[l] ? it.planLinea[l][d] : 0); });
+        }
+        map[it.modelo].cantidad += it.cantidad;
+      });
+      return map;
+    }
+
+    function renderResultadosSimulacion() {
+      if (!simState) return;
+      renderKpisSim();
+      renderTablaSemanasSim();
+      renderizarGraficosSimulados();
+      document.getElementById('sim-resultados').classList.remove('hidden');
+    }
+
+    function renderKpisSim() {
+      const { items, filasSemana } = simState;
+      const totalCant = items.reduce((a, i) => a + i.cantidad, 0);
+      const totalAsignado = items.reduce((a, i) => a + (i.cantidad - i.restante), 0);
+      const sinCubrir = items.reduce((a, i) => a + i.restante, 0);
+      const cobertura = totalCant > 0 ? totalAsignado / totalCant : 1;
+      document.getElementById('sim-cap-total').innerText = totalAsignado.toLocaleString() + " piezas";
+      document.getElementById('sim-cobertura').innerText = (cobertura * 100).toFixed(0) + "%";
+      document.getElementById('sim-sin-cubrir').innerText = sinCubrir.toLocaleString();
+      const itemsSinTerminar = items.filter(i => i.restante > 0);
+      document.getElementById('sim-fecha-termino').innerText = itemsSinTerminar.length === 0
+        ? (filasSemana.length ? filasSemana[filasSemana.length - 1].fecha : "--")
+        : "Fuera de horizonte";
+    }
+
+    function renderTablaSemanasSim() {
+      const { items, filasSemana } = simState;
+      const tbody = document.getElementById('sim-tabla-semanas');
+      tbody.innerHTML = "";
+      filasSemana.forEach((f, wIdx) => {
+        const porModelo = {};
+        items.forEach(it => {
+          let sum = 0; for (let d = wIdx * 5; d < wIdx * 5 + 5; d++) sum += it.plan[d];
+          if (sum <= 0) return;
+          if (!porModelo[it.modelo]) porModelo[it.modelo] = { total: 0, skus: [] };
+          porModelo[it.modelo].total += sum;
+          porModelo[it.modelo].skus.push({ sku: it.sku, detalle: it.detalle, cantidad: sum });
+        });
+        const modelosSemana = Object.entries(porModelo).sort((a, b) => b[1].total - a[1].total);
+        const drillWeekId = 'drill-semw-' + wIdx;
+        const hayDetalle = modelosSemana.length > 0;
+        tbody.innerHTML += `
+          <tr class="border-b ${hayDetalle ? 'cursor-pointer hover:bg-gray-100' : ''} bg-white" ${hayDetalle ? `onclick="toggleDrill('${drillWeekId}')"` : ''}>
+            <td class="px-3 py-2 font-bold">${hayDetalle ? '⊞ ' : ''}Semana ${f.semana}</td>
+            <td class="px-3 py-2 text-center">${f.fecha}</td>
+            <td class="px-3 py-2 text-center text-blue-600 font-bold">${f.plan.toLocaleString()}</td>
+            <td class="px-3 py-2 text-center">${f.acumulado.toLocaleString()}</td>
+            <td class="px-3 py-2 text-center ${f.restante > 0 ? 'text-red-600 font-bold' : 'text-green-600 font-semibold'}">${f.restante.toLocaleString()}</td>
+          </tr>
+        `;
+        modelosSemana.forEach(([modelo, info], mIdx) => {
+          const drillModelId = drillWeekId + '-m' + mIdx;
+          tbody.innerHTML += `
+            <tr class="drill-down ${drillWeekId} cursor-pointer hover:bg-gray-100 bg-gray-50 border-b border-gray-100" onclick="toggleDrill('${drillModelId}')">
+              <td class="px-3 py-2 pl-6 text-xs font-semibold text-gray-700" colspan="2">⊞ ${modelo}</td>
+              <td class="px-3 py-2 text-center text-xs text-blue-500 font-bold">${info.total.toLocaleString()}</td>
+              <td class="px-3 py-2 text-center text-xs">-</td>
+              <td class="px-3 py-2 text-center text-xs">-</td>
+            </tr>
+          `;
+          info.skus.forEach(s => {
+            tbody.innerHTML += `
+              <tr class="drill-down ${drillModelId} bg-gray-100 border-b border-gray-200">
+                <td class="px-3 py-2 pl-12 text-[11px] text-gray-600 font-mono" colspan="2">${s.sku} <span class="text-gray-400">| ${s.detalle}</span></td>
+                <td class="px-3 py-2 text-center text-[11px] text-blue-400 font-semibold">${s.cantidad.toLocaleString()}</td>
+                <td class="px-3 py-2 text-center text-[11px]">-</td>
+                <td class="px-3 py-2 text-center text-[11px]">-</td>
+              </tr>
+            `;
+          });
+        });
+      });
+    }
+
+    function renderizarGraficosSimulados() {
+      if (!simState) return;
+      const { items, totalDias, todasLineas, semanas } = simState;
+      const semSel = document.getElementById('sim-filtro-semana').value;
+      let dIni = 0, dFin = totalDias;
+      if (semSel !== 'todas') { const s = Number(semSel) - 1; dIni = s * 5; dFin = dIni + 5; }
+      const agg = agregarPorModelo(items, totalDias, todasLineas);
+      const modelos = Object.keys(agg);
+      const colorByModelo = {}; modelos.forEach((m, i) => colorByModelo[m] = gPalette[i % gPalette.length]);
+      const dsLineas = modelos.map(m => estiloBarraRedondeada({
+        label: m,
+        data: todasLineas.map(l => { let s = 0; for (let d = dIni; d < dFin; d++) s += agg[m].planLinea[l][d]; return s; }),
+        backgroundColor: colorByModelo[m]
+      }));
+      if (chartSimLineas) chartSimLineas.destroy();
+      chartSimLineas = new Chart(document.getElementById('chartSimLineas').getContext('2d'), {
+        type: 'bar', data: { labels: todasLineas.map(l => 'Línea ' + l), datasets: dsLineas },
+        options: { responsive: true, maintainAspectRatio: false, scales: ejesApiladosSinGridSinEjeY(), plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 9 } } } } }
+      });
+      const diasLbl = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+      const dsDias = modelos.map(m => estiloBarraRedondeada({
+        label: m,
+        data: diasLbl.map((_, di) => { let s = 0; for (let d = dIni + di; d < dFin; d += 5) s += agg[m].plan[d]; return s; }),
+        backgroundColor: colorByModelo[m]
+      }));
+      if (chartSimDias) chartSimDias.destroy();
+      chartSimDias = new Chart(document.getElementById('chartSimDias').getContext('2d'), {
+        type: 'bar', data: { labels: diasLbl, datasets: dsDias },
+        options: { responsive: true, maintainAspectRatio: false, scales: ejesApiladosSinGridSinEjeY(), plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 9 } } } } }
+      });
+      const dsEvo = modelos.map(m => {
+        const semanal = [];
+        for (let s = 0; s < semanas; s++) { let sum = 0; for (let d = s * 5; d < s * 5 + 5; d++) sum += agg[m].plan[d]; semanal.push(sum); }
+        let cum = 0;
+        const acumulados = semanal.map(v => { cum += v; return cum; });
+        const start = semanal.findIndex(v => v > 0);
+        let out = acumulados.map((v, idx) => idx < start ? null : v);
+        const completedIdx = out.findIndex(v => v !== null && v >= agg[m].cantidad);
+        if (completedIdx !== -1) for (let idx = completedIdx + 1; idx < out.length; idx++) out[idx] = null;
+        return { label: m, data: out, borderColor: colorByModelo[m], backgroundColor: colorByModelo[m], tension: 0.25, fill: false, spanGaps: false };
+      });
+      if (chartSimEvo) chartSimEvo.destroy();
+      chartSimEvo = new Chart(document.getElementById('chartSimEvo').getContext('2d'), {
+        type: 'line', data: { labels: Array.from({ length: semanas }, (_, i) => 'Sem ' + (i + 1)), datasets: dsEvo },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: 'Piezas acumuladas' } } }, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 9 } } } } }
+      });
+    }
+  </script>
+</body>
+</html>
