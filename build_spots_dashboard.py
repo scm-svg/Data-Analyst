@@ -12,11 +12,16 @@ VENTAS_PATH = Path(__file__).resolve().parent / "data" / "spots_ventas.csv"
 INV_PATH = Path(__file__).resolve().parent / "data" / "spots_inventario.csv"
 
 HIGH_SEASON_FACTOR = 1.2
+DECEMBER_HS_FACTOR = 1.4
 LEAD_MONTHS = 3
 PARTIAL_MONTH = "septiembre-2026"
 VELOCITY_MONTHS_COUNT = 3
 BASE_STORE = "VELA"
 DECISION_STORES = ["VELA"]
+BQT_DISENO_CIUDAD = "Ciudad"
+BQT_DISENO_VIRGEN = "Virgen"
+BQT_VIRGEN_REF = "Virgen del Valle"
+BQT_CIUDAD_REF = "Nueva Esparta"
 EXPANSION_STORES = ["CARACAS", "VALENCIA", "BARQUISIMETO"]
 PROD_ZONE_ORDER = ["MARGARITA", "CARACAS", "VALENCIA", "BARQUISIMETO"]
 EXPANSION_CAPS = {
@@ -34,9 +39,25 @@ EXPANSION_CAPS = {
     },
     "BARQUISIMETO": {
         "mult": 1.0,
-        "label": "Modelo exclusivo zona Barquisimeto",
+        "label": (
+            "Barquisimeto · Blanco en 2 diseños (Ciudad + Virgen) · "
+            f"Virgen festividad dic ×{DECEMBER_HS_FACTOR}"
+        ),
         "zone_model": "Modelo Barquisimeto",
         "modelos": ["SPOTS MANGA CORTA"],
+        "blanco_designs": [
+            {
+                "diseno": BQT_DISENO_CIUDAD,
+                "ref_diseno": BQT_CIUDAD_REF,
+                "hs_factor": HIGH_SEASON_FACTOR,
+            },
+            {
+                "diseno": BQT_DISENO_VIRGEN,
+                "ref_diseno": BQT_VIRGEN_REF,
+                "hs_factor": DECEMBER_HS_FACTOR,
+                "seasonality": "Festividad Virgen · rotación dic ×1.4",
+            },
+        ],
     },
 }
 ADDITIONAL_COLOR = "Color adicional"
@@ -194,19 +215,78 @@ def compute_prod_curve(raw_rows, stock, stock_taller, vel_months):
     return prod_rows, summary
 
 
-def compute_expansion(raw_rows, vel_months, prod_rows):
-    """Proyección por zona: modelo propio Blanco + color adicional (70%).
+def _blanco_velocity_groups(store_rows, vel_months):
+    """Velocidad mensual Blanco VELA por línea/género/talla (agregado y por diseño)."""
+    total = defaultdict(float)
+    by_diseno = defaultdict(float)
+    for r in store_rows:
+        if r["color"].lower() != "blanco":
+            continue
+        if r["mes"] not in vel_months:
+            continue
+        v = r["v"] / len(vel_months)
+        k = (r["modelo"], r["genero"], r["talla"])
+        total[k] += v
+        by_diseno[(r["modelo"], r["genero"], r["talla"], r["diseno"])] += v
+    return total, by_diseno
 
-    Referencia de velocidad = movimiento Blanco VELA (mix talla/línea, sin diseños).
-    Los diseños actuales de VELA son exclusivos Margarita y NO van a otras zonas.
+
+def _ref_velocity(by_diseno, ref_diseno, modelo, genero, talla, v_total):
+    v = by_diseno.get((modelo, genero, talla, ref_diseno), 0)
+    if v > 0:
+        return v
+    # Reparto proporcional si falta talla en el diseño referencia
+    design_total = sum(
+        v_d for (m, g, t, _), v_d in by_diseno.items()
+        if m == modelo and g == genero and t == talla
+    )
+    if design_total > 0:
+        ref_sum = sum(
+            v_d for (m, g, t, d), v_d in by_diseno.items()
+            if m == modelo and g == genero and d == ref_diseno
+        )
+        share = ref_sum / design_total if design_total else 0.5
+        return v_total * share
+    return v_total * 0.5
+
+
+def _append_sku(skus, modelo, genero, talla, diseno, color, zone_model, v_adj, hs_factor, seasonality=""):
+    need_1m = max(0, round(v_adj))
+    need_2m = max(0, round(v_adj * 2))
+    need_3m = max(0, round(v_adj * LEAD_MONTHS))
+    skus.append({
+        "modelo": modelo,
+        "genero": genero,
+        "diseno": diseno,
+        "zone_model": zone_model,
+        "talla": talla,
+        "color": color,
+        "v_mes": v_adj,
+        "hs_factor": hs_factor,
+        "seasonality": seasonality,
+        "need_1m": need_1m,
+        "need_2m": need_2m,
+        "need_3m": need_3m,
+    })
+    return need_3m
+
+
+def compute_expansion(raw_rows, vel_months, prod_rows):
+    """Proyección por zona: modelo propio + Blanco + color adicional (70%).
+
+    Referencia de velocidad = movimiento Blanco VELA (sin replicar diseños Margarita).
+    Barquisimeto: Blanco en 2 diseños (Ciudad ×1.2, Virgen festividad dic ×1.4).
     """
     store_rows = [r for r in raw_rows if r["tienda"] == BASE_STORE]
+    total_groups, design_groups = _blanco_velocity_groups(store_rows, vel_months)
     expansion = {
         "base_store": BASE_STORE,
         "stores": EXPANSION_STORES,
         "additional_color": ADDITIONAL_COLOR,
         "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "high_season_factor": HIGH_SEASON_FACTOR,
+        "december_hs_factor": DECEMBER_HS_FACTOR,
+        "velocity_months_count": VELOCITY_MONTHS_COUNT,
         "lead_months": LEAD_MONTHS,
         "vela_exclusive_note": (
             "Diseños VELA (Nueva Esparta, Virgen del Valle, Manga Larga, etc.) "
@@ -216,18 +296,9 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         "by_color": [],
         "total_blanco": 0,
         "total_adicional": 0,
+        "total_zona_modelo": 0,
         "total_expansion": 0,
     }
-
-    # Velocidad referencia: Blanco VELA agregado por línea/género/talla (sin diseño)
-    groups = defaultdict(float)
-    for r in store_rows:
-        if r["color"].lower() != "blanco":
-            continue
-        if r["mes"] not in vel_months:
-            continue
-        k = (r["modelo"], r["genero"], r["talla"])
-        groups[k] += r["v"] / len(vel_months)
 
     for store in EXPANSION_STORES:
         cap = EXPANSION_CAPS[store]
@@ -235,57 +306,69 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         zone_model = cap.get("zone_model", f"Modelo {store.title()}")
         store_blanco = 0
         store_adicional = 0
+        store_zona = 0
         skus = []
         allowed_modelos = set(cap.get("modelos", ["SPOTS MANGA CORTA", "SPOTS MANGA LARGA"]))
-        for (modelo, genero, talla), v_base in sorted(groups.items()):
+        blanco_designs = cap.get("blanco_designs")
+
+        for (modelo, genero, talla), v_base in sorted(total_groups.items()):
             if modelo not in allowed_modelos:
                 continue
-            v_adj = round(v_base * HIGH_SEASON_FACTOR * mult, 2)
-            need_1m = max(0, round(v_adj * 1))
-            need_2m = max(0, round(v_adj * 2))
-            blanco_3m = max(0, round(v_adj * LEAD_MONTHS))
-            adicional_3m = max(0, round(v_adj * ADDITIONAL_COLOR_FACTOR * LEAD_MONTHS))
-            store_blanco += blanco_3m
+            v_zone = round(v_base * HIGH_SEASON_FACTOR * mult, 2)
+            store_zona += _append_sku(
+                skus, modelo, genero, talla, zone_model, zone_model, zone_model,
+                v_zone, HIGH_SEASON_FACTOR,
+            )
+
+            v_blanco_total = 0.0
+            if blanco_designs:
+                for bd in blanco_designs:
+                    v_ref = _ref_velocity(
+                        design_groups, bd["ref_diseno"], modelo, genero, talla, v_base,
+                    )
+                    hs = bd.get("hs_factor", HIGH_SEASON_FACTOR)
+                    v_adj = round(v_ref * mult * hs, 2)
+                    v_blanco_total += v_adj
+                    store_blanco += _append_sku(
+                        skus, modelo, genero, talla, bd["diseno"], "Blanco", zone_model,
+                        v_adj, hs, bd.get("seasonality", ""),
+                    )
+            else:
+                v_adj = round(v_base * HIGH_SEASON_FACTOR * mult, 2)
+                v_blanco_total = v_adj
+                store_blanco += _append_sku(
+                    skus, modelo, genero, talla, "Blanco", "Blanco", zone_model,
+                    v_adj, HIGH_SEASON_FACTOR,
+                )
+
+            v_add = round(v_blanco_total * ADDITIONAL_COLOR_FACTOR, 2)
+            adicional_3m = _append_sku(
+                skus, modelo, genero, talla, ADDITIONAL_COLOR, ADDITIONAL_COLOR, zone_model,
+                v_add, HIGH_SEASON_FACTOR,
+            )
             store_adicional += adicional_3m
-            if blanco_3m > 0:
-                skus.append({
-                    "modelo": modelo,
-                    "genero": genero,
-                    "diseno": zone_model,
-                    "zone_model": zone_model,
-                    "talla": talla,
-                    "color": "Blanco",
-                    "v_mes": v_adj,
-                    "need_1m": need_1m,
-                    "need_2m": need_2m,
-                    "need_3m": blanco_3m,
-                })
-            if adicional_3m > 0:
-                skus.append({
-                    "modelo": modelo,
-                    "genero": genero,
-                    "diseno": zone_model,
-                    "zone_model": zone_model,
-                    "talla": talla,
-                    "color": ADDITIONAL_COLOR,
-                    "v_mes": round(v_adj * ADDITIONAL_COLOR_FACTOR, 2),
-                    "need_1m": max(0, round(need_1m * ADDITIONAL_COLOR_FACTOR)),
-                    "need_2m": max(0, round(need_2m * ADDITIONAL_COLOR_FACTOR)),
-                    "need_3m": adicional_3m,
-                })
+
+        store_total = store_zona + store_blanco + store_adicional
         expansion["by_store"].append({
             "store": store,
             "label": cap.get("label", ""),
             "zone_model": zone_model,
             "blanco": store_blanco,
             "adicional": store_adicional,
-            "total": store_blanco + store_adicional,
+            "zona_modelo": store_zona,
+            "total": store_total,
             "skus": skus,
+            "blanco_designs": [bd["diseno"] for bd in blanco_designs] if blanco_designs else None,
         })
         expansion["total_blanco"] += store_blanco
         expansion["total_adicional"] += store_adicional
+        expansion["total_zona_modelo"] += store_zona
 
-    expansion["total_expansion"] = expansion["total_blanco"] + expansion["total_adicional"]
+    expansion["total_expansion"] = (
+        expansion["total_zona_modelo"]
+        + expansion["total_blanco"]
+        + expansion["total_adicional"]
+    )
     expansion["by_color"] = [
         {"color": "Blanco", "need_3m": expansion["total_blanco"]},
         {
@@ -295,10 +378,12 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         },
     ]
     zones_label = ", ".join(EXPANSION_STORES)
+    vel_lbl = ", ".join(velocity_months_label(vel_months))
     expansion["nota"] = (
-        f"Ref. velocidad VELA Blanco ({', '.join(velocity_months_label(vel_months))}) "
-        f"× {HIGH_SEASON_FACTOR} temp. alta · {LEAD_MONTHS}m · {zones_label}. "
-        f"Cada zona: modelo propio Blanco + {ADDITIONAL_COLOR} al "
+        f"Base {VELOCITY_MONTHS_COUNT} meses cerrados ({vel_lbl}) · ref. movimiento Blanco VELA. "
+        f"Temp. alta ×{HIGH_SEASON_FACTOR} · Virgen Barquisimeto dic ×{DECEMBER_HS_FACTOR}. "
+        f"Producción {LEAD_MONTHS}m · {zones_label}. "
+        f"Cada zona: modelo propio + Blanco + {ADDITIONAL_COLOR} al "
         f"{int(ADDITIONAL_COLOR_FACTOR * 100)}%. Diseños VELA no se replican."
     )
     return expansion
@@ -339,15 +424,18 @@ def build_prod_zones(prod_curve, summary_prod, expansion):
         rows = []
         for sku in es["skus"]:
             v = sku["v_mes"]
+            hs = sku.get("hs_factor", HIGH_SEASON_FACTOR) or HIGH_SEASON_FACTOR
             rows.append({
                 "modelo": sku["modelo"],
                 "genero": sku["genero"],
                 "color": sku["color"],
-                "diseno": sku["color"],
+                "diseno": sku.get("diseno") or sku["color"],
                 "zone_model": sku.get("zone_model", es["zone_model"]),
                 "talla": sku["talla"],
                 "v_mes": v,
-                "v_mes_base": round(v / HIGH_SEASON_FACTOR, 2) if HIGH_SEASON_FACTOR else v,
+                "v_mes_base": round(v / hs, 2) if hs else v,
+                "hs_factor": hs,
+                "seasonality": sku.get("seasonality", ""),
                 "stk_total": 0,
                 "stk_pt": 0,
                 "cobertura": 0,
@@ -458,6 +546,9 @@ def rebuild_data() -> dict:
         "prod_curve": prod_curve,
         "summary_prod": summary_prod,
         "high_season_factor": HIGH_SEASON_FACTOR,
+        "december_hs_factor": DECEMBER_HS_FACTOR,
+        "velocity_months_count": VELOCITY_MONTHS_COUNT,
+        "lead_months": LEAD_MONTHS,
         "velocity_months": vel_months,
         "velocity_months_label": " · ".join(velocity_months_label(vel_months)),
         "expansion": expansion,
@@ -644,20 +735,23 @@ def patch_html(html: str, data: dict) -> str:
         "  var decHdr=document.getElementById('decMethodology');\n"
         "  if(decHdr){\n"
         "    var velLbl=DATA.velocity_months_label||'';\n"
+        "    var velCnt=DATA.velocity_months_count||3;\n"
+        "    var dicHs=DATA.december_hs_factor||1.4;\n"
         "    var exp=DATA.expansion||{};\n"
         "    var addPct=Math.round((DATA.additional_color_factor||0.7)*100);\n"
         "    var zoneCards=(exp.by_store||[]).map(function(z){\n"
+        "      var extra=z.blanco_designs?(' · Blanco: <strong style=\"color:var(--tx)\">'+z.blanco_designs.join(' + ')+'</strong>'):'';\n"
         "      return '<div style=\"background:rgba(0,0,0,.12);border-radius:8px;padding:8px 10px\">'\n"
-        "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <span style=\"color:var(--tx)\">'+(z.zone_model||'')+'</span>'\n"
+        "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <span style=\"color:var(--tx)\">'+(z.zone_model||'')+'</span>'+extra\n"
         "        +'<div style=\"font-size:.64rem;margin-top:4px\">'+z.total+' und · Blanco <strong>'+z.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+z.adicional+'</strong></div></div>';\n"
         "    }).join('');\n"
         "    decHdr.innerHTML='<div style=\"background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem\">📋 Metodología — rotación y producción</div>'\n"
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px\">'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Velocidad base = ventas <strong style=\"color:var(--tx)\">VELA Margarita</strong> en '+velLbl+' (sin '+((DATA.partial_month||'mes parcial').split('-')[0])+').</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Temporada alta</strong><br>Rotación ajustada = base × <strong style=\"color:var(--tx)\">'+hs+'</strong> para cobertura y producción.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Velocidad base = ventas <strong style=\"color:var(--tx)\">VELA Margarita</strong> en <strong style=\"color:var(--tx)\">'+velCnt+' meses</strong> cerrados ('+velLbl+'; sin '+((DATA.partial_month||'mes parcial').split('-')[0])+').</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Temporada alta</strong><br>Rotación ajustada = base × <strong style=\"color:var(--tx)\">'+hs+'</strong>. Barquisimeto Virgen (festividad dic) × <strong style=\"color:var(--tx)\">'+dicHs+'</strong>.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Diseños exclusivos Margarita</strong><br>Nueva Esparta, Virgen del Valle, Manga Larga, etc. <strong style=\"color:var(--tx)\">no van</strong> a Valencia, Barquisimeto ni Caracas.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión — 3 zonas</strong><br>Cada zona tiene <strong style=\"color:var(--tx)\">modelo propio</strong>: Blanco + '+((DATA.additional_color)||'Color adicional')+' al <strong style=\"color:var(--tx)\">'+addPct+'%</strong> de Blanco (ref. movimiento Blanco VELA).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión — 3 zonas</strong><br>Modelo propio + Blanco + '+((DATA.additional_color)||'Color adicional')+' al <strong style=\"color:var(--tx)\">'+addPct+'%</strong>. Barquisimeto Blanco: <strong style=\"color:var(--tx)\">Ciudad</strong> + <strong style=\"color:var(--tx)\">Virgen</strong> (estacionalidad festividad).</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
@@ -705,14 +799,15 @@ def patch_html(html: str, data: dict) -> str:
         var mrows=mdata.rows||[];
         var byGroup={};
         mrows.forEach(function(r){
-          var gk=zn.is_expansion?r.color:(r.diseno||r.color);
-          if(!byGroup[gk])byGroup[gk]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0};
+          var gk=zn.is_expansion?(r.diseno||r.color):(r.diseno||r.color);
+          if(!byGroup[gk])byGroup[gk]={rows:[],totalStk:0,totalNeed1:0,totalNeed2:0,totalNeed3:0,v_mes:0,seasonality:''};
           byGroup[gk].rows.push(r);
           byGroup[gk].totalStk+=r.stk_total||0;
           byGroup[gk].totalNeed1+=r.need_1m||0;
           byGroup[gk].totalNeed2+=r.need_2m||0;
           byGroup[gk].totalNeed3+=r.need_3m||0;
           byGroup[gk].v_mes+=r.v_mes||0;
+          if(r.seasonality)byGroup[gk].seasonality=r.seasonality;
         });
         var gKeys=Object.keys(byGroup).sort(function(a,b){return byGroup[b].v_mes-byGroup[a].v_mes;});
         var groupsHtml=gKeys.map(function(gk){
@@ -720,6 +815,7 @@ def patch_html(html: str, data: dict) -> str:
           var gNeed=meses===1?gd.totalNeed1:meses===2?gd.totalNeed2:gd.totalNeed3;
           var uid='pg_'+zn.zone+'_'+mod.replace(/\W/g,'_')+'_'+gk.replace(/\W/g,'_');
           var col=gk==='Blanco'?'#e4e4e7':(gk.toLowerCase().indexOf('adicional')>=0?'#a5b4fc':cn(gk));
+          var seasonNote=gd.seasonality?('<span style="font-size:.6rem;color:#f59e0b;margin-left:6px">'+gd.seasonality+'</span>'):'';
           var sortedRows=gd.rows.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
           var tallasHtml=sortedRows.map(function(r){
             var tn=meses===1?r.need_1m:meses===2?r.need_2m:r.need_3m;
@@ -737,7 +833,7 @@ def patch_html(html: str, data: dict) -> str:
           return '<div style="margin-bottom:6px">'
             +'<div data-pguid="'+uid+'" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border-radius:6px;background:rgba(0,0,0,.15)">'
             +'<span style="width:9px;height:9px;border-radius:50%;background:'+col+';flex-shrink:0"></span>'
-            +'<span style="font-size:.73rem;font-weight:700;color:var(--tx)">'+gk+'</span>'
+            +'<span style="font-size:.73rem;font-weight:700;color:var(--tx)">'+gk+'</span>'+seasonNote
             +'<span style="font-family:var(--fm);font-size:.64rem;color:var(--mu2)">'+gd.v_mes.toFixed(1)+'/mes</span>'
             +(zn.is_expansion?'':'<span style="font-family:var(--fm);font-size:.64rem;color:var(--mu2)">stk '+gd.totalStk+'</span>')
             +(gNeed>0?'<span style="background:rgba(245,158,11,.18);color:#f59e0b;border-radius:5px;padding:2px 8px;font-size:.66rem;font-weight:700;margin-left:auto">+'+gNeed+'</span>':'')
