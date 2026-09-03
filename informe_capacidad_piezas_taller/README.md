@@ -12,7 +12,8 @@ Informe de decisión para Gerencia. Responde tres preguntas, todas en **piezas p
 
 | Archivo | Para qué |
 |---|---|
-| `INFORME_CAPACIDAD_PIEZAS.html` | Documento completo. Tiene botón de **Imprimir / Guardar PDF**. |
+| `Informe_Capacidad_Piezas_Cuadro.pdf` | **Listo para enviar a Gerencia.** 25 páginas. |
+| `INFORME_CAPACIDAD_PIEZAS.html` | El mismo documento en web, con botón de **Imprimir / Guardar PDF** para regenerarlo. |
 | `dashboard_capacidad_piezas.html` | Dashboard interactivo para la sesión. Selector de escenario y de período de demanda. Modo claro y oscuro. Funciona sin internet. |
 | `anexos/Modelo_Capacidad_Piezas_Cuadro.xlsx` | Memoria de cálculo en 13 hojas. |
 | `modelo_capacidad.py` | El modelo ejecutable. Cambiar un supuesto y volver a correrlo regenera Excel, figuras y dashboard. |

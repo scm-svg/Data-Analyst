@@ -3,11 +3,11 @@ Modelo de capacidad instalada del taller de costura — Cuadro (Crecoindustrias,
 Unidad de salida: PIEZAS / MES. Corte: septiembre 2026.
 
 Genera:
-  anexos/Modelo_Capacidad_Piezas_Cuadro.xlsx   (memoria de cálculo, 10 hojas)
-  anexos/figuras/*.png                          (figuras del informe)
-  datos_modelo.json                             (alimenta el dashboard)
+  anexos/Modelo_Capacidad_Piezas_Cuadro.xlsx   (memoria de cálculo, 13 hojas)
+  anexos/figuras/*.png                          (las 8 figuras del informe)
+  datos_modelo.json / datos_modelo.js           (alimentan el dashboard)
 
-Ejecutar:  python3 modelo_capacidade.py
+Ejecutar:  python3 modelo_capacidad.py
 """
 
 import json
