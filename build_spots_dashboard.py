@@ -242,21 +242,34 @@ def compute_prod_curve(raw_rows, stock, stock_taller, vel_months):
     return prod_rows, summary
 
 
-def _mc_blanco_mix(store_rows, vel_months, modelo=MC_MODEL):
-    """Mix género/talla VELA MC Blanco para repartir unidades objetivo."""
-    mix = defaultdict(float)
+def _vela_genero_talla_mix(store_rows, vel_months, modelo=MC_MODEL):
+    """Mix para reparto: share género desde MC · curva talla/género como dashboard Tallas (todo SPOTS VELA)."""
+    gen_qty = defaultdict(float)
+    talla_by_gen = defaultdict(lambda: defaultdict(float))
     for r in store_rows:
-        if r["modelo"] != modelo or r["color"].lower() != "blanco":
-            continue
         if r["mes"] not in vel_months:
             continue
-        mix[(r["genero"], r["talla"])] += r["v"]
-    total = sum(mix.values())
-    if total <= 0:
+        g, t = r["genero"], r["talla"]
+        talla_by_gen[g][t] += r["v"]
+        if r["modelo"] == modelo:
+            gen_qty[g] += r["v"]
+    gen_total = sum(gen_qty.values())
+    if gen_total <= 0:
         return {("CAB", "M"): 0.5, ("DAMA", "M"): 0.5}
-    boosted = {(g, t): w * talla_factor(t) for (g, t), w in mix.items()}
-    btotal = sum(boosted.values()) or 1
-    return {k: v / btotal for k, v in boosted.items()}
+    mix = {}
+    for g, gqty in gen_qty.items():
+        g_share = gqty / gen_total
+        tallas = talla_by_gen.get(g, {})
+        t_total = sum(tallas.values()) or 1
+        for t, v in tallas.items():
+            mix[(g, t)] = g_share * (v / t_total) * talla_factor(t)
+    btotal = sum(mix.values()) or 1
+    return {k: v / btotal for k, v in mix.items()}
+
+
+def _mc_blanco_mix(store_rows, vel_months, modelo=MC_MODEL):
+    """Alias: mix alineado con análisis Tallas del dashboard (por género)."""
+    return _vela_genero_talla_mix(store_rows, vel_months, modelo)
 
 
 def _allocate_target(target_3m: int, mix: dict, modelo=MC_MODEL) -> list:
@@ -422,10 +435,10 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     ]
     vel_lbl = ", ".join(velocity_months_label(vel_months))
     expansion["nota"] = (
-        f"Proyección calibrada {LEAD_MONTHS}m · mix talla/género VELA MC Blanco ({vel_lbl}). "
+        f"Proyección calibrada {LEAD_MONTHS}m · mix talla/género VELA ({vel_lbl}): "
+        f"share género MC · curva talla por género como dashboard Tallas (todo SPOTS). "
         f"Blanco principal + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%. "
-        f"Caracas ~475 (4 tiendas ponderadas 2+2+0.5+0.15) · Valencia ~375 · Barquisimeto ~450 "
-        f"(Ciudad 200 + Virgen 110 + adicional 140). Solo Manga Corta."
+        f"Caracas ~475 · Valencia ~375 · Barquisimeto ~450. Solo Manga Corta."
     )
     return expansion
 
@@ -824,8 +837,8 @@ def patch_html(html: str, data: dict) -> str:
         "    decHdr.innerHTML='<div style=\"background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem\">📋 Metodología — rotación y producción</div>'\n"
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px\">'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Mix talla/género desde <strong style=\"color:var(--tx)\">VELA MC Blanco</strong> ('+velLbl+'; '+velCnt+' meses cerrados).</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Blanco principal</strong><br>Proyección base por zona. <strong style=\"color:var(--tx)\">'+((DATA.additional_color)||'Color adicional')+'</strong> = <strong style=\"color:var(--tx)\">'+addPct+'%</strong> del blanco principal (no Virgen en BQT).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Base '+velCnt+' meses cerrados ('+velLbl+'). Share género desde <strong style=\"color:var(--tx)\">MC</strong>.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Curva de tallas</strong><br>Share género desde <strong style=\"color:var(--tx)\">MC</strong> · proporción talla por género como pestaña <strong style=\"color:var(--tx)\">Tallas</strong> (todo SPOTS VELA). XL/2XL con boost.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Caracas — 4 tiendas CCS</strong><br>2 alto peso · 1 media · 1 bajo movimiento. Objetivo ~<strong style=\"color:var(--tx)\">450-500</strong> und/3m.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad ~180 + Virgen 100-120 (dic ×'+dicHs+') + adicional 70% Ciudad · total ~450.</div>'\n"
         "      +'</div></div>'\n"
