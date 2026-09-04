@@ -212,19 +212,19 @@ def build_cambio(wb):
     ws.row_dimensions[4].height = 25.5
 
     ws["A1"] = "Qué cambió de la v3 a la v4"
-    ws["A1"]._style = title_style
+    ws["A1"]._style = copy(title_style)
     ws["A2"] = (
         "Los 2 overlock de los escenarios B, C y D pasan de reemplazo en L1 y L2 a "
         "máquinas de apoyo (posición nueva en cada línea). Capacidad comparada = "
         "Modelo 2, balance de estaciones."
     )
-    ws["A2"]._style = sub_style
+    ws["A2"]._style = copy(sub_style)
 
     headers = ["Concepto", "v3 — reemplazo", "v4 — de apoyo", "Diferencia", "Por qué"]
     for i, h in enumerate(headers, start=1):
         c = ws.cell(4, i)
         c.value = h
-        c._style = head_style
+        c._style = copy(head_style)
 
     # Valores de la v3 congelados como referencia historica.
     v3 = {
@@ -258,30 +258,30 @@ def build_cambio(wb):
     row = 5
     for esc in ("B", "C", "D"):
         ws.cell(row, 1).value = f"ESCENARIO {esc}"
-        ws.cell(row, 1)._style = label_style
+        ws.cell(row, 1)._style = copy(label_style)
         for col in range(2, 6):
-            ws.cell(row, col)._style = label_style
+            ws.cell(row, col)._style = copy(label_style)
         row += 1
         for concepto, key, plantilla, fmt, porque in filas:
             ws.cell(row, 1).value = concepto
-            ws.cell(row, 1)._style = label_style
+            ws.cell(row, 1)._style = copy(label_style)
             viva = plantilla.format(cap=cap_col[esc], dem=dem_col[esc],
                                     esc=esc_row[esc], inv=esc_row[esc])
             b = ws.cell(row, 2)
             b.value = v3[esc][key]
-            b._style = num_style
+            b._style = copy(num_style)
             b.number_format = fmt
             c = ws.cell(row, 3)
             c.value = viva
-            c._style = tot_style
+            c._style = copy(tot_style)
             c.number_format = fmt
             d = ws.cell(row, 4)
             d.value = f"=C{row}-B{row}"
-            d._style = num_style
+            d._style = copy(num_style)
             d.number_format = fmt
             e = ws.cell(row, 5)
             e.value = porque
-            e._style = sub_style
+            e._style = copy(sub_style)
             row += 1
         row += 1
 
@@ -289,12 +289,12 @@ def build_cambio(wb):
         "El escenario A no cambia: sigue siendo reposición estricta de las 4 máquinas "
         "averiadas, US$ 10.400."
     )
-    ws.cell(row, 1)._style = sub_style
+    ws.cell(row, 1)._style = copy(sub_style)
     ws.cell(row + 1, 1).value = (
         "La estructura de L1 y L2 en B, C y D queda con 6 posiciones: 2 overlock de "
         "línea + 1 overlock de apoyo + 1 collaret de cuello + 2 collaret de ruedo."
     )
-    ws.cell(row + 1, 1)._style = sub_style
+    ws.cell(row + 1, 1)._style = copy(sub_style)
 
 
 def main():
