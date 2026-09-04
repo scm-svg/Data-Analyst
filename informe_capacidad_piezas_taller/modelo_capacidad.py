@@ -932,3 +932,9 @@ print("=" * 78)
 print(cobertura.to_string(index=False,
                           formatters={c: "{:.2f}".format for c in esc["clave"]}))
 print("\nListo.")
+
+# Reempaqueta el dashboard autocontenido (Chart.js + datos incrustados).
+pack = os.path.join(BASE, "empaquetar_dashboard.py")
+if os.path.exists(pack):
+    import runpy
+    runpy.run_path(pack, run_name="__main__")
