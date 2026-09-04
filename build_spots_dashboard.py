@@ -57,23 +57,23 @@ EXPANSION_CAPS = {
     },
     "BARQUISIMETO": {
         "tiendas": 1,
-        "target_total_3m": 450,
+        "target_total_3m": 574,
         "label": (
-            f"Barquisimeto · 1 tienda · MC · Ciudad ~180 + Virgen 100-120 + "
-            f"{ADDITIONAL_COLOR} 70% Ciudad · total ~450"
+            f"Barquisimeto · 1 tienda · MC · Ciudad 220 + Virgen 200 + "
+            f"{ADDITIONAL_COLOR} 154 (70% Ciudad) · total 574"
         ),
         "modelos": [MC_MODEL],
         "design_targets_3m": [
             {
                 "diseno": BQT_DISENO_CIUDAD,
                 "color": "Blanco",
-                "target": 200,
+                "target": 220,
                 "hs_factor": HIGH_SEASON_FACTOR,
             },
             {
                 "diseno": BQT_DISENO_VIRGEN,
                 "color": "Blanco",
-                "target": 110,
+                "target": 200,
                 "hs_factor": DECEMBER_HS_FACTOR,
                 "seasonality": "Festividad Virgen · rotación dic ×1.4",
             },
@@ -393,7 +393,7 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     """Proyección calibrada 3m por zona · MC · Blanco principal + color adicional 70%.
 
   Caracas: ~475 und (4 tiendas ponderadas: 2 alto · 1 media · 1 bajo).
-  Valencia: ~375 und · Barquisimeto: ~450 (Ciudad 200 + Virgen 110 + adicional 70% Ciudad).
+  Valencia: ~375 und · Barquisimeto: ~574 (Ciudad 220 + Virgen 200 + adicional 70% Ciudad).
   Reparto talla/género: share género MC · curva talla como dashboard Tallas (todo SPOTS VELA).
     """
     store_rows = [r for r in raw_rows if r["tienda"] == BASE_STORE]
@@ -891,7 +891,7 @@ def patch_html(html: str, data: dict) -> str:
         "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Base '+velCnt+' meses cerrados ('+velLbl+'). Share género desde <strong style=\"color:var(--tx)\">MC</strong>.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Curva de tallas</strong><br>Share género desde <strong style=\"color:var(--tx)\">MC</strong> · proporción talla por género como pestaña <strong style=\"color:var(--tx)\">Tallas</strong> (todo SPOTS VELA). XL/2XL con boost.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Caracas — 4 tiendas CCS</strong><br>2 alto peso · 1 media · 1 bajo movimiento. Objetivo ~<strong style=\"color:var(--tx)\">450-500</strong> und/3m.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad ~180 + Virgen 100-120 (dic ×'+dicHs+') + adicional 70% Ciudad · total ~450.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad <strong style=\"color:var(--tx)\">220</strong> + Virgen <strong style=\"color:var(--tx)\">200</strong> (dic ×'+dicHs+') + adicional 70% Ciudad · total <strong style=\"color:var(--tx)\">574</strong>.</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
