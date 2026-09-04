@@ -27,42 +27,46 @@ BQT_DISENO_CIUDAD = "Ciudad"
 BQT_DISENO_VIRGEN = "Virgen"
 BQT_VIRGEN_REF = "Virgen del Valle"
 BQT_CIUDAD_REF = "Nueva Esparta"
-ADDITIONAL_COLOR = "Color adicional"
 ADDITIONAL_COLOR_FACTOR = 0.70
+ZONE_ADICIONAL_COLOR = {
+    "CARACAS": "Azul Marino",
+    "VALENCIA": "Vinotinto",
+    "BARQUISIMETO": "Verde",
+}
 MC_MODEL = "SPOTS MANGA CORTA"
 EXPANSION_STORES = ["CARACAS", "VALENCIA", "BARQUISIMETO"]
 PROD_ZONE_ORDER = ["MARGARITA", "CARACAS", "VALENCIA", "BARQUISIMETO"]
-# Proyección 3 meses calibrada · color adicional = 70% del blanco principal
+# Proyección 3 meses calibrada · color zona = 70% del blanco principal
 EXPANSION_CAPS = {
     "CARACAS": {
         "tiendas": 4,
         "tienda_weights": [1.0, 1.0, 0.5, 0.15],
         "target_total_3m": 475,
+        "adicional_color": "Azul Marino",
         "label": (
             "Caracas · 4 tiendas CCS (2 alto peso · 1 media · 1 bajo) · MC · "
-            f"Blanco + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%"
+            "Blanco + Azul Marino al 70%"
         ),
         "modelos": [MC_MODEL],
         "blanco_diseno": "Caracas",
-        "adicional_diseno": "Caracas Alt",
+        "adicional_diseno": "Caracas",
     },
     "VALENCIA": {
         "tiendas": 2,
         "target_total_3m": 375,
-        "label": (
-            f"Valencia · 2 tiendas · MC · Blanco + {ADDITIONAL_COLOR} al "
-            f"{int(ADDITIONAL_COLOR_FACTOR * 100)}%"
-        ),
+        "adicional_color": "Vinotinto",
+        "label": "Valencia · 2 tiendas · MC · Blanco + Vinotinto al 70%",
         "modelos": [MC_MODEL],
         "blanco_diseno": "Valencia",
-        "adicional_diseno": "Valencia Alt",
+        "adicional_diseno": "Valencia",
     },
     "BARQUISIMETO": {
         "tiendas": 1,
         "target_total_3m": 574,
+        "adicional_color": "Verde",
         "label": (
-            f"Barquisimeto · 1 tienda · MC · Ciudad 220 + Virgen 200 + "
-            f"{ADDITIONAL_COLOR} 154 (70% Ciudad) · total 574"
+            "Barquisimeto · 1 tienda · MC · Ciudad 220 + Virgen 200 + "
+            "Verde 154 (70% Ciudad) · total 574"
         ),
         "modelos": [MC_MODEL],
         "design_targets_3m": [
@@ -80,8 +84,8 @@ EXPANSION_CAPS = {
                 "seasonality": "Festividad Virgen · rotación dic ×1.4",
             },
             {
-                "diseno": "Barquisimeto",
-                "color": ADDITIONAL_COLOR,
+                "diseno": BQT_DISENO_CIUDAD,
+                "color": "Verde",
                 "pct_of_diseno": BQT_DISENO_CIUDAD,
                 "hs_factor": HIGH_SEASON_FACTOR,
             },
@@ -356,8 +360,13 @@ def _sku_from_alloc(modelo, genero, talla, diseno, color, need_3m, hs_factor, se
     }
 
 
-def _zone_design_targets(cap):
-    """Objetivos 3m por diseño: blanco principal + adicional al 70%."""
+def _zone_adicional_color(cap, store: str = "") -> str:
+    return cap.get("adicional_color") or ZONE_ADICIONAL_COLOR.get(store, "Color zona")
+
+
+def _zone_design_targets(cap, store: str = ""):
+    """Objetivos 3m por diseño: blanco principal + color zona al 70%."""
+    adicional_color = _zone_adicional_color(cap, store)
     if cap.get("design_targets_3m"):
         specs = []
         resolved = {}
@@ -368,7 +377,7 @@ def _zone_design_targets(cap):
             else:
                 target = d["target"]
             resolved[d["diseno"]] = target
-            specs.append({**d, "target": target})
+            specs.append({**d, "target": target, "color": d.get("color") or adicional_color})
         return specs
 
     total = cap["target_total_3m"]
@@ -383,7 +392,7 @@ def _zone_design_targets(cap):
         },
         {
             "diseno": cap["adicional_diseno"],
-            "color": ADDITIONAL_COLOR,
+            "color": adicional_color,
             "target": adicional,
             "hs_factor": HIGH_SEASON_FACTOR,
             "pct_of_diseno": cap["blanco_diseno"],
@@ -403,7 +412,7 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     expansion = {
         "base_store": BASE_STORE,
         "stores": EXPANSION_STORES,
-        "additional_color": ADDITIONAL_COLOR,
+        "zone_colors": ZONE_ADICIONAL_COLOR,
         "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "high_season_factor": HIGH_SEASON_FACTOR,
         "december_hs_factor": DECEMBER_HS_FACTOR,
@@ -428,7 +437,8 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         tiendas = cap.get("tiendas", 1)
         weights = cap.get("tienda_weights")
         effective_tiendas = round(sum(weights), 2) if weights else tiendas
-        design_specs = _zone_design_targets(cap)
+        design_specs = _zone_design_targets(cap, store)
+        store_adicional_color = _zone_adicional_color(cap, store)
         store_blanco = 0
         store_adicional = 0
         skus = []
@@ -461,6 +471,7 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         expansion["by_store"].append({
             "store": store,
             "label": cap.get("label", ""),
+            "adicional_color": store_adicional_color,
             "tiendas": tiendas,
             "tienda_weights": weights,
             "effective_tiendas": effective_tiendas,
@@ -475,21 +486,21 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         expansion["total_adicional"] += store_adicional
 
     expansion["total_expansion"] = expansion["total_blanco"] + expansion["total_adicional"]
-    expansion["by_color"] = [
-        {"color": "Blanco", "need_3m": expansion["total_blanco"]},
-        {
-            "color": ADDITIONAL_COLOR,
-            "need_3m": expansion["total_adicional"],
-            "note": f"{int(ADDITIONAL_COLOR_FACTOR * 100)}% del blanco principal",
-        },
-    ]
+    expansion["by_color"] = [{"color": "Blanco", "need_3m": expansion["total_blanco"]}]
+    for s in expansion["by_store"]:
+        expansion["by_color"].append({
+            "color": s["adicional_color"],
+            "need_3m": s["adicional"],
+            "zona": s["store"],
+        })
     vel_lbl = ", ".join(velocity_months_label(vel_months))
     expansion["nota"] = (
         f"Proyección calibrada {LEAD_MONTHS}m · mix talla/género VELA ({vel_lbl}): "
         f"share género MC · curva talla por género como dashboard Tallas (todo SPOTS). "
-        f"Blanco principal + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%. "
+        f"Colores zona: Caracas Azul Marino · Valencia Vinotinto · Barquisimeto Verde "
+        f"(70% del blanco principal). "
         f"Caracas ~475 · Valencia ~375 · Barquisimeto ~574 "
-        f"(Ciudad 220 + Virgen 200 + adicional 154). Solo Manga Corta."
+        f"(Ciudad 220 + Virgen 200 + Verde 154). Solo Manga Corta."
     )
     expansion["fabric"] = compute_fabric_needs(expansion)
     return expansion
@@ -512,6 +523,7 @@ def compute_fabric_needs(expansion: dict) -> dict:
                 if zone == "BARQUISIMETO":
                     rows.append({
                         "tipo": "Blanco",
+                        "color": "Blanco",
                         "zona": zone.title(),
                         "detalle": d["diseno"],
                         "units": units,
@@ -520,7 +532,8 @@ def compute_fabric_needs(expansion: dict) -> dict:
                     })
             else:
                 rows.append({
-                    "tipo": ADDITIONAL_COLOR,
+                    "tipo": d["color"],
+                    "color": d["color"],
                     "zona": zone.title(),
                     "detalle": d["diseno"],
                     "units": units,
@@ -538,7 +551,7 @@ def compute_fabric_needs(expansion: dict) -> dict:
             "kg": _fabric_kg(blanco_units),
         },
         "adicional_by_zone": [
-            r for r in rows if r["tipo"] == ADDITIONAL_COLOR
+            r for r in rows if r["color"] != "Blanco"
         ],
         "blanco_detail": [
             r for r in rows if r.get("is_detail")
@@ -717,7 +730,7 @@ def rebuild_data() -> dict:
         "prod_zone_order": PROD_ZONE_ORDER,
         "expansion_stores": EXPANSION_STORES,
         "expansion_caps": EXPANSION_CAPS,
-        "additional_color": ADDITIONAL_COLOR,
+        "zone_colors": ZONE_ADICIONAL_COLOR,
         "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "fabric": expansion.get("fabric", {}),
         "date_range": date_range,
@@ -942,10 +955,11 @@ def patch_html(html: str, data: dict) -> str:
         "    var zoneCards=(exp.by_store||[]).map(function(z){\n"
         "      var dsg=(z.designs||[]).map(function(d){return d.diseno+' <span style=\"color:var(--mu2)\">('+d.color+': '+d.target_3m+'und)</span>';}).join(' · ');\n"
         "      var tw=z.tienda_weights?(' · pesos '+z.tienda_weights.join('/')+''):'';\n"
+        "      var zc=z.adicional_color||((DATA.zone_colors||{})[z.store])||'color zona';\n"
         "      return '<div style=\"background:rgba(0,0,0,.12);border-radius:8px;padding:8px 10px\">'\n"
         "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <strong style=\"color:var(--tx)\">'+z.tiendas+'</strong> tienda(s)'+tw+' · objetivo <strong style=\"color:var(--tx)\">'+z.total+'</strong> und'\n"
         "        +'<div style=\"font-size:.64rem;margin-top:4px;color:var(--mu2)\">'+dsg+'</div>'\n"
-        "        +'<div style=\"font-size:.64rem;margin-top:4px\">Blanco <strong>'+z.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+z.adicional+'</strong> ('+addPct+'% blanco principal)</div></div>';\n"
+        "        +'<div style=\"font-size:.64rem;margin-top:4px\">Blanco <strong>'+z.blanco+'</strong> + <strong style=\"color:#a5b4fc\">'+zc+'</strong> <strong>'+z.adicional+'</strong> ('+addPct+'% blanco principal)</div></div>';\n"
         "    }).join('');\n"
         "    decHdr.innerHTML='<div style=\"background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem\">📋 Metodología — rotación y producción</div>'\n"
@@ -953,14 +967,15 @@ def patch_html(html: str, data: dict) -> str:
         "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Base '+velCnt+' meses cerrados ('+velLbl+'). Share género desde <strong style=\"color:var(--tx)\">MC</strong>.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Curva de tallas</strong><br>Share género desde <strong style=\"color:var(--tx)\">MC</strong> · proporción talla por género como pestaña <strong style=\"color:var(--tx)\">Tallas</strong> (todo SPOTS VELA). XL/2XL con boost.</div>'\n"
         "      +'<div><strong style=\"color:var(--tx)\">Caracas — 4 tiendas CCS</strong><br>2 alto peso · 1 media · 1 bajo movimiento. Objetivo ~<strong style=\"color:var(--tx)\">450-500</strong> und/3m.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad <strong style=\"color:var(--tx)\">220</strong> + Virgen <strong style=\"color:var(--tx)\">200</strong> (dic ×'+dicHs+') + adicional 70% Ciudad · total <strong style=\"color:var(--tx)\">574</strong>.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Colores por zona</strong><br>Caracas <strong style=\"color:var(--tx)\">Azul Marino</strong> · Valencia <strong style=\"color:var(--tx)\">Vinotinto</strong> · Barquisimeto <strong style=\"color:var(--tx)\">Verde</strong> (70% blanco principal).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad <strong style=\"color:var(--tx)\">220</strong> + Virgen <strong style=\"color:var(--tx)\">200</strong> (dic ×'+dicHs+') + Verde 70% Ciudad · total <strong style=\"color:var(--tx)\">574</strong>.</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
         "      +'<div style=\"display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px\">'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1.2rem;font-weight:800;color:var(--tx)\">'+(exp.total_expansion||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">und total</span></div>'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#e4e4e7\">'+(exp.total_blanco||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">Blanco</span></div>'\n"
-        "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#a5b4fc\">'+(exp.total_adicional||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">'+((DATA.additional_color)||'Color adicional')+'</span></div>'\n"
+        "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#a5b4fc\">'+(exp.total_adicional||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">Colores zona</span></div>'\n"
         "      +'</div>'\n"
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px\">'+zoneCards+'</div>'\n"
         "      +'<div style=\"font-size:.65rem;color:var(--mu2)\">'+(exp.nota||'')+'</div></div>';\n"
@@ -982,7 +997,7 @@ def patch_html(html: str, data: dict) -> str:
         "      (z.designs||[]).forEach(function(d){\n"
         "        var u=storeUnits(z,d.diseno,d.color);\n"
         "        if(d.color==='Blanco')blancoU+=u;\n"
-        "        else{adicionalU+=u;adicionalRows.push({zona:z.store,diseno:d.diseno,units:u,kg:fabKg(u)});}\n"
+        "        else{adicionalU+=u;adicionalRows.push({zona:z.store,diseno:d.diseno,color:d.color,units:u,kg:fabKg(u)});}\n"
         "      });\n"
         "    });\n"
         "    var bqtDetail=[];\n"
@@ -1007,7 +1022,7 @@ def patch_html(html: str, data: dict) -> str:
         "      body+=tr(['<span style=\"color:var(--mu2)\">↳ Blanco</span>','Barquisimeto · '+d.diseno,d.units,kgPer+' kg/und',safetyLbl,'<span style=\"color:var(--tx)\">'+d.kg+'</span>']);\n"
         "    });\n"
         "    adicionalRows.forEach(function(r){\n"
-        "      body+=tr(['<strong style=\"color:#a5b4fc\">'+((DATA.additional_color)||'Color adicional')+'</strong>',r.zona+' · '+r.diseno,'<strong>'+r.units+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"color:#10b981\">'+r.kg+'</strong>'],' style=\"background:rgba(99,102,241,.04)\"');\n"
+        "      body+=tr(['<strong style=\"color:#a5b4fc\">'+(r.color||'Color')+'</strong>',r.zona+' · '+r.diseno,'<strong>'+r.units+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"color:#10b981\">'+r.kg+'</strong>'],' style=\"background:rgba(99,102,241,.04)\"');\n"
         "    });\n"
         "    body+=tr(['<strong style=\"color:var(--tx)\">TOTAL</strong>','Caracas + Valencia + Barquisimeto','<strong>'+totalU+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"font-family:var(--fm);font-size:.85rem;color:#10b981\">'+totalKg+'</strong>'],' style=\"background:rgba(16,185,129,.08)\"');\n"
         "    decFab.innerHTML='<div style=\"background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
@@ -1069,7 +1084,8 @@ def patch_html(html: str, data: dict) -> str:
           var gd=byGroup[gk];
           var gNeed=gd.totalNeed;
           var uid='pg_'+zn.zone+'_'+mod.replace(/\W/g,'_')+'_'+gk.replace(/\W/g,'_');
-          var col=gk==='Blanco'?'#e4e4e7':(gk.toLowerCase().indexOf('adicional')>=0?'#a5b4fc':cn(gk));
+          var grpColor=gd.rows.length?gd.rows[0].color:'';
+          var col=grpColor==='Blanco'?'#e4e4e7':(grpColor?cn(grpColor):cn(gk));
           var seasonNote=gd.seasonality?('<span style="font-size:.6rem;color:#f59e0b;margin-left:6px">'+gd.seasonality+'</span>'):'';
           var sortedRows=gd.rows.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
           var tallasHtml=sortedRows.map(function(r){
