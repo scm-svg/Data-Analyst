@@ -23,49 +23,63 @@ BQT_DISENO_VIRGEN = "Virgen"
 BQT_VIRGEN_REF = "Virgen del Valle"
 BQT_CIUDAD_REF = "Nueva Esparta"
 ADDITIONAL_COLOR = "Color adicional"
+ADDITIONAL_COLOR_FACTOR = 0.70
+MC_MODEL = "SPOTS MANGA CORTA"
 EXPANSION_STORES = ["CARACAS", "VALENCIA", "BARQUISIMETO"]
 PROD_ZONE_ORDER = ["MARGARITA", "CARACAS", "VALENCIA", "BARQUISIMETO"]
+# Proyección 3 meses calibrada · color adicional = 70% del blanco principal
 EXPANSION_CAPS = {
     "CARACAS": {
         "tiendas": 4,
-        "label": "Caracas · 4 tiendas CCS · Manga Corta · Blanco + Color adicional",
-        "modelos": ["SPOTS MANGA CORTA"],
-        "designs": [
-            {"diseno": "Caracas", "color": "Blanco", "hs_factor": HIGH_SEASON_FACTOR},
-            {"diseno": "Caracas Alt", "color": ADDITIONAL_COLOR, "hs_factor": HIGH_SEASON_FACTOR},
-        ],
+        "tienda_weights": [1.0, 1.0, 0.5, 0.15],
+        "target_total_3m": 475,
+        "label": (
+            "Caracas · 4 tiendas CCS (2 alto peso · 1 media · 1 bajo) · MC · "
+            f"Blanco + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%"
+        ),
+        "modelos": [MC_MODEL],
+        "blanco_diseno": "Caracas",
+        "adicional_diseno": "Caracas Alt",
     },
     "VALENCIA": {
         "tiendas": 2,
-        "label": "Valencia · 2 tiendas · Manga Corta · Blanco + Color adicional",
-        "modelos": ["SPOTS MANGA CORTA"],
-        "designs": [
-            {"diseno": "Valencia", "color": "Blanco", "hs_factor": HIGH_SEASON_FACTOR},
-            {"diseno": "Valencia Alt", "color": ADDITIONAL_COLOR, "hs_factor": HIGH_SEASON_FACTOR},
-        ],
+        "target_total_3m": 375,
+        "label": (
+            f"Valencia · 2 tiendas · MC · Blanco + {ADDITIONAL_COLOR} al "
+            f"{int(ADDITIONAL_COLOR_FACTOR * 100)}%"
+        ),
+        "modelos": [MC_MODEL],
+        "blanco_diseno": "Valencia",
+        "adicional_diseno": "Valencia Alt",
     },
     "BARQUISIMETO": {
         "tiendas": 1,
+        "target_total_3m": 450,
         "label": (
-            f"Barquisimeto · 1 tienda · Manga Corta · Ciudad + Virgen (Blanco) + Color adicional · "
-            f"Virgen dic ×{DECEMBER_HS_FACTOR}"
+            f"Barquisimeto · 1 tienda · MC · Ciudad ~180 + Virgen 100-120 + "
+            f"{ADDITIONAL_COLOR} 70% Ciudad · total ~450"
         ),
-        "modelos": ["SPOTS MANGA CORTA"],
-        "designs": [
+        "modelos": [MC_MODEL],
+        "design_targets_3m": [
             {
                 "diseno": BQT_DISENO_CIUDAD,
                 "color": "Blanco",
-                "ref_diseno": BQT_CIUDAD_REF,
+                "target": 200,
                 "hs_factor": HIGH_SEASON_FACTOR,
             },
             {
                 "diseno": BQT_DISENO_VIRGEN,
                 "color": "Blanco",
-                "ref_diseno": BQT_VIRGEN_REF,
+                "target": 110,
                 "hs_factor": DECEMBER_HS_FACTOR,
                 "seasonality": "Festividad Virgen · rotación dic ×1.4",
             },
-            {"diseno": "Barquisimeto", "color": ADDITIONAL_COLOR, "hs_factor": HIGH_SEASON_FACTOR},
+            {
+                "diseno": "Barquisimeto",
+                "color": ADDITIONAL_COLOR,
+                "pct_of_diseno": BQT_DISENO_CIUDAD,
+                "hs_factor": HIGH_SEASON_FACTOR,
+            },
         ],
     },
 }
@@ -222,73 +236,105 @@ def compute_prod_curve(raw_rows, stock, stock_taller, vel_months):
     return prod_rows, summary
 
 
-def _blanco_velocity_groups(store_rows, vel_months):
-    """Velocidad mensual Blanco VELA por línea/género/talla (agregado y por diseño)."""
-    total = defaultdict(float)
-    by_diseno = defaultdict(float)
+def _mc_blanco_mix(store_rows, vel_months, modelo=MC_MODEL):
+    """Mix género/talla VELA MC Blanco para repartir unidades objetivo."""
+    mix = defaultdict(float)
     for r in store_rows:
-        if r["color"].lower() != "blanco":
+        if r["modelo"] != modelo or r["color"].lower() != "blanco":
             continue
         if r["mes"] not in vel_months:
             continue
-        v = r["v"] / len(vel_months)
-        k = (r["modelo"], r["genero"], r["talla"])
-        total[k] += v
-        by_diseno[(r["modelo"], r["genero"], r["talla"], r["diseno"])] += v
-    return total, by_diseno
+        mix[(r["genero"], r["talla"])] += r["v"]
+    total = sum(mix.values())
+    if total <= 0:
+        return {("CAB", "M"): 0.5, ("DAMA", "M"): 0.5}
+    return {k: v / total for k, v in mix.items()}
 
 
-def _ref_velocity(by_diseno, ref_diseno, modelo, genero, talla, v_total):
-    v = by_diseno.get((modelo, genero, talla, ref_diseno), 0)
-    if v > 0:
-        return v
-    # Reparto proporcional si falta talla en el diseño referencia
-    design_total = sum(
-        v_d for (m, g, t, _), v_d in by_diseno.items()
-        if m == modelo and g == genero and t == talla
-    )
-    if design_total > 0:
-        ref_sum = sum(
-            v_d for (m, g, t, d), v_d in by_diseno.items()
-            if m == modelo and g == genero and d == ref_diseno
-        )
-        share = ref_sum / design_total if design_total else 0.5
-        return v_total * share
-    return v_total * 0.5
+def _allocate_target(target_3m: int, mix: dict, modelo=MC_MODEL) -> list:
+    """Reparte unidades enteras por género/talla (método mayor resto)."""
+    if target_3m <= 0:
+        return []
+    keys = sorted(mix.keys())
+    raw = {k: target_3m * mix[k] for k in keys}
+    floors = {k: int(raw[k]) for k in keys}
+    rem = target_3m - sum(floors.values())
+    order = sorted(keys, key=lambda k: raw[k] - floors[k], reverse=True)
+    for i in range(rem):
+        floors[order[i % len(order)]] += 1
+    return [
+        (modelo, genero, talla, qty)
+        for (genero, talla), qty in floors.items()
+        if qty > 0
+    ]
 
 
-def _append_sku(skus, modelo, genero, talla, diseno, color, v_adj, hs_factor, seasonality=""):
-    need_1m = max(0, round(v_adj))
-    need_2m = max(0, round(v_adj * 2))
-    need_3m = max(0, round(v_adj * LEAD_MONTHS))
-    skus.append({
+def _sku_from_alloc(modelo, genero, talla, diseno, color, need_3m, hs_factor, seasonality=""):
+    v_mes = round(need_3m / LEAD_MONTHS, 2) if LEAD_MONTHS else need_3m
+    return {
         "modelo": modelo,
         "genero": genero,
         "diseno": diseno,
         "talla": talla,
         "color": color,
-        "v_mes": v_adj,
+        "v_mes": v_mes,
         "hs_factor": hs_factor,
         "seasonality": seasonality,
-        "need_1m": need_1m,
-        "need_2m": need_2m,
+        "need_1m": max(0, round(v_mes)),
+        "need_2m": max(0, round(v_mes * 2)),
         "need_3m": need_3m,
-    })
-    return need_3m
+    }
+
+
+def _zone_design_targets(cap):
+    """Objetivos 3m por diseño: blanco principal + adicional al 70%."""
+    if cap.get("design_targets_3m"):
+        specs = []
+        resolved = {}
+        for d in cap["design_targets_3m"]:
+            if d.get("pct_of_diseno"):
+                base = resolved.get(d["pct_of_diseno"], 0)
+                target = round(base * ADDITIONAL_COLOR_FACTOR)
+            else:
+                target = d["target"]
+            resolved[d["diseno"]] = target
+            specs.append({**d, "target": target})
+        return specs
+
+    total = cap["target_total_3m"]
+    blanco = round(total / (1 + ADDITIONAL_COLOR_FACTOR))
+    adicional = total - blanco
+    return [
+        {
+            "diseno": cap["blanco_diseno"],
+            "color": "Blanco",
+            "target": blanco,
+            "hs_factor": HIGH_SEASON_FACTOR,
+        },
+        {
+            "diseno": cap["adicional_diseno"],
+            "color": ADDITIONAL_COLOR,
+            "target": adicional,
+            "hs_factor": HIGH_SEASON_FACTOR,
+            "pct_of_diseno": cap["blanco_diseno"],
+        },
+    ]
 
 
 def compute_expansion(raw_rows, vel_months, prod_rows):
-    """Proyección por zona: diseños en Blanco + Color adicional · solo Manga Corta.
+    """Proyección calibrada 3m por zona · MC · Blanco principal + color adicional 70%.
 
-    Factor tiendas: Caracas ×4, Valencia ×2, Barquisimeto ×1.
-    Referencia velocidad = movimiento Blanco VELA (diseños Margarita no se replican).
+  Caracas: ~475 und (4 tiendas ponderadas: 2 alto · 1 media · 1 bajo).
+  Valencia: ~375 und · Barquisimeto: ~450 (Ciudad 200 + Virgen 110 + adicional 70% Ciudad).
+  Reparto talla/género según mix VELA MC Blanco.
     """
     store_rows = [r for r in raw_rows if r["tienda"] == BASE_STORE]
-    total_groups, design_groups = _blanco_velocity_groups(store_rows, vel_months)
+    mix = _mc_blanco_mix(store_rows, vel_months)
     expansion = {
         "base_store": BASE_STORE,
         "stores": EXPANSION_STORES,
         "additional_color": ADDITIONAL_COLOR,
+        "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "high_season_factor": HIGH_SEASON_FACTOR,
         "december_hs_factor": DECEMBER_HS_FACTOR,
         "velocity_months_count": VELOCITY_MONTHS_COUNT,
@@ -307,43 +353,50 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     for store in EXPANSION_STORES:
         cap = EXPANSION_CAPS[store]
         tiendas = cap.get("tiendas", 1)
+        weights = cap.get("tienda_weights")
+        effective_tiendas = round(sum(weights), 2) if weights else tiendas
+        design_specs = _zone_design_targets(cap)
         store_blanco = 0
         store_adicional = 0
         skus = []
-        allowed_modelos = set(cap.get("modelos", ["SPOTS MANGA CORTA"]))
-        designs = cap.get("designs", [])
+        designs_meta = []
 
-        for (modelo, genero, talla), v_base in sorted(total_groups.items()):
-            if modelo not in allowed_modelos:
-                continue
-            for dspec in designs:
-                if dspec.get("ref_diseno"):
-                    v_ref = _ref_velocity(
-                        design_groups, dspec["ref_diseno"], modelo, genero, talla, v_base,
-                    )
-                else:
-                    v_ref = v_base
-                hs = dspec.get("hs_factor", HIGH_SEASON_FACTOR)
-                v_adj = round(v_ref * tiendas * hs, 2)
-                need_3m = _append_sku(
-                    skus, modelo, genero, talla,
-                    dspec["diseno"], dspec["color"], v_adj, hs,
+        for dspec in design_specs:
+            target = dspec["target"]
+            alloc = _allocate_target(target, mix)
+            design_total = 0
+            for modelo, genero, talla, need_3m in alloc:
+                sku = _sku_from_alloc(
+                    modelo, genero, talla,
+                    dspec["diseno"], dspec["color"], need_3m,
+                    dspec.get("hs_factor", HIGH_SEASON_FACTOR),
                     dspec.get("seasonality", ""),
                 )
-                if dspec["color"] == "Blanco":
-                    store_blanco += need_3m
-                else:
-                    store_adicional += need_3m
+                skus.append(sku)
+                design_total += need_3m
+            if dspec["color"] == "Blanco":
+                store_blanco += design_total
+            else:
+                store_adicional += design_total
+            designs_meta.append({
+                "diseno": dspec["diseno"],
+                "color": dspec["color"],
+                "target_3m": design_total,
+            })
 
+        store_total = store_blanco + store_adicional
         expansion["by_store"].append({
             "store": store,
             "label": cap.get("label", ""),
             "tiendas": tiendas,
+            "tienda_weights": weights,
+            "effective_tiendas": effective_tiendas,
+            "target_total_3m": cap.get("target_total_3m", store_total),
             "blanco": store_blanco,
             "adicional": store_adicional,
-            "total": store_blanco + store_adicional,
+            "total": store_total,
             "skus": skus,
-            "designs": [{"diseno": d["diseno"], "color": d["color"]} for d in designs],
+            "designs": designs_meta,
         })
         expansion["total_blanco"] += store_blanco
         expansion["total_adicional"] += store_adicional
@@ -351,16 +404,18 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
     expansion["total_expansion"] = expansion["total_blanco"] + expansion["total_adicional"]
     expansion["by_color"] = [
         {"color": "Blanco", "need_3m": expansion["total_blanco"]},
-        {"color": ADDITIONAL_COLOR, "need_3m": expansion["total_adicional"]},
+        {
+            "color": ADDITIONAL_COLOR,
+            "need_3m": expansion["total_adicional"],
+            "note": f"{int(ADDITIONAL_COLOR_FACTOR * 100)}% del blanco principal",
+        },
     ]
-    zones_label = ", ".join(EXPANSION_STORES)
     vel_lbl = ", ".join(velocity_months_label(vel_months))
     expansion["nota"] = (
-        f"Base {VELOCITY_MONTHS_COUNT} meses cerrados ({vel_lbl}) · ref. Blanco VELA × temp. alta. "
-        f"Factor tiendas: Caracas ×4, Valencia ×2, Barquisimeto ×1. "
-        f"Producción {LEAD_MONTHS}m · {zones_label}. "
-        f"Solo Manga Corta · 2 colores (Blanco + {ADDITIONAL_COLOR}) por zona. "
-        f"Barquisimeto: 3 diseños (Ciudad + Virgen festivo dic ×{DECEMBER_HS_FACTOR} + color adicional)."
+        f"Proyección calibrada {LEAD_MONTHS}m · mix talla/género VELA MC Blanco ({vel_lbl}). "
+        f"Blanco principal + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%. "
+        f"Caracas ~475 (4 tiendas ponderadas 2+2+0.5+0.15) · Valencia ~375 · Barquisimeto ~450 "
+        f"(Ciudad 200 + Virgen 110 + adicional 140). Solo Manga Corta."
     )
     return expansion
 
@@ -423,6 +478,7 @@ def build_prod_zones(prod_curve, summary_prod, expansion):
             "label": store.title(),
             "is_expansion": True,
             "tiendas": es.get("tiendas", 1),
+            "effective_tiendas": es.get("effective_tiendas"),
             "note": es["label"],
             "summary": {
                 "v_mes": round(sum(r["v_mes"] for r in rows), 1),
@@ -532,6 +588,7 @@ def rebuild_data() -> dict:
         "expansion_stores": EXPANSION_STORES,
         "expansion_caps": EXPANSION_CAPS,
         "additional_color": ADDITIONAL_COLOR,
+        "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
         "date_range": date_range,
     }
 
@@ -661,6 +718,8 @@ def patch_html(html: str, data: dict) -> str:
         "}",
         "function getNewStoreShare(store,realShares){\n"
         "  var cap=NEW_STORE_CAPS[store];if(!cap)return 0;\n"
+        "  if(cap.effective_tiendas!=null)return(realShares['VELA']||0)*cap.effective_tiendas;\n"
+        "  if(cap.tienda_weights)return(realShares['VELA']||0)*cap.tienda_weights.reduce(function(a,w){return a+w;},0);\n"
         "  if(cap.tiendas!=null)return(realShares['VELA']||0)*cap.tiendas;\n"
         "  if(cap.mult!=null)return(realShares['VELA']||0)*cap.mult;\n"
         "  return(realShares[cap.base]||0)*(cap.mult||1);\n"
@@ -712,21 +771,23 @@ def patch_html(html: str, data: dict) -> str:
         "    var velLbl=DATA.velocity_months_label||'';\n"
         "    var velCnt=DATA.velocity_months_count||3;\n"
         "    var dicHs=DATA.december_hs_factor||1.4;\n"
+        "    var addPct=Math.round((DATA.additional_color_factor||0.7)*100);\n"
         "    var exp=DATA.expansion||{};\n"
         "    var zoneCards=(exp.by_store||[]).map(function(z){\n"
-        "      var dsg=(z.designs||[]).map(function(d){return d.diseno+' <span style=\"color:var(--mu2)\">('+d.color+')</span>';}).join(' · ');\n"
+        "      var dsg=(z.designs||[]).map(function(d){return d.diseno+' <span style=\"color:var(--mu2)\">('+d.color+': '+d.target_3m+'und)</span>';}).join(' · ');\n"
+        "      var tw=z.tienda_weights?(' · pesos '+z.tienda_weights.join('/')+''):'';\n"
         "      return '<div style=\"background:rgba(0,0,0,.12);border-radius:8px;padding:8px 10px\">'\n"
-        "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <strong style=\"color:var(--tx)\">'+z.tiendas+'</strong> tienda(s)'\n"
+        "        +'<strong style=\"color:#f97316\">'+z.store+'</strong> · <strong style=\"color:var(--tx)\">'+z.tiendas+'</strong> tienda(s)'+tw+' · objetivo <strong style=\"color:var(--tx)\">'+z.total+'</strong> und'\n"
         "        +'<div style=\"font-size:.64rem;margin-top:4px;color:var(--mu2)\">'+dsg+'</div>'\n"
-        "        +'<div style=\"font-size:.64rem;margin-top:4px\">'+z.total+' und · Blanco <strong>'+z.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+z.adicional+'</strong></div></div>';\n"
+        "        +'<div style=\"font-size:.64rem;margin-top:4px\">Blanco <strong>'+z.blanco+'</strong> + '+((DATA.additional_color)||'adicional')+' <strong>'+z.adicional+'</strong> ('+addPct+'% blanco principal)</div></div>';\n"
         "    }).join('');\n"
         "    decHdr.innerHTML='<div style=\"background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;padding:14px 16px;font-size:.71rem;color:var(--mu);line-height:1.55;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem\">📋 Metodología — rotación y producción</div>'\n"
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px\">'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Velocidad base = ventas <strong style=\"color:var(--tx)\">VELA Margarita</strong> en <strong style=\"color:var(--tx)\">'+velCnt+' meses</strong> cerrados ('+velLbl+'; sin '+((DATA.partial_month||'mes parcial').split('-')[0])+').</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Temporada alta</strong><br>Rotación ajustada = base × <strong style=\"color:var(--tx)\">'+hs+'</strong>. Barquisimeto Virgen (festividad dic) × <strong style=\"color:var(--tx)\">'+dicHs+'</strong>.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">Factor tiendas</strong><br>Caracas <strong style=\"color:var(--tx)\">×4</strong> CCS · Valencia <strong style=\"color:var(--tx)\">×2</strong> · Barquisimeto <strong style=\"color:var(--tx)\">×1</strong>. Solo <strong style=\"color:var(--tx)\">Manga Corta</strong>.</div>'\n"
-        "      +'<div><strong style=\"color:var(--tx)\">🆕 Expansión — 2 colores</strong><br><strong style=\"color:var(--tx)\">Blanco</strong> + <strong style=\"color:var(--tx)\">'+((DATA.additional_color)||'Color adicional')+'</strong> por zona. Caracas/Valencia: 2 diseños. Barquisimeto: 3 (Ciudad + Virgen en Blanco + 1 en color adicional).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Foco tienda VELA</strong><br>Mix talla/género desde <strong style=\"color:var(--tx)\">VELA MC Blanco</strong> ('+velLbl+'; '+velCnt+' meses cerrados).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Blanco principal</strong><br>Proyección base por zona. <strong style=\"color:var(--tx)\">'+((DATA.additional_color)||'Color adicional')+'</strong> = <strong style=\"color:var(--tx)\">'+addPct+'%</strong> del blanco principal (no Virgen en BQT).</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Caracas — 4 tiendas CCS</strong><br>2 alto peso · 1 media · 1 bajo movimiento. Objetivo ~<strong style=\"color:var(--tx)\">450-500</strong> und/3m.</div>'\n"
+        "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad ~180 + Virgen 100-120 (dic ×'+dicHs+') + adicional 70% Ciudad · total ~450.</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
