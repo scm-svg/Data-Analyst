@@ -227,18 +227,7 @@ def compute_prod_curve(raw_rows, stock, stock_taller, vel_months):
             **needs,
         })
 
-    summary = {}
-    for modelo in sorted({r["modelo"] for r in prod_rows}):
-        rows_m = [r for r in prod_rows if r["modelo"] == modelo]
-        v_mes = sum(r["v_mes"] for r in rows_m)
-        stk = sum(r["stk_total"] for r in rows_m)
-        summary[modelo] = {
-            "v_mes_base": round(sum(r["v_mes_base"] for r in rows_m), 1),
-            "v_mes": round(v_mes, 1),
-            "stk_total": stk,
-            "stk_pt": sum(r["stk_pt"] for r in rows_m),
-            **{f"need_{m}m": sum(r[f"need_{m}m"] for r in rows_m) for m in PROD_MONTHS_OPTIONS},
-        }
+    summary = _summarize_prod(prod_rows)
     return prod_rows, summary
 
 
@@ -270,6 +259,65 @@ def _vela_genero_talla_mix(store_rows, vel_months, modelo=MC_MODEL):
 def _mc_blanco_mix(store_rows, vel_months, modelo=MC_MODEL):
     """Alias: mix alineado con análisis Tallas del dashboard (por género)."""
     return _vela_genero_talla_mix(store_rows, vel_months, modelo)
+
+
+def _genero_talla_mix_only(mix: dict, genero: str) -> dict:
+    gm = {t: mix.get((genero, t), 0) for (g, t) in mix if g == genero}
+    s = sum(gm.values()) or 1
+    return {t: v / s for t, v in gm.items()}
+
+
+def rebalance_prod_curve_tallas(prod_rows, store_rows, vel_months):
+    """Ajusta need_*m por talla dentro de cada modelo+género al mix dashboard Tallas."""
+    mix = _vela_genero_talla_mix(store_rows, vel_months)
+    by_group = defaultdict(list)
+    for r in prod_rows:
+        by_group[(r["modelo"], r["genero"])].append(r)
+
+    for (modelo, genero), rows in by_group.items():
+        total = sum(r["need_3m"] for r in rows)
+        if total <= 0:
+            continue
+        t_mix = _genero_talla_mix_only(mix, genero)
+        alloc = {
+            t: q for _, _, t, q in _allocate_target(
+                total, {(genero, t): w for t, w in t_mix.items()}, modelo,
+            )
+        }
+        for talla, t_need in alloc.items():
+            talla_rows = [r for r in rows if r["talla"] == talla]
+            if not talla_rows:
+                continue
+            t_curr = sum(r["need_3m"] for r in talla_rows)
+            vm_sum = sum(x["v_mes"] for x in talla_rows) or 1
+            for r in talla_rows:
+                share = r["need_3m"] / t_curr if t_curr > 0 else r["v_mes"] / vm_sum
+                r["need_3m"] = max(0, round(t_need * share))
+        diff = total - sum(r["need_3m"] for r in rows)
+        if diff:
+            mx = max(rows, key=lambda r: r["need_3m"])
+            mx["need_3m"] = max(0, mx["need_3m"] + diff)
+        for r in rows:
+            stk = r.get("stk_total", 0)
+            n3 = r["need_3m"]
+            v_mes = (n3 + stk) / LEAD_MONTHS if LEAD_MONTHS else (n3 + stk)
+            r["v_mes"] = round(v_mes, 1)
+            for m in PROD_MONTHS_OPTIONS:
+                r[f"need_{m}m"] = max(0, round(v_mes * m - stk))
+
+
+def _summarize_prod(prod_rows):
+    summary = {}
+    for modelo in sorted({r["modelo"] for r in prod_rows}):
+        rows_m = [r for r in prod_rows if r["modelo"] == modelo]
+        summary[modelo] = {
+            "v_mes_base": round(sum(r["v_mes_base"] for r in rows_m), 1),
+            "v_mes": round(sum(r["v_mes"] for r in rows_m), 1),
+            "stk_total": sum(r["stk_total"] for r in rows_m),
+            "stk_pt": sum(r["stk_pt"] for r in rows_m),
+            **{f"need_{m}m": sum(r[f"need_{m}m"] for r in rows_m) for m in PROD_MONTHS_OPTIONS},
+        }
+    return summary
 
 
 def _allocate_target(target_3m: int, mix: dict, modelo=MC_MODEL) -> list:
@@ -346,7 +394,7 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
 
   Caracas: ~475 und (4 tiendas ponderadas: 2 alto · 1 media · 1 bajo).
   Valencia: ~375 und · Barquisimeto: ~450 (Ciudad 200 + Virgen 110 + adicional 70% Ciudad).
-  Reparto talla/género según mix VELA MC Blanco.
+  Reparto talla/género: share género MC · curva talla como dashboard Tallas (todo SPOTS VELA).
     """
     store_rows = [r for r in raw_rows if r["tienda"] == BASE_STORE]
     mix = _mc_blanco_mix(store_rows, vel_months)
@@ -550,7 +598,10 @@ def rebuild_data() -> dict:
             stock_taller[key] += r["qty"]
 
     vel_months = velocity_months(meses_order)
+    store_rows_vela = [r for r in raw_rows if r["tienda"] == BASE_STORE]
     prod_curve, summary_prod = compute_prod_curve(raw_rows, stock, stock_taller, vel_months)
+    rebalance_prod_curve_tallas(prod_curve, store_rows_vela, vel_months)
+    summary_prod = _summarize_prod(prod_curve)
     expansion = compute_expansion(raw_rows, vel_months, prod_curve)
     prod_zones = build_prod_zones(prod_curve, summary_prod, expansion)
 
