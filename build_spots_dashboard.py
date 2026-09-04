@@ -17,6 +17,8 @@ LEAD_MONTHS = 3
 PROD_MONTHS_OPTIONS = [3, 4, 6]
 DEFAULT_PROD_MONTHS = 3
 TALLA_BOOST = {"XL": 1.15, "2XL": 1.20}
+FABRIC_KG_PER_UNIT = 0.45
+FABRIC_SAFETY_PCT = 0.20
 PARTIAL_MONTH = "septiembre-2026"
 VELOCITY_MONTHS_COUNT = 3
 BASE_STORE = "VELA"
@@ -486,9 +488,68 @@ def compute_expansion(raw_rows, vel_months, prod_rows):
         f"Proyección calibrada {LEAD_MONTHS}m · mix talla/género VELA ({vel_lbl}): "
         f"share género MC · curva talla por género como dashboard Tallas (todo SPOTS). "
         f"Blanco principal + {ADDITIONAL_COLOR} al {int(ADDITIONAL_COLOR_FACTOR * 100)}%. "
-        f"Caracas ~475 · Valencia ~375 · Barquisimeto ~450. Solo Manga Corta."
+        f"Caracas ~475 · Valencia ~375 · Barquisimeto ~574 "
+        f"(Ciudad 220 + Virgen 200 + adicional 154). Solo Manga Corta."
     )
+    expansion["fabric"] = compute_fabric_needs(expansion)
     return expansion
+
+
+def _fabric_kg(units: int) -> int:
+    return round(units * FABRIC_KG_PER_UNIT * (1 + FABRIC_SAFETY_PCT))
+
+
+def compute_fabric_needs(expansion: dict) -> dict:
+    """Tela para expansión (CCS · Valencia · Barquisimeto) · consumo 0.45 kg/und · +20% seguridad."""
+    rows = []
+    blanco_units = 0
+    for store in expansion.get("by_store", []):
+        zone = store["store"]
+        for d in store.get("designs", []):
+            units = d.get("target_3m", 0)
+            if d["color"] == "Blanco":
+                blanco_units += units
+                if zone == "BARQUISIMETO":
+                    rows.append({
+                        "tipo": "Blanco",
+                        "zona": zone.title(),
+                        "detalle": d["diseno"],
+                        "units": units,
+                        "kg": _fabric_kg(units),
+                        "is_detail": True,
+                    })
+            else:
+                rows.append({
+                    "tipo": ADDITIONAL_COLOR,
+                    "zona": zone.title(),
+                    "detalle": d["diseno"],
+                    "units": units,
+                    "kg": _fabric_kg(units),
+                })
+
+    adicional_units = expansion.get("total_adicional", 0)
+    fabric = {
+        "kg_per_unit": FABRIC_KG_PER_UNIT,
+        "safety_pct": FABRIC_SAFETY_PCT,
+        "safety_label": f"+{int(FABRIC_SAFETY_PCT * 100)}%",
+        "base_months": DEFAULT_PROD_MONTHS,
+        "blanco": {
+            "units": blanco_units,
+            "kg": _fabric_kg(blanco_units),
+        },
+        "adicional_by_zone": [
+            r for r in rows if r["tipo"] == ADDITIONAL_COLOR
+        ],
+        "blanco_detail": [
+            r for r in rows if r.get("is_detail")
+        ],
+        "rows": rows,
+        "total": {
+            "units": expansion.get("total_expansion", 0),
+            "kg": _fabric_kg(expansion.get("total_expansion", 0)),
+        },
+    }
+    return fabric
 
 
 def build_prod_zones(prod_curve, summary_prod, expansion):
@@ -658,6 +719,7 @@ def rebuild_data() -> dict:
         "expansion_caps": EXPANSION_CAPS,
         "additional_color": ADDITIONAL_COLOR,
         "additional_color_factor": ADDITIONAL_COLOR_FACTOR,
+        "fabric": expansion.get("fabric", {}),
         "date_range": date_range,
     }
 
@@ -869,6 +931,7 @@ def patch_html(html: str, data: dict) -> str:
     dec_methodology_js = (
         "function rDecisiones(){\n  var meses=_decMeses||(DATA.default_prod_months||3);\n"
         "  var hs=DATA.high_season_factor||1.2;\n"
+        "  var exp=DATA.expansion||{};\n"
         "  var hsLbl=document.getElementById('hsFactorLabel');if(hsLbl)hsLbl.textContent=hs;\n"
         "  var decHdr=document.getElementById('decMethodology');\n"
         "  if(decHdr){\n"
@@ -876,7 +939,6 @@ def patch_html(html: str, data: dict) -> str:
         "    var velCnt=DATA.velocity_months_count||3;\n"
         "    var dicHs=DATA.december_hs_factor||1.4;\n"
         "    var addPct=Math.round((DATA.additional_color_factor||0.7)*100);\n"
-        "    var exp=DATA.expansion||{};\n"
         "    var zoneCards=(exp.by_store||[]).map(function(z){\n"
         "      var dsg=(z.designs||[]).map(function(d){return d.diseno+' <span style=\"color:var(--mu2)\">('+d.color+': '+d.target_3m+'und)</span>';}).join(' · ');\n"
         "      var tw=z.tienda_weights?(' · pesos '+z.tienda_weights.join('/')+''):'';\n"
@@ -903,9 +965,63 @@ def patch_html(html: str, data: dict) -> str:
         "      +'<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px\">'+zoneCards+'</div>'\n"
         "      +'<div style=\"font-size:.65rem;color:var(--mu2)\">'+(exp.nota||'')+'</div></div>';\n"
         "  }\n"
+        "  var decFab=document.getElementById('decFabric');\n"
+        "  if(decFab){\n"
+        "    var fab=DATA.fabric||{};\n"
+        "    var kgPer=fab.kg_per_unit||0.45;\n"
+        "    var safety=fab.safety_pct||0.20;\n"
+        "    var safetyLbl=fab.safety_label||'+20%';\n"
+        "    function fabKg(u){return Math.round(u*kgPer*(1+safety));}\n"
+        "    function storeUnits(z,dsg,col){\n"
+        "      var t=0;(z.skus||[]).forEach(function(s){\n"
+        "        if(s.diseno===dsg&&s.color===col)t+=needM(s,meses);\n"
+        "      });return t;\n"
+        "    }\n"
+        "    var blancoU=0,adicionalU=0,adicionalRows=[];\n"
+        "    (exp.by_store||[]).forEach(function(z){\n"
+        "      (z.designs||[]).forEach(function(d){\n"
+        "        var u=storeUnits(z,d.diseno,d.color);\n"
+        "        if(d.color==='Blanco')blancoU+=u;\n"
+        "        else{adicionalU+=u;adicionalRows.push({zona:z.store,diseno:d.diseno,units:u,kg:fabKg(u)});}\n"
+        "      });\n"
+        "    });\n"
+        "    var bqtDetail=[];\n"
+        "    (exp.by_store||[]).forEach(function(z){\n"
+        "      if(z.store!=='BARQUISIMETO')return;\n"
+        "      (z.designs||[]).forEach(function(d){\n"
+        "        if(d.color!=='Blanco')return;\n"
+        "        var u=storeUnits(z,d.diseno,d.color);\n"
+        "        bqtDetail.push({diseno:d.diseno,units:u,kg:fabKg(u)});\n"
+        "      });\n"
+        "    });\n"
+        "    var totalU=blancoU+adicionalU;\n"
+        "    var totalKg=fabKg(totalU);\n"
+        "    var tr=function(cells,extra){return '<tr'+(extra||'')+'>'+cells.map(function(c){return '<td style=\"padding:7px 10px;border-bottom:1px solid var(--brd);font-size:.7rem\">'+c+'</td>';}).join('')+'</tr>';};\n"
+        "    var head='<thead><tr style=\"background:rgba(0,0,0,.18)\">'\n"
+        "      +['Material','Zona / diseño','Unidades','Consumo','Stock seg.','Tela (kg)'].map(function(h){\n"
+        "        return '<th style=\"padding:7px 10px;text-align:left;font-size:.64rem;color:var(--mu);font-weight:700;border-bottom:1px solid var(--brd)\">'+h+'</th>';\n"
+        "      }).join('')+'</tr></thead>';\n"
+        "    var body='';\n"
+        "    body+=tr(['<strong style=\"color:#e4e4e7\">Blanco</strong>','Total expansión','<strong>'+blancoU+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"color:#10b981\">'+fabKg(blancoU)+'</strong>'],' style=\"background:rgba(255,255,255,.02)\"');\n"
+        "    bqtDetail.forEach(function(d){\n"
+        "      body+=tr(['<span style=\"color:var(--mu2)\">↳ Blanco</span>','Barquisimeto · '+d.diseno,d.units,kgPer+' kg/und',safetyLbl,'<span style=\"color:var(--tx)\">'+d.kg+'</span>']);\n"
+        "    });\n"
+        "    adicionalRows.forEach(function(r){\n"
+        "      body+=tr(['<strong style=\"color:#a5b4fc\">'+((DATA.additional_color)||'Color adicional')+'</strong>',r.zona+' · '+r.diseno,'<strong>'+r.units+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"color:#10b981\">'+r.kg+'</strong>'],' style=\"background:rgba(99,102,241,.04)\"');\n"
+        "    });\n"
+        "    body+=tr(['<strong style=\"color:var(--tx)\">TOTAL</strong>','Caracas + Valencia + Barquisimeto','<strong>'+totalU+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"font-family:var(--fm);font-size:.85rem;color:#10b981\">'+totalKg+'</strong>'],' style=\"background:rgba(16,185,129,.08)\"');\n"
+        "    decFab.innerHTML='<div style=\"background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
+        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#10b981;margin-bottom:8px;font-size:.78rem\">🧵 Compra de tela — expansión ('+meses+' meses)</div>'\n"
+        "      +'<div style=\"font-size:.65rem;color:var(--mu2);margin-bottom:10px\">Solo Caracas, Valencia y Barquisimeto · consumo promedio <strong style=\"color:var(--tx)\">'+kgPer+' kg/und</strong> · stock de seguridad <strong style=\"color:var(--tx)\">'+safetyLbl+'</strong></div>'\n"
+        "      +'<div style=\"overflow-x:auto\"><table style=\"width:100%;border-collapse:collapse\">'+head+'<tbody>'+body+'</tbody></table></div>'\n"
+        "      +'<div style=\"display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.65rem;color:var(--mu)\">'\n"
+        "      +'<div>Blanco: <strong style=\"color:var(--tx)\">'+fabKg(blancoU)+' kg</strong> ('+blancoU+' und)</div>'\n"
+        "      +'<div>Colores: <strong style=\"color:var(--tx)\">'+fabKg(adicionalU)+' kg</strong> ('+adicionalU+' und)</div>'\n"
+        "      +'<div>Total pedido: <strong style=\"font-family:var(--fm);color:#10b981\">'+totalKg+' kg</strong></div></div></div>';\n"
+        "  }\n"
     )
     html = re.sub(
-        r"function rDecisiones\(\)\{\s*var meses=_decMeses\|\|2;.*?(?=\n  var TORD=)",
+        r"function rDecisiones\(\)\{.*?(?=\n  var TORD=)",
         dec_methodology_js,
         html,
         count=1,
