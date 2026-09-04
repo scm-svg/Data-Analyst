@@ -12,6 +12,12 @@ Adjunto **`SPOTS_PRODUCCION_EXPANSION.xlsx`**, con el mismo formato usado en **S
 - Pestañas **CAB** y **DAMA**: matriz consolidada con **blanco arriba** y **colores abajo** (tallas en columnas).
 - Pestañas por zona (Caracas, Valencia, Barquisimeto) y **TELA** para compra.
 
+## Solicitud en módulo de aprobaciones
+
+Informo que **ya se registró la solicitud** en el módulo de aprobaciones con el número **INT00019**. Adjunto captura de pantalla como referencia.
+
+*(Insertar aquí la imagen / adjunto de la solicitud INT00019)*
+
 ## Colores definidos por zona
 
 | Zona | Blanco | Color zona |
@@ -31,7 +37,7 @@ Adjunto **`SPOTS_PRODUCCION_EXPANSION.xlsx`**, con el mismo formato usado en **S
 
 *Barquisimeto blanco: Ciudad **220** + Virgen **200** (festividad dic. ×1,4).*
 
-## Compra de tela
+## Compra de tela — expansión
 
 | Material | Unidades | Tela |
 |----------|----------|------|
@@ -50,4 +56,16 @@ Las cantidades del Excel son el **pedido objetivo** validado por análisis. **Cu
 Saludos,  
 [Tu nombre]
 
-**Adjunto:** `SPOTS_PRODUCCION_EXPANSION.xlsx`
+**Adjuntos:**
+- `SPOTS_PRODUCCION_EXPANSION.xlsx`
+- Captura solicitud **INT00019** (módulo de aprobaciones)
+
+---
+
+## Nota adicional (Margarita — enviar por separado o al cierre del correo)
+
+Por otro lado, y de forma independiente a la expansión anterior, comentar que para **Margarita (VELA)** también se gestionará compra de **tela Bahamas** para la producción de SPOTS según la curva del dashboard (MC + ML, horizonte 3 meses · **~164 und** sugeridas), tomando en cuenta el análisis y necesidades proyectadas en **Daily 3.0**. Esa solicitud de compra se enviará por la vía correspondiente en un paso aparte.
+
+**Texto sugerido para pegar al final del correo:**
+
+> *Adicionalmente, y por fuera de esta solicitud de expansión: para la producción de **Margarita** también se enviará a comprar **tela Bahamas**, según las cantidades definidas en el análisis de SPOTS y considerando lo proyectado en **Daily 3.0**. Les informaremos en cuanto quede formalizada esa compra.*
