@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Genera Excel de rango de acción (mín / solicitado / máx) para Short Playa Sublimado."""
+"""Genera Excel de rango de producción Short Playa Sublimado.
+
+Mínimo = cantidades establecidas en el dashboard (compromiso de producción).
+Máximo = techo de acción hacia arriba, aprovechando tela adicional sin sobrestock.
+"""
 
 import json
 import re
@@ -19,19 +23,14 @@ TORD = {
 }
 COLOR_ORDER = ["Playuela", "Sal", "Tucupido", "Sombrero", "Nuevo color"]
 MAX_COVERAGE_MONTHS = 6
-MAX_PCT_BUFFER = 1.10
-
-CAB_CORE = {"M", "L", "XL"}
-CAB_TAIL = {"S", "2XL"}
-KIDS_CORE = {"6", "8", "10", "12", "14"}
-KIDS_TAIL = {"1", "2", "4"}
+# Colchón hacia arriba cuando hay tela disponible (diciembre, carnaval, tiendas nuevas)
+MAX_PCT_ABOVE_MIN = 1.15
 
 title_fill = PatternFill("solid", fgColor="6ABF4A")
 sub_fill = PatternFill("solid", fgColor="A8D5A2")
 color_fill = PatternFill("solid", fgColor="E2F0E4")
 tot_fill = PatternFill("solid", fgColor="C8E6C9")
-sol_fill = PatternFill("solid", fgColor="FFF9C4")
-min_fill = PatternFill("solid", fgColor="E3F2FD")
+min_fill = PatternFill("solid", fgColor="FFF9C4")
 max_fill = PatternFill("solid", fgColor="FFE0B2")
 white_fill = PatternFill("solid", fgColor="FFFFFF")
 thin = Side(style="thin", color="2D5016")
@@ -62,35 +61,21 @@ def merge_rows(data: dict, genero: str) -> list:
     return sorted(merged.values(), key=sort_key)
 
 
-def min_factor(genero: str, talla: str) -> float:
-    if genero == "CAB":
-        if talla in CAB_CORE:
-            return 0.90
-        if talla in CAB_TAIL:
-            return 0.70
-        return 0.85
-    if talla in KIDS_CORE:
-        return 0.85
-    if talla in KIDS_TAIL:
-        return 0.70
-    return 0.85
-
-
-def calc_range(genero: str, talla_row: dict) -> tuple[int, int, int]:
-    sol = int(talla_row.get("produce", 0) or 0)
-    if sol <= 0:
-        return 0, 0, 0
+def calc_range(talla_row: dict, is_launch: bool = False) -> tuple[int, int]:
+    """Mínimo = cantidad establecida (dashboard). Máximo = techo con tela adicional."""
+    mn = int(talla_row.get("produce", 0) or 0)
+    if mn <= 0:
+        return 0, 0
 
     v_mes = float(talla_row.get("v_mes", 0) or 0)
     stk = int(talla_row.get("stk", 0) or 0)
-    talla = talla_row["talla"]
 
-    mn = max(0, round(sol * min_factor(genero, talla)))
-    cap_coverage = max(0, round(v_mes * MAX_COVERAGE_MONTHS - stk)) if v_mes > 0 else sol
-    cap_pct = max(0, round(sol * MAX_PCT_BUFFER))
+    cap_coverage = max(0, round(v_mes * MAX_COVERAGE_MONTHS - stk)) if v_mes > 0 else mn
+    pct = MAX_PCT_ABOVE_MIN + (0.05 if is_launch else 0)  # +5% extra techo en lanzamiento
+    cap_pct = max(0, round(mn * pct))
     mx = min(cap_coverage, cap_pct)
-    mx = max(mx, sol)
-    return mn, sol, mx
+    mx = max(mx, mn)
+    return mn, mx
 
 
 def style_cell(cell, fill=None, bold=False, align=center):
@@ -108,10 +93,10 @@ def write_genero_sheet(ws, genero: str, rows: list):
         for t in row["tallas"]:
             talla_set.add(t["talla"])
     tallas = sorted(talla_set, key=lambda t: TORD.get(t, 99))
-    ncol = 1 + len(tallas) * 3
+    ncol = 1 + len(tallas) * 2
 
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncol)
-    c = ws.cell(row=1, column=1, value="CANTIDADES POR COLORES — RANGO DE ACCIÓN")
+    c = ws.cell(row=1, column=1, value="CANTIDADES POR COLORES — MÍNIMO Y MÁXIMO")
     style_cell(c, title_fill, bold=True)
 
     ws.cell(row=2, column=1, value=f"SHORT PLAYA SUBLIMADO {genero}").font = Font(bold=True, italic=True)
@@ -119,49 +104,46 @@ def write_genero_sheet(ws, genero: str, rows: list):
 
     col = 2
     for talla in tallas:
-        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 2)
+        ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + 1)
         h = ws.cell(row=2, column=col, value=talla)
         style_cell(h, sub_fill, bold=True)
-        for off, label, fill in [(0, "Mín", min_fill), (1, "Sol", sol_fill), (2, "Máx", max_fill)]:
+        for off, label, fill in [(0, "Mín", min_fill), (1, "Máx", max_fill)]:
             sub = ws.cell(row=3, column=col + off, value=label)
             style_cell(sub, fill, bold=True)
-        col += 3
+        col += 2
 
-    totals = {"min": 0, "sol": 0, "max": 0}
+    totals = {"min": 0, "max": 0}
     r_idx = 4
     for cp in rows:
         tmap = {t["talla"]: t for t in cp["tallas"]}
         label = cp["color"] + (" (lanzamiento)" if cp.get("is_launch") else "")
         style_cell(ws.cell(row=r_idx, column=1, value=label), color_fill, bold=True, align=left)
 
-        row_min = row_sol = row_max = 0
+        row_min = row_max = 0
         col = 2
         for talla in tallas:
             t = tmap.get(talla, {"talla": talla, "produce": 0, "v_mes": 0, "stk": 0})
-            mn, sol, mx = calc_range(genero, t)
-            for off, val, fill in [(0, mn, min_fill), (1, sol, sol_fill), (2, mx, max_fill)]:
+            mn, mx = calc_range(t, is_launch=bool(cp.get("is_launch")))
+            for off, val, fill in [(0, mn, min_fill), (1, mx, max_fill)]:
                 cell = ws.cell(row=r_idx, column=col + off, value=val if val else None)
                 style_cell(cell, white_fill if val else fill)
                 if val:
                     cell.font = Font(bold=True)
             row_min += mn
-            row_sol += sol
             row_max += mx
-            col += 3
+            col += 2
 
         totals["min"] += row_min
-        totals["sol"] += row_sol
         totals["max"] += row_max
         r_idx += 1
 
     style_cell(ws.cell(row=r_idx, column=1, value="TOTAL"), tot_fill, bold=True, align=left)
     style_cell(ws.cell(row=r_idx, column=2, value=totals["min"]), tot_fill, bold=True)
-    style_cell(ws.cell(row=r_idx, column=3, value=totals["sol"]), tot_fill, bold=True)
-    style_cell(ws.cell(row=r_idx, column=4, value=totals["max"]), tot_fill, bold=True)
+    style_cell(ws.cell(row=r_idx, column=3, value=totals["max"]), tot_fill, bold=True)
 
     ws.column_dimensions["A"].width = 24
     for i in range(2, ncol + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 7
+        ws.column_dimensions[get_column_letter(i)].width = 8
 
     return totals
 
@@ -179,16 +161,16 @@ def write_resumen(wb, data: dict, summary: dict):
         ["Tiendas nuevas consideradas", ", ".join(data.get("new_stores", ["VELA", "BARQUISIMETO"]))],
         ["Ramp-up tiendas nuevas (lanzamiento)", f"{int((data.get('launch_new_store_uptake', 0.7) or 0.7) * 100)}%"],
         [],
-        ["Género", "Mínimo", "Solicitado (dashboard)", "Máximo"],
-        ["CAB", summary["CAB"]["min"], summary["CAB"]["sol"], summary["CAB"]["max"]],
-        ["KIDS", summary["KIDS"]["min"], summary["KIDS"]["sol"], summary["KIDS"]["max"]],
-        ["TOTAL", summary["TOTAL"]["min"], summary["TOTAL"]["sol"], summary["TOTAL"]["max"]],
+        ["Género", "Mínimo (compromiso)", "Máximo (con tela adicional)"],
+        ["CAB", summary["CAB"]["min"], summary["CAB"]["max"]],
+        ["KIDS", summary["KIDS"]["min"], summary["KIDS"]["max"]],
+        ["TOTAL", summary["TOTAL"]["min"], summary["TOTAL"]["max"]],
         [],
         ["Notas"],
-        ["• Solicitado = cantidades del dashboard (curva óptima, cobertura 3 meses, temporada alta)."],
-        ["• Mínimo = piso operativo para no quedar cortos en tallas núcleo."],
-        ["• Máximo = tope anti-sobrestock (menor entre +10% y 6 meses de cobertura por talla)."],
-        ["• Incluye color de lanzamiento y proyección de red ampliada (VELA, Barquisimeto)."],
+        ["• Mínimo = cantidades establecidas en el dashboard (compromiso de producción)."],
+        ["• Máximo = techo si hay tela disponible (hasta +15% o 6 meses cobertura, lo que sea menor)."],
+        ["• La diferencia entre Mín y Máx es el rango de acción hacia arriba."],
+        ["• Incluye color de lanzamiento y proyección temporada alta / tiendas nuevas."],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -207,37 +189,29 @@ def write_metodologia(wb, data: dict):
     ws = wb.create_sheet("Metodología")
     hs = data.get("high_season_factor", 1.4)
     text = [
-        "METODOLOGÍA — RANGO DE ACCIÓN SHORT PLAYA SUBLIMADO",
+        "METODOLOGÍA — MÍNIMO Y MÁXIMO SHORT PLAYA SUBLIMADO",
         "",
-        "1. SOLICITADO (referencia del dashboard)",
-        "   Cantidad por color/talla según rotación ajustada × factor temporada alta (×{hs}).".format(hs=hs),
-        "   Rotación base: promedio últimos 6 meses completos, con diciembre ponderado ×1.4.",
-        "   Cobertura objetivo: 3 meses (lead time 90 días).",
-        "   Color nuevo: benchmark top 3 colores (Sal, Playuela, Tucupido) × participación de red",
-        "   incluyendo VELA (1.5× GRIETA) y Barquisimeto, con ramp-up 70% en apertura.",
+        "1. MÍNIMO (compromiso de producción)",
+        "   Son las cantidades establecidas en el dashboard por color y talla.",
+        "   Representan lo que SÍ hay que fabricar sí o sí: curva óptima, cobertura 3 meses,",
+        "   factor temporada alta (×{hs}), diciembre ponderado, tiendas nuevas (VELA, Barquisimeto)",
+        "   y color de lanzamiento.".format(hs=hs),
         "",
-        "2. MÍNIMO (piso — producción no debería bajar de aquí)",
-        "   CAB tallas M/L/XL: 90% del solicitado.",
-        "   CAB tallas S/2XL: 70% del solicitado.",
-        "   KIDS tallas 6–14: 85% del solicitado.",
-        "   KIDS tallas 1–4: 70% del solicitado.",
-        "   Si solicitado = 0 → mínimo = 0.",
+        "2. MÁXIMO (rango de acción hacia arriba)",
+        "   Si hay tela disponible que hoy está parada, producción puede subir HASTA el máximo.",
+        "   El techo es el menor entre:",
+        "   a) Mínimo + 15% (20% en color de lanzamiento)",
+        "   b) Unidades para no superar 6 meses de cobertura por talla (anti sobrestock).",
         "",
-        "3. MÁXIMO (techo — anti sobrestock)",
-        "   Menor valor entre:",
-        "   a) Solicitado + 10%",
-        "   b) Unidades para no superar 6 meses de cobertura (stock actual + producción).",
-        "   El máximo nunca es menor que el solicitado.",
+        "3. LÓGICA DE LA REUNIÓN",
+        "   • El mínimo cubre disponibilidad en red (diciembre, enero, carnaval).",
+        "   • El máximo permite aprovechar tela adicional sin dejarla idle ni inflar inventario.",
+        "   • Producción decide cuánto fabricar entre Mín y Máx según tela y capacidad del mes.",
+        "   • Lo fabricado se distribuye y mueve entre tiendas para cubrir huecos.",
         "",
-        "4. CONTEXTO TEMPORADA Y TIENDAS",
-        "   Proyección orientada a picos: diciembre, enero y carnaval (factor temporada alta).",
-        "   Uso inteligente de tela disponible: fabricar según rango y redistribuir entre tiendas.",
-        "   Tiendas nuevas absorben parte del volumen de lanzamiento sin sobrecargar stock en una sola tienda.",
-        "",
-        "5. CÓMO USA PRODUCCIÓN EL RANGO",
-        "   • Fabricar preferentemente en el SOLICITADO.",
-        "   • Si hay restricción de tela/capacidad: no bajar del MÍNIMO en tallas núcleo.",
-        "   • Si hay tela adicional y demanda confirma pico festivo: puede subir hasta el MÁXIMO sin aprobación extra.",
+        "4. EJEMPLO",
+        "   Si Mín = 41 und talla M color nuevo y Máx = 47 und → hay 6 und de margen",
+        "   para usar tela extra si el pico festivo lo justifica.",
     ]
     for r, line in enumerate(text, start=1):
         cell = ws.cell(row=r, column=1, value=line)
@@ -259,15 +233,15 @@ def main():
         summary[genero] = totals
 
     summary["TOTAL"] = {
-        k: summary["CAB"][k] + summary["KIDS"][k] for k in ("min", "sol", "max")
+        k: summary["CAB"][k] + summary["KIDS"][k] for k in ("min", "max")
     }
     write_resumen(wb, data, summary)
     write_metodologia(wb, data)
     wb.save(OUTPUT_PATH)
     print(f"Guardado: {OUTPUT_PATH}")
-    print(f"CAB:  {summary['CAB']['min']} — {summary['CAB']['sol']} — {summary['CAB']['max']}")
-    print(f"KIDS: {summary['KIDS']['min']} — {summary['KIDS']['sol']} — {summary['KIDS']['max']}")
-    print(f"TOTAL:{summary['TOTAL']['min']} — {summary['TOTAL']['sol']} — {summary['TOTAL']['max']}")
+    print(f"CAB:  mín {summary['CAB']['min']} — máx {summary['CAB']['max']}")
+    print(f"KIDS: mín {summary['KIDS']['min']} — máx {summary['KIDS']['max']}")
+    print(f"TOTAL:mín {summary['TOTAL']['min']} — máx {summary['TOTAL']['max']}")
 
 
 if __name__ == "__main__":
