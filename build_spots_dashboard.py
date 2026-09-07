@@ -1029,7 +1029,7 @@ def patch_html(html: str, data: dict) -> str:
         "      body+=tr(['<strong style=\"color:#a5b4fc\">'+(r.color||'Color')+'</strong>',r.zona+' · '+r.diseno,'<strong>'+r.units+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"color:#10b981\">'+r.kg+'</strong>'],' style=\"background:rgba(99,102,241,.04)\"');\n"
         "    });\n"
         "    body+=tr(['<strong style=\"color:var(--tx)\">TOTAL</strong>','Caracas + Valencia + Barquisimeto','<strong>'+totalU+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style=\"font-family:var(--fm);font-size:.85rem;color:#10b981\">'+totalKg+'</strong>'],' style=\"background:rgba(16,185,129,.08)\"');\n"
-        "    decFab.innerHTML='<div style=\"background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
+        "    decFab.innerHTML='<div style=\"background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-top:14px\">'\n"
         "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#10b981;margin-bottom:8px;font-size:.78rem\">🧵 Compra de tela — expansión ('+meses+' meses)</div>'\n"
         "      +'<div style=\"font-size:.65rem;color:var(--mu2);margin-bottom:10px\">Solo Caracas, Valencia y Barquisimeto · consumo promedio <strong style=\"color:var(--tx)\">'+kgPer+' kg/und</strong> · stock de seguridad <strong style=\"color:var(--tx)\">'+safetyLbl+'</strong></div>'\n"
         "      +'<div style=\"overflow-x:auto\"><table style=\"width:100%;border-collapse:collapse\">'+head+'<tbody>'+body+'</tbody></table></div>'\n"
@@ -1231,6 +1231,22 @@ def patch_html(html: str, data: dict) -> str:
         html = html.replace(
             '  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">',
             '  <div id="decMethodology"></div>\n  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">',
+            1,
+        )
+
+    # Compra de tela al final de Decisiones (después de curva de producción)
+    html = re.sub(r'\s*<div id="decFabric"[^>]*></div>\s*', '\n', html, count=1)
+    if 'id="decFabric"' not in html:
+        html = html.replace(
+            '      <div id="propGrid" style="display:flex;flex-direction:column;gap:14px;margin-top:10px"></div>\n'
+            '    </div>\n'
+            '  </div>\n'
+            '</div>',
+            '      <div id="propGrid" style="display:flex;flex-direction:column;gap:14px;margin-top:10px"></div>\n'
+            '    </div>\n'
+            '  </div>\n'
+            '  <div id="decFabric" style="margin-top:14px"></div>\n'
+            '</div>',
             1,
         )
 

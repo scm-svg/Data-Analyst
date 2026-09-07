@@ -209,7 +209,6 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
 <!-- DECISIONES -->
 <div class="sec" id="sec-decisiones">
   <div id="decMethodology"></div>
-  <div id="decFabric"></div>
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
     <div style="font-family:var(--fh);font-size:0.82rem;font-weight:700;color:var(--mu)">📅 Meses base para proyección:</div>
     <div style="display:flex;gap:6px">
@@ -226,6 +225,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
       <div id="propGrid" style="display:flex;flex-direction:column;gap:14px;margin-top:10px"></div>
     </div>
   </div>
+  <div id="decFabric" style="margin-top:14px"></div>
 </div>
 
 </div>
@@ -279,12 +279,14 @@ function tallasScope(genero){
     if(f.diseno&&r.diseno!==f.diseno)return;
     if(f.diseno&&r.diseno!==f.diseno)return;
     if(f.diseno&&r.diseno!==f.diseno)return;
+    if(f.diseno&&r.diseno!==f.diseno)return;
     set[r.talla]=1;
   });
   DATA.raw_rows.forEach(function(r){
     if(_modelo&&r.modelo!==_modelo)return;
     if(genero&&r.genero!==genero)return;
     if(f.color&&r.color!==f.color)return;
+    if(f.diseno&&r.diseno!==f.diseno)return;
     if(f.diseno&&r.diseno!==f.diseno)return;
     if(f.diseno&&r.diseno!==f.diseno)return;
     if(f.diseno&&r.diseno!==f.diseno)return;
@@ -845,7 +847,7 @@ function rDecisiones(){
       body+=tr(['<strong style="color:#a5b4fc">'+(r.color||'Color')+'</strong>',r.zona+' · '+r.diseno,'<strong>'+r.units+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style="color:#10b981">'+r.kg+'</strong>'],' style="background:rgba(99,102,241,.04)"');
     });
     body+=tr(['<strong style="color:var(--tx)">TOTAL</strong>','Caracas + Valencia + Barquisimeto','<strong>'+totalU+'</strong>',kgPer+' kg/und',safetyLbl,'<strong style="font-family:var(--fm);font-size:.85rem;color:#10b981">'+totalKg+'</strong>'],' style="background:rgba(16,185,129,.08)"');
-    decFab.innerHTML='<div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+    decFab.innerHTML='<div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:14px 16px;margin-top:14px">'
       +'<div style="font-family:var(--fh);font-weight:800;color:#10b981;margin-bottom:8px;font-size:.78rem">🧵 Compra de tela — expansión ('+meses+' meses)</div>'
       +'<div style="font-size:.65rem;color:var(--mu2);margin-bottom:10px">Solo Caracas, Valencia y Barquisimeto · consumo promedio <strong style="color:var(--tx)">'+kgPer+' kg/und</strong> · stock de seguridad <strong style="color:var(--tx)">'+safetyLbl+'</strong></div>'
       +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+'</tbody></table></div>'
@@ -965,6 +967,7 @@ function openFS(orig){var ov=document.createElement('div');ov.className='fs-over
 Chart.register(ChartDataLabels);
 DATA.filtros.tiendas.forEach(function(t){document.getElementById('fT').innerHTML+='<option value="'+t+'">'+t+'</option>';});
 DATA.filtros.generos.forEach(function(g){document.getElementById('fG').innerHTML+='<option value="'+g+'">'+g+'</option>';});
+(DATA.filtros.disenos||[]).forEach(function(d){var el=document.getElementById('fD');if(el)el.innerHTML+='<option value="'+d+'">'+d+'</option>';});
 (DATA.filtros.disenos||[]).forEach(function(d){var el=document.getElementById('fD');if(el)el.innerHTML+='<option value="'+d+'">'+d+'</option>';});
 (DATA.filtros.disenos||[]).forEach(function(d){var el=document.getElementById('fD');if(el)el.innerHTML+='<option value="'+d+'">'+d+'</option>';});
 (DATA.filtros.disenos||[]).forEach(function(d){var el=document.getElementById('fD');if(el)el.innerHTML+='<option value="'+d+'">'+d+'</option>';});
