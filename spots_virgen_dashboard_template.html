@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SPOTS Virgen del Valle — Producción</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--ac:#5b6af7;--gr:#10b981;--or:#f97316;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0d0e13,#1a1528,#0d0e13);border-bottom:1px solid var(--brd);padding:20px 36px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.hdr h1{font-family:var(--fh);font-size:1.45rem;font-weight:800}
+.hdr h1 em{color:var(--or);font-style:normal}
+.hdr p{color:var(--mu);font-size:.78rem;margin-top:4px;max-width:720px;line-height:1.5}
+.kpis{display:flex;gap:10px;flex-wrap:wrap}
+.kpi{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:10px 14px;text-align:center;min-width:88px}
+.kpi .v{font-family:var(--fh);font-size:1.25rem;font-weight:800;color:var(--ac)}
+.kpi .l{font-size:.62rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.kpi.hot .v{color:var(--or)}
+.kpi.ok .v{color:var(--gr)}
+.tabs{display:flex;gap:4px;padding:12px 36px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:8px 14px;font-family:var(--fh);font-size:.76rem;font-weight:700;color:var(--mu);background:transparent;border:none;cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:var(--tx);border-bottom-color:var(--ac)}
+.content{padding:20px 36px;max-width:1400px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:14px;padding:16px}
+.card h3{font-family:var(--fh);font-size:.88rem;margin-bottom:2px}
+.sub{font-size:.7rem;color:var(--mu);margin-bottom:12px;line-height:1.45}
+.note{background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.25);border-radius:12px;padding:14px 16px;font-size:.72rem;color:var(--mu);line-height:1.55;margin-bottom:14px}
+.note strong{color:var(--tx)}
+.cw{height:240px;position:relative}
+.rt{width:100%;border-collapse:collapse;font-size:.76rem}
+.rt th{text-align:left;color:var(--mu);font-size:.62rem;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--brd)}
+.rt td{padding:7px 8px;border-bottom:1px solid var(--brd)}
+.rt tr:hover td{background:rgba(91,106,247,.05)}
+.prod{font-family:var(--fh);font-weight:800;color:var(--gr)}
+.warn{color:#f59e0b;font-weight:700}
+.bad{color:#ef4444;font-weight:700}
+@media(max-width:800px){.g2{grid-template-columns:1fr}.hdr,.tabs,.content{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <h1>SPOTS · <em>Virgen del Valle</em></h1>
+    <p id="hdrSub">Proyección post-pico · VELA Margarita + WEB · prioridad corte/confección → serigrafía TS</p>
+  </div>
+  <div class="kpis" id="kpiBar"></div>
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="st('res')">📊 Resumen</button>
+  <button class="tab" onclick="st('ventas')">🛒 Ventas</button>
+  <button class="tab" onclick="st('inv')">📦 Inventario</button>
+  <button class="tab" onclick="st('prod')">🏭 Producción sugerida</button>
+</div>
+<div class="content">
+  <div class="sec active" id="sec-res">
+    <div class="note" id="methodNote"></div>
+    <div class="g2">
+      <div class="card"><h3>Ventas por mes</h3><div class="sub">Agosto vs septiembre · La Vela + Pedidos</div><div class="cw"><canvas id="cMes"></canvas></div></div>
+      <div class="card"><h3>Mix talla × género</h3><div class="sub">Base para distribuir producción</div><div class="cw"><canvas id="cMix"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Escenarios de demanda</h3><div class="sub">Resto septiembre · mitad octubre · WEB 30–40%</div><div id="scenarios"></div></div>
+  </div>
+  <div class="sec" id="sec-ventas">
+    <div class="g2">
+      <div class="card"><h3>Por tienda</h3><div class="cw"><canvas id="cTienda"></canvas></div></div>
+      <div class="card"><h3>Por talla</h3><div class="cw"><canvas id="cTalla"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Detalle ventas</h3><div class="sub">Septiembre + agosto acumulado</div><div id="ventasTbl"></div></div>
+  </div>
+  <div class="sec" id="sec-inv">
+    <div class="g2">
+      <div class="card"><h3>Stock por ubicación</h3><div class="cw"><canvas id="cInvLoc"></canvas></div></div>
+      <div class="card"><h3>Cobertura VELA (días)</h3><div class="sub">Stock tienda ÷ ritmo post-pico por variante</div><div id="cobTbl"></div></div>
+    </div>
+    <div class="card"><h3>Matriz inventario</h3><div id="invMatrix"></div></div>
+  </div>
+  <div class="sec" id="sec-prod">
+    <div class="note" id="prodNote"></div>
+    <div class="card"><h3>Cantidades sugeridas a producir</h3><div class="sub">Por género y talla · horizonte sept + mitad oct · incluye WEB</div><div id="prodTbl"></div></div>
+    <div class="g2">
+      <div class="card"><h3>Producción CAB</h3><div class="cw"><canvas id="cProdCab"></canvas></div></div>
+      <div class="card"><h3>Producción DAMA</h3><div class="cw"><canvas id="cProdDama"></canvas></div></div>
+    </div>
+  </div>
+</div>
+<script>
+var DATA=__DATA_JSON__;
+var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5};
+function st(id){
+  document.querySelectorAll('.tab').forEach(function(t,i){t.classList.toggle('active',['res','ventas','inv','prod'][i]===id);});
+  document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('sec-'+id).classList.add('active');
+}
+function cn(t){return ['#6366f1','#8b5cf6','#ec4899','#f97316','#eab308','#22c55e'][TORD[t]||0];}
+function render(){
+  var D=DATA, T=D.totals, M=D.meta, V=D.velocity;
+  document.getElementById('hdrSub').innerHTML='Actualizado '+M.ref_date+' · ritmo post-pico <strong style="color:var(--tx)">'+V.post_peak_daily+' und/día</strong> (VELA) · horizonte <strong style="color:var(--tx)">'+D.primary_scenario+'</strong>';
+  document.getElementById('kpiBar').innerHTML=
+    '<div class="kpi"><div class="v">'+T.ventas_sept+'</div><div class="l">Ventas sept</div></div>'+
+    '<div class="kpi"><div class="v">'+T.inventario_vela+'</div><div class="l">Stock VELA</div></div>'+
+    '<div class="kpi hot"><div class="v">'+T.produccion_sugerida+'</div><div class="l">Producir</div></div>'+
+    '<div class="kpi ok"><div class="v">'+T.demanda_web+'</div><div class="l">Demanda WEB</div></div>';
+  document.getElementById('methodNote').innerHTML=
+    '<strong>Contexto:</strong> el pico de lanzamiento ya pasó (≈'+Math.round(V.peak_share*100)+'% de ventas sept en los primeros '+V.peak_days+' días). '
+    +'Proyectamos <strong>'+M.rest_sept_days+' días</strong> restantes de septiembre + <strong>'+M.mid_oct_days+' días</strong> de octubre (×'+M.oct_factor+') '
+    +'con ritmo sostenido de <strong>'+V.post_peak_daily+' und/día</strong> en VELA. '
+    +'Canal WEB: <strong>'+Math.round(M.web_share*100)+'%</strong> de la proyección VELA (rango '+Math.round(M.web_share_range[0]*100)+'–'+Math.round(M.web_share_range[1]*100)+'%). '
+    +'Stock TALLER cuenta al <strong>'+Math.round(M.taller_util*100)+'%</strong> en cobertura. Buffer <strong>+'+Math.round(M.stock_buffer*100)+'%</strong>.';
+  document.getElementById('prodNote').innerHTML=
+    'Recomendación para activar <strong>corte y confección</strong> con prioridad y enviar a <strong>serigrafía TS</strong>. '
+    +'Total sugerido: <strong style="color:var(--gr);font-size:1.05rem">'+T.produccion_sugerida+' und</strong> '
+    '(VELA proj '+T.demanda_vela+' + WEB proj '+T.demanda_web+' − stock efectivo).';
+
+  var mesLabels=Object.keys(D.by_month);
+  var mesData=mesLabels.map(function(k){return D.by_month[k];});
+  new Chart(document.getElementById('cMes'),{type:'bar',data:{labels:mesLabels,datasets:[{label:'Unidades',data:mesData,backgroundColor:'#f97316bb',borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95'}}}}});
+
+  var recs=D.recommendations.filter(function(r){return r.mix_pct>0||r.stock_total;});
+  var mixLabels=recs.map(function(r){return r.genero+' '+r.talla;});
+  var mixData=recs.map(function(r){return r.ventas_total;});
+  new Chart(document.getElementById('cMix'),{type:'bar',data:{labels:mixLabels,datasets:[{label:'Ventas',data:mixData,backgroundColor:mixLabels.map(function(l){return l.startsWith('CAB')?'#6366f1bb':'#ec4899bb';}),borderRadius:4}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95',font:{size:10}}}}}});
+
+  var sh='<table class="rt"><thead><tr><th>Escenario</th><th>VELA</th><th>WEB</th><th>Total</th></tr></thead><tbody>';
+  D.scenarios.forEach(function(s){
+    sh+='<tr><td>'+s.label+'</td><td>'+s.vela_units+'</td><td>'+s.web_units+'</td><td><strong>'+s.total_units+'</strong></td></tr>';
+  });
+  document.getElementById('scenarios').innerHTML=sh+'</tbody></table>';
+
+  var stores=Object.keys(D.by_store);
+  new Chart(document.getElementById('cTienda'),{type:'doughnut',data:{labels:stores,datasets:[{data:stores.map(function(s){return D.by_store[s];}),backgroundColor:['#f97316','#6366f1','#10b981']}]},options:{plugins:{legend:{labels:{color:'#7a7b95'}}}}});
+  var tallas=Object.keys(D.by_talla).sort(function(a,b){return (TORD[a]||9)-(TORD[b]||9);});
+  new Chart(document.getElementById('cTalla'),{type:'bar',data:{labels:tallas,datasets:[{data:tallas.map(function(t){return D.by_talla[t];}),backgroundColor:tallas.map(cn),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95'}}}}});
+
+  var vt='<table class="rt"><thead><tr><th>Género</th><th>Talla</th><th>Sept</th><th>Agosto</th><th>Total</th></tr></thead><tbody>';
+  var byGT={};
+  D.ventas_rows.forEach(function(r){
+    var k=r.genero+'|'+r.talla;
+    if(!byGT[k])byGT[k]={genero:r.genero,talla:r.talla,sept:0,aug:0};
+    if(r.mes==='septiembre')byGT[k].sept+=r.qty; else byGT[k].aug+=r.qty;
+  });
+  Object.values(byGT).sort(function(a,b){return a.genero.localeCompare(b.genero)||(TORD[a.talla]||9)-(TORD[b.talla]||9);}).forEach(function(r){
+    vt+='<tr><td>'+r.genero+'</td><td>'+r.talla+'</td><td>'+r.sept+'</td><td>'+r.aug+'</td><td><strong>'+(r.sept+r.aug)+'</strong></td></tr>';
+  });
+  document.getElementById('ventasTbl').innerHTML=vt+'</tbody></table>';
+
+  var loc={};
+  D.inv_rows.forEach(function(r){loc[r.ubicacion]=(loc[r.ubicacion]||0)+r.qty;});
+  new Chart(document.getElementById('cInvLoc'),{type:'bar',data:{labels:Object.keys(loc),datasets:[{data:Object.values(loc),backgroundColor:['#10b981','#f97316','#6366f1'],borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95'}}}}});
+
+  var cb='<table class="rt"><thead><tr><th>Género</th><th>Talla</th><th>Stock VELA</th><th>Cobertura (días)</th></tr></thead><tbody>';
+  recs.forEach(function(r){
+    var cls=r.cobertura_vela_dias!=null&&r.cobertura_vela_dias<7?'bad':(r.cobertura_vela_dias<14?'warn':'');
+    cb+='<tr><td>'+r.genero+'</td><td>'+r.talla+'</td><td>'+r.stock_vela+'</td><td class="'+cls+'">'+(r.cobertura_vela_dias!=null?r.cobertura_vela_dias:'—')+'</td></tr>';
+  });
+  document.getElementById('cobTbl').innerHTML=cb+'</tbody></table>';
+
+  var im='<table class="rt"><thead><tr><th>Ubicación</th><th>Género</th><th>Talla</th><th>Cantidad</th></tr></thead><tbody>';
+  D.inv_rows.sort(function(a,b){return a.ubicacion.localeCompare(b.ubicacion)||a.genero.localeCompare(b.genero)||(TORD[a.talla]||9)-(TORD[b.talla]||9);}).forEach(function(r){
+    im+='<tr><td>'+r.ubicacion+'</td><td>'+r.genero+'</td><td>'+r.talla+'</td><td><strong>'+r.qty+'</strong></td></tr>';
+  });
+  document.getElementById('invMatrix').innerHTML=im+'</tbody></table>';
+
+  var pt='<table class="rt"><thead><tr><th>Género</th><th>Talla</th><th>Mix%</th><th>Demanda VELA</th><th>Demanda WEB</th><th>Stock eff.</th><th>Producir</th></tr></thead><tbody>';
+  recs.forEach(function(r){
+    pt+='<tr><td>'+r.genero+'</td><td>'+r.talla+'</td><td>'+r.mix_pct+'%</td><td>'+r.demanda_vela+'</td><td>'+r.demanda_web+'</td><td>'+r.stock_efectivo+'</td><td class="prod"><strong>'+r.produccion_sugerida+'</strong></td></tr>';
+  });
+  pt+='<tr style="background:rgba(16,185,129,.08)"><td colspan="6"><strong>TOTAL PRODUCCIÓN SUGERIDA</strong></td><td class="prod"><strong>'+T.produccion_sugerida+'</strong></td></tr>';
+  document.getElementById('prodTbl').innerHTML=pt+'</tbody></table>';
+
+  function prodChart(id, gen){
+    var rows=recs.filter(function(r){return r.genero===gen;}).sort(function(a,b){return (TORD[a.talla]||9)-(TORD[b.talla]||9);});
+    new Chart(document.getElementById(id),{type:'bar',data:{labels:rows.map(function(r){return r.talla;}),datasets:[
+      {label:'Producir',data:rows.map(function(r){return r.produccion_sugerida;}),backgroundColor:'#10b981bb',borderRadius:6},
+      {label:'Stock VELA',data:rows.map(function(r){return r.stock_vela;}),backgroundColor:'#6366f144',borderColor:'#6366f1',borderWidth:1,borderRadius:6}
+    ]},options:{plugins:{legend:{labels:{color:'#7a7b95'}}},scales:{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95'}}}}});
+  }
+  prodChart('cProdCab','CAB');
+  prodChart('cProdDama','DAMA');
+}
+render();
+</script>
+</body>
+</html>
