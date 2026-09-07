@@ -10,6 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from build_spots_dashboard import (
     DEFAULT_PROD_MONTHS,
+    EXPANSION_CAPS,
     FABRIC_KG_PER_UNIT,
     FABRIC_SAFETY_PCT,
     ZONE_ADICIONAL_COLOR,
@@ -368,6 +369,308 @@ def _write_tela(wb, data):
     _style_range(ws, row, 1, 6, fill=TOTAL_FILL, font=TOTAL_FONT)
 
 
+def _fabric_kg(units: int) -> int:
+    return round(units * FABRIC_KG_PER_UNIT * (1 + FABRIC_SAFETY_PCT))
+
+
+def _parse_label(label: str):
+    if " · Blanco (" in label:
+        diseno, rest = label.split(" · Blanco (")
+        return rest.rstrip(")").upper(), diseno, "Blanco"
+    if " · " in label:
+        color, zona = label.rsplit(" · ", 1)
+        cap = EXPANSION_CAPS.get(zona.upper(), {})
+        diseno = cap.get("blanco_diseno") or cap.get("adicional_diseno") or color
+        if color != "Blanco" and zona.upper() == "BARQUISIMETO":
+            diseno = "Ciudad"
+        return zona.upper(), diseno, color
+    return None, None, None
+
+
+def parse_consolidated_sheet(ws, genero: str):
+    """Lee filas de detalle desde pestaña CAB o DAMA."""
+    tallas = []
+    rows = []
+    for row in ws.iter_rows(values_only=True):
+        vals = list(row)
+        if not any(v is not None for v in vals):
+            continue
+        if vals[0] in (f"SPOTS MANGA CORTA {genero}",):
+            tallas = [v for v in vals[1:-1] if v]
+            continue
+        if vals[0] in (
+            "CANTIDADES POR COLORES",
+            "TOTAL BLANCO",
+            "TOTAL COLORES",
+            "TOTAL GENERAL",
+        ):
+            continue
+        if not tallas or not vals[0]:
+            continue
+        zona, diseno, color = _parse_label(str(vals[0]))
+        if not zona:
+            continue
+        qtys = {str(t): int(vals[i + 1] or 0) for i, t in enumerate(tallas)}
+        total = int(vals[len(tallas) + 1] or sum(qtys.values()))
+        rows.append({
+            "label": vals[0],
+            "zona": zona,
+            "diseno": diseno,
+            "color": color,
+            "genero": genero,
+            "tallas": qtys,
+            "total": total,
+        })
+    return tallas, rows
+
+
+def build_manual_bundle(cab_rows, dama_rows, months=DEFAULT_PROD_MONTHS):
+    """Construye estructura coherente desde CAB+DAMA editados manualmente."""
+    all_rows = cab_rows + dama_rows
+    stores = {}
+    for r in all_rows:
+        z = r["zona"]
+        stores.setdefault(z, {
+            "store": z,
+            "label": EXPANSION_CAPS.get(z, {}).get("label", z.title()),
+            "adicional_color": ZONE_ADICIONAL_COLOR.get(z, ""),
+            "designs": defaultdict(lambda: defaultdict(lambda: defaultdict(dict))),
+        })
+        stores[z]["designs"][r["diseno"]][r["color"]][r["genero"]] = dict(r["tallas"])
+
+    by_store = []
+    total_blanco = total_color = 0
+    blanco_detail = []
+    adicional_by_zone = []
+
+    for z in ("CARACAS", "VALENCIA", "BARQUISIMETO"):
+        if z not in stores:
+            continue
+        s = stores[z]
+        zb = zc = 0
+        designs_meta = []
+        for diseno, by_color in sorted(s["designs"].items()):
+            for color, by_gen in sorted(by_color.items()):
+                t_total = sum(sum(by_gen[g].values()) for g in by_gen)
+                designs_meta.append({"diseno": diseno, "color": color, "target_3m": t_total})
+                if color == "Blanco":
+                    zb += t_total
+                    if z == "BARQUISIMETO":
+                        blanco_detail.append({
+                            "detalle": diseno,
+                            "units": t_total,
+                            "kg": _fabric_kg(t_total),
+                        })
+                else:
+                    zc += t_total
+                    adicional_by_zone.append({
+                        "color": color,
+                        "zona": z.title(),
+                        "detalle": diseno,
+                        "units": t_total,
+                        "kg": _fabric_kg(t_total),
+                    })
+        total_z = zb + zc
+        if z == "BARQUISIMETO":
+            def _design_total(dname, color):
+                by_color = s["designs"].get(dname, {})
+                by_gen = by_color.get(color, {})
+                return sum(sum(t.values()) for t in by_gen.values())
+
+            ciudad_b = _design_total("Ciudad", "Blanco")
+            virgen_b = _design_total("Virgen", "Blanco")
+            verde = zc
+            s["label"] = (
+                f"Barquisimeto · 1 tienda · MC · Ciudad {ciudad_b} + Virgen {virgen_b} + "
+                f"Verde {verde} · total {total_z}"
+            )
+        elif z == "CARACAS":
+            s["label"] = (
+                f"Caracas · 4 tiendas CCS · MC · Blanco {zb} + Azul Marino {zc} · total {total_z}"
+            )
+        elif z == "VALENCIA":
+            s["label"] = (
+                f"Valencia · 2 tiendas · MC · Blanco {zb} + Vinotinto {zc} · total {total_z}"
+            )
+        total_blanco += zb
+        total_color += zc
+        by_store.append({
+            **s,
+            "blanco": zb,
+            "adicional": zc,
+            "total": zb + zc,
+            "designs": designs_meta,
+            "rows": all_rows,
+        })
+
+    total_exp = total_blanco + total_color
+    fabric = {
+        "kg_per_unit": FABRIC_KG_PER_UNIT,
+        "safety_pct": FABRIC_SAFETY_PCT,
+        "blanco": {"units": total_blanco, "kg": _fabric_kg(total_blanco)},
+        "blanco_detail": blanco_detail,
+        "adicional_by_zone": adicional_by_zone,
+        "total": {"units": total_exp, "kg": _fabric_kg(total_exp)},
+    }
+    expansion = {
+        "by_store": by_store,
+        "total_blanco": total_blanco,
+        "total_adicional": total_color,
+        "total_expansion": total_exp,
+        "nota": (
+            f"Cantidades ajustadas manualmente · horizonte {months} meses · "
+            "colores: Caracas Azul Marino · Valencia Vinotinto · Barquisimeto Verde."
+        ),
+    }
+    return {
+        "months": months,
+        "cab_rows": cab_rows,
+        "dama_rows": dama_rows,
+        "expansion": expansion,
+        "fabric": fabric,
+        "velocity_months_label": "",
+        "high_season_factor": 1.2,
+        "december_hs_factor": 1.4,
+        "additional_color_factor": 0.7,
+    }
+
+
+def _zone_rows_from_manual(store, genero):
+    grouped = defaultdict(lambda: defaultdict(int))
+    z = store["store"]
+    for r in store.get("rows", []):
+        if r["genero"] != genero or r["zona"] != z:
+            continue
+        label = f"{r['diseno']} ({r['color']})"
+        for t, q in r["tallas"].items():
+            grouped[label][t] += q
+    tallas = [t for t in TALLA_ORDER if any(grouped[l].get(t) for l in grouped)]
+    rows = [(label, dict(grouped[label])) for label in sorted(grouped)]
+    return tallas, rows
+
+
+def _write_zone_sheet_manual(wb, store, months):
+    zone = store["store"]
+    ws = wb.create_sheet(zone.title())
+    ws.column_dimensions["A"].width = 34
+    for i in range(2, 10):
+        ws.column_dimensions[get_column_letter(i)].width = 8
+
+    row = 1
+    ws.cell(row=row, column=1, value=f"SPOTS MANGA CORTA — {zone} · Proyección {months} meses")
+    ws.cell(row=row, column=1).font = Font(bold=True, size=13)
+    row += 2
+    ws.cell(row=row, column=1, value=store.get("label", ""))
+    row += 2
+
+    zone_total = 0
+    for genero in ("CAB", "DAMA"):
+        tallas, rows = _zone_rows_from_manual(store, genero)
+        if not rows:
+            continue
+        ws.cell(row=row, column=1, value=genero).font = Font(bold=True, size=11)
+        ws.cell(row=row, column=1).fill = SECTION_FILL
+        row += 1
+        row, sub = _write_matrix(ws, row, f"SPOTS MANGA CORTA {genero} — {zone}", tallas, rows)
+        zone_total += sub
+
+    ws.cell(row=row, column=1, value=f"TOTAL ZONA {zone}").font = Font(bold=True, size=11)
+    ws.cell(row=row, column=2, value=zone_total).font = Font(bold=True, size=11)
+
+
+def _write_colores_sheet_manual(wb, bundle, genero):
+    ws = wb.create_sheet(genero)
+    ws.column_dimensions["A"].width = 36
+    for i in range(2, 12):
+        ws.column_dimensions[get_column_letter(i)].width = 8
+
+    rows_in = bundle["cab_rows"] if genero == "CAB" else bundle["dama_rows"]
+    blanco_rows = [r for r in rows_in if r["color"] == "Blanco"]
+    color_rows = [r for r in rows_in if r["color"] != "Blanco"]
+    all_tallas = [t for t in TALLA_ORDER if any(r["tallas"].get(t) for r in rows_in)]
+
+    row = 1
+    ws.cell(row=row, column=1, value="CANTIDADES POR COLORES").font = Font(bold=True, size=13)
+    row += 1
+    hdr = row
+    ws.cell(row=hdr, column=1, value=f"SPOTS MANGA CORTA {genero}")
+    for i, t in enumerate(all_tallas, start=2):
+        ws.cell(row=hdr, column=i, value=t)
+    ws.cell(row=hdr, column=len(all_tallas) + 2, value="Tot")
+    _style_range(ws, hdr, 1, len(all_tallas) + 2, fill=HDR_FILL, font=HDR_FONT)
+    row = hdr + 1
+
+    def write_block(items, total_label=None):
+        nonlocal row
+        col_totals = defaultdict(int)
+        section_total = 0
+        for r in items:
+            ws.cell(row=row, column=1, value=r["label"])
+            row_sum = 0
+            for i, t in enumerate(all_tallas, start=2):
+                qty = int(r["tallas"].get(t, 0) or 0)
+                if qty:
+                    ws.cell(row=row, column=i, value=qty)
+                col_totals[t] += qty
+                row_sum += qty
+            ws.cell(row=row, column=len(all_tallas) + 2, value=row_sum)
+            section_total += row_sum
+            _style_range(ws, row, 1, len(all_tallas) + 2)
+            row += 1
+        if total_label:
+            ws.cell(row=row, column=1, value=total_label).font = TOTAL_FONT
+            for i, t in enumerate(all_tallas, start=2):
+                if col_totals[t]:
+                    ws.cell(row=row, column=i, value=col_totals[t])
+            ws.cell(row=row, column=len(all_tallas) + 2, value=section_total)
+            _style_range(ws, row, 1, len(all_tallas) + 2, fill=TOTAL_FILL, font=TOTAL_FONT)
+            row += 1
+        return section_total, col_totals
+
+    grand_cols = defaultdict(int)
+    b_tot, b_cols = write_block(blanco_rows, "TOTAL BLANCO")
+    row += 1
+    c_tot, c_cols = write_block(color_rows, "TOTAL COLORES")
+    for t, v in b_cols.items():
+        grand_cols[t] += v
+    for t, v in c_cols.items():
+        grand_cols[t] += v
+    grand = b_tot + c_tot
+    ws.cell(row=row, column=1, value="TOTAL GENERAL").font = Font(bold=True, size=11)
+    for i, t in enumerate(all_tallas, start=2):
+        if grand_cols[t]:
+            ws.cell(row=row, column=i, value=grand_cols[t])
+    ws.cell(row=row, column=len(all_tallas) + 2, value=grand)
+    _style_range(ws, row, 1, len(all_tallas) + 2, fill=PatternFill("solid", fgColor="D1FAE5"), font=TOTAL_FONT)
+
+
+def export_from_bundle(bundle, out_path: Path):
+    months = bundle["months"]
+    data = {**bundle, **bundle["fabric"]}
+    wb = Workbook()
+    wb.remove(wb.active)
+    _write_resumen(wb, bundle, months)
+    _write_colores_sheet_manual(wb, bundle, "CAB")
+    _write_colores_sheet_manual(wb, bundle, "DAMA")
+    for store in bundle["expansion"]["by_store"]:
+        _write_zone_sheet_manual(wb, store, months)
+    _write_tela(wb, bundle)
+    wb.save(out_path)
+    return out_path
+
+
+def sync_produccion_xlsx(source_path: Path, out_path: Path = OUT_PATH, months=DEFAULT_PROD_MONTHS):
+    """Toma CAB/DAMA editados manualmente y regenera todas las pestañas."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(source_path, data_only=True)
+    _, cab_rows = parse_consolidated_sheet(wb["CAB"], "CAB")
+    _, dama_rows = parse_consolidated_sheet(wb["DAMA"], "DAMA")
+    bundle = build_manual_bundle(cab_rows, dama_rows, months)
+    export_from_bundle(bundle, out_path)
+    return bundle, out_path
+
+
 def export_produccion_xlsx(months: int = DEFAULT_PROD_MONTHS, out_path: Path = OUT_PATH) -> Path:
     data = rebuild_data()
     wb = Workbook()
@@ -385,6 +688,18 @@ def export_produccion_xlsx(months: int = DEFAULT_PROD_MONTHS, out_path: Path = O
 
 
 def main():
+    import sys
+
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    if src and src.exists():
+        bundle, path = sync_produccion_xlsx(src)
+        exp = bundle["expansion"]
+        print(f"Synced {src.name} → {path}")
+        print(f"Expansión {exp['total_expansion']} und · Tela {bundle['fabric']['total']['kg']} kg")
+        for s in exp["by_store"]:
+            print(f"  {s['store']}: {s['total']} (B{s['blanco']} + {s['adicional_color']} {s['adicional']})")
+        return
+
     path = export_produccion_xlsx()
     data = rebuild_data()
     exp = data["expansion"]
