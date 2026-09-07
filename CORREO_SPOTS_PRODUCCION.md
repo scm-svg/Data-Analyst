@@ -30,10 +30,10 @@ Informo que **ya se registró la solicitud** en el módulo de aprobaciones con e
 
 | Zona | Blanco | Color zona | **Total** |
 |------|-------:|-----------:|----------:|
-| Caracas | 279 | Azul Marino 196 | **475** |
-| Valencia | 221 | Vinotinto 154 | **375** |
-| Barquisimeto | 420 | Verde 154 | **574** |
-| **Total** | **920** | **504** | **1.424** |
+| Caracas | 283 | Azul Marino 209 | **492** |
+| Valencia | 228 | Vinotinto 174 | **402** |
+| Barquisimeto | 441 | Verde 175 | **616** |
+| **Total** | **952** | **558** | **1.510** |
 
 *Barquisimeto blanco: Ciudad **220** + Virgen **200** (festividad dic. ×1,4).*
 
@@ -41,11 +41,11 @@ Informo que **ya se registró la solicitud** en el módulo de aprobaciones con e
 
 | Material | Unidades | Tela |
 |----------|----------|------|
-| Blanco | 920 | **497 kg** |
-| Azul Marino — Caracas | 196 | **106 kg** |
-| Vinotinto — Valencia | 154 | **83 kg** |
-| Verde — Barquisimeto | 154 | **83 kg** |
-| **TOTAL** | **1.424** | **769 kg** |
+| Blanco | 952 | **515 kg** |
+| Azul Marino — Caracas | 209 | **113 kg** |
+| Vinotinto — Valencia | 174 | **94 kg** |
+| Verde — Barquisimeto | 175 | **94 kg** |
+| **TOTAL** | **1.510** | **815 kg** |
 
 *0,45 kg/und · +20% stock de seguridad.*
 

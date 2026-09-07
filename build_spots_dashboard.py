@@ -676,7 +676,11 @@ def rebuild_data() -> dict:
     prod_curve, summary_prod = compute_prod_curve(raw_rows, stock, stock_taller, vel_months)
     rebalance_prod_curve_tallas(prod_curve, store_rows_vela, vel_months)
     summary_prod = _summarize_prod(prod_curve)
-    expansion = compute_expansion(raw_rows, vel_months, prod_curve)
+    from spots_produccion_manual import load_manual_expansion
+
+    expansion = load_manual_expansion(vel_months=vel_months)
+    if expansion is None:
+        expansion = compute_expansion(raw_rows, vel_months, prod_curve)
     prod_zones = build_prod_zones(prod_curve, summary_prod, expansion)
 
     tiendas = sorted({r["tienda"] for r in raw_rows})
@@ -971,7 +975,7 @@ def patch_html(html: str, data: dict) -> str:
         "      +'<div><strong style=\"color:var(--tx)\">Valencia · Barquisimeto</strong><br>Valencia ~<strong style=\"color:var(--tx)\">350-400</strong> und. BQT: Ciudad <strong style=\"color:var(--tx)\">220</strong> + Virgen <strong style=\"color:var(--tx)\">200</strong> (dic ×'+dicHs+') + Verde 70% Ciudad · total <strong style=\"color:var(--tx)\">574</strong>.</div>'\n"
         "      +'</div></div>'\n"
         "      +'<div style=\"background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.28);border-radius:12px;padding:14px 16px;margin-bottom:14px\">'\n"
-        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)</div>'\n"
+        "      +'<div style=\"font-family:var(--fh);font-weight:800;color:#f97316;margin-bottom:8px;font-size:.78rem\">🚀 Proyección expansión — 3 meses (Caracas · Valencia · Barquisimeto)'+(exp.source==='manual_xlsx'?' · <span style=\"color:#10b981\">ajustado manual</span>':'')+'</div>'\n"
         "      +'<div style=\"display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px\">'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1.2rem;font-weight:800;color:var(--tx)\">'+(exp.total_expansion||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">und total</span></div>'\n"
         "      +'<div><span style=\"font-family:var(--fm);font-size:1rem;font-weight:700;color:#e4e4e7\">'+(exp.total_blanco||0)+'</span> <span style=\"font-size:.65rem;color:var(--mu)\">Blanco</span></div>'\n"
