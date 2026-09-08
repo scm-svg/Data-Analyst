@@ -52,6 +52,11 @@ TOTAL_FILL = PatternFill("solid", fgColor="E5E7EB")
 TOTAL_FONT = Font(bold=True)
 ACCENT_FILL = PatternFill("solid", fgColor="D1FAE5")
 ACCENT_FONT = Font(bold=True, color="065F46")
+SECTION_FILL = PatternFill("solid", fgColor="F3F4F6")
+REF_FONT = Font(italic=True, color="666666", size=10)
+
+CAB_TALLAS = ["S", "M", "L", "XL", "2XL"]
+DAMA_TALLAS = ["XS", "S", "M", "L", "XL"]
 
 
 def norm_store(name: str) -> str:
@@ -368,8 +373,8 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
     }
 
 
-def _style_range(ws, row, c1, c2, fill=None, font=None):
-    for c in range(c1, c2 + 1):
+def _style_range(ws, row, col_start, col_end, fill=None, font=None):
+    for c in range(col_start, col_end + 1):
         cell = ws.cell(row=row, column=c)
         cell.border = BORDER
         cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -379,6 +384,118 @@ def _style_range(ws, row, c1, c2, fill=None, font=None):
             cell.font = font
 
 
+def _recs_by_talla(recs, genero: str, field: str = "produccion_sugerida"):
+    tallas = CAB_TALLAS if genero == "CAB" else DAMA_TALLAS
+    lookup = {r["talla"]: r for r in recs if r["genero"] == genero}
+    return tallas, lookup
+
+
+def _write_matrix(ws, start_row, title, tallas, rows_data, prod_font=None):
+    """Matriz estilo SPOTS_PRODUCCION_EXPANSION: diseño/color × talla."""
+    ws.cell(row=start_row, column=1, value="CANTIDADES POR DISEÑO / COLOR").font = TITLE_FONT
+    hdr_row = start_row + 1
+    ws.cell(row=hdr_row, column=1, value=title).font = Font(bold=True)
+    ws.cell(row=hdr_row, column=1).alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    for i, t in enumerate(tallas, start=2):
+        ws.cell(row=hdr_row, column=i, value=t)
+    ws.cell(row=hdr_row, column=len(tallas) + 2, value="Tot")
+    _style_range(ws, hdr_row, 1, len(tallas) + 2, HDR_FILL, HDR_FONT)
+
+    r = hdr_row + 1
+    col_totals = defaultdict(int)
+    grand = 0
+    for label, by_talla, is_ref in rows_data:
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=1).alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        if is_ref:
+            ws.cell(row=r, column=1).font = REF_FONT
+        row_sum = 0
+        for i, t in enumerate(tallas, start=2):
+            qty = int(by_talla.get(t, 0) or 0)
+            if qty:
+                cell = ws.cell(row=r, column=i, value=qty)
+                if is_ref:
+                    cell.font = REF_FONT
+                elif prod_font:
+                    cell.font = prod_font
+                    cell.fill = ACCENT_FILL
+            col_totals[t] += 0 if is_ref else qty
+            row_sum += 0 if is_ref else qty
+        if not is_ref:
+            tot_cell = ws.cell(row=r, column=len(tallas) + 2, value=row_sum)
+            if prod_font:
+                tot_cell.font = prod_font
+                tot_cell.fill = ACCENT_FILL
+            grand += row_sum
+        else:
+            ref_sum = sum(int(by_talla.get(t, 0) or 0) for t in tallas)
+            ws.cell(row=r, column=len(tallas) + 2, value=ref_sum).font = REF_FONT
+        _style_range(ws, r, 1, len(tallas) + 2)
+        r += 1
+
+    ws.cell(row=r, column=1, value="TOTAL").font = TOTAL_FONT
+    for i, t in enumerate(tallas, start=2):
+        if col_totals[t]:
+            ws.cell(row=r, column=i, value=col_totals[t])
+    ws.cell(row=r, column=len(tallas) + 2, value=grand)
+    _style_range(ws, r, 1, len(tallas) + 2, TOTAL_FILL, TOTAL_FONT)
+    ws.cell(r, len(tallas) + 2).fill = ACCENT_FILL
+    return r + 2, grand
+
+
+def _matrix_rows_for_gen(recs, genero: str):
+    tallas, lookup = _recs_by_talla(recs, genero)
+    prod = {t: lookup[t]["produccion_sugerida"] if t in lookup else 0 for t in tallas}
+    ventas = {t: lookup[t]["ventas_sept"] if t in lookup else 0 for t in tallas}
+    rows = [
+        ("Virgen del Valle (Blanco)", prod, False),
+        ("↳ Ref. ventas sept (curva)", ventas, True),
+    ]
+    return tallas, rows
+
+
+def _write_gen_matrix_sheet(wb, genero: str, recs: list, zone_label: str = "VELA + WEB"):
+    ws = wb.create_sheet(genero)
+    ws.column_dimensions["A"].width = 34
+    for i in range(2, 12):
+        ws.column_dimensions[get_column_letter(i)].width = 8
+    tallas, rows = _matrix_rows_for_gen(recs, genero)
+    ws.cell(1, 1, f"SPOTS MANGA CORTA — Virgen del Valle · {zone_label}").font = Font(bold=True, size=13)
+    row, total = _write_matrix(
+        ws, 3, f"SPOTS MANGA CORTA {genero} — Virgen del Valle · {zone_label}",
+        tallas, rows, ACCENT_FONT,
+    )
+    ws.cell(row, 1, f"TOTAL {genero}").font = Font(bold=True, size=11)
+    ws.cell(row, 2, total).font = ACCENT_FONT
+    return total
+
+
+def _write_produccion_sheet(wb, recs: list, total_prod: int):
+    ws = wb.create_sheet("PRODUCCION", 1)
+    ws.column_dimensions["A"].width = 34
+    for i in range(2, 12):
+        ws.column_dimensions[get_column_letter(i)].width = 8
+    ws.cell(1, 1, "SPOTS Virgen del Valle — Producción sugerida · Margarita (VELA) + WEB").font = Font(bold=True, size=13)
+    row = 3
+    zone_total = 0
+    for genero in GENDER_ORDER:
+        ws.cell(row, 1, genero).font = Font(bold=True, size=11)
+        ws.cell(row, 1).fill = SECTION_FILL
+        row += 1
+        tallas, rows = _matrix_rows_for_gen(recs, genero)
+        row, sub = _write_matrix(
+            ws, row, f"SPOTS MANGA CORTA {genero} — Virgen del Valle · VELA + WEB",
+            tallas, rows, ACCENT_FONT,
+        )
+        zone_total += sub
+        row += 1
+    ws.cell(row, 1, "TOTAL PRODUCCIÓN SUGERIDA").font = Font(bold=True, size=12)
+    ws.cell(row, 2, zone_total).font = Font(bold=True, size=12, color="065F46")
+    ws.cell(row, 2).fill = ACCENT_FILL
+    if zone_total != total_prod:
+        ws.cell(row, 3, f"(detalle: {total_prod})").font = REF_FONT
+
+
 def export_xlsx(data: dict, path: Path):
     wb = Workbook()
     recs = data["recommendations"]
@@ -386,7 +503,7 @@ def export_xlsx(data: dict, path: Path):
     wb.remove(wb.active)
 
     # RESUMEN
-    ws = wb.create_sheet("RESUMEN")
+    ws = wb.create_sheet("RESUMEN", 0)
     ws.column_dimensions["A"].width = 34
     ws.column_dimensions["B"].width = 18
     rows = [
@@ -422,10 +539,12 @@ def export_xlsx(data: dict, path: Path):
             ws.cell(i, 2).font = ACCENT_FONT
             ws.cell(i, 2).fill = ACCENT_FILL
 
+    total_prod = data["totals"]["produccion_sugerida"]
+    _write_produccion_sheet(wb, recs, total_prod)
     for gen in GENDER_ORDER:
-        _write_gen_sheet(wb, gen, recs)
+        _write_gen_matrix_sheet(wb, gen, recs)
 
-    ws_ped = wb.create_sheet("PEDIDO_TS", 1)
+    ws_ped = wb.create_sheet("PEDIDO_TS")
     ws_ped.append(["Género", "Talla", "Cantidad a producir", "Demanda VELA", "Demanda WEB", "Stock VELA actual"])
     for c in range(1, 7):
         ws_ped.cell(1, c).fill = HDR_FILL
@@ -457,52 +576,6 @@ def export_xlsx(data: dict, path: Path):
         ws2.cell(1, c).font = HDR_FONT
 
     wb.save(path)
-
-
-def _write_gen_sheet(wb, genero: str, recs: list):
-    ws = wb.create_sheet(genero)
-    headers = [
-        "Talla", "Mix %", "Ventas sept", "Stock VELA", "Stock TALLER", "Stock WEB",
-        "Demanda VELA", "Demanda WEB", "Demanda total", "Stock efectivo",
-        "Producción sugerida", "Cobertura VELA (días)",
-    ]
-    ws.append([f"SPOTS MANGA CORTA {genero} · Virgen del Valle · Blanco"])
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    ws.cell(1, 1).font = TITLE_FONT
-    ws.append(headers)
-    _style_range(ws, 2, 1, len(headers), HDR_FILL, HDR_FONT)
-
-    gen_recs = [r for r in recs if r["genero"] == genero]
-    r = 3
-    col_totals = defaultdict(int)
-    for rec in sorted(gen_recs, key=lambda x: talla_idx(x["talla"])):
-        row = [
-            rec["talla"], rec["mix_pct"], rec["ventas_sept"],
-            rec["stock_vela"], rec["stock_taller"], rec["stock_web"],
-            rec["demanda_vela"], rec["demanda_web"], rec["demanda_total"],
-            rec["stock_efectivo"], rec["produccion_sugerida"],
-            rec["cobertura_vela_dias"] if rec["cobertura_vela_dias"] is not None else "—",
-        ]
-        ws.append(row)
-        for i, val in enumerate(row[2:], 3):
-            if isinstance(val, (int, float)):
-                col_totals[i] += val
-        if rec["produccion_sugerida"] > 0:
-            ws.cell(r, 11).font = ACCENT_FONT
-            ws.cell(r, 11).fill = ACCENT_FILL
-        _style_range(ws, r, 1, len(headers))
-        r += 1
-
-    ws.cell(r, 1, "TOTAL").font = TOTAL_FONT
-    for c, key in [(3, "ventas_sept"), (4, "stock_vela"), (5, "stock_taller"), (6, "stock_web"),
-                   (7, "demanda_vela"), (8, "demanda_web"), (9, "demanda_total"),
-                   (10, "stock_efectivo"), (11, "produccion_sugerida")]:
-        ws.cell(r, c, sum(x[key] for x in gen_recs))
-    _style_range(ws, r, 1, len(headers), TOTAL_FILL, TOTAL_FONT)
-    ws.cell(r, 11).fill = ACCENT_FILL
-
-    for i, w in enumerate([8, 8, 10, 10, 12, 10, 12, 12, 12, 12, 16, 14], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
 
 
 TEMPLATE_PATH = ROOT / "spots_virgen_dashboard_template.html"
