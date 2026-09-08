@@ -104,17 +104,18 @@ function render(){
     '<div class="kpi"><div class="v">'+T.ventas_sept+'</div><div class="l">Ventas sept</div></div>'+
     '<div class="kpi"><div class="v">'+T.inventario_vela+'</div><div class="l">Stock VELA</div></div>'+
     '<div class="kpi hot"><div class="v">'+T.produccion_sugerida+'</div><div class="l">Producir</div></div>'+
-    '<div class="kpi ok"><div class="v">'+T.demanda_web+'</div><div class="l">Demanda WEB</div></div>';
+    '<div class="kpi ok"><div class="v">'+T.pool_cover_days+'d</div><div class="l">Pool cobertura</div></div>';
   document.getElementById('methodNote').innerHTML=
-    '<strong>Contexto:</strong> el pico de lanzamiento ya pasó (≈'+Math.round(V.peak_share*100)+'% de ventas sept en los primeros '+V.peak_days+' días). '
-    +'Proyectamos <strong>'+M.rest_sept_days+' días</strong> restantes de septiembre + <strong>'+M.mid_oct_days+' días</strong> de octubre (×'+M.oct_factor+') '
-    +'con ritmo sostenido de <strong>'+V.post_peak_daily+' und/día</strong> en VELA. '
-    +'Canal WEB: <strong>'+Math.round(M.web_share*100)+'%</strong> de la proyección VELA (rango '+Math.round(M.web_share_range[0]*100)+'–'+Math.round(M.web_share_range[1]*100)+'%). '
-    +'Stock TALLER cuenta al <strong>'+Math.round(M.taller_util*100)+'%</strong> en cobertura. Buffer <strong>+'+Math.round(M.stock_buffer*100)+'%</strong>.';
+    '<strong>Revisión metodológica:</strong> el modelo anterior (295 und) proyectaba todo sept+oct como si no existiera inventario. '
+    +'Con <strong>'+T.inventario_total+' und</strong> en VELA+TALLER el pool agregado ya cubre ~<strong>'+T.pool_cover_days+' días</strong> al ritmo post-pico (<strong>'+V.post_peak_daily+' und/día</strong>). '
+    +'La nueva recomendación cubre <strong>'+M.coverage_days_vela+' días</strong> en piso VELA por talla + <strong>'+M.coverage_days_web+' días</strong> incremental WEB ('+Math.round(M.web_share*100)+'%), '
+    +'descontando solo <strong>'+Math.round(M.taller_replenish*100)+'%</strong> del TALLER como reposición inmediata a tienda. '
+    +'Tope <strong>'+M.max_production+' und</strong> · objetivo '+M.target_note+'.';
   document.getElementById('prodNote').innerHTML=
-    'Recomendación para activar <strong>corte y confección</strong> con prioridad y enviar a <strong>serigrafía TS</strong>. '
-    +'Total sugerido: <strong style="color:var(--gr);font-size:1.05rem">'+T.produccion_sugerida+' und</strong> '
-    '(VELA proj '+T.demanda_vela+' + WEB proj '+T.demanda_web+' − stock efectivo).';
+    'Priorizar <strong>corte/confección → TS</strong> en quiebres reales (sobre todo <strong>DAMA M</strong> y <strong>DAMA XS</strong>). '
+    +'Total sugerido: <strong style="color:var(--gr);font-size:1.05rem">'+T.produccion_sugerida+' und</strong>'
+    +(M.production_capped?' (ajustado al tope '+M.max_production+')':'')
+    +' · posición objetivo ~'+M.coverage_days_vela+'d post-pico en tienda + reserva WEB.';
 
   var mesLabels=Object.keys(D.by_month);
   var mesData=mesLabels.map(function(k){return D.by_month[k];});

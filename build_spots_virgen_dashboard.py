@@ -22,19 +22,25 @@ XLSX_PATH = ROOT / "SPOTS_VIRGEN_PRODUCCION_SUGERIDA.xlsx"
 DISENO = "Virgen del Valle"
 MODELO = "SPOTS MANGA CORTA"
 COLOR = "Blanco"
-REF_DATE = date(2026, 9, 7)
+REF_DATE = date(2026, 9, 8)
 TALLA_ORDER = ["XS", "S", "M", "L", "XL", "2XL"]
 GENDER_ORDER = ["CAB", "DAMA"]
 STORE_MAP = {"la vela": "VELA", "vela": "VELA", "pedidos": "PEDIDOS", "web": "WEB", "taller": "TALLER"}
 
-# Proyección post-pico · sept restante + mitad octubre
-PEAK_DAYS = 4
-WEB_SHARE = 0.35
+# Cobertura post-pico — el pool (267 und) ya cubre ~32 días agregados; producir solo quiebres + WEB
+COVERAGE_DAYS_VELA = 20
+COVERAGE_DAYS_WEB = 14
+WEB_SHARE = 0.33
 WEB_SHARE_RANGE = (0.30, 0.40)
-STOCK_BUFFER = 0.12
-TALLER_UTIL = 0.55
+TALLER_REPLENISH = 0.15
+STOCK_BUFFER = 0.0
+MAX_PRODUCTION = 120
+TARGET_PRODUCTION_NOTE = "100–120 und · quiebres talla en tienda + reserva WEB incremental"
+POST_PEAK_WINDOW = 3
 OCT_FACTOR = 0.88
-MIN_PRODUCE = 2
+MIN_PRODUCE = 0
+
+PEAK_DAYS = 4
 
 THIN = Side(style="thin", color="CCCCCC")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -122,17 +128,16 @@ def aggregate(rows, *keys):
 
 def compute_velocity(sept_vela: int, days_elapsed: int):
     peak_days = min(PEAK_DAYS, max(days_elapsed - 1, 1))
-    recent_days = max(days_elapsed - peak_days, 1)
     peak_share = min(0.78, 0.45 + peak_days * 0.08)
     peak_sales = sept_vela * peak_share
     recent_sales = max(sept_vela - peak_sales, 0)
     peak_daily = peak_sales / peak_days if peak_days else 0
-    post_peak_daily = recent_sales / recent_days if recent_days else sept_vela / max(days_elapsed, 1)
+    post_peak_daily = recent_sales / POST_PEAK_WINDOW
     observed_daily = sept_vela / max(days_elapsed, 1)
     return {
         "days_elapsed": days_elapsed,
         "peak_days": peak_days,
-        "recent_days": recent_days,
+        "recent_days": POST_PEAK_WINDOW,
         "peak_share": round(peak_share, 3),
         "peak_daily": round(peak_daily, 2),
         "post_peak_daily": round(post_peak_daily, 2),
@@ -180,22 +185,22 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
     inv_total = aggregate(inv_rows, "genero", "talla")
 
     post_peak = vel["post_peak_daily"]
-    vela_horizon = post_peak * rest_sept_days + post_peak * OCT_FACTOR * mid_oct_days
-    web_horizon = vela_horizon * WEB_SHARE
+    inv_total_qty = sum(r["qty"] for r in inv_rows)
+    pool_cover_days = round(inv_total_qty / post_peak, 1) if post_peak else 0
 
     scenarios = []
-    for label, days_s, days_o, web_pct in [
-        ("Resto septiembre", rest_sept_days, 0, WEB_SHARE),
-        ("Sept + mitad octubre", rest_sept_days, mid_oct_days, WEB_SHARE),
-        ("Sept + mitad oct (WEB 30%)", rest_sept_days, mid_oct_days, 0.30),
-        ("Sept + mitad oct (WEB 40%)", rest_sept_days, mid_oct_days, 0.40),
+    for label, cov_v, cov_w, web_pct in [
+        ("Cobertura 18d VELA + WEB", 18, 12, WEB_SHARE),
+        ("Cobertura 20d VELA + WEB (base)", COVERAGE_DAYS_VELA, COVERAGE_DAYS_WEB, WEB_SHARE),
+        ("Cobertura 20d · WEB 30%", COVERAGE_DAYS_VELA, COVERAGE_DAYS_WEB, 0.30),
+        ("Resto sept post-pico (referencia)", rest_sept_days, 0, 0),
     ]:
-        vela_u = post_peak * days_s + post_peak * OCT_FACTOR * days_o
-        web_u = vela_u * web_pct
+        vela_u = post_peak * cov_v
+        web_u = post_peak * cov_w * web_pct if cov_w else 0
         scenarios.append({
             "label": label,
-            "days_sept": days_s,
-            "days_oct": days_o,
+            "days_sept": cov_v,
+            "days_oct": cov_w,
             "web_pct": web_pct,
             "vela_units": round(vela_u),
             "web_units": round(web_u),
@@ -203,31 +208,31 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
         })
 
     primary = scenarios[1]
-    recs = []
-    total_suggest = 0
-    total_vela_d = 0
-    total_web_d = 0
-    total_stock_eff = 0
-
+    raw_recs = []
     for g in GENDER_ORDER:
         for t in TALLA_ORDER:
             key = (g, t)
             pct = mix_pct.get(key, 0)
             if pct <= 0 and not inv_total.get(key):
                 continue
-            vela_d = primary["vela_units"] * pct
-            web_d = primary["web_units"] * pct
             stock_vela = inv_vela.get(key, 0)
             stock_taller = inv_taller.get(key, 0)
             stock_web = inv_web.get(key, 0)
             stock_all = inv_total.get(key, 0)
-            effective = stock_vela + stock_web + stock_taller * TALLER_UTIL
-            gap = (vela_d + web_d) * (1 + STOCK_BUFFER) - effective
-            suggest = max(0, int(math.ceil(gap))) if gap > 0.5 else 0
-            if 0 < suggest < MIN_PRODUCE:
-                suggest = MIN_PRODUCE
-            cob_vela = round(stock_vela / post_peak / pct, 1) if post_peak * pct > 0 else None
-            recs.append({
+
+            vela_need = post_peak * pct * COVERAGE_DAYS_VELA
+            web_need = post_peak * pct * WEB_SHARE * COVERAGE_DAYS_WEB
+            vela_short = max(0.0, vela_need - stock_vela)
+            web_short = max(0.0, web_need - stock_web)
+            taller_cover = min(stock_taller * TALLER_REPLENISH, vela_short)
+            raw_gap = vela_short - taller_cover + web_short
+            if STOCK_BUFFER:
+                raw_gap *= 1 + STOCK_BUFFER
+            raw_suggest = max(0, int(math.ceil(raw_gap - 0.4)))
+
+            cob_vela = round(stock_vela / (post_peak * pct), 1) if post_peak * pct > 0 else None
+            cob_pool = round(stock_all / (post_peak * pct), 1) if post_peak * pct > 0 else None
+            raw_recs.append({
                 "genero": g,
                 "talla": t,
                 "mix_pct": round(pct * 100, 1),
@@ -237,17 +242,40 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
                 "stock_taller": stock_taller,
                 "stock_web": stock_web,
                 "stock_total": stock_all,
-                "demanda_vela": round(vela_d),
-                "demanda_web": round(web_d),
-                "demanda_total": round(vela_d + web_d),
-                "stock_efectivo": round(effective),
-                "produccion_sugerida": suggest,
+                "demanda_vela": round(vela_need),
+                "demanda_web": round(web_need),
+                "demanda_total": round(vela_need + web_need),
+                "stock_efectivo": stock_all,
+                "taller_aporte": round(taller_cover),
+                "gap_bruto": round(raw_gap, 1),
+                "produccion_raw": raw_suggest,
                 "cobertura_vela_dias": cob_vela,
+                "cobertura_pool_dias": cob_pool,
+                "prioridad": raw_suggest * (2 if cob_vela and cob_vela < 7 else 1),
             })
-            total_suggest += suggest
-            total_vela_d += round(vela_d)
-            total_web_d += round(web_d)
-            total_stock_eff += round(effective)
+
+    total_raw = sum(r["produccion_raw"] for r in raw_recs)
+    scale = 1.0
+    capped = False
+    if total_raw > MAX_PRODUCTION and total_raw > 0:
+        scale = MAX_PRODUCTION / total_raw
+        capped = True
+
+    recs = []
+    total_suggest = 0
+    total_vela_d = 0
+    total_web_d = 0
+    for r in raw_recs:
+        suggest = int(math.floor(r["produccion_raw"] * scale + 0.45)) if r["produccion_raw"] else 0
+        if capped and suggest == 0 and r["produccion_raw"] > 0 and r["cobertura_vela_dias"] is not None and r["cobertura_vela_dias"] < 5:
+            suggest = MIN_PRODUCE or 1
+        out = {k: v for k, v in r.items() if k not in {"produccion_raw", "prioridad", "gap_bruto", "taller_aporte"}}
+        out["produccion_sugerida"] = suggest
+        out["nota_cap"] = "Ajustado al tope 120 und" if capped and r["produccion_raw"] > suggest else ""
+        recs.append(out)
+        total_suggest += suggest
+        total_vela_d += r["demanda_vela"]
+        total_web_d += r["demanda_web"]
 
     by_store = aggregate(ventas, "tienda")
     by_month = aggregate(ventas, "mes")
@@ -262,23 +290,31 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
             "days_elapsed_sept": days_elapsed,
             "rest_sept_days": rest_sept_days,
             "mid_oct_days": mid_oct_days,
+            "coverage_days_vela": COVERAGE_DAYS_VELA,
+            "coverage_days_web": COVERAGE_DAYS_WEB,
+            "pool_cover_days": pool_cover_days,
             "web_share": WEB_SHARE,
             "web_share_range": list(WEB_SHARE_RANGE),
             "stock_buffer": STOCK_BUFFER,
-            "taller_util": TALLER_UTIL,
+            "taller_replenish": TALLER_REPLENISH,
+            "max_production": MAX_PRODUCTION,
+            "production_capped": capped,
             "oct_factor": OCT_FACTOR,
+            "target_note": TARGET_PRODUCTION_NOTE,
         },
         "totals": {
             "ventas_total": sum(r["qty"] for r in ventas),
             "ventas_sept": sept_total,
             "ventas_agosto": aug_total,
             "ventas_vela_sept": sept_vela,
-            "inventario_total": sum(r["qty"] for r in inv_rows),
+            "inventario_total": inv_total_qty,
             "inventario_vela": sum(r["qty"] for r in inv_rows if r["ubicacion"] == "VELA"),
             "inventario_taller": sum(r["qty"] for r in inv_rows if r["ubicacion"] == "TALLER"),
             "produccion_sugerida": total_suggest,
+            "produccion_raw": total_raw,
             "demanda_vela": total_vela_d,
             "demanda_web": total_web_d,
+            "pool_cover_days": pool_cover_days,
         },
         "velocity": vel,
         "scenarios": scenarios,
@@ -326,16 +362,18 @@ def export_xlsx(data: dict, path: Path):
         ("Inventario TALLER", data["totals"]["inventario_taller"]),
         ("", ""),
         ("Ritmo post-pico VELA (und/día)", data["velocity"]["post_peak_daily"]),
-        ("Demanda proyectada VELA", data["totals"]["demanda_vela"]),
-        (f"Demanda proyectada WEB ({int(meta['web_share']*100)}%)", data["totals"]["demanda_web"]),
+        ("Cobertura pool actual (días @ post-pico)", data["totals"]["pool_cover_days"]),
+        ("Objetivo cobertura VELA (días)", meta["coverage_days_vela"]),
+        (f"Incremento WEB ({int(meta['web_share']*100)}%)", f"{meta['coverage_days_web']} días"),
+        ("Producción bruta (sin tope)", data["totals"]["produccion_raw"]),
         ("Producción sugerida total", data["totals"]["produccion_sugerida"]),
+        ("Tope recomendado", meta["max_production"]),
         ("", ""),
         ("Supuestos", ""),
+        ("Metodología", "Quiebres por talla + WEB · no duplica horizonte calendario completo"),
+        ("Pool VELA+TALLER", f"{data['totals']['inventario_vela']}+{data['totals']['inventario_taller']} und (~{data['totals']['pool_cover_days']} días post-pico)"),
+        ("TALLER en plan tienda", f"{int(meta['taller_replenish']*100)}% puede reponer VELA"),
         ("WEB vs VELA", f"{int(meta['web_share_range'][0]*100)}–{int(meta['web_share_range'][1]*100)}% (base {int(meta['web_share']*100)}%)"),
-        ("Stock seguridad", f"+{int(meta['stock_buffer']*100)}%"),
-        ("TALLER en cobertura", f"{int(meta['taller_util']*100)}% del stock"),
-        ("Octubre (mitad)", f"×{meta['oct_factor']} vs ritmo sept"),
-        ("Pico", f"Primeros {data['velocity']['peak_days']} días ≈ {int(data['velocity']['peak_share']*100)}% ventas sept"),
     ]
     for i, (a, b) in enumerate(rows, 1):
         ws.cell(i, 1, a)
