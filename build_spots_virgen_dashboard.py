@@ -37,6 +37,7 @@ STOCK_BUFFER = 0.0
 MAX_PRODUCTION = 120
 TARGET_PRODUCTION_NOTE = "100–120 und · quiebres talla en tienda + reserva WEB incremental"
 POST_PEAK_WINDOW = 3
+MIX_SEPT_WEIGHT = 1.0
 OCT_FACTOR = 0.88
 MIN_PRODUCE = 0
 
@@ -158,25 +159,32 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
 
     vel = compute_velocity(sept_vela, days_elapsed)
 
-    # Mix: sept 85% + agosto 15%
-    mix_rows = []
-    for r in ventas:
-        w = 0.85 if r["mes"] == "septiembre" else 0.15
-        mix_rows.extend([r] * max(r["qty"], 0) for _ in [0] * 1)
+    # Curva talla × género desde septiembre (tendencia post-lanzamiento; DAMA predomina ~58–60%)
     mix_weighted = defaultdict(float)
     sept_mix = aggregate([r for r in ventas if r["mes"] == "septiembre"], "genero", "talla")
     aug_mix = aggregate([r for r in ventas if r["mes"] == "agosto"], "genero", "talla")
+    aug_w = max(0.0, 1.0 - MIX_SEPT_WEIGHT)
     all_keys = set(sept_mix) | set(aug_mix)
     mix_total = 0.0
     for k in all_keys:
-        v = sept_mix.get(k, 0) * 0.85 + aug_mix.get(k, 0) * 0.15
+        v = sept_mix.get(k, 0) * MIX_SEPT_WEIGHT + aug_mix.get(k, 0) * aug_w
         mix_weighted[k] = v
         mix_total += v
     mix_pct = {k: (v / mix_total if mix_total else 0) for k, v in mix_weighted.items()}
 
-    gen_mix = defaultdict(float)
-    for (g, t), pct in mix_pct.items():
-        gen_mix[g] += pct
+    gen_share = {}
+    talla_within = {g: {} for g in GENDER_ORDER}
+    for g in GENDER_ORDER:
+        gen_units = sum(sept_mix.get((g, t), 0) for t in TALLA_ORDER)
+        gen_share[g] = gen_units
+    gen_total = sum(gen_share.values()) or 1
+    gen_pct = {g: gen_share[g] / gen_total for g in GENDER_ORDER}
+    for g in GENDER_ORDER:
+        gen_units = gen_share[g] or 1
+        for t in TALLA_ORDER:
+            u = sept_mix.get((g, t), 0)
+            if u:
+                talla_within[g][t] = round(u / gen_units * 100, 1)
 
     inv_by_loc = aggregate(inv_rows, "ubicacion", "genero", "talla")
     inv_vela = aggregate([r for r in inv_rows if r["ubicacion"] == "VELA"], "genero", "talla")
@@ -282,6 +290,34 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
     by_gen = aggregate(ventas, "genero")
     by_talla = aggregate(ventas, "talla")
 
+    prod_by_gen = defaultdict(int)
+    prod_by_gt = defaultdict(int)
+    for r in recs:
+        prod_by_gen[r["genero"]] += r["produccion_sugerida"]
+        prod_by_gt[(r["genero"], r["talla"])] += r["produccion_sugerida"]
+    prod_total = sum(prod_by_gen.values()) or 1
+    prod_gen_pct = {g: round(prod_by_gen[g] / prod_total * 100, 1) for g in GENDER_ORDER}
+    prod_talla_within = {}
+    for g in GENDER_ORDER:
+        gsum = prod_by_gen[g] or 1
+        prod_talla_within[g] = {
+            t: round(prod_by_gt[(g, t)] / gsum * 100, 1)
+            for t in TALLA_ORDER if prod_by_gt[(g, t)]
+        }
+
+    curves = {
+        "mix_source": "Septiembre · curva post-lanzamiento",
+        "mix_sept_weight": MIX_SEPT_WEIGHT,
+        "ventas_genero_pct": {g: round(gen_pct[g] * 100, 1) for g in GENDER_ORDER},
+        "ventas_talla_within": talla_within,
+        "produccion_genero_pct": prod_gen_pct,
+        "produccion_talla_within": prod_talla_within,
+        "nota": (
+            "Demanda distribuida con share género × talla dentro del género (misma lógica SPOTS). "
+            "Producción inclina más a DAMA donde hay quiebre de stock (M, XS)."
+        ),
+    }
+
     return {
         "meta": {
             "diseno": DISENO,
@@ -301,6 +337,7 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
             "production_capped": capped,
             "oct_factor": OCT_FACTOR,
             "target_note": TARGET_PRODUCTION_NOTE,
+            "mix_sept_weight": MIX_SEPT_WEIGHT,
         },
         "totals": {
             "ventas_total": sum(r["qty"] for r in ventas),
@@ -326,6 +363,7 @@ def compute_projection(ventas, inv_rows, ref_date: date = REF_DATE):
         "by_gen": dict(by_gen),
         "by_talla": dict(by_talla),
         "mix_pct": {f"{g}|{t}": round(v * 100, 1) for (g, t), v in mix_pct.items()},
+        "curves": curves,
         "primary_scenario": primary["label"],
     }
 

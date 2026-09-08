@@ -61,9 +61,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
     <div class="note" id="methodNote"></div>
     <div class="g2">
       <div class="card"><h3>Ventas por mes</h3><div class="sub">Agosto vs septiembre · La Vela + Pedidos</div><div class="cw"><canvas id="cMes"></canvas></div></div>
-      <div class="card"><h3>Mix talla × género</h3><div class="sub">Base para distribuir producción</div><div class="cw"><canvas id="cMix"></canvas></div></div>
+      <div class="card"><h3>Mix talla × género</h3><div class="sub">Curva septiembre · base para distribuir demanda</div><div class="cw"><canvas id="cMix"></canvas></div></div>
     </div>
-    <div class="card"><h3>Escenarios de demanda</h3><div class="sub">Resto septiembre · mitad octubre · WEB 30–40%</div><div id="scenarios"></div></div>
+    <div class="card"><h3>Curva ventas vs producción</h3><div class="sub">Share género (DAMA predomina) · talla dentro de cada género</div><div id="curveNote" style="font-size:.68rem;color:var(--mu);margin-bottom:10px"></div>
+      <div class="g2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div><div class="sub">Género — ventas vs producir</div><div class="cw s" style="height:180px"><canvas id="cGenCurve"></canvas></div></div>
+        <div id="curveTallaTbl"></div>
+      </div>
+    </div>
+    <div class="card"><h3>Escenarios de demanda</h3><div class="sub">Cobertura post-pico por días · WEB 30–40%</div><div id="scenarios"></div></div>
   </div>
   <div class="sec" id="sec-ventas">
     <div class="g2">
@@ -81,7 +87,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
   </div>
   <div class="sec" id="sec-prod">
     <div class="note" id="prodNote"></div>
-    <div class="card"><h3>Cantidades sugeridas a producir</h3><div class="sub">Por género y talla · horizonte sept + mitad oct · incluye WEB</div><div id="prodTbl"></div></div>
+    <div class="card"><h3>Cantidades sugeridas a producir</h3><div class="sub">Por género y talla · curva sept (DAMA ~58–60%) · ajustada a quiebres de stock</div><div id="prodTbl"></div></div>
     <div class="g2">
       <div class="card"><h3>Producción CAB</h3><div class="cw"><canvas id="cProdCab"></canvas></div></div>
       <div class="card"><h3>Producción DAMA</h3><div class="cw"><canvas id="cProdDama"></canvas></div></div>
@@ -110,7 +116,27 @@ function render(){
     +'Con <strong>'+T.inventario_total+' und</strong> en VELA+TALLER el pool agregado ya cubre ~<strong>'+T.pool_cover_days+' días</strong> al ritmo post-pico (<strong>'+V.post_peak_daily+' und/día</strong>). '
     +'La nueva recomendación cubre <strong>'+M.coverage_days_vela+' días</strong> en piso VELA por talla + <strong>'+M.coverage_days_web+' días</strong> incremental WEB ('+Math.round(M.web_share*100)+'%), '
     +'descontando solo <strong>'+Math.round(M.taller_replenish*100)+'%</strong> del TALLER como reposición inmediata a tienda. '
-    +'Tope <strong>'+M.max_production+' und</strong> · objetivo '+M.target_note+'.';
+    +'Tope <strong>'+M.max_production+' und</strong> · objetivo '+M.target_note+'. '
+    +(D.curves&&D.curves.nota?('<br><span style="color:var(--mu2)">'+D.curves.nota+'</span>'):'');
+
+  if(D.curves){
+    document.getElementById('curveNote').textContent='Fuente mix: '+D.curves.mix_source+' · DAMA '+D.curves.ventas_genero_pct.DAMA+'% ventas → '+D.curves.produccion_genero_pct.DAMA+'% producción';
+    var vg=D.curves.ventas_genero_pct, pg=D.curves.produccion_genero_pct;
+    new Chart(document.getElementById('cGenCurve'),{type:'bar',data:{labels:['CAB','DAMA'],datasets:[
+      {label:'Ventas %',data:['CAB','DAMA'].map(function(g){return vg[g]||0;}),backgroundColor:'#6366f199',borderRadius:6},
+      {label:'Producir %',data:['CAB','DAMA'].map(function(g){return pg[g]||0;}),backgroundColor:'#10b981bb',borderRadius:6}
+    ]},options:{plugins:{legend:{labels:{color:'#7a7b95'}}},scales:{x:{ticks:{color:'#7a7b95'}},y:{max:100,ticks:{color:'#7a7b95',callback:function(v){return v+'%';}}}}}});
+    var th='<table class="rt"><thead><tr><th>Género</th><th>Talla</th><th>Ventas %</th><th>Producir %</th></tr></thead><tbody>';
+    ['CAB','DAMA'].forEach(function(g){
+      var vt=D.curves.ventas_talla_within[g]||{}, pt=D.curves.produccion_talla_within[g]||{};
+      var tallas=Object.keys(vt).concat(Object.keys(pt)).filter(function(t,i,a){return a.indexOf(t)===i;});
+      tallas.sort(function(a,b){return (TORD[a]||9)-(TORD[b]||9);});
+      tallas.forEach(function(t){
+        th+='<tr><td>'+g+'</td><td>'+t+'</td><td>'+(vt[t]!=null?vt[t]+'%':'—')+'</td><td>'+(pt[t]!=null?pt[t]+'%':'—')+'</td></tr>';
+      });
+    });
+    document.getElementById('curveTallaTbl').innerHTML=th+'</tbody></table>';
+  }
   document.getElementById('prodNote').innerHTML=
     'Priorizar <strong>corte/confección → TS</strong> en quiebres reales (sobre todo <strong>DAMA M</strong> y <strong>DAMA XS</strong>). '
     +'Total sugerido: <strong style="color:var(--gr);font-size:1.05rem">'+T.produccion_sugerida+' und</strong>'
