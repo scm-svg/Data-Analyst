@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.8 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.9 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
@@ -18,10 +18,13 @@
  *     salir de costura (antes eran 2).
  *   - SYNC TRACKING: sincronizarProduccionExterna() solo escribe
  *     "Cantida Producida" (Por Hacer col. L / Especial col. M).
- *     No pisa Faltante. Suma el DELTA de Costura vs el último corte
- *     aplicado (hoja oculta "Sync Costura Aplicada"). La primera sync
- *     solo fija la línea base (el corte actual ya está en Cantida
- *     Producida) y no vuelve a sumar.
+ *     No pisa Faltante. Suma el DELTA de Costura sobre lo ya cargado:
+ *     existente + max(0, costura_ahora − ya_aplicado). La primera
+ *     corrida (sin línea base válida) suma el total de Costura. La
+ *     hoja oculta "Sync Costura Aplicada" (esquema 5.9.9) guarda el
+ *     último corte aplicado; una línea base vieja de v5.9.8 se ignora
+ *     para no bloquear la suma. Las MO se cruzan sin ceros a la
+ *     izquierda (00071 = 71; 00082-002 = 82-002).
  *   - ESPECIAL HECHO: permanece en Por Hacer - Especial, pero NO entra
  *     al backlog ni a la planificación.
  *   - TABLEROS POR FLUJO: el modelo que cierra el día (lote chico /
@@ -70,7 +73,8 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.8";
+var VERSION_SISTEMA = "5.9.9";
+var SYNC_COSTURA_ESQUEMA = "5.9.9";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_URGENTE = 2;
@@ -551,9 +555,17 @@ function esEspecialHecho_(status) {
   return quitarTildes_(normLow_(status)) === "hecho";
 }
 
-function deltaCosturaAplicar_(costuraAhora, yaAplicado, primerSync) {
-  if (primerSync) return 0;
+function deltaCosturaAplicar_(costuraAhora, yaAplicado) {
   return Math.max(0, parseCantidad_(costuraAhora) - parseCantidad_(yaAplicado));
+}
+
+/** Cruza Por Hacer con Produccion - Costura: "00071" y 71 → "71"; "00082-002" → "82-002". */
+function claveLookupMO_(mo) {
+  var s = String(mo == null ? "" : mo).trim().toUpperCase();
+  if (s === "") return "";
+  var m = s.match(/^0*([0-9]+)(.*)$/);
+  if (m) return m[1] + m[2];
+  return s;
 }
 
 function aplicarDeltaCantidaProducida_(existente, delta) {
@@ -3189,22 +3201,19 @@ function onEdit(e) {
 // =====================================================================
 //  SINCRONIZACIÓN DE TRACKING DE PRODUCCIÓN EXTERNO
 // =====================================================================
-function hayRegistroCosturaAplicada_(ss) {
-  var hoja = ss.getSheetByName(HOJA_SYNC_COSTURA);
-  return !!(hoja && hoja.getLastRow() >= 2);
-}
-
 function leerCosturaAplicada_(ss) {
   var mapa = {};
   var hoja = ss.getSheetByName(HOJA_SYNC_COSTURA);
   if (!hoja || hoja.getLastRow() < 2) return mapa;
+  var esquema = String(hoja.getRange(1, 4).getValue() || "").trim();
+  if (esquema !== SYNC_COSTURA_ESQUEMA) return mapa;
   var n = hoja.getLastRow() - 1;
   if (n < 1) return mapa;
   var datos = hoja.getRange(2, 1, n, 2).getValues();
   for (var i = 0; i < datos.length; i++) {
-    var mo = String(datos[i][0] || "").trim().toUpperCase();
+    var mo = claveLookupMO_(datos[i][0]);
     if (mo === "") continue;
-    mapa[mo] = parseCantidad_(datos[i][1]);
+    mapa[mo] = (mapa[mo] || 0) + parseCantidad_(datos[i][1]);
   }
   return mapa;
 }
@@ -3216,16 +3225,16 @@ function guardarCosturaAplicada_(ss, totalesPorMo) {
     hoja.hideSheet();
   }
   var maxR = hoja.getMaxRows();
-  if (maxR > 1) hoja.getRange(1, 1, maxR, 3).clearContent();
-  hoja.getRange(1, 1, 1, 3).setValues([["MO", "Total Costura Aplicado", "Fecha Sync"]])
+  if (maxR > 1) hoja.getRange(1, 1, maxR, 4).clearContent();
+  hoja.getRange(1, 1, 1, 4).setValues([["MO", "Total Costura Aplicado", "Fecha Sync", SYNC_COSTURA_ESQUEMA]])
     .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
   var mos = Object.keys(totalesPorMo || {}).sort();
   if (mos.length === 0) return;
   var fecha = new Date();
   var filas = mos.map(function (mo) {
-    return [mo, totalesPorMo[mo], fecha];
+    return [mo, totalesPorMo[mo], fecha, ""];
   });
-  hoja.getRange(2, 1, filas.length, 3).setValues(filas);
+  hoja.getRange(2, 1, filas.length, 4).setValues(filas);
   hoja.getRange(2, 1, filas.length, 1).setNumberFormat("@");
   try { hoja.hideSheet(); } catch (eHide) {}
 }
@@ -3324,9 +3333,9 @@ function sincronizarProduccionExterna() {
     var datosPC = hojaProdCostura.getRange(3, 2, ultFilaPC - 2, 9).getValues();
 
     datosPC.forEach(function (fila) {
-      var mo = String(fila[0] || "").trim().toUpperCase();
+      var mo = claveLookupMO_(fila[0]);
       var lineaTxt = String(fila[6] || "").trim().toLowerCase();
-      var cantidad = Number(fila[7]) || 0;
+      var cantidad = parseCantidad_(fila[7]);
       if (mo === "" || cantidad === 0) return;
 
       totalesPorMo[mo] = (totalesPorMo[mo] || 0) + cantidad;
@@ -3341,7 +3350,6 @@ function sincronizarProduccionExterna() {
     SpreadsheetApp.getUi().alert("⚠️ Aviso: la pestaña 'Produccion - Costura' no existe o está vacía.\n'Cantidad Producida' no pudo recalcularse.\nUsa '💾 Guardar Producción (Corte Diario)' primero.");
   }
 
-  var primerSyncCostura = !hayRegistroCosturaAplicada_(ssMain);
   var lastApplied = leerCosturaAplicada_(ssMain);
 
   function inyectarCantidades(hojaDestino, nombreHoja) {
@@ -3382,13 +3390,14 @@ function sincronizarProduccionExterna() {
       var yaAplicado = 0;
       if (rowMoStr !== "") {
         rowMoStr.split(",").forEach(function (mm) {
-          var claveMo = mm.trim();
+          var claveMo = claveLookupMO_(mm);
+          if (!claveMo) return;
           prodHoy += (totalesPorMo[claveMo] || 0);
           yaAplicado += (lastApplied[claveMo] || 0);
         });
       }
 
-      var delta = deltaCosturaAplicar_(prodHoy, yaAplicado, primerSyncCostura);
+      var delta = deltaCosturaAplicar_(prodHoy, yaAplicado);
       colProduccion.push([aplicarDeltaCantidaProducida_(datosH[r][idxProdH], delta)]);
     }
     hojaDestino.getRange(detHeadPH.fila + 2, idxProdH + 1, colProduccion.length, 1).setValues(colProduccion);
@@ -3423,7 +3432,9 @@ function sincronizarProduccionExterna() {
       var produccionEnEstaLinea = 0;
       if (rowMoStrL !== "") {
         rowMoStrL.split(",").forEach(function (mm) {
-          produccionEnEstaLinea += (totalesPorLineaYMo[prefijoLinea + "_" + mm.trim()] || 0);
+          var claveMoL = claveLookupMO_(mm);
+          if (!claveMoL) return;
+          produccionEnEstaLinea += (totalesPorLineaYMo[prefijoLinea + "_" + claveMoL] || 0);
         });
       }
 
@@ -3462,7 +3473,10 @@ function sincronizarProduccionExterna() {
       var gen = idGen !== -1 ? String(datosM[i][idGen]).trim() : "";
       var mod = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
       if (esEspecial) mod += " (Especial)";
-      moStr.split(",").forEach(function (mm) { mapaMoAModelo[mm.trim()] = mod; });
+      moStr.split(",").forEach(function (mm) {
+        var claveMap = claveLookupMO_(mm);
+        if (claveMap) mapaMoAModelo[claveMap] = mod;
+      });
     }
   }
 
@@ -3493,8 +3507,8 @@ function sincronizarProduccionExterna() {
       var idCantV = headersV.indexOf("cantidad");
       if (idMoV !== -1 && idCantV !== -1) {
         for (var iv = detHeadV.fila + 1; iv < datosV.length; iv++) {
-          var moV = String(datosV[iv][idMoV]).trim().toUpperCase();
-          var cantV = Number(datosV[iv][idCantV]) || 0;
+          var moV = claveLookupMO_(datosV[iv][idMoV]);
+          var cantV = parseCantidad_(datosV[iv][idCantV]);
           if (cantV > 0 && moV !== "") {
             totalesAlmacenMo[moV] = (totalesAlmacenMo[moV] || 0) + cantV;
             var modMapping = mapaMoAModelo[moV];
@@ -3521,7 +3535,10 @@ function sincronizarProduccionExterna() {
       }
       var recHoy = 0;
       if (rowMoStr !== "") {
-        rowMoStr.split(",").forEach(function (mm) { recHoy += (totalesAlmacenMo[mm.trim()] || 0); });
+        rowMoStr.split(",").forEach(function (mm) {
+          var claveAlm = claveLookupMO_(mm);
+          if (claveAlm) recHoy += (totalesAlmacenMo[claveAlm] || 0);
+        });
       }
       var faltS = cantSolS - recHoy; if (faltS < 0) faltS = 0;
       colRecepcionado.push([recHoy > 0 ? recHoy : ""]);
@@ -3557,10 +3574,8 @@ function sincronizarProduccionExterna() {
     "✅ SINCRONIZACIÓN MAESTRA EXITOSA\n\n" +
     "• Tablero visual 'Tracking - Produccion' actualizado con el archivo externo.\n" +
     "• 'Cantida Producida' actualizada en Por Hacer (col. L) y Por Hacer - Especial (col. M).\n" +
-    "  Se suma solo el incremento de Costura vs el último corte aplicado (no se pisa Faltante).\n" +
-    (primerSyncCostura
-      ? "  Primera sync: se fijó la línea base sin volver a sumar el corte ya cargado.\n"
-      : "  Se agregó el delta de Costura sobre lo ya cargado.\n") +
+    "  Se suma el incremento de Costura sobre lo ya cargado (no se pisa Faltante).\n" +
+    "  Primera corrida (o línea base vieja): suma el total de Costura. Después, solo el delta.\n" +
     "• Pestañas de Línea 1-5 actualizadas.\n" +
     "• 📦 Pestañas de Almacén (Modelo y SKUs) sincronizadas con los ingresos basados SOLO en MO."
   );
