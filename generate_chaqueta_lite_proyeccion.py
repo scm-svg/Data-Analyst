@@ -35,6 +35,7 @@ COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.50       # Web ≈ 50% de Cerro Verde
+GRAND_PLAZ_BONUS = 1.20         # Grand Plaz +20% sobre histórico
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres ──
@@ -110,16 +111,27 @@ def analyze_reference(data: dict) -> dict:
         store_tot[s] = sum(r["v"] for r in rows if r["tienda"] == s)
     store_monthly_hist = {s: store_tot.get(s, 0) / n_months for s in store_tot}
 
+    sambil_m = store_monthly_hist.get("SAMBIL", 0)
     chacao_m = store_monthly_hist.get("CHACAO", 0)
     cerro_m = store_monthly_hist.get("CERRO VERDE", 0)
     grieta_m = store_monthly_hist.get("GRIETA", 0)
+    grand_hist = store_monthly_hist.get("GRAND PLAZ", 0)
+    vela_hist = store_monthly_hist.get("LA VELA", 0)
+
     tolon_proj = chacao_m * TOLON_VS_CHACAO
     web_proj = cerro_m * WEB_VS_CERRO_VERDE
     barq_proj = (grieta_m + chacao_m + tolon_proj) / 3
+    vela_proj = (sambil_m + cerro_m) / 2
+    grand_proj = grand_hist * GRAND_PLAZ_BONUS
 
     store_monthly = {}
     for s in HISTORICAL_STORES:
-        store_monthly[s] = store_monthly_hist.get(s, 0)
+        if s == "GRAND PLAZ":
+            store_monthly[s] = grand_proj
+        elif s == "LA VELA":
+            store_monthly[s] = vela_proj
+        else:
+            store_monthly[s] = store_monthly_hist.get(s, 0)
     store_monthly[TOLON_STORE] = tolon_proj
     store_monthly[WEB_STORE] = web_proj
     store_monthly[NEW_STORE] = barq_proj
@@ -140,6 +152,11 @@ def analyze_reference(data: dict) -> dict:
         "tolon_proj": tolon_proj,
         "web_proj": web_proj,
         "barq_proj": barq_proj,
+        "vela_proj": vela_proj,
+        "grand_proj": grand_proj,
+        "grand_hist": grand_hist,
+        "vela_hist": vela_hist,
+        "sambil_m": sambil_m,
         "chacao_m": chacao_m,
         "cerro_m": cerro_m,
         "months": months,
@@ -276,6 +293,10 @@ def write_resumen(wb, ref, zip_cap, prod):
         [f"Tolón proyectado ({int(TOLON_VS_CHACAO*100)}% Chacao)", round(ref["tolon_proj"], 1), "und/mes"],
         ["Web histórica", round(ref["store_monthly_hist"].get("WEB", 0), 1), "und/mes"],
         [f"Web proyectada ({int(WEB_VS_CERRO_VERDE*100)}% Cerro Verde)", round(ref["web_proj"], 1), "und/mes"],
+        ["La Vela histórica", round(ref["vela_hist"], 1), "und/mes"],
+        ["La Vela proyectada (avg Sambil + Cerro Verde)", round(ref["vela_proj"], 1), "und/mes"],
+        ["Grand Plaz histórica", round(ref["grand_hist"], 1), "und/mes"],
+        [f"Grand Plaz proyectada (+{round((GRAND_PLAZ_BONUS - 1) * 100)}%)", round(ref["grand_proj"], 1), "und/mes"],
         ["Barquisimeto (avg Grieta+Chacao+Tolón proy.)", round(ref["barq_proj"], 1), "und/mes"],
         ["Corporativo", "EXCLUIDO"],
         [],
@@ -356,7 +377,7 @@ def write_tallas_sheet(wb, ref, prod):
 
 def write_tiendas_sheet(wb, ref, prod):
     ws = wb.create_sheet("Distribución por Tienda")
-    adjusted = {TOLON_STORE, WEB_STORE, NEW_STORE}
+    adjusted = {TOLON_STORE, WEB_STORE, NEW_STORE, "LA VELA", "GRAND PLAZ"}
     store_min = distribute_by_store(prod["prod_min"], ref)
     store_max = distribute_by_store(prod["prod_max"], ref)
     matrix_min = distribute_store_talla(store_min, ref["talla_pct"])
@@ -364,7 +385,7 @@ def write_tiendas_sheet(wb, ref, prod):
 
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2 + len(TALLAS) * 2)
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — DISTRIBUCIÓN POR TIENDA Y TALLA"), title_fill, bold=True)
-    ws.cell(row=2, column=1, value="★ = Tolón/Web/Barquisimeto con ajuste proyectado").font = Font(italic=True, color="E65100")
+    ws.cell(row=2, column=1, value="★ = tienda con velocidad proyectada/ajustada").font = Font(italic=True, color="E65100")
 
     col = 2
     for t in TALLAS:
@@ -472,6 +493,10 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"     Histórico Tolón: {ref['store_monthly_hist'].get('TOLON', 0):.0f} und/mes — subestimado por tienda nueva.",
         f"   • Web: proyectada al {int(WEB_VS_CERRO_VERDE*100)}% de Cerro Verde ({ref['cerro_m']:.0f} → {ref['web_proj']:.0f} und/mes).",
         f"     Histórico Web: {ref['store_monthly_hist'].get('WEB', 0):.0f} und/mes.",
+        f"   • La Vela (nueva): promedio Sambil + Cerro Verde = {ref['vela_proj']:.0f} und/mes.",
+        f"     Histórico La Vela: {ref['vela_hist']:.0f} und/mes.",
+        f"   • Grand Plaz: histórico × {GRAND_PLAZ_BONUS} = {ref['grand_proj']:.0f} und/mes.",
+        f"     Histórico Grand Plaz: {ref['grand_hist']:.0f} und/mes.",
         f"   • Barquisimeto (nueva): promedio Grieta + Chacao + Tolón proyectado = {ref['barq_proj']:.0f} und/mes.",
         "   • Corporativo: EXCLUIDO.",
         "",
