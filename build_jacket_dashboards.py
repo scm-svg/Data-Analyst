@@ -51,7 +51,9 @@ CUADRO_PRODUCTS = {
 JACKET10_PRODUCTS = {"JACKET CAB", "JACKET DAMA", "JACKET KIDS", "JACKET"}
 COVER_MONTHS = 9
 LEAD_MONTHS = 3
-REAL_STORES = ["CERRO VERDE", "CHACAO", "GRAND PLAZ", "GRIETA", "PEDIDOS", "SAMBIL", "TOLON", "LA VELA"]
+REAL_STORES = ["CERRO VERDE", "CHACAO", "GRAND PLAZ", "GRIETA", "SAMBIL", "TOLON", "LA VELA"]
+# Tiendas excluidas del dashboard 2.0 (pedidos corporativos / no retail)
+EXCLUDE_STORES_20 = {"PEDIDOS"}
 
 
 def norm_store(s: str) -> str:
@@ -328,8 +330,9 @@ def main():
     es_parcial = last_mes.startswith("septiembre-2026")
     partial_msg = f"{mes_label(last_mes)} con datos parciales" if es_parcial else f"{mes_label(last_mes)} con datos parciales"
 
-    # Jacket 2.0
+    # Jacket 2.0 (excluir PEDIDOS — pedidos corporativos no retail)
     df20 = df[df["Producto"].isin(CUADRO_PRODUCTS)].copy()
+    df20 = df20[~df20["store_norm"].isin(EXCLUDE_STORES_20)]
     raw20 = build_raw_rows(df20, lambda p: "CUADRO JACKET 2.0")
     stock = load_existing_stock()
     data20 = build_data(raw20, ["CUADRO JACKET 2.0"], stock=stock, es_parcial=es_parcial)
