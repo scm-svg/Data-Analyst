@@ -45,9 +45,10 @@ PROD_RANGE_MIN = 1280            # Mismo rango acordado que Chaqueta Lite
 PROD_RANGE_MAX = 1350
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
-# Ajuste curva tallas: M y S fijas; lo restado va a XS; L/XL sin cambio
+# Ajuste curva tallas: M y S fijas; lo restado va a XS; +1,5 pp de L a XL
 TALLA_TARGET_M = 0.25
 TALLA_TARGET_S = 0.22
+TALLA_SHIFT_L_TO_XL = 0.015       # +1,5 pp XL ← L (XS sin cambio)
 
 # ── Colores de producción ──
 COLORES = ["Negro", "Vinotinto", "Verde Militar"]
@@ -207,16 +208,20 @@ def analyze_reference(data: dict) -> dict:
 
 
 def adjust_talla_curve(talla_pct: dict) -> dict:
-    """Fija M y S; transfiere a XS lo restado de ambas; L/XL igual que histórico."""
+    """Fija M y S; transfiere a XS lo restado de ambas; +1,5 pp de L a XL."""
     shift_m = max(0, talla_pct.get("M", 0) - TALLA_TARGET_M)
     shift_s = max(0, talla_pct.get("S", 0) - TALLA_TARGET_S)
-    return {
+    adjusted = {
         "XS": talla_pct.get("XS", 0) + shift_m + shift_s,
         "S": TALLA_TARGET_S,
         "M": TALLA_TARGET_M,
         "L": talla_pct.get("L", 0),
         "XL": talla_pct.get("XL", 0),
     }
+    shift_l = min(TALLA_SHIFT_L_TO_XL, adjusted["L"])
+    adjusted["L"] -= shift_l
+    adjusted["XL"] += shift_l
+    return adjusted
 
 
 def calc_production(ref: dict) -> dict:
@@ -378,7 +383,7 @@ def write_resumen(wb, ref, prod):
         ["M objetivo", f"{TALLA_TARGET_M*100:.0f}%", f"hist {ref['talla_pct_hist']['M']*100:.1f}%"],
         ["S objetivo", f"{TALLA_TARGET_S*100:.0f}%", f"hist {ref['talla_pct_hist']['S']*100:.1f}%"],
         ["XS (recibe resto M+S)", f"{ref['talla_pct']['XS']*100:.1f}%", f"hist {ref['talla_pct_hist']['XS']*100:.1f}%"],
-        ["L / XL", "Sin cambio", f"L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}%"],
+        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"L {ref['talla_pct']['L']*100:.1f}% · XS sin cambio"],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -851,7 +856,7 @@ def write_metodologia(wb, ref, prod):
         "5. AJUSTE CURVA TALLAS",
         f"   Histórica: XS {ref['talla_pct_hist']['XS']*100:.1f}% · S {ref['talla_pct_hist']['S']*100:.1f}% · M {ref['talla_pct_hist']['M']*100:.1f}%.",
         f"   Ajustada: M {TALLA_TARGET_M*100:.0f}% · S {TALLA_TARGET_S*100:.0f}% · XS {ref['talla_pct']['XS']*100:.1f}% (recibe lo restado de M y S).",
-        f"   L/XL sin cambio: {ref['talla_pct']['L']*100:.1f}% · {ref['talla_pct']['XL']*100:.1f}%.",
+        f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}% (XS sin cambio).",
         "",
         "6. DISTRIBUCIÓN",
         "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",

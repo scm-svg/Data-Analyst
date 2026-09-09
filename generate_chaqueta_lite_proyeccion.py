@@ -40,6 +40,7 @@ GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicion
 PROD_RANGE_MIN = 1280            # Rango global acordado (lanzamiento diciembre)
 PROD_RANGE_MAX = 1350
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
+TALLA_SHIFT_L_TO_XL = 0.015       # +1,5 pp XL ← L (XS sin cambio)
 
 # ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
 CIERRES_60CM = 748
@@ -137,7 +138,8 @@ def analyze_reference(data: dict) -> dict:
         if r["talla"] in talla_tot:
             talla_tot[r["talla"]] += r["v"]
     talla_grand = sum(talla_tot.values())
-    talla_pct = {t: talla_tot[t] / talla_grand if talla_grand else 0 for t in TALLAS}
+    talla_pct_hist = {t: talla_tot[t] / talla_grand if talla_grand else 0 for t in TALLAS}
+    talla_pct = adjust_talla_curve(talla_pct_hist)
 
     store_tot = {}
     for s in set(r["tienda"] for r in rows):
@@ -178,6 +180,7 @@ def analyze_reference(data: dict) -> dict:
         "dec_vel": dec_vel,
         "vel_months": VELOCITY_MONTHS,
         "talla_pct": talla_pct,
+        "talla_pct_hist": talla_pct_hist,
         "talla_tot": talla_tot,
         "store_monthly": store_monthly,
         "store_monthly_hist": store_monthly_hist,
@@ -196,6 +199,15 @@ def analyze_reference(data: dict) -> dict:
         "by_month": by_month,
         "sources": [p.name for p in HTML_PATHS],
     }
+
+
+def adjust_talla_curve(talla_pct: dict) -> dict:
+    """Transfiere +1,5 pp de L a XL sobre curva histórica (XS sin cambio)."""
+    adjusted = dict(talla_pct)
+    shift = min(TALLA_SHIFT_L_TO_XL, adjusted.get("L", 0))
+    adjusted["L"] -= shift
+    adjusted["XL"] = adjusted.get("XL", 0) + shift
+    return adjusted
 
 
 def calc_zipper_cap(talla_pct: dict) -> dict:
@@ -422,6 +434,10 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Detalle color/talla Mín-Máx", "Hoja Producción Color × Talla", ""],
         ["Compra tela VIORI", f"Hoja Compra de Tela (+{int(TELA_SS_PCT*100)}% SS)", ""],
         [],
+        ["── AJUSTE CURVA TALLAS ──"],
+        ["Curva histórica (Jacket 1.0 + 2.0)", "Dashboards combinados", ""],
+        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"hist XL {ref['talla_pct_hist']['XL']*100:.1f}% · L {ref['talla_pct']['L']*100:.1f}% · XS sin cambio"],
+        [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
         [f"Tolón proyectado ({int(TOLON_VS_CHACAO*100)}% Chacao)", round(ref["tolon_proj"], 1), "und/mes"],
@@ -460,7 +476,9 @@ def write_tallas_sheet(wb, ref, prod):
 
     ws.merge_cells("A1:G1")
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — CANTIDADES POR TALLA (MÍN / MÁX)"), title_fill, bold=True)
-    ws.cell(row=2, column=1, value=f"{GENERO} · Curva Jacket 1.0 + 2.0 DAMA combinado").font = Font(italic=True)
+    ws.cell(row=2, column=1, value=(
+        f"{GENERO} · Curva Jacket 1.0 + 2.0 DAMA · XL +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L"
+    )).font = Font(italic=True)
 
     headers = ["Talla", "Curva %", "Cierre (cm)", "Mínimo", "Máximo", "Cierres Mín", "Cierres Máx"]
     for c, h in enumerate(headers, 1):
@@ -938,11 +956,15 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"   Compromiso mín: {prod['prod_min']} und.",
         f"   Techo máx: {prod['prod_max']} und.",
         "",
-        "7. DISTRIBUCIÓN",
-        "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
-        "   Por talla: curva combinada Jacket 1.0 + 2.0 DAMA.",
+        "7. AJUSTE CURVA TALLAS",
+        f"   Histórica Jacket 1.0 + 2.0 DAMA: L {ref['talla_pct_hist']['L']*100:.1f}% · XL {ref['talla_pct_hist']['XL']*100:.1f}%.",
+        f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}% (XS sin cambio).",
         "",
-        "8. COLORES Y COMPRA DE TELA",
+        "8. DISTRIBUCIÓN",
+        "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
+        "   Por talla: curva histórica ajustada (ver sección 7).",
+        "",
+        "9. COLORES Y COMPRA DE TELA",
         "   Colores: Negro 40% · Vinotinto 30% · Verde Militar 30%.",
         "   Dentro de cada color se aplica la misma curva de tallas.",
         "   Consumo VIORI por pieza (ficha técnica): XS 1.19m · S 1.22m · M 1.28m · L 1.34m · XL 1.35m.",
