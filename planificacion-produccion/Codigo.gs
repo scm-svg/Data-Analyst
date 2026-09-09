@@ -1,10 +1,28 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.6 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.7 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CAPACIDAD POR PRODUCTO: el techo diario de la línea es
+ *     "Cap Produccion por Dia" (Por Hacer col. N / Especial col. O).
+ *     Al cambiar de modelo, el sobrante del día usa la cap del que entra.
+ *     Si la celda viene vacía, se usa el respaldo L1-4=130 / L5=40.
+ *   - SECUENCIA DE GÉNERO: si RIO CAB, RIO DAMA y RIO KIDS caen en la
+ *     misma línea, salen en lotes diarios por género (CAB → DAMA → KIDS)
+ *     según la capacidad. No se mezclan géneros el mismo día en L1-4
+ *     ni en paralelo en L5. El sobrante del día puede pasar al siguiente
+ *     género de la familia.
+ *   - ALMACÉN: Fecha Entrada de Almacen = 4 días hábiles después de
+ *     salir de costura (antes eran 2).
+ *   - SYNC TRACKING: sincronizarProduccionExterna() solo escribe
+ *     "Cantida Producida" (Por Hacer col. L / Especial col. M).
+ *     No pisa Faltante. Conserva extras: max(existente, costura).
+ *   - TABLEROS POR FLUJO: el modelo que cierra el día (lote chico /
+ *     remanente) va primero; el que corre el resto de la semana después.
+ *   - ACTUALIZAR MOs: las MO en Hecho de Por Hacer - Especial NO se
+ *     archivan ni se borran. Cancelada sí. Producción regular igual.
  *   - LÍNEA 1: al cambiar de modelo el sobrante del día se llena
  *     (igual que L2-4). Un nativo de L1 que ya está en otra línea no
  *     bloquea el desborde; el overflow se recálcula al ceder la línea.
@@ -24,9 +42,9 @@
  *     entra a la línea, esos SKUs salen primero (todo su faltante);
  *     luego sigue la distribución de colores núcleo.
  *   - LÍNEA 5: única que trabaja 2 modelos en paralelo (rueda de 5 pzas
- *     cuando hay dos). Si solo hay un modelo, usa las 40 pzas/día.
- *   - Capacidad real por línea (L5 = 40, resto = 130). El lote de 5 ya
- *     no se aplica como techo diario cuando L5 va sola.
+ *     cuando hay dos), salvo que sean el mismo producto en distinto
+ *     género: esos van en secuencia. Si solo hay un modelo, usa su
+ *     Cap Produccion por Dia (típico 40).
  *   - URGENTE (después de Especial y de la cantidad mínima), luego la
  *     fecha más próxima. Un modelo Urgente con 2+ líneas usa ambas.
  *     Líneas 1-4 = un modelo a la vez (secuencial); L5 hasta 2 en paralelo.
@@ -47,12 +65,13 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.6";
+var VERSION_SISTEMA = "5.9.7";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_URGENTE = 2;
 var BANDA_RESTO = 3;
 var DIAS_LABORALES = 5;
+var DIAS_ENTRADA_ALMACEN = 4;
 var MAX_MODELOS_LINEA5 = 2;
 var MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5;
 var MAX_SNAPSHOTS = 8;
@@ -470,6 +489,109 @@ function rangoColor_(color) {
   return 50;
 }
 
+function esTokenGenero_(s) {
+  var g = quitarTildes_(normLow_(s));
+  if (g === "" || g === "--") return false;
+  return g === "cab" || g.indexOf("caballer") === 0 || g === "hombre" || g === "male" ||
+    g === "dama" || g === "mujer" || g === "female" || g === "girl" ||
+    g === "kids" || g === "nino" || g === "nina" || g === "ninos" || g === "ninas" ||
+    g === "infantil" || g === "nino/nina" || g === "unisex" || g === "boy";
+}
+
+function ordenGenero_(g) {
+  var s = quitarTildes_(normLow_(g));
+  if (s === "cab" || s.indexOf("caballer") === 0 || s === "hombre" || s === "male" || s === "boy") return 0;
+  if (s === "dama" || s === "mujer" || s === "female" || s === "girl") return 1;
+  if (s === "kids" || s === "nino" || s === "nina" || s === "ninos" || s === "ninas" || s === "infantil") return 2;
+  if (s === "" || s === "--") return 3;
+  return 4;
+}
+
+function familiaDeNombre_(modelo) {
+  var n = norm_(modelo).replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+  if (n === "") return "";
+  var parts = n.split(/\s+/);
+  if (parts.length >= 2 && esTokenGenero_(parts[parts.length - 1])) {
+    return parts.slice(0, parts.length - 1).join(" ");
+  }
+  return n;
+}
+
+function familiaDeTarea_(t) {
+  if (t && t.familia) return t.familia;
+  return familiaDeNombre_(t ? t.modelo : "");
+}
+
+function generoDeTarea_(t) {
+  if (t && t.genero && norm_(t.genero) !== "" && norm_(t.genero) !== "--") return t.genero;
+  var n = norm_(t ? t.modelo : "").replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+  var parts = n.split(/\s+/);
+  if (parts.length >= 2 && esTokenGenero_(parts[parts.length - 1])) return parts[parts.length - 1];
+  return t && t.genero ? t.genero : "";
+}
+
+function capFallbackLinea_(lin) {
+  return CAP_POR_LINEA[String(lin)] || 130;
+}
+
+function capDeTarea_(t, lin) {
+  var c = t ? Number(t.cap) : 0;
+  if (c > 0) return c;
+  var l = lin || (t && t.lineaFija) || (t && t.lineas && t.lineas[0]) || "1";
+  return capFallbackLinea_(l);
+}
+
+function fusionarCantidaProducida_(existente, desdeCostura) {
+  var a = parseCantidad_(existente);
+  var b = parseCantidad_(desdeCostura);
+  var m = Math.max(a, b);
+  return m > 0 ? m : "";
+}
+
+function debeArchivarMo_(tipo, status) {
+  var st = quitarTildes_(normLow_(status));
+  var tp = quitarTildes_(normLow_(tipo));
+  if (st === "cancelada") return true;
+  if (st === "hecho" && tp.indexOf("especial") !== -1) return false;
+  if (st === "hecho") return true;
+  return false;
+}
+
+function numEnCeldaDia_(v) {
+  if (v === "--" || v === "" || v === null || v === undefined) return 0;
+  return Number(v) || 0;
+}
+
+function primerDiaEnRango_(row, diaIni, diaFin) {
+  for (var i = diaIni; i <= diaFin; i++) {
+    if (numEnCeldaDia_(row[i]) > 0) return i;
+  }
+  return 99;
+}
+
+function filaContinuaDespues_(row, primerDia, diaIni, diaFin) {
+  if (primerDia >= 99) return false;
+  for (var i = primerDia + 1; i <= diaFin; i++) {
+    if (numEnCeldaDia_(row[i]) > 0) return true;
+  }
+  return false;
+}
+
+function cmpFilasFlujoTablero_(a, b, diaIni, diaFin, idxNombre) {
+  var da = primerDiaEnRango_(a, diaIni, diaFin);
+  var db = primerDiaEnRango_(b, diaIni, diaFin);
+  if (da !== db) return da - db;
+  var ca = filaContinuaDespues_(a, da, diaIni, diaFin) ? 1 : 0;
+  var cb = filaContinuaDespues_(b, db, diaIni, diaFin) ? 1 : 0;
+  if (ca !== cb) return ca - cb;
+  var qa = numEnCeldaDia_(a[da]);
+  var qb = numEnCeldaDia_(b[db]);
+  if (qa !== qb) return qa - qb;
+  var na = idxNombre !== undefined ? a[idxNombre] : a[1];
+  var nb = idxNombre !== undefined ? b[idxNombre] : b[1];
+  return String(na).localeCompare(String(nb));
+}
+
 function claveMO_(t) {
   var mo = normUp_(t.mo);
   var tipo = t.esEspecial ? "E" : "R";
@@ -495,6 +617,7 @@ function cloneTask(t, newQty, isFase2) {
     diaNoLaborable: t.diaNoLaborable,
     mo: t.mo,
     genero: t.genero,
+    familia: t.familia || familiaDeTarea_(t),
     color: t.color,
     colorRank: t.colorRank !== undefined ? t.colorRank : rangoColor_(t.color),
     talla: t.talla,
@@ -740,10 +863,14 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     var cap = Number(fila[iCap]);
     var lineasStr = iLin !== -1 ? norm_(fila[iLin]) : "";
 
-    if (sku === "" || productoBase === "" || !(cantEfectiva > 0) || !(cap > 0)) continue;
+    if (sku === "" || productoBase === "" || !(cantEfectiva > 0)) continue;
     if (lineasStr === "") {
       if (esEspecial) lineasStr = "1";
       else continue;
+    }
+    if (!(cap > 0)) {
+      var lsCap = parsearLineas_(lineasStr);
+      cap = capFallbackLinea_(lsCap.length ? lsCap[0] : "1");
     }
 
     var genero = iGen !== -1 ? norm_(fila[iGen]) : "";
@@ -824,7 +951,7 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
       cantidad: cantEfectiva, cantidadOriginal: cantSolicitada, solicitadaOrig: cantSolicitada, cap: cap,
       prioridadNum: esEspecial ? 0 : (mapaPrioridades[modelo] !== undefined ? mapaPrioridades[modelo] : 5),
       esEspecial: esEspecial, fechaKey: fechaKey, diaIngreso: diaIngreso, diaNoLaborable: diaNoLaborable,
-      mo: mo, genero: genero, color: color, colorRank: rangoColor_(color), talla: talla,
+      mo: mo, genero: genero, familia: productoBase, color: color, colorRank: rangoColor_(color), talla: talla,
       restante: cantEfectiva, planificada: 0, planificadaSem1: 0, ultimoDia: -1, plan: {},
       indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null, esMinima: false,
       esSkuPrio: false, skuPrioOrden: 9999
@@ -998,7 +1125,8 @@ function generarPlanificacionSemanal_() {
       mapaModelos[t.modelo] = {
         nombre: t.modelo, tareas: [], volumen: 0,
         prioMin: t.prioridadNum, fechaMin: t.fechaKey,
-        esEspecial: !!t.esEspecial, banda: bandaDe_(t)
+        esEspecial: !!t.esEspecial, banda: bandaDe_(t),
+        familia: familiaDeTarea_(t), genero: generoDeTarea_(t)
       };
       ordenModelos.push(t.modelo);
     }
@@ -1054,7 +1182,26 @@ function generarPlanificacionSemanal_() {
   }
 
   function capLinea_(lin) {
-    return CAP_POR_LINEA[String(lin)] || 130;
+    return capFallbackLinea_(lin);
+  }
+
+  function capModelo_(m, lin) {
+    if (!m) return capFallbackLinea_(lin);
+    var cap = 0;
+    m.tareas.forEach(function (t) {
+      if (t.restante > 0 && Number(t.cap) > cap) cap = Number(t.cap);
+    });
+    if (cap > 0) return cap;
+    m.tareas.forEach(function (t) {
+      if (Number(t.cap) > cap) cap = Number(t.cap);
+    });
+    return cap > 0 ? cap : capFallbackLinea_(lin || (m.tareas[0] && m.tareas[0].lineas[0]));
+  }
+
+  function familiaModelo_(m) {
+    if (!m) return "";
+    if (m.familia) return m.familia;
+    return familiaDeNombre_(m.nombre);
   }
 
   function maxOcupantes_(lin) {
@@ -1069,7 +1216,7 @@ function generarPlanificacionSemanal_() {
       for (var k = 0; k < totalDias; k++) t.plan[lin].push(0);
     }
     t.plan[lin][d] += piezas;
-    carga[lin][d] += piezas / capLinea_(lin);
+    carga[lin][d] += piezas / capDeTarea_(t, lin);
     t.restante -= piezas;
     t.planificada += piezas;
     if (d < DIAS_LABORALES) t.planificadaSem1 += piezas;
@@ -1079,10 +1226,11 @@ function generarPlanificacionSemanal_() {
   }
 
   var lineaPorMO = {};
+  var ultimoModeloLinea = { "1": "", "2": "", "3": "", "4": "", "5": "" };
 
   function estimarDiaFinLinea_(t, lin, fromDay) {
     var rest = t.restante;
-    var capLin = capLinea_(lin);
+    var capLin = capDeTarea_(t, lin);
     for (var d = fromDay; d < totalDias; d++) {
       if (d < diaInicioEfectivo_(t)) continue;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) continue;
@@ -1151,17 +1299,16 @@ function generarPlanificacionSemanal_() {
     return ls.filter(function (l) { return carga[l] !== undefined; });
   }
 
-  function capRestanteSemana_(lin, d) {
+  function capRestanteSemana_(lin, d, capRef) {
     var week = Math.floor(d / DIAS_LABORALES);
     var end = Math.min(totalDias, (week + 1) * DIAS_LABORALES);
-    var cap = capLinea_(lin);
+    var cap = capRef > 0 ? capRef : capLinea_(lin);
     var piezas = 0;
     for (var dd = d; dd < end; dd++) piezas += Math.max(0, 1 - carga[lin][dd]) * cap;
     return piezas;
   }
 
   function producirLote_(mP, lin, d, overflow, maxLote, soloMinima) {
-    var capLin = capLinea_(lin);
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
       var diaSemanaActual = d % DIAS_LABORALES;
@@ -1173,12 +1320,14 @@ function generarPlanificacionSemanal_() {
       if (elegiblesTarea_(t, overflow).indexOf(lin) === -1) continue;
       var avail = 1 - carga[lin][d];
       if (avail <= 0.001) return 0;
+      var capLin = capDeTarea_(t, lin);
       var piezasCaben = Math.floor(avail * capLin + 0.0001);
       if (maxLote > 0) piezasCaben = Math.min(piezasCaben, maxLote);
       if (piezasCaben <= 0) return 0;
       var puestas = asignar_(t, lin, d, piezasCaben);
       if (puestas > 0) {
         lineaPorMO[clave] = lin;
+        ultimoModeloLinea[lin] = mP.nombre;
         return puestas;
       }
     }
@@ -1207,6 +1356,118 @@ function generarPlanificacionSemanal_() {
 
   var ocupante = { "1": [], "2": [], "3": [], "4": [], "5": [] };
 
+  function lineasClaveModelo_(m, overflow) {
+    var seen = {};
+    var out = [];
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0) return;
+      elegiblesTarea_(t, overflow).forEach(function (lin) {
+        if (seen[lin]) return;
+        seen[lin] = true;
+        out.push(lin);
+      });
+    });
+    out.sort();
+    return out.join(",");
+  }
+
+  function hayGeneroAnteriorMismaLinea_(m, overflow, dHoy) {
+    var fam = familiaModelo_(m);
+    if (!fam) return false;
+    var g = ordenGenero_(m.genero);
+    var key = lineasClaveModelo_(m, overflow);
+    if (!key) return false;
+    for (var iH = 0; iH < listaModelos.length; iH++) {
+      var h = listaModelos[iH];
+      if (h.nombre === m.nombre) continue;
+      if (familiaModelo_(h) !== fam) continue;
+      if (restanteModelo_(h) <= 0) continue;
+      if (ordenGenero_(h.genero) >= g) continue;
+      if (lineasDondeEsta_(h.nombre).length > 0) continue;
+      if (lineasClaveModelo_(h, overflow) !== key) continue;
+      var puede = h.tareas.some(function (t) {
+        if (t.restante <= 0 || dHoy < diaInicioEfectivo_(t)) return false;
+        if (dHoy < DIAS_LABORALES && (dHoy % DIAS_LABORALES) === t.diaNoLaborable) return false;
+        return elegiblesTarea_(t, overflow).length > 0;
+      });
+      if (puede) return true;
+    }
+    return false;
+  }
+    if (!fam) return false;
+    return (ocupante[lin] || []).some(function (nom) {
+      if (exceptNom && nom === exceptNom) return false;
+      var mO = mapaModelos[nom];
+      return mO && familiaModelo_(mO) === fam;
+    });
+  }
+
+  function lineasDondeEsta_(nombre) {
+    return ["1", "2", "3", "4", "5"].filter(function (lin) {
+      return ocupante[lin].indexOf(nombre) !== -1;
+    });
+  }
+
+  function debeEsperarHermano_(m, overflow) {
+    var fam = familiaModelo_(m);
+    if (!fam) return false;
+    var misLineas = {};
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0) return;
+      elegiblesTarea_(t, overflow).forEach(function (lin) { misLineas[lin] = true; });
+    });
+    var tieneOtraLibre = false;
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      if (!misLineas[lin]) return;
+      if (familiaOcupaLinea_(fam, lin, m.nombre)) return;
+      var occ = ocupante[lin] || [];
+      if (occ.indexOf(m.nombre) !== -1) return;
+      if (occ.length >= maxOcupantes_(lin)) return;
+      tieneOtraLibre = true;
+    });
+    var hermanoEnLineaCompartida = false;
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      if (!misLineas[lin]) return;
+      if (familiaOcupaLinea_(fam, lin, m.nombre)) hermanoEnLineaCompartida = true;
+    });
+    return hermanoEnLineaCompartida && !tieneOtraLibre;
+  }
+
+  function hermanosPendientesEnLinea_(lin, d, overflow, skip, fam) {
+    if (!fam) return [];
+    var out = [];
+    listaModelos.forEach(function (mC) {
+      if (familiaModelo_(mC) !== fam) return;
+      if (restanteModelo_(mC) <= 0) return;
+      if (skip && skip[mC.nombre]) return;
+      if (ocupante[lin].indexOf(mC.nombre) !== -1) return;
+      var yaOtra = lineasDondeEsta_(mC.nombre).some(function (l2) { return l2 !== lin; });
+      if (yaOtra) return;
+      if (!modeloPuedeProducirHoyNom_(mC.nombre, lin, d, overflow)) return;
+      out.push(mC);
+    });
+    out.sort(function (a, b) {
+      var ga = ordenGenero_(a.genero || generoDeTarea_(a.tareas[0]));
+      var gb = ordenGenero_(b.genero || generoDeTarea_(b.tareas[0]));
+      if (ga !== gb) return ga - gb;
+      return a.nombre.localeCompare(b.nombre);
+    });
+    return out;
+  }
+
+  function modeloPuedeProducirHoyNom_(nom, lin, d, overflow) {
+    var mO = mapaModelos[nom];
+    if (!mO || restanteModelo_(mO) <= 0) return false;
+    return mO.tareas.some(function (t) {
+      if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
+      if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
+      var clave = claveMO_(t);
+      if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
+      if (t.lineaFija && t.lineaFija !== lin) return false;
+      return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
+    });
+  }
+
   for (var d = 0; d < totalDias; d++) {
     refrescarColaModelos_();
     if (d % DIAS_LABORALES === 0) {
@@ -1229,6 +1490,7 @@ function generarPlanificacionSemanal_() {
 
     function lineasLibresDe_(m) {
       var out = [], seen = {};
+      var fam = familiaModelo_(m);
       m.tareas.forEach(function (t) {
         if (t.restante <= 0) return;
         elegiblesTarea_(t, overflowL1).forEach(function (lin) {
@@ -1236,6 +1498,7 @@ function generarPlanificacionSemanal_() {
           var occ = ocupante[lin] || [];
           if (occ.indexOf(m.nombre) !== -1) return;
           if (occ.length >= maxOcupantes_(lin)) return;
+          if (fam && familiaOcupaLinea_(fam, lin, m.nombre)) return;
           seen[lin] = true;
           out.push(lin);
         });
@@ -1243,15 +1506,37 @@ function generarPlanificacionSemanal_() {
       return out;
     }
 
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      if ((ocupante[lin] || []).length > 0) return;
+      var lastNom = ultimoModeloLinea[lin];
+      var lastM = lastNom ? mapaModelos[lastNom] : null;
+      if (lastM && restanteModelo_(lastM) > 0 && modeloPuedeProducirHoyNom_(lastNom, lin, d, overflowL1) &&
+          lineasDondeEsta_(lastNom).length === 0) {
+        ocupante[lin].push(lastNom);
+        return;
+      }
+      var famLast = lastM ? familiaModelo_(lastM) : (lastNom ? familiaDeNombre_(lastNom) : "");
+      var hermanos = hermanosPendientesEnLinea_(lin, d, overflowL1, {}, famLast);
+      if (hermanos.length > 0 && (ocupante[lin] || []).length < maxOcupantes_(lin)) {
+        ocupante[lin].push(hermanos[0].nombre);
+      }
+    });
+
     var vivos = listaModelos.filter(function (m) { return restanteModelo_(m) > 0; });
     vivos.forEach(function (m) {
       var ya = ["1", "2", "3", "4", "5"].some(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (ya) return;
+      if (debeEsperarHermano_(m, overflowL1)) return;
+      if (hayGeneroAnteriorMismaLinea_(m, overflowL1, d)) return;
       var libres = lineasLibresDe_(m);
       if (libres.length === 0) return;
       libres.sort(function (a, b) {
+        var fam = familiaModelo_(m);
+        var pa = (fam && familiaDeNombre_(ultimoModeloLinea[a] || "") === fam) ? 0 : 1;
+        var pb = (fam && familiaDeNombre_(ultimoModeloLinea[b] || "") === fam) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
         if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
         return String(a).localeCompare(String(b));
       });
@@ -1263,12 +1548,12 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
-      var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d); }, 0);
+      var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
       if (restanteModelo_(m) <= capOwned + 0.001) return;
       lineasLibresDe_(m).forEach(function (lin) {
         if (restanteModelo_(m) <= capOwned + 0.001) return;
         ocupante[lin].push(m.nombre);
-        capOwned += capRestanteSemana_(lin, d);
+        capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
     });
     if (overflowL1 && ocupante["1"].length === 0) {
@@ -1309,20 +1594,23 @@ function generarPlanificacionSemanal_() {
     });
 
     function modeloPuedeProducirHoy_(nom, lin, d, overflow) {
-      var mO = mapaModelos[nom];
-      if (!mO || restanteModelo_(mO) <= 0) return false;
-      return mO.tareas.some(function (t) {
-        if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
-        if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
-        var clave = claveMO_(t);
-        if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
-        if (t.lineaFija && t.lineaFija !== lin) return false;
-        return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
-      });
+      return modeloPuedeProducirHoyNom_(nom, lin, d, overflow);
     }
 
     function siguienteCandidato_(lin, d, overflow, skip) {
       skip = skip || {};
+      var lastNom = ultimoModeloLinea[lin] || "";
+      var lastM = lastNom ? mapaModelos[lastNom] : null;
+      var famRef = lastM ? familiaModelo_(lastM) : familiaDeNombre_(lastNom);
+      if (!famRef && ocupante[lin].length) famRef = familiaModelo_(mapaModelos[ocupante[lin][0]]);
+      var paraParalelo = ocupante[lin].length > 0;
+      var generoTerminado = lastM && restanteModelo_(lastM) <= 0;
+      if (famRef && !paraParalelo && generoTerminado) {
+        var hermanos = hermanosPendientesEnLinea_(lin, d, overflow, skip, famRef).filter(function (h) {
+          return h.nombre !== lastNom;
+        });
+        if (hermanos.length > 0) return hermanos[0].nombre;
+      }
       for (var iC = 0; iC < listaModelos.length; iC++) {
         var mC = listaModelos[iC];
         if (restanteModelo_(mC) <= 0) continue;
@@ -1332,6 +1620,8 @@ function generarPlanificacionSemanal_() {
           return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
         });
         if (yaOtra && !(overflow && lin === "1" && mC.esEspecial)) continue;
+        if (paraParalelo && famRef && familiaModelo_(mC) === famRef) continue;
+        if (debeEsperarHermano_(mC, overflow)) continue;
         if (!modeloPuedeProducirHoy_(mC.nombre, lin, d, overflow)) continue;
         return mC.nombre;
       }
@@ -1350,7 +1640,13 @@ function generarPlanificacionSemanal_() {
         var noms = ocupante[lin];
         var before = carga[lin][d];
         if (String(lin) === "5" && noms.length >= 2) {
-          producirRuedaLinea5_(noms, d, overflow);
+          var fam0 = familiaModelo_(mapaModelos[noms[0]]);
+          var paralelos = noms.filter(function (nom, idx) {
+            if (idx === 0) return true;
+            return familiaModelo_(mapaModelos[nom]) !== fam0;
+          });
+          if (paralelos.length >= 2) producirRuedaLinea5_(paralelos, d, overflow);
+          else producirModeloDia_(mapaModelos[noms[0]], lin, d, overflow);
         } else if (noms.length > 0) {
           producirModeloDia_(mapaModelos[noms[0]], lin, d, overflow);
         }
@@ -1553,12 +1849,7 @@ function generarPlanificacionSemanal_() {
 
     if (arrData.length > 0) {
       arrData.sort(function (a, b) {
-        var diaA = 9, diaB = 9;
-        for (var i = 4; i <= 8; i++) { if (a[i] !== "--" && a[i] > 0) { diaA = i; break; } }
-        for (var j = 4; j <= 8; j++) { if (b[j] !== "--" && b[j] > 0) { diaB = j; break; } }
-        if (diaA !== diaB) return diaA - diaB;
-        if (b[9] !== a[9]) return b[9] - a[9];
-        return String(a[1]).localeCompare(String(b[1]));
+        return cmpFilasFlujoTablero_(a, b, 4, 8, 2);
       });
 
       var rDest = hl.getRange(3, 2, arrData.length, 10);
@@ -1590,15 +1881,18 @@ function generarPlanificacionSemanal_() {
 
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
+    "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
+    "• Misma familia (RIO CAB/DAMA/KIDS) en una línea: lotes por género, no mezclados.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
-    "• Línea 5: hasta 2 modelos en paralelo (40 pzas/día; rueda de 5 si hay dos).\n" +
+    "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
     "  Programadas en banda mínima: " + piezasMinima + " pzas.  |  Modelos vivos con cupo: " + nMinAplicadas + "\n" +
     "  Fase 1 (mínima): " + piezasFase1 + " pzas.  |  Fase 2 (resto): " + piezasFase2 + " pzas.\n" +
-    "• Tableros semanales ordenados por flujo diario (primer día con producción).\n" +
+    "• Tableros: primero el remanente del día, luego el modelo que sigue la semana.\n" +
+    "• Almacén: entrada a 4 días hábiles de costura.\n" +
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
     "• Proyección: amarillo al llegar a la mínima, verde al llegar a la meta."
   );
@@ -1679,18 +1973,7 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
     if (datosGlobalesS.length > 0) {
       datosGlobalesS.sort(function (a, b) {
         if (String(a[0]) !== String(b[0])) return String(a[0]).localeCompare(String(b[0]));
-        var da = primerDiaFila_(a);
-        var db = primerDiaFila_(b);
-        if (da !== db) return da - db;
-        var ia = infoModelo[a[1]] || {};
-        var ib = infoModelo[b[1]] || {};
-        var ba = (ia.bandaMin !== undefined) ? ia.bandaMin : 9;
-        var bb = (ib.bandaMin !== undefined) ? ib.bandaMin : 9;
-        if (ba !== bb) return ba - bb;
-        var qtyA = numCeldaDia_(a, da);
-        var qtyB = numCeldaDia_(b, db);
-        if (qtyA !== qtyB) return qtyB - qtyA;
-        return String(a[1]).localeCompare(String(b[1]));
+        return cmpFilasFlujoTablero_(a, b, 4, 8, 1);
       });
 
       var rangoS = hojaS.getRange(4, 2, datosGlobalesS.length, 11);
@@ -2349,7 +2632,7 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
   listAlmacenModelo.forEach(function (item) {
     var imA = item.im;
     var msSalida = imA.diaFinEstimado >= 0 ? fechaDeDia_(cfg, imA.diaFinEstimado).getTime() : Infinity;
-    var msEntrada = addBusinessDays_(msSalida, 2);
+    var msEntrada = addBusinessDays_(msSalida, DIAS_ENTRADA_ALMACEN);
     var v = viejosModelo[norm_(item.mod)] || { rec: "", fal: "" };
 
     arrModelo.push([
@@ -2384,7 +2667,7 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
   var arrSku = [];
   listAlmacenSku.forEach(function (tG) {
     var msSalida = tG.diaFin >= 0 ? fechaDeDia_(cfg, tG.diaFin).getTime() : Infinity;
-    var msEntrada = addBusinessDays_(msSalida, 2);
+    var msEntrada = addBusinessDays_(msSalida, DIAS_ENTRADA_ALMACEN);
     var v = viejosSku[norm_(tG.mo) + "_" + norm_(tG.sku)] || { rec: "", fal: "" };
 
     arrSku.push([
@@ -2625,8 +2908,7 @@ function actualizarMOs_() {
       var skuAct = norm_(bloqueMO[m][0]);
       var tipoAct = norm_(bloqueMO[m][1]);
       var statusOriginal = norm_(bloqueMO[m][4]);
-      var st = statusOriginal.toLowerCase();
-      if (skuAct !== "" && (st === "hecho" || st === "cancelada")) {
+      if (skuAct !== "" && debeArchivarMo_(tipoAct, statusOriginal)) {
         skusTerminados[skuAct + "||" + tipoAct] = statusOriginal;
       }
     }
@@ -2698,7 +2980,8 @@ function actualizarMOs_() {
     var elimReg = limpiarYRespaldar(hojaPorHacer, "Producción");
     var elimEsp = limpiarYRespaldar(hojaEspecial, "Especial");
     mensaje += "✅ CULMINADOS/CANCELADOS:\nSe archivaron " + (elimReg + elimEsp) +
-      " SKUs en 'Historial MO' (columnas alineadas por nombre).\n\n";
+      " SKUs en 'Historial MO' (columnas alineadas por nombre).\n" +
+      "Las MO en Hecho de 'Por Hacer - Especial' se conservan.\n\n";
   }
 
   ss.toast("Fase 2: sincronizando hoja MO...", "🔄 Actualizando MOs", 5);
@@ -3011,26 +3294,22 @@ function sincronizarProduccionExterna() {
     var idxSkuH = headers.indexOf("sku");
     var idxSolH = headers.findIndex(function (h) { return h.indexOf("cantidad solicitada") !== -1; });
     var idxProdH = headers.findIndex(function (h) { return h.indexOf("cantida producida") !== -1 || h.indexOf("cantidad producida") !== -1; });
-    var idxFaltH = headers.findIndex(function (h) { return h === "faltante"; });
 
-    if (idxMoH === -1 || idxSolH === -1 || idxProdH === -1 || idxFaltH === -1) {
-      SpreadsheetApp.getUi().alert("⚠️ Aviso: No se pudieron actualizar las cantidades en '" + nombreHoja + "' por falta de encabezados exactos.");
+    if (idxMoH === -1 || idxProdH === -1) {
+      SpreadsheetApp.getUi().alert("⚠️ Aviso: No se pudieron actualizar las cantidades en '" + nombreHoja + "' por falta de encabezados exactos (MO / Cantida Producida).");
       return;
     }
 
     var datosH = hojaDestino.getRange(detHeadPH.fila + 2, 1, ultFila - (detHeadPH.fila + 1), ultCol).getValues();
     var colProduccion = [];
-    var colFaltante = [];
 
     for (var r = 0; r < datosH.length; r++) {
       var rowMoStr = String(datosH[r][idxMoH]).trim().toUpperCase();
-      var valSol = String(datosH[r][idxSolH]).trim();
-      var cantSol = Number(valSol) || 0;
+      var valSol = idxSolH !== -1 ? String(datosH[r][idxSolH]).trim() : "";
       var rowSkuStr = idxSkuH !== -1 ? String(datosH[r][idxSkuH]).trim() : "";
 
       if (rowMoStr === "" && rowSkuStr === "" && valSol === "") {
         colProduccion.push([""]);
-        colFaltante.push([""]);
         continue;
       }
 
@@ -3041,14 +3320,10 @@ function sincronizarProduccionExterna() {
         });
       }
 
-      var faltante = cantSol - prodHoy;
-      if (faltante < 0) faltante = 0;
-
-      colProduccion.push([prodHoy > 0 ? prodHoy : ""]);
-      colFaltante.push([prodHoy > 0 ? faltante : (valSol !== "" ? cantSol : "")]);
+      var fusion = fusionarCantidaProducida_(datosH[r][idxProdH], prodHoy);
+      colProduccion.push([fusion]);
     }
     hojaDestino.getRange(detHeadPH.fila + 2, idxProdH + 1, colProduccion.length, 1).setValues(colProduccion);
-    hojaDestino.getRange(detHeadPH.fila + 2, idxFaltH + 1, colFaltante.length, 1).setValues(colFaltante);
   }
 
   inyectarCantidades(hojaPorHacer, "Por Hacer");
@@ -3212,7 +3487,8 @@ function sincronizarProduccionExterna() {
   SpreadsheetApp.getUi().alert(
     "✅ SINCRONIZACIÓN MAESTRA EXITOSA\n\n" +
     "• Tablero visual 'Tracking - Produccion' actualizado con el archivo externo.\n" +
-    "• 'Cantidad Producida' / 'Faltante' recalculados en todas las listas locales.\n" +
+    "• 'Cantida Producida' actualizada en Por Hacer (col. L) y Por Hacer - Especial (col. M).\n" +
+    "  Se conserva el mayor entre lo ya cargado y lo de Costura (no se pisa Faltante).\n" +
     "• Pestañas de Línea 1-5 actualizadas.\n" +
     "• 📦 Pestañas de Almacén (Modelo y SKUs) sincronizadas con los ingresos basados SOLO en MO."
   );
