@@ -41,6 +41,8 @@ MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
 GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
+PROD_RANGE_MIN = 890            # Mismo rango acordado que Chaqueta Lite
+PROD_RANGE_MAX = 970
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Colores de producción ──
@@ -212,8 +214,8 @@ def calc_production(ref: dict) -> dict:
         "barq_add": barq_add,
         "raw_min": raw_min,
         "raw_max": raw_max,
-        "prod_min": raw_min,
-        "prod_max": raw_max,
+        "prod_min": PROD_RANGE_MIN,
+        "prod_max": PROD_RANGE_MAX,
     }
 
 
@@ -336,11 +338,11 @@ def write_resumen(wb, ref, prod):
         ["Demanda teórica mín", prod["raw_min"], "und"],
         ["Demanda teórica máx", prod["raw_max"], "und"],
         [],
-        ["── RANGO DE PRODUCCIÓN (CALCULADO) ──"],
+        ["── RANGO DE PRODUCCIÓN (ACORDADO — IGUAL CHAQUETA LITE) ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
         ["MÁXIMO", prod["prod_max"], "und"],
         ["Rango de acción", prod["prod_max"] - prod["prod_min"], "und"],
-        ["Base del rango", f"{COVER_MONTHS_MIN}–{COVER_MONTHS_MAX} meses + SS {int(SAFETY_STOCK_PCT*100)}%", ""],
+        ["Demanda teórica calculada (referencia)", f"{prod['raw_min']} – {prod['raw_max']} und", ""],
         [],
         ["── COLORES DE PRODUCCIÓN ──"],
         ["Negro", f"{int(COLOR_PCT['Negro']*100)}%", "protagonista"],
@@ -809,9 +811,9 @@ def write_metodologia(wb, ref, prod):
         f"   • Barquisimeto (nueva): promedio Grieta + Chacao + Tolón proyectado = {ref['barq_proj']:.0f} und/mes.",
         "   • Corporativo: EXCLUIDO.",
         "",
-        "4. RANGO DE PRODUCCIÓN",
-        f"   Mínimo: {prod['prod_min']} und | Máximo: {prod['prod_max']} und.",
-        f"   Calculado: {COVER_MONTHS_MIN}–{COVER_MONTHS_MAX} meses cobertura + SS {int(SAFETY_STOCK_PCT*100)}%.",
+        "4. RANGO DE PRODUCCIÓN (ACORDADO)",
+        f"   Mínimo: {PROD_RANGE_MIN} und | Máximo: {PROD_RANGE_MAX} und (mismo rango Chaqueta Lite).",
+        f"   Demanda teórica calculada: {prod['raw_min']} – {prod['raw_max']} und (referencia).",
         f"   Velocidad red ajustada: {prod['vel_network']:.0f} und/mes.",
         "",
         "5. DISTRIBUCIÓN",
