@@ -35,7 +35,9 @@ COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.50       # Web ≈ 50% de Cerro Verde
-GRAND_PLAZ_BONUS = 1.20         # Grand Plaz +20% sobre histórico
+GRAND_PLAZ_BONUS = 1.40         # Grand Plaz +40% sobre histórico
+PROD_RANGE_MIN = 850            # Rango global acordado
+PROD_RANGE_MAX = 940
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres ──
@@ -189,19 +191,16 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
 
     raw_min = round(vel_network * COVER_MONTHS_MIN * (1 + SAFETY_STOCK_PCT))
     raw_max = round(vel_network * COVER_MONTHS_MAX * (1 + SAFETY_STOCK_PCT))
-    pct_max = round(raw_min * MAX_PCT_ABOVE_MIN)
 
+    prod_min = PROD_RANGE_MIN
+    prod_max = PROD_RANGE_MAX
     cap = zip_cap["cap_total"]
-    zipper_limited = raw_min > cap
 
-    if zipper_limited:
-        prod_max = cap
-        prod_min = round(cap * 0.87)
-        prod_min = min(prod_min, prod_max - 1) if prod_max > 1 else prod_max
-    else:
-        prod_min = raw_min
-        prod_max = min(max(raw_max, pct_max), cap)
-        prod_max = max(prod_max, prod_min)
+    use_60_min = round(prod_min * zip_cap["pct_60"])
+    use_60_max = round(prod_max * zip_cap["pct_60"])
+    use_75_min = round(prod_min * zip_cap["pct_75"])
+    use_75_max = round(prod_max * zip_cap["pct_75"])
+    deficit_60_max = max(0, use_60_max - CIERRES_60CM)
 
     return {
         "vel_adj": vel_adj,
@@ -211,7 +210,13 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
         "raw_max": raw_max,
         "prod_min": prod_min,
         "prod_max": prod_max,
-        "zipper_limited": zipper_limited,
+        "zipper_limited": prod_max > cap,
+        "use_60_min": use_60_min,
+        "use_60_max": use_60_max,
+        "use_75_min": use_75_min,
+        "use_75_max": use_75_max,
+        "deficit_60_max": deficit_60_max,
+        "cap_cierres": cap,
     }
 
 
@@ -280,13 +285,15 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Cierre 75 cm (L · XL)", CIERRES_75CM, "und disponibles"],
         ["Curva tallas → % cierre 60 cm", f"{zip_cap['pct_60']*100:.1f}%"],
         ["Curva tallas → % cierre 75 cm", f"{zip_cap['pct_75']*100:.1f}%"],
-        ["TOPE DURO PRODUCCIÓN", zip_cap["cap_total"], "und"],
-        ["¿Limitado por cierres?", "SÍ" if prod["zipper_limited"] else "NO"],
+        ["Tope teórico cierres 60 cm", zip_cap["cap_total"], "und"],
+        ["¿Máximo supera cierres 60 cm?", "SÍ — ver hoja Cierres" if prod["deficit_60_max"] else "NO"],
         [],
-        ["── RANGO DE PRODUCCIÓN SUGERIDO ──"],
+        ["── RANGO DE PRODUCCIÓN (ACORDADO) ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
-        ["MÁXIMO (techo con cierres)", prod["prod_max"], "und"],
+        ["MÁXIMO", prod["prod_max"], "und"],
         ["Rango de acción", prod["prod_max"] - prod["prod_min"], "und"],
+        ["Cierres 60 cm al máximo", prod["use_60_max"], f"de {CIERRES_60CM} disp."],
+        ["Déficit cierres 60 cm al máximo", prod["deficit_60_max"] or "—", "und" if prod["deficit_60_max"] else ""],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -296,7 +303,7 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["La Vela histórica", round(ref["vela_hist"], 1), "und/mes"],
         ["La Vela proyectada (avg Sambil + Cerro Verde)", round(ref["vela_proj"], 1), "und/mes"],
         ["Grand Plaz histórica", round(ref["grand_hist"], 1), "und/mes"],
-        [f"Grand Plaz proyectada (+{round((GRAND_PLAZ_BONUS - 1) * 100)}%)", round(ref["grand_proj"], 1), "und/mes"],
+        [f"Grand Plaz proyectada (+{round((GRAND_PLAZ_BONUS - 1) * 100)}% hist.)", round(ref["grand_proj"], 1), "und/mes"],
         ["Barquisimeto (avg Grieta+Chacao+Tolón proy.)", round(ref["barq_proj"], 1), "und/mes"],
         ["Corporativo", "EXCLUIDO"],
         [],
@@ -362,9 +369,11 @@ def write_tallas_sheet(wb, ref, prod):
     style_cell(ws.cell(row=r, column=7, value=c60_max), tot_fill, bold=True)
 
     r += 2
-    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 60 cm"), color_fill, align=left)
+    fill60 = warn_fill if c60_max > CIERRES_60CM else color_fill
+    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 60 cm"), fill60, align=left)
     ws.cell(row=r, column=4, value=CIERRES_60CM)
-    ws.cell(row=r, column=5, value=f"Usa máx {c60_max} ({c60_max/CIERRES_60CM*100:.0f}%)")
+    deficit = c60_max - CIERRES_60CM
+    ws.cell(row=r, column=5, value=f"Usa máx {c60_max}" + (f" (faltan {deficit})" if deficit > 0 else f" ({c60_max/CIERRES_60CM*100:.0f}%)"))
     r += 1
     style_cell(ws.cell(row=r, column=1, value="Disponible cierres 75 cm"), color_fill, align=left)
     ws.cell(row=r, column=4, value=CIERRES_75CM)
@@ -465,6 +474,10 @@ def write_cierres_sheet(wb, ref, prod, zip_cap):
             CIERRES_75CM - sum(talla_max[t] for t in TALLAS_75CM),
             f"{sum(talla_max[t] for t in TALLAS_75CM)/CIERRES_75CM*100:.0f}%",
         ],
+        [],
+        ["Rango producción acordado", f"{prod['prod_min']} – {prod['prod_max']} und"],
+        ["Déficit cierres 60 cm al máximo", prod["deficit_60_max"] or 0, "und (comprar adicional)" if prod["deficit_60_max"] else "—"],
+        ["Nota", "Al máximo (940) se supera stock cierres 60 cm; comprar ~14 und extra o producir tope 921 con stock actual." if prod["deficit_60_max"] else ""],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -495,21 +508,23 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"     Histórico Web: {ref['store_monthly_hist'].get('WEB', 0):.0f} und/mes.",
         f"   • La Vela (nueva): promedio Sambil + Cerro Verde = {ref['vela_proj']:.0f} und/mes.",
         f"     Histórico La Vela: {ref['vela_hist']:.0f} und/mes.",
-        f"   • Grand Plaz: histórico × {GRAND_PLAZ_BONUS} = {ref['grand_proj']:.0f} und/mes.",
+        f"   • Grand Plaz: histórico × {GRAND_PLAZ_BONUS} (+{round((GRAND_PLAZ_BONUS-1)*100)}%) = {ref['grand_proj']:.0f} und/mes.",
         f"     Histórico Grand Plaz: {ref['grand_hist']:.0f} und/mes.",
         f"   • Barquisimeto (nueva): promedio Grieta + Chacao + Tolón proyectado = {ref['barq_proj']:.0f} und/mes.",
         "   • Corporativo: EXCLUIDO.",
         "",
-        "4. COBERTURA Y STOCK DE SEGURIDAD",
-        f"   Mínimo: {COVER_MONTHS_MIN} meses + {int(SAFETY_STOCK_PCT*100)}% SS.",
-        f"   Máximo: {COVER_MONTHS_MAX} meses o mín × {MAX_PCT_ABOVE_MIN}.",
+        "4. RANGO GLOBAL ACORDADO",
+        f"   Mínimo: {PROD_RANGE_MIN} und | Máximo: {PROD_RANGE_MAX} und.",
+        f"   Demanda teórica calculada: {prod['raw_min']} – {prod['raw_max']} und (referencia).",
         "",
         "5. INSUMO LIMITANTE — CIERRES",
-        f"   Tope duro = {zip_cap['cap_total']} und (cierre 60 cm limitante).",
+        f"   Tope teórico cierres 60 cm = {zip_cap['cap_total']} und.",
+        f"   Al máximo ({prod['prod_max']} und) se necesitan {prod['use_60_max']} cierres 60 cm.",
+        f"   Déficit al máximo: {prod['deficit_60_max']} und de cierre 60 cm (si no se compran más).",
         "",
         "6. RANGO MÍNIMO / MÁXIMO",
-        f"   Demanda teórica mín: {prod['raw_min']} → ajustada: {prod['prod_min']} und.",
-        f"   Demanda teórica máx: {prod['raw_max']} → ajustada: {prod['prod_max']} und.",
+        f"   Compromiso mín: {prod['prod_min']} und.",
+        f"   Techo máx: {prod['prod_max']} und.",
         "",
         "7. DISTRIBUCIÓN",
         "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
