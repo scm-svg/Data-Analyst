@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Genera proyección de producción Chaqueta Lite (DAMA, XS–XL).
 
-Referencia: ventas DAMA de CUADRO JACKET 2.0 (importado, producto similar).
+Referencia: ventas DAMA combinadas de Jacket 1.0 + Jacket 2.0 (adjuntos).
 Restricción: cierres QX Negro 0580 — 60 cm (748 und) y 75 cm (744 und).
 """
 
@@ -13,8 +13,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-HTML_PATH = Path(__file__).resolve().parent / "Dashboard_Jacket_2_0 (3).html"
-OUTPUT_PATH = Path(__file__).resolve().parent / "CHAQUETA_LITE_RANGO_PRODUCCION.xlsx"
+BASE = Path(__file__).resolve().parent
+HTML_PATHS = [
+    BASE / "Dashboard_Jacket_1_0.html",
+    BASE / "Dashboard_Jacket_2_0.html",
+]
+OUTPUT_PATH = BASE / "CHAQUETA_LITE_RANGO_PRODUCCION.xlsx"
 
 PRODUCTO = "CHAQUETA LITE"
 GENERO = "DAMA"
@@ -24,25 +28,26 @@ TALLAS_60CM = {"XS", "S", "M"}
 TALLAS_75CM = {"L", "XL"}
 
 # ── Parámetros de proyección ──
-HIGH_SEASON_FACTOR = 1.25       # Temporada alta (diciembre)
-SAFETY_STOCK_PCT = 0.15         # Stock de seguridad +15%
-COVER_MONTHS_MIN = 2.5          # Cobertura mínima (meses, velocidad ajustada)
-COVER_MONTHS_MAX = 3.5          # Cobertura máxima
-MAX_PCT_ABOVE_MIN = 1.12        # Techo máximo = mín × 112%
-NEW_STORE_RAMP = 0.85           # Ramp-up Barquisimeto (85% capacidad proxy)
-WEB_SHARE_PCT = 0.06            # Web ~6% de red (PEDIDOS subestima canal web)
-VELOCITY_MONTHS = 3             # Base: últimos 3 meses (Mar–May 2026)
+HIGH_SEASON_FACTOR = 1.25
+SAFETY_STOCK_PCT = 0.15
+COVER_MONTHS_MIN = 2.5
+COVER_MONTHS_MAX = 3.5
+MAX_PCT_ABOVE_MIN = 1.12
+TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
+WEB_VS_CERRO_VERDE = 0.50       # Web ≈ 50% de Cerro Verde
+VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres ──
 CIERRES_60CM = 748
 CIERRES_75CM = 744
 
 # ── Tiendas ──
-PHYSICAL_STORES = ["SAMBIL", "GRIETA", "CERRO VERDE", "CHACAO", "GRAND PLAZ", "TOLON"]
+HISTORICAL_STORES = ["SAMBIL", "GRIETA", "CERRO VERDE", "CHACAO", "GRAND PLAZ", "LA VELA"]
 NEW_STORE = "BARQUISIMETO"
 WEB_STORE = "WEB"
+TOLON_STORE = "TOLON"
 EXCLUDE_STORES = {"CORPORATIVO", "PEDIDOS"}
-BARQUISIMETO_PROXY = ["GRIETA", "CHACAO", "TOLON"]
+DISTRIBUTION_STORES = HISTORICAL_STORES + [TOLON_STORE, WEB_STORE, NEW_STORE]
 
 # ── Estilos Excel ──
 title_fill = PatternFill("solid", fgColor="1E3A5F")
@@ -53,74 +58,97 @@ min_fill = PatternFill("solid", fgColor="FFF9C4")
 max_fill = PatternFill("solid", fgColor="FFE0B2")
 warn_fill = PatternFill("solid", fgColor="FFCDD2")
 white_fill = PatternFill("solid", fgColor="FFFFFF")
+adj_fill = PatternFill("solid", fgColor="FFF3E0")
 thin = Side(style="thin", color="1E3A5F")
 border = Border(left=thin, right=thin, top=thin, bottom=thin)
 center = Alignment(horizontal="center", vertical="center")
 left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
 
-def load_jacket_data() -> dict:
-    html = HTML_PATH.read_text(encoding="utf-8")
-    match = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
-    if not match:
-        raise ValueError("No se encontró DATA en el dashboard Jacket 2.0")
-    return json.loads(match.group(1))
+def load_combined_data() -> dict:
+    all_rows = []
+    meses_order = []
+    for path in HTML_PATHS:
+        html = path.read_text(encoding="utf-8")
+        match = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
+        if not match:
+            raise ValueError(f"No se encontró DATA en {path.name}")
+        data = json.loads(match.group(1))
+        meses_order.extend(data.get("meses_order", []))
+        all_rows.extend(data["raw_rows"])
+
+    seen = set()
+    months_chrono = []
+    for m in meses_order:
+        if m not in seen:
+            seen.add(m)
+            months_chrono.append(m)
+
+    return {"raw_rows": all_rows, "meses_order": months_chrono}
 
 
 def analyze_reference(data: dict) -> dict:
-    """Analiza ventas DAMA Jacket 2.0 como proxy."""
-    rows = [r for r in data["raw_rows"] if r["genero"] == GENERO]
+    rows = [r for r in data["raw_rows"] if r["genero"] == GENERO and r["tienda"] not in EXCLUDE_STORES]
     months = data["meses_order"]
-    vel_months = months[-VELOCITY_MONTHS:]
+    months_with_data = [m for m in months if any(r["mes"] == m for r in rows)]
+    n_months = len(months_with_data)
 
-    by_month = {}
-    for m in months:
-        by_month[m] = sum(r["v"] for r in rows if r["mes"] == m and r["tienda"] not in EXCLUDE_STORES)
-
-    vel_base = sum(by_month[m] for m in vel_months) / len(vel_months)
-    vel_all = sum(by_month.values()) / len(months)
+    by_month = {m: sum(r["v"] for r in rows if r["mes"] == m) for m in months}
+    vel_base = sum(by_month.get(m, 0) for m in VELOCITY_MONTHS) / len(VELOCITY_MONTHS)
+    vel_all = sum(by_month.values()) / n_months if n_months else 0
     dec_vel = by_month.get("diciembre-2025", 0)
 
-    # Curva de tallas
     talla_tot = {t: 0 for t in TALLAS}
     for r in rows:
-        if r["tienda"] not in EXCLUDE_STORES and r["talla"] in talla_tot:
+        if r["talla"] in talla_tot:
             talla_tot[r["talla"]] += r["v"]
     talla_grand = sum(talla_tot.values())
     talla_pct = {t: talla_tot[t] / talla_grand if talla_grand else 0 for t in TALLAS}
 
-    # Participación por tienda
     store_tot = {}
-    for s in PHYSICAL_STORES:
+    for s in set(r["tienda"] for r in rows):
         store_tot[s] = sum(r["v"] for r in rows if r["tienda"] == s)
-    store_grand = sum(store_tot.values())
-    store_share = {s: store_tot[s] / store_grand if store_grand else 0 for s in PHYSICAL_STORES}
+    store_monthly_hist = {s: store_tot.get(s, 0) / n_months for s in store_tot}
 
-    # Barquisimeto proxy
-    n_months = len(months)
-    proxy_monthly = sum(store_tot.get(s, 0) / n_months for s in BARQUISIMETO_PROXY) / len(BARQUISIMETO_PROXY)
-    barq_monthly = proxy_monthly * NEW_STORE_RAMP
+    chacao_m = store_monthly_hist.get("CHACAO", 0)
+    cerro_m = store_monthly_hist.get("CERRO VERDE", 0)
+    grieta_m = store_monthly_hist.get("GRIETA", 0)
+    tolon_proj = chacao_m * TOLON_VS_CHACAO
+    web_proj = cerro_m * WEB_VS_CERRO_VERDE
+    barq_proj = (grieta_m + chacao_m + tolon_proj) / 3
 
-    web_monthly = vel_base * WEB_SHARE_PCT
+    store_monthly = {}
+    for s in HISTORICAL_STORES:
+        store_monthly[s] = store_monthly_hist.get(s, 0)
+    store_monthly[TOLON_STORE] = tolon_proj
+    store_monthly[WEB_STORE] = web_proj
+    store_monthly[NEW_STORE] = barq_proj
+
+    total_weight = sum(store_monthly.values())
+    store_share = {s: store_monthly[s] / total_weight if total_weight else 0 for s in DISTRIBUTION_STORES}
 
     return {
         "vel_base": vel_base,
         "vel_all": vel_all,
         "dec_vel": dec_vel,
-        "vel_months": vel_months,
+        "vel_months": VELOCITY_MONTHS,
         "talla_pct": talla_pct,
         "talla_tot": talla_tot,
+        "store_monthly": store_monthly,
+        "store_monthly_hist": store_monthly_hist,
         "store_share": store_share,
-        "store_tot": store_tot,
-        "barq_monthly": barq_monthly,
-        "web_monthly": web_monthly,
+        "tolon_proj": tolon_proj,
+        "web_proj": web_proj,
+        "barq_proj": barq_proj,
+        "chacao_m": chacao_m,
+        "cerro_m": cerro_m,
         "months": months,
         "by_month": by_month,
+        "sources": [p.name for p in HTML_PATHS],
     }
 
 
 def calc_zipper_cap(talla_pct: dict) -> dict:
-    """Calcula tope de producción según cierres disponibles."""
     pct_60 = sum(talla_pct[t] for t in TALLAS_60CM)
     pct_75 = sum(talla_pct[t] for t in TALLAS_75CM)
     cap_60 = int(CIERRES_60CM / pct_60) if pct_60 else 0
@@ -138,10 +166,9 @@ def calc_zipper_cap(talla_pct: dict) -> dict:
 
 
 def calc_production(ref: dict, zip_cap: dict) -> dict:
-    """Calcula rango mínimo/máximo de producción."""
     vel_adj = ref["vel_base"] * HIGH_SEASON_FACTOR
-    network_factor = 1 + (ref["barq_monthly"] + ref["web_monthly"]) / ref["vel_base"]
-    vel_network = vel_adj * network_factor
+    barq_add = ref["barq_proj"]
+    vel_network = vel_adj + barq_add
 
     raw_min = round(vel_network * COVER_MONTHS_MIN * (1 + SAFETY_STOCK_PCT))
     raw_max = round(vel_network * COVER_MONTHS_MAX * (1 + SAFETY_STOCK_PCT))
@@ -151,7 +178,6 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
     zipper_limited = raw_min > cap
 
     if zipper_limited:
-        # Demanda supera cierres: máximo = tope duro; mínimo = ~87% del tope (buffer cierres/defectos)
         prod_max = cap
         prod_min = round(cap * 0.87)
         prod_min = min(prod_min, prod_max - 1) if prod_max > 1 else prod_max
@@ -163,7 +189,7 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
     return {
         "vel_adj": vel_adj,
         "vel_network": vel_network,
-        "network_factor": network_factor,
+        "barq_add": barq_add,
         "raw_min": raw_min,
         "raw_max": raw_max,
         "prod_min": prod_min,
@@ -173,7 +199,6 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
 
 
 def distribute_by_talla(total: int, talla_pct: dict) -> dict:
-    """Distribuye unidades por talla respetando curva histórica."""
     result = {}
     allocated = 0
     for t in TALLAS[:-1]:
@@ -185,36 +210,18 @@ def distribute_by_talla(total: int, talla_pct: dict) -> dict:
 
 
 def distribute_by_store(total: int, ref: dict) -> dict:
-    """Distribuye unidades por tienda incluyendo Barquisimeto y Web."""
-    vel_base = ref["vel_base"]
-    store_units = {}
-    physical_total = 0
-
-    for s in PHYSICAL_STORES:
-        share = ref["store_share"].get(s, 0)
-        qty = round(total * share * (vel_base / (vel_base + ref["barq_monthly"] + ref["web_monthly"])))
-        store_units[s] = qty
-        physical_total += qty
-
-    barq = round(total * ref["barq_monthly"] / (vel_base + ref["barq_monthly"] + ref["web_monthly"]))
-    web = round(total * ref["web_monthly"] / (vel_base + ref["barq_monthly"] + ref["web_monthly"]))
-    store_units[NEW_STORE] = barq
-    store_units[WEB_STORE] = web
-
+    weights = ref["store_monthly"]
+    total_w = sum(weights.values())
+    store_units = {s: round(total * weights[s] / total_w) for s in DISTRIBUTION_STORES}
     diff = total - sum(store_units.values())
-    if diff != 0:
-        top_store = max(PHYSICAL_STORES, key=lambda s: store_units[s])
-        store_units[top_store] += diff
-
+    if diff:
+        top = max(DISTRIBUTION_STORES, key=lambda s: store_units[s])
+        store_units[top] += diff
     return store_units
 
 
 def distribute_store_talla(store_units: dict, talla_pct: dict) -> dict:
-    """Matriz tienda × talla."""
-    matrix = {}
-    for store, total in store_units.items():
-        matrix[store] = distribute_by_talla(total, talla_pct)
-    return matrix
+    return {store: distribute_by_talla(qty, talla_pct) for store, qty in store_units.items()}
 
 
 def style_cell(cell, fill=None, bold=False, align=center):
@@ -231,17 +238,17 @@ def write_resumen(wb, ref, zip_cap, prod):
     rows = [
         [f"{PRODUCTO} — PROYECCIÓN DE PRODUCCIÓN (DAMA)"],
         [],
-        ["Referencia analítica", "CUADRO JACKET 2.0 — ventas DAMA (importado, producto similar)"],
-        ["Fuente datos", str(HTML_PATH.name)],
-        ["Período referencia", f"Últimos {VELOCITY_MONTHS} meses: {', '.join(ref['vel_months'])}"],
+        ["Referencia analítica", "Jacket 1.0 + Jacket 2.0 — ventas DAMA combinadas"],
+        ["Fuentes datos", " + ".join(ref["sources"])],
+        ["Período velocidad base", f"Jun–Jul–Ago 2026 ({', '.join(ref['vel_months'])})"],
         [],
         ["── VELOCIDAD ──"],
-        ["Velocidad base (3m, red actual)", round(ref["vel_base"], 1), "und/mes"],
+        ["Velocidad base (3m combinado)", round(ref["vel_base"], 1), "und/mes"],
         ["Velocidad histórica promedio", round(ref["vel_all"], 1), "und/mes"],
         ["Diciembre 2025 (temporada alta ref.)", ref["dec_vel"], "und"],
         ["Factor temporada alta aplicado", HIGH_SEASON_FACTOR, "×"],
         ["Velocidad ajustada temporada alta", round(prod["vel_adj"], 1), "und/mes"],
-        ["Factor expansión red (Barquisimeto + Web)", round(prod["network_factor"], 3), "×"],
+        ["Barquisimeto adicional (tienda nueva)", round(prod["barq_add"], 1), "und/mes"],
         ["Velocidad red completa ajustada", round(prod["vel_network"], 1), "und/mes"],
         [],
         ["── COBERTURA Y STOCK DE SEGURIDAD ──"],
@@ -256,8 +263,6 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Cierre 75 cm (L · XL)", CIERRES_75CM, "und disponibles"],
         ["Curva tallas → % cierre 60 cm", f"{zip_cap['pct_60']*100:.1f}%"],
         ["Curva tallas → % cierre 75 cm", f"{zip_cap['pct_75']*100:.1f}%"],
-        ["Tope producción (cierre 60 cm)", zip_cap["cap_60"], "und"],
-        ["Tope producción (cierre 75 cm)", zip_cap["cap_75"], "und"],
         ["TOPE DURO PRODUCCIÓN", zip_cap["cap_total"], "und"],
         ["¿Limitado por cierres?", "SÍ" if prod["zipper_limited"] else "NO"],
         [],
@@ -266,20 +271,19 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["MÁXIMO (techo con cierres)", prod["prod_max"], "und"],
         ["Rango de acción", prod["prod_max"] - prod["prod_min"], "und"],
         [],
-        ["── TIENDAS ──"],
-        ["Tiendas físicas incluidas", ", ".join(PHYSICAL_STORES)],
-        ["Canal Web", "SÍ incluido"],
+        ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
+        ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
+        [f"Tolón proyectado ({int(TOLON_VS_CHACAO*100)}% Chacao)", round(ref["tolon_proj"], 1), "und/mes"],
+        ["Web histórica", round(ref["store_monthly_hist"].get("WEB", 0), 1), "und/mes"],
+        [f"Web proyectada ({int(WEB_VS_CERRO_VERDE*100)}% Cerro Verde)", round(ref["web_proj"], 1), "und/mes"],
+        ["Barquisimeto (avg Grieta+Chacao+Tolón proy.)", round(ref["barq_proj"], 1), "und/mes"],
         ["Corporativo", "EXCLUIDO"],
-        [f"Tienda nueva {NEW_STORE}", f"Promedio {BARQUISIMETO_PROXY} × {NEW_STORE_RAMP} ramp-up"],
-        [f"Velocidad mensual {NEW_STORE} (proy.)", round(ref["barq_monthly"], 1), "und/mes"],
-        [f"Velocidad mensual {WEB_STORE} (proy.)", round(ref["web_monthly"], 1), "und/mes"],
         [],
         ["Notas"],
+        ["• Dashboards adjuntos Jacket 1.0 y Jacket 2.0 leídos y combinados."],
         ["• Producto NUEVO manufacturado — sin stock inicial."],
         ["• Solo género DAMA, tallas XS a XL."],
         ["• Cierres 60 cm → XS, S, M | Cierres 75 cm → L, XL."],
-        ["• La producción está limitada por cierres 60 cm (~902 und máx teórico)."],
-        ["• Barquisimeto proyectada como promedio mensual Grieta + Chacao + Tolón."],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -289,10 +293,8 @@ def write_resumen(wb, ref, zip_cap, prod):
                 cell.fill = title_fill
             elif row and row[0] and str(row[0]).startswith("──"):
                 cell.font = Font(bold=True, color="1E3A5F")
-            if r == 36 and c == 1:
-                cell.font = Font(bold=True)
-    ws.column_dimensions["A"].width = 42
-    ws.column_dimensions["B"].width = 22
+    ws.column_dimensions["A"].width = 44
+    ws.column_dimensions["B"].width = 28
     ws.column_dimensions["C"].width = 14
 
 
@@ -303,30 +305,28 @@ def write_tallas_sheet(wb, ref, prod):
 
     ws.merge_cells("A1:G1")
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — CANTIDADES POR TALLA (MÍN / MÁX)"), title_fill, bold=True)
-    ws.cell(row=2, column=1, value=f"{GENERO} · Curva basada en Jacket 2.0 DAMA").font = Font(italic=True)
+    ws.cell(row=2, column=1, value=f"{GENERO} · Curva Jacket 1.0 + 2.0 DAMA combinado").font = Font(italic=True)
 
     headers = ["Talla", "Curva %", "Cierre (cm)", "Mínimo", "Máximo", "Cierres Mín", "Cierres Máx"]
     for c, h in enumerate(headers, 1):
         style_cell(ws.cell(row=4, column=c, value=h), sub_fill, bold=True)
 
     cierres_map = {"XS": 60, "S": 60, "M": 60, "L": 75, "XL": 75}
-    t_min_total = t_max_total = 0
     c60_min = c75_min = c60_max = c75_max = 0
+    t_min_total = t_max_total = 0
 
     for i, t in enumerate(TALLAS, start=5):
         mn, mx = talla_min[t], talla_max[t]
-        pct = ref["talla_pct"][t]
-        cm = cierres_map[t]
         style_cell(ws.cell(row=i, column=1, value=t), color_fill, bold=True)
-        ws.cell(row=i, column=2, value=f"{pct*100:.1f}%")
-        ws.cell(row=i, column=3, value=cm)
+        ws.cell(row=i, column=2, value=f"{ref['talla_pct'][t]*100:.1f}%")
+        ws.cell(row=i, column=3, value=cierres_map[t])
         style_cell(ws.cell(row=i, column=4, value=mn), min_fill, bold=True)
         style_cell(ws.cell(row=i, column=5, value=mx), max_fill, bold=True)
         ws.cell(row=i, column=6, value=mn)
         ws.cell(row=i, column=7, value=mx)
         t_min_total += mn
         t_max_total += mx
-        if cm == 60:
+        if cierres_map[t] == 60:
             c60_min += mn
             c60_max += mx
         else:
@@ -341,12 +341,11 @@ def write_tallas_sheet(wb, ref, prod):
     style_cell(ws.cell(row=r, column=7, value=c60_max), tot_fill, bold=True)
 
     r += 2
-    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 60 cm"), warn_fill if c60_max > CIERRES_60CM else color_fill, align=left)
+    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 60 cm"), color_fill, align=left)
     ws.cell(row=r, column=4, value=CIERRES_60CM)
     ws.cell(row=r, column=5, value=f"Usa máx {c60_max} ({c60_max/CIERRES_60CM*100:.0f}%)")
-
     r += 1
-    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 75 cm"), warn_fill if c75_max > CIERRES_75CM else color_fill, align=left)
+    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 75 cm"), color_fill, align=left)
     ws.cell(row=r, column=4, value=CIERRES_75CM)
     ws.cell(row=r, column=5, value=f"Usa máx {c75_max} ({c75_max/CIERRES_75CM*100:.0f}%)")
 
@@ -357,8 +356,7 @@ def write_tallas_sheet(wb, ref, prod):
 
 def write_tiendas_sheet(wb, ref, prod):
     ws = wb.create_sheet("Distribución por Tienda")
-    all_stores = PHYSICAL_STORES + [NEW_STORE, WEB_STORE]
-
+    adjusted = {TOLON_STORE, WEB_STORE, NEW_STORE}
     store_min = distribute_by_store(prod["prod_min"], ref)
     store_max = distribute_by_store(prod["prod_max"], ref)
     matrix_min = distribute_store_talla(store_min, ref["talla_pct"])
@@ -366,6 +364,7 @@ def write_tiendas_sheet(wb, ref, prod):
 
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2 + len(TALLAS) * 2)
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — DISTRIBUCIÓN POR TIENDA Y TALLA"), title_fill, bold=True)
+    ws.cell(row=2, column=1, value="★ = Tolón/Web/Barquisimeto con ajuste proyectado").font = Font(italic=True, color="E65100")
 
     col = 2
     for t in TALLAS:
@@ -376,13 +375,13 @@ def write_tiendas_sheet(wb, ref, prod):
         col += 2
 
     style_cell(ws.cell(row=3, column=1, value="Tienda"), sub_fill, bold=True, align=left)
-    style_cell(ws.cell(row=4, column=1, value=""), sub_fill)
 
     row = 5
-    for store in all_stores:
-        is_new = store in (NEW_STORE, WEB_STORE)
-        label = store + (" ★" if is_new else "")
-        style_cell(ws.cell(row=row, column=1, value=label), color_fill if is_new else white_fill, bold=is_new, align=left)
+    for store in DISTRIBUTION_STORES:
+        is_adj = store in adjusted
+        label = store + (" ★" if is_adj else "")
+        fill = adj_fill if is_adj else white_fill
+        style_cell(ws.cell(row=row, column=1, value=label), fill, bold=is_adj, align=left)
         col = 2
         for t in TALLAS:
             style_cell(ws.cell(row=row, column=col, value=matrix_min[store][t]), min_fill if matrix_min[store][t] else white_fill)
@@ -393,22 +392,27 @@ def write_tiendas_sheet(wb, ref, prod):
     style_cell(ws.cell(row=row, column=1, value="TOTAL"), tot_fill, bold=True, align=left)
     col = 2
     for t in TALLAS:
-        tmin = sum(matrix_min[s][t] for s in all_stores)
-        tmax = sum(matrix_max[s][t] for s in all_stores)
-        style_cell(ws.cell(row=row, column=col, value=tmin), tot_fill, bold=True)
-        style_cell(ws.cell(row=row, column=col + 1, value=tmax), tot_fill, bold=True)
+        style_cell(ws.cell(row=row, column=col, value=sum(matrix_min[s][t] for s in DISTRIBUTION_STORES)), tot_fill, bold=True)
+        style_cell(ws.cell(row=row, column=col + 1, value=sum(matrix_max[s][t] for s in DISTRIBUTION_STORES)), tot_fill, bold=True)
         col += 2
 
     row += 2
     ws.cell(row=row, column=1, value="Totales por tienda (Mín / Máx):").font = Font(bold=True)
     row += 1
-    for store in all_stores:
-        ws.cell(row=row, column=1, value=store)
+    ws.cell(row=row, column=1, value="Tienda").font = Font(bold=True)
+    ws.cell(row=row, column=2, value="Mín").font = Font(bold=True)
+    ws.cell(row=row, column=3, value="Máx").font = Font(bold=True)
+    ws.cell(row=row, column=4, value="Vel. mensual proy.").font = Font(bold=True)
+    row += 1
+    for store in DISTRIBUTION_STORES:
+        ws.cell(row=row, column=1, value=store + (" ★" if store in adjusted else ""))
         ws.cell(row=row, column=2, value=store_min[store])
         ws.cell(row=row, column=3, value=store_max[store])
+        ws.cell(row=row, column=4, value=round(ref["store_monthly"][store], 1))
         row += 1
 
-    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["D"].width = 16
     for i in range(2, 2 + len(TALLAS) * 2):
         ws.column_dimensions[get_column_letter(i)].width = 7
 
@@ -420,7 +424,6 @@ def write_cierres_sheet(wb, ref, prod, zip_cap):
 
     rows = [
         ["PLAN DE CIERRES — QX NEGRO 0580"],
-        [],
         ["Modelo", "QX Negro 0580"],
         ["Color producto", "Negro (inferido del insumo)"],
         [],
@@ -441,38 +444,14 @@ def write_cierres_sheet(wb, ref, prod, zip_cap):
             CIERRES_75CM - sum(talla_max[t] for t in TALLAS_75CM),
             f"{sum(talla_max[t] for t in TALLAS_75CM)/CIERRES_75CM*100:.0f}%",
         ],
-        [],
-        ["Detalle por talla (Mín / Máx)"],
-        ["Talla", "Cierre", "Mín", "Máx"],
     ]
-    for t in TALLAS:
-        rows.append([t, "60 cm" if t in TALLAS_60CM else "75 cm", talla_min[t], talla_max[t]])
-
-    rows += [
-        [],
-        ["Tope teórico si se agotan todos los cierres 60 cm", zip_cap["cap_total"], "und"],
-        ["Cierres 75 cm necesarios al tope", zip_cap["use_75_at_cap"], "und"],
-        ["Cierres 75 cm sobrantes al tope", CIERRES_75CM - zip_cap["use_75_at_cap"], "und"],
-        [],
-        ["Recomendación"],
-        ["• El cierre 60 cm es el INSUMO LIMITANTE — planificar producción desde este tope."],
-        ["• Al máximo de producción se usan ~100% cierres 60 cm y ~21% cierres 75 cm."],
-        ["• Reservar remanente 75 cm para reposición o segunda producción."],
-    ]
-
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
             cell = ws.cell(row=r, column=c, value=val)
-            if r in (1, 6, 13):
+            if r in (1, 5):
                 cell.font = Font(bold=True)
-                cell.fill = sub_fill if r > 1 else title_fill
-            if r == 6:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = sub_fill
-
+                cell.fill = title_fill if r == 1 else sub_fill
     ws.column_dimensions["A"].width = 42
-    for col in "BCDEFGH":
-        ws.column_dimensions[col].width = 14
 
 
 def write_metodologia(wb, ref, zip_cap, prod):
@@ -481,41 +460,35 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"METODOLOGÍA — PROYECCIÓN {PRODUCTO}",
         "",
         "1. PRODUCTO DE REFERENCIA",
-        "   Se usó CUADRO JACKET 2.0 (importado) filtrado a género DAMA como proxy de demanda.",
-        "   Jacket 1.0 no estaba disponible en el repositorio; Jacket 2.0 tiene 6 meses de historial.",
-        f"   Velocidad base = promedio últimos {VELOCITY_MONTHS} meses (Mar–May 2026): {ref['vel_base']:.0f} und/mes.",
+        "   Fuentes: Dashboard_Jacket_1_0.html + Dashboard_Jacket_2_0.html (adjuntos).",
+        "   Se combinaron ventas DAMA de Jacket 1.0 y CUADRO Jacket 2.0.",
+        f"   Velocidad base = promedio Jun–Jul–Ago 2026: {ref['vel_base']:.0f} und/mes.",
         "",
         "2. AJUSTE TEMPORADA ALTA",
-        f"   Factor ×{HIGH_SEASON_FACTOR} aplicado (diciembre + regalos navideños).",
-        f"   Diciembre 2025 Jacket DAMA vendió {ref['dec_vel']} und ({ref['dec_vel']/ref['vel_base']:.2f}× vs base 3m).",
+        f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre). Diciembre 2025 combinado: {ref['dec_vel']} und.",
         "",
-        "3. EXPANSIÓN DE RED",
-        f"   • Barquisimeto (nueva): promedio mensual Grieta + Chacao + Tolón × ramp-up {NEW_STORE_RAMP}.",
-        f"     → {ref['barq_monthly']:.0f} und/mes proyectadas.",
-        f"   • Web: {WEB_SHARE_PCT*100:.0f}% de velocidad base → {ref['web_monthly']:.0f} und/mes.",
+        "3. AJUSTES DE TIENDA (según indicación)",
+        f"   • Tolón: proyectado al {int(TOLON_VS_CHACAO*100)}% de Chacao ({ref['chacao_m']:.0f} → {ref['tolon_proj']:.0f} und/mes).",
+        f"     Histórico Tolón: {ref['store_monthly_hist'].get('TOLON', 0):.0f} und/mes — subestimado por tienda nueva.",
+        f"   • Web: proyectada al {int(WEB_VS_CERRO_VERDE*100)}% de Cerro Verde ({ref['cerro_m']:.0f} → {ref['web_proj']:.0f} und/mes).",
+        f"     Histórico Web: {ref['store_monthly_hist'].get('WEB', 0):.0f} und/mes.",
+        f"   • Barquisimeto (nueva): promedio Grieta + Chacao + Tolón proyectado = {ref['barq_proj']:.0f} und/mes.",
         "   • Corporativo: EXCLUIDO.",
         "",
         "4. COBERTURA Y STOCK DE SEGURIDAD",
-        f"   Mínimo: {COVER_MONTHS_MIN} meses de venta a velocidad ajustada + {int(SAFETY_STOCK_PCT*100)}% SS.",
-        f"   Máximo: {COVER_MONTHS_MAX} meses o mín × {MAX_PCT_ABOVE_MIN}, lo que aplique.",
+        f"   Mínimo: {COVER_MONTHS_MIN} meses + {int(SAFETY_STOCK_PCT*100)}% SS.",
+        f"   Máximo: {COVER_MONTHS_MAX} meses o mín × {MAX_PCT_ABOVE_MIN}.",
         "",
         "5. INSUMO LIMITANTE — CIERRES",
-        "   QX Negro 0580: 60 cm (748 und) para XS/S/M | 75 cm (744 und) para L/XL.",
-        f"   Curva tallas Jacket DAMA: 60 cm = {zip_cap['pct_60']*100:.1f}%, 75 cm = {zip_cap['pct_75']*100:.1f}%.",
-        f"   Tope duro = {zip_cap['cap_total']} und (limitado por cierres 60 cm).",
+        f"   Tope duro = {zip_cap['cap_total']} und (cierre 60 cm limitante).",
         "",
         "6. RANGO MÍNIMO / MÁXIMO",
-        f"   Demanda teórica mín: {prod['raw_min']} und → ajustada a {prod['prod_min']} und (cap cierres).",
-        f"   Demanda teórica máx: {prod['raw_max']} und → ajustada a {prod['prod_max']} und (cap cierres).",
+        f"   Demanda teórica mín: {prod['raw_min']} → ajustada: {prod['prod_min']} und.",
+        f"   Demanda teórica máx: {prod['raw_max']} → ajustada: {prod['prod_max']} und.",
         "",
         "7. DISTRIBUCIÓN",
-        "   Por tienda: participación histórica Jacket DAMA + Barquisimeto + Web.",
-        "   Por talla: curva histórica Jacket DAMA (XS 22%, S 32%, M 29%, L 11%, XL 6%).",
-        "",
-        "8. DECISIÓN EN REUNIÓN",
-        "   • MÍNIMO = compromiso de producción para cubrir temporada alta + SS dentro del cap de cierres.",
-        "   • MÁXIMO = techo si se confirma demanda fuerte; no supera cierres 60 cm disponibles.",
-        "   • Distribuir a tiendas y mover entre puntos de venta según rotación real post-lanzamiento.",
+        "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
+        "   Por talla: curva combinada Jacket 1.0 + 2.0 DAMA.",
     ]
     for r, line in enumerate(text, start=1):
         cell = ws.cell(row=r, column=1, value=line)
@@ -523,11 +496,11 @@ def write_metodologia(wb, ref, zip_cap, prod):
             cell.font = Font(bold=True, size=13)
         if line and line[0].isdigit():
             cell.font = Font(bold=True)
-    ws.column_dimensions["A"].width = 90
+    ws.column_dimensions["A"].width = 95
 
 
 def main():
-    data = load_jacket_data()
+    data = load_combined_data()
     ref = analyze_reference(data)
     zip_cap = calc_zipper_cap(ref["talla_pct"])
     prod = calc_production(ref, zip_cap)
@@ -542,9 +515,10 @@ def main():
     wb.save(OUTPUT_PATH)
 
     print(f"✅ Generado: {OUTPUT_PATH}")
-    print(f"   Velocidad base: {ref['vel_base']:.1f} und/mes")
-    print(f"   Velocidad red ajustada: {prod['vel_network']:.1f} und/mes")
-    print(f"   Tope cierres: {zip_cap['cap_total']} und")
+    print(f"   Fuentes: {', '.join(ref['sources'])}")
+    print(f"   Velocidad base (Jun-Ago 2026): {ref['vel_base']:.1f} und/mes")
+    print(f"   Tolón proy: {ref['tolon_proj']:.1f}/mes ({TOLON_VS_CHACAO*100:.0f}% Chacao)")
+    print(f"   Web proy: {ref['web_proj']:.1f}/mes ({WEB_VS_CERRO_VERDE*100:.0f}% Cerro Verde)")
     print(f"   Rango producción: {prod['prod_min']} – {prod['prod_max']} und")
 
 
