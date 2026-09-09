@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.10 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.11 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
@@ -20,13 +20,13 @@
  *     salir de costura (antes eran 2).
  *   - SYNC TRACKING: sincronizarProduccionExterna() solo escribe
  *     "Cantida Producida" (Por Hacer col. L / Especial col. M).
- *     No pisa Faltante. Suma el DELTA de Costura sobre lo ya cargado:
- *     existente + max(0, costura_ahora − ya_aplicado). La primera
- *     corrida (sin línea base válida) suma el total de Costura. La
- *     hoja oculta "Sync Costura Aplicada" (esquema 5.9.9) guarda el
- *     último corte aplicado; una línea base vieja de v5.9.8 se ignora
- *     para no bloquear la suma. Las MO se cruzan sin ceros a la
- *     izquierda (00071 = 71; 00082-002 = 82-002).
+ *     No pisa Faltante. Por Hacer ya es la línea base de lo producido.
+ *     La primera corrida (esquema 5.9.11) NO suma el histórico de
+ *     Costura: solo guarda el corte actual. Después:
+ *     existente + max(0, costura_ahora − ya_aplicado). Si la hoja
+ *     oculta quedó en esquema 5.9.9 (esa versión sí sumó el total),
+ *     se deshace esa suma y luego se aplica el delta real. Las MO se
+ *     cruzan sin ceros a la izquierda (00071 = 71; 00082-002 = 82-002).
  *   - ESPECIAL HECHO: permanece en Por Hacer - Especial, pero NO entra
  *     al backlog ni a la planificación.
  *   - TABLEROS POR FLUJO: el modelo que cierra el día (lote chico /
@@ -75,8 +75,9 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.10";
-var SYNC_COSTURA_ESQUEMA = "5.9.9";
+var VERSION_SISTEMA = "5.9.11";
+var SYNC_COSTURA_ESQUEMA = "5.9.11";
+var SYNC_COSTURA_ESQUEMA_SUMA_TOTAL = "5.9.9";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
 var BANDA_URGENTE = 2;
@@ -557,8 +558,25 @@ function esEspecialHecho_(status) {
   return quitarTildes_(normLow_(status)) === "hecho";
 }
 
-function deltaCosturaAplicar_(costuraAhora, yaAplicado) {
+function deltaCosturaAplicar_(costuraAhora, yaAplicado, primerSync) {
+  if (primerSync) return 0;
   return Math.max(0, parseCantidad_(costuraAhora) - parseCantidad_(yaAplicado));
+}
+
+/** Por Hacer es la base. Esquema 5.9.9 sumó el total de Costura: se deshace y se aplica el delta. */
+function aplicarCantidaSyncCostura_(existente, costuraAhora, yaAplicado, esquemaPrev) {
+  var ex = parseCantidad_(existente);
+  var ahora = parseCantidad_(costuraAhora);
+  var prev = parseCantidad_(yaAplicado);
+  var m;
+  if (esquemaPrev === SYNC_COSTURA_ESQUEMA_SUMA_TOTAL) {
+    m = Math.max(0, ex - prev) + Math.max(0, ahora - prev);
+  } else if (esquemaPrev !== SYNC_COSTURA_ESQUEMA) {
+    m = ex;
+  } else {
+    m = ex + Math.max(0, ahora - prev);
+  }
+  return m > 0 ? m : "";
 }
 
 /** Cruza Por Hacer con Produccion - Costura: "00071" y 71 → "71"; "00082-002" → "82-002". */
@@ -3205,12 +3223,16 @@ function onEdit(e) {
 // =====================================================================
 //  SINCRONIZACIÓN DE TRACKING DE PRODUCCIÓN EXTERNO
 // =====================================================================
+function esquemaCosturaAplicada_(ss) {
+  var hoja = ss.getSheetByName(HOJA_SYNC_COSTURA);
+  if (!hoja || hoja.getLastRow() < 1) return "";
+  return String(hoja.getRange(1, 4).getValue() || "").trim();
+}
+
 function leerCosturaAplicada_(ss) {
   var mapa = {};
   var hoja = ss.getSheetByName(HOJA_SYNC_COSTURA);
   if (!hoja || hoja.getLastRow() < 2) return mapa;
-  var esquema = String(hoja.getRange(1, 4).getValue() || "").trim();
-  if (esquema !== SYNC_COSTURA_ESQUEMA) return mapa;
   var n = hoja.getLastRow() - 1;
   if (n < 1) return mapa;
   var datos = hoja.getRange(2, 1, n, 2).getValues();
@@ -3354,7 +3376,11 @@ function sincronizarProduccionExterna() {
     SpreadsheetApp.getUi().alert("⚠️ Aviso: la pestaña 'Produccion - Costura' no existe o está vacía.\n'Cantidad Producida' no pudo recalcularse.\nUsa '💾 Guardar Producción (Corte Diario)' primero.");
   }
 
-  var lastApplied = leerCosturaAplicada_(ssMain);
+  var esquemaPrev = esquemaCosturaAplicada_(ssMain);
+  var lastApplied = {};
+  if (esquemaPrev === SYNC_COSTURA_ESQUEMA || esquemaPrev === SYNC_COSTURA_ESQUEMA_SUMA_TOTAL) {
+    lastApplied = leerCosturaAplicada_(ssMain);
+  }
 
   function inyectarCantidades(hojaDestino, nombreHoja) {
     if (!hojaDestino) return;
@@ -3401,8 +3427,8 @@ function sincronizarProduccionExterna() {
         });
       }
 
-      var delta = deltaCosturaAplicar_(prodHoy, yaAplicado);
-      colProduccion.push([aplicarDeltaCantidaProducida_(datosH[r][idxProdH], delta)]);
+      var deltaAplicado = aplicarCantidaSyncCostura_(datosH[r][idxProdH], prodHoy, yaAplicado, esquemaPrev);
+      colProduccion.push([deltaAplicado]);
     }
     hojaDestino.getRange(detHeadPH.fila + 2, idxProdH + 1, colProduccion.length, 1).setValues(colProduccion);
   }
@@ -3578,8 +3604,12 @@ function sincronizarProduccionExterna() {
     "✅ SINCRONIZACIÓN MAESTRA EXITOSA\n\n" +
     "• Tablero visual 'Tracking - Produccion' actualizado con el archivo externo.\n" +
     "• 'Cantida Producida' actualizada en Por Hacer (col. L) y Por Hacer - Especial (col. M).\n" +
-    "  Se suma el incremento de Costura sobre lo ya cargado (no se pisa Faltante).\n" +
-    "  Primera corrida (o línea base vieja): suma el total de Costura. Después, solo el delta.\n" +
+    "  Por Hacer es la base. No se vuelve a sumar el histórico de Costura.\n" +
+    (esquemaPrev === SYNC_COSTURA_ESQUEMA_SUMA_TOTAL
+      ? "  Se deshizo la suma duplicada de v5.9.9/5.9.10 y se dejó solo el incremento nuevo.\n"
+      : (esquemaPrev !== SYNC_COSTURA_ESQUEMA
+        ? "  Primera sync 5.9.11: se fijó la línea base de Costura SIN sumarla.\n"
+        : "  Se sumó solo lo nuevo de Costura vs el último corte aplicado.\n")) +
     "• Pestañas de Línea 1-5 actualizadas.\n" +
     "• 📦 Pestañas de Almacén (Modelo y SKUs) sincronizadas con los ingresos basados SOLO en MO."
   );

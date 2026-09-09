@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.9 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.11 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -108,7 +108,8 @@ def cap_de_tarea(t, lin, caps_lineas):
     return caps_lineas.get(str(lin), 130)
 
 
-SYNC_COSTURA_ESQUEMA = "5.9.9"
+SYNC_COSTURA_ESQUEMA = "5.9.11"
+SYNC_COSTURA_ESQUEMA_SUMA_TOTAL = "5.9.9"
 
 
 def clave_lookup_mo(mo):
@@ -126,7 +127,9 @@ def fusionar_cantida_producida(existente, desde_costura):
     return aplicar_delta_cantida_producida(existente, desde_costura)
 
 
-def delta_costura_aplicar(costura_ahora, ya_aplicado):
+def delta_costura_aplicar(costura_ahora, ya_aplicado, primer_sync=False):
+    if primer_sync:
+        return 0.0
     try:
         ahora = float(costura_ahora or 0)
     except (TypeError, ValueError):
@@ -139,8 +142,8 @@ def delta_costura_aplicar(costura_ahora, ya_aplicado):
 
 
 def leer_costura_aplicada(filas, esquema_header, esquema_actual=SYNC_COSTURA_ESQUEMA):
-    """Si el esquema no es 5.9.9 (p. ej. línea base de v5.9.8), se ignora."""
-    if esquema_header != esquema_actual:
+    """Lee totales por MO. El caller decide si el esquema sirve para sumar o deshacer."""
+    if esquema_header not in (esquema_actual, SYNC_COSTURA_ESQUEMA_SUMA_TOTAL):
         return {}
     mapa = {}
     for mo, qty in filas:
@@ -155,7 +158,27 @@ def leer_costura_aplicada(filas, esquema_header, esquema_actual=SYNC_COSTURA_ESQ
     return mapa
 
 
-def inyectar_cantida_por_hacer(existente, mos_por_hacer, totales_costura, last_applied):
+def aplicar_cantida_sync_costura(existente, costura_ahora, ya_aplicado, esquema_prev):
+    def n(v):
+        try:
+            if v in ("", None):
+                return 0.0
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+    ex = n(existente)
+    ahora = n(costura_ahora)
+    prev = n(ya_aplicado)
+    if esquema_prev == SYNC_COSTURA_ESQUEMA_SUMA_TOTAL:
+        m = max(0.0, ex - prev) + max(0.0, ahora - prev)
+    elif esquema_prev != SYNC_COSTURA_ESQUEMA:
+        m = ex
+    else:
+        m = ex + max(0.0, ahora - prev)
+    return m if m > 0 else ""
+
+
+def inyectar_cantida_por_hacer(existente, mos_por_hacer, totales_costura, last_applied, esquema_prev=""):
     prod = 0.0
     ya = 0.0
     for mm in str(mos_por_hacer or "").split(","):
@@ -164,7 +187,7 @@ def inyectar_cantida_por_hacer(existente, mos_por_hacer, totales_costura, last_a
             continue
         prod += float(totales_costura.get(k, 0) or 0)
         ya += float(last_applied.get(k, 0) or 0)
-    return aplicar_delta_cantida_producida(existente, delta_costura_aplicar(prod, ya))
+    return aplicar_cantida_sync_costura(existente, prod, ya, esquema_prev)
 
 
 def aplicar_delta_cantida_producida(existente, delta):
@@ -1725,18 +1748,18 @@ class TestV597CapFamiliaSyncAlmacen(unittest.TestCase):
         self.assertEqual(DIAS_ENTRADA_ALMACEN, 4)
 
     def test_sync_suma_solo_el_delta(self):
-        # Primera corrida (sin línea base válida): suma Costura sobre lo existente
-        self.assertEqual(delta_costura_aplicar(80, 0), 80)
-        self.assertEqual(aplicar_delta_cantida_producida(100, 80), 180)
+        # Primera corrida: Por Hacer ya tiene lo producido; no suma el histórico de Costura
+        self.assertEqual(delta_costura_aplicar(80, 0, True), 0)
+        self.assertEqual(aplicar_cantida_sync_costura(100, 80, 0, ""), 100)
         # Segunda corrida, Costura igual: no duplica
-        self.assertEqual(delta_costura_aplicar(80, 80), 0)
-        self.assertEqual(aplicar_delta_cantida_producida(180, 0), 180)
-        # Incremento
-        self.assertEqual(delta_costura_aplicar(100, 80), 20)
-        self.assertEqual(aplicar_delta_cantida_producida(180, 20), 200)
+        self.assertEqual(delta_costura_aplicar(80, 80, False), 0)
+        self.assertEqual(aplicar_cantida_sync_costura(100, 80, 80, "5.9.11"), 100)
+        # Incremento nuevo en Costura
+        self.assertEqual(delta_costura_aplicar(100, 80, False), 20)
+        self.assertEqual(aplicar_cantida_sync_costura(100, 100, 80, "5.9.11"), 120)
         # Costura baja: no resta
-        self.assertEqual(delta_costura_aplicar(70, 80), 0)
-        self.assertEqual(aplicar_delta_cantida_producida(100, 0), 100)
+        self.assertEqual(delta_costura_aplicar(70, 80, False), 0)
+        self.assertEqual(aplicar_cantida_sync_costura(100, 70, 80, "5.9.11"), 100)
         self.assertEqual(fusionar_cantida_producida(100, 20), 120)
 
     def test_sync_invalida_baseline_vieja_y_padding_mo(self):
@@ -1744,24 +1767,30 @@ class TestV597CapFamiliaSyncAlmacen(unittest.TestCase):
         self.assertEqual(leer_costura_aplicada(filas, ""), {})
         self.assertEqual(leer_costura_aplicada(filas, "5.9.8"), {})
         self.assertEqual(leer_costura_aplicada(filas, "5.9.9"), {"71": 50.0, "82-002": 30.0})
+        self.assertEqual(leer_costura_aplicada(filas, "5.9.11"), {"71": 50.0, "82-002": 30.0})
         self.assertEqual(clave_lookup_mo("00071"), "71")
         self.assertEqual(clave_lookup_mo(71), "71")
         self.assertEqual(clave_lookup_mo("00082-002"), "82-002")
         self.assertEqual(clave_lookup_mo("82-002"), "82-002")
-        # Por Hacer 100 + Costura 50, baseline v5.9.8 ignorada → 150
+        # Por Hacer 100 ya incluye lo producido; Costura 50 histórica no se suma
         self.assertEqual(
-            inyectar_cantida_por_hacer(100, "00071", {"71": 50}, leer_costura_aplicada([("00071", 50)], "")),
-            150,
+            inyectar_cantida_por_hacer(100, "00071", {"71": 50}, {}, ""),
+            100,
         )
-        # Segunda corrida con esquema válido: no vuelve a sumar
+        # v5.9.9 duplicó (100+50=150): se deshace y queda 100
         self.assertEqual(
-            inyectar_cantida_por_hacer(150, "00071", {"71": 50}, leer_costura_aplicada([("00071", 50)], "5.9.9")),
-            150,
+            inyectar_cantida_por_hacer(150, "00071", {"71": 50}, leer_costura_aplicada([("00071", 50)], "5.9.9"), "5.9.9"),
+            100,
         )
-        # Costura sube a 80 → +30
+        # Tras deshacer, Costura subió a 80 → 100 + 30
         self.assertEqual(
-            inyectar_cantida_por_hacer(150, "71", {"71": 80}, {"71": 50}),
-            180,
+            inyectar_cantida_por_hacer(150, "00071", {"71": 80}, {"71": 50}, "5.9.9"),
+            130,
+        )
+        # Esquema actual: solo el incremento
+        self.assertEqual(
+            inyectar_cantida_por_hacer(100, "71", {"71": 80}, {"71": 50}, "5.9.11"),
+            130,
         )
 
     def test_especial_hecho_no_entra_al_backlog(self):
