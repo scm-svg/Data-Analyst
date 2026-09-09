@@ -45,6 +45,9 @@ PROD_RANGE_MIN = 890            # Mismo rango acordado que Chaqueta Lite
 PROD_RANGE_MAX = 970
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
+# Ajuste fino curva tallas: transferir proporción de M → XS (sobre curva dashboard)
+TALLA_SHIFT_M_TO_XS = 0.02      # +2 pp XS · −2 pp M
+
 # ── Colores de producción ──
 COLORES = ["Negro", "Vinotinto", "Verde Militar"]
 COLOR_PCT = {"Negro": 0.40, "Vinotinto": 0.30, "Verde Militar": 0.30}
@@ -139,7 +142,8 @@ def analyze_reference(data: dict) -> dict:
         if r["talla"] in talla_tot:
             talla_tot[r["talla"]] += r["v"]
     talla_grand = sum(talla_tot.values())
-    talla_pct = {t: talla_tot[t] / talla_grand if talla_grand else 0 for t in TALLAS}
+    talla_pct_hist = {t: talla_tot[t] / talla_grand if talla_grand else 0 for t in TALLAS}
+    talla_pct = adjust_talla_curve(talla_pct_hist)
 
     store_tot = {}
     for s in set(r["tienda"] for r in rows):
@@ -180,6 +184,7 @@ def analyze_reference(data: dict) -> dict:
         "dec_vel": dec_vel,
         "vel_months": VELOCITY_MONTHS,
         "talla_pct": talla_pct,
+        "talla_pct_hist": talla_pct_hist,
         "talla_tot": talla_tot,
         "store_monthly": store_monthly,
         "store_monthly_hist": store_monthly_hist,
@@ -198,6 +203,15 @@ def analyze_reference(data: dict) -> dict:
         "by_month": by_month,
         "sources": [p.name for p in HTML_PATHS],
     }
+
+
+def adjust_talla_curve(talla_pct: dict) -> dict:
+    """Transfiere proporción de M a XS (ajuste fino sobre curva histórica)."""
+    adjusted = dict(talla_pct)
+    shift = min(TALLA_SHIFT_M_TO_XS, adjusted.get("M", 0))
+    adjusted["M"] = adjusted.get("M", 0) - shift
+    adjusted["XS"] = adjusted.get("XS", 0) + shift
+    return adjusted
 
 
 def calc_production(ref: dict) -> dict:
@@ -351,6 +365,12 @@ def write_resumen(wb, ref, prod):
         ["Curva completa color × talla", "Hoja Cantidades por Colores", ""],
         ["Detalle color/talla Mín-Máx", "Hoja Producción Color × Talla", ""],
         ["Compra tela VIORI", f"Hoja Compra de Tela (+{int(TELA_SS_PCT*100)}% SS)", ""],
+        [],
+        ["── AJUSTE CURVA TALLAS ──"],
+        ["Curva histórica (BASIC LINE PANT)", "Dashboard Basic Line", ""],
+        [f"Ajuste aplicado", f"+{TALLA_SHIFT_M_TO_XS*100:.0f} pp XS ← M", "refuerzo XS moderado"],
+        ["XS hist → ajustada", f"{ref['talla_pct_hist']['XS']*100:.1f}% → {ref['talla_pct']['XS']*100:.1f}%", ""],
+        ["M hist → ajustada", f"{ref['talla_pct_hist']['M']*100:.1f}% → {ref['talla_pct']['M']*100:.1f}%", ""],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -816,18 +836,22 @@ def write_metodologia(wb, ref, prod):
         f"   Demanda teórica calculada: {prod['raw_min']} – {prod['raw_max']} und (referencia).",
         f"   Velocidad red ajustada: {prod['vel_network']:.0f} und/mes.",
         "",
-        "5. DISTRIBUCIÓN",
-        "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
-        f"   Por talla: curva {REFERENCE_MODEL} DAMA del dashboard.",
+        "5. AJUSTE CURVA TALLAS",
+        f"   Curva histórica {REFERENCE_MODEL} DAMA: XS {ref['talla_pct_hist']['XS']*100:.1f}% · M {ref['talla_pct_hist']['M']*100:.1f}%.",
+        f"   Ajuste fino: +{TALLA_SHIFT_M_TO_XS*100:.0f} pp a XS tomados de M → XS {ref['talla_pct']['XS']*100:.1f}% · M {ref['talla_pct']['M']*100:.1f}%.",
         "",
-        "6. COLORES Y COMPRA DE TELA",
+        "6. DISTRIBUCIÓN",
+        "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
+        f"   Por talla: curva ajustada (ver sección 5).",
+        "",
+        "7. COLORES Y COMPRA DE TELA",
         "   Colores producción: Negro 40% · Vinotinto 30% · Verde Militar 30%.",
         "   Dentro de cada color se aplica la misma curva de tallas.",
         "   Consumo VIORI por pieza (ficha LITE PANT DAMA): XS 1.45m · S 1.48m · M 1.58m · L 1.63m · XL 1.66m.",
         f"   Stock de seguridad tela: +{int(TELA_SS_PCT*100)}% sobre consumo (compra = consumo × {1+TELA_SS_PCT}).",
         "   Ver hojas 'Producción Color × Talla' y 'Compra de Tela VIORI'.",
         "",
-        "7. OTROS INSUMOS",
+        "8. OTROS INSUMOS",
         "   Elástica 4.5 cm: consumo por talla según ficha (67–77 cm/pieza).",
         "   Etiqueta agua/SENCAMER: 1 und/pieza · costado derecho.",
         "   Hilos: Negro-N · Vinotinto · Verde Militar (según color de tela).",
