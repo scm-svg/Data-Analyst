@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.12 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.13 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -108,7 +108,7 @@ def cap_de_tarea(t, lin, caps_lineas):
     return caps_lineas.get(str(lin), 130)
 
 
-SYNC_COSTURA_ESQUEMA = "5.9.12"
+SYNC_COSTURA_ESQUEMA = "SYNC-V13"
 
 
 def clave_lookup_mo(mo):
@@ -140,42 +140,59 @@ def delta_costura_aplicar(costura_ahora, ya_aplicado, primer_sync=False):
     return max(0.0, ahora - prev)
 
 
-def delta_filas_nuevas_costura(filas, last_row_aplicada):
+def texto_fecha_costura(v):
+    if v in ("", None):
+        return ""
+    if hasattr(v, "timestamp"):
+        try:
+            return str(int(v.timestamp() * 1000))
+        except Exception:
+            return str(v)
+    return str(v).strip()
+
+
+def huella_fila_costura(f):
+    return "||".join([
+        clave_lookup_mo(f.get("mo")),
+        str(f.get("sku") or "").strip().upper(),
+        str(f.get("qty")),
+        texto_fecha_costura(f.get("fecha")),
+        str(f.get("linea") or "").strip().lower(),
+    ])
+
+
+def es_esquema_sync_actual(v):
+    if v in ("", None):
+        return False
+    if hasattr(v, "year") and not isinstance(v, str):
+        return False
+    s = str(v).strip().upper()
+    return s == SYNC_COSTURA_ESQUEMA or s.startswith("SYNC-V13")
+
+
+def delta_por_huellas_costura(filas, aplicadas=None):
+    aplicadas = aplicadas or {}
+    seen = {}
     delta = {}
+    n_nuevas = 0
     for f in filas:
-        if f["sheet_row"] <= last_row_aplicada:
+        fp = huella_fila_costura(f)
+        seen[fp] = seen.get(fp, 0) + 1
+        if seen[fp] <= aplicadas.get(fp, 0):
             continue
-        k = clave_lookup_mo(f["mo"])
+        k = clave_lookup_mo(f.get("mo"))
         if not k:
             continue
-        delta[k] = delta.get(k, 0.0) + float(f["qty"] or 0)
+        delta[k] = delta.get(k, 0.0) + float(f.get("qty") or 0)
+        n_nuevas += 1
+    return delta, n_nuevas
+
+
+def resolver_delta_costura(filas, esquema_prev, aplicadas=None):
+    if not es_esquema_sync_actual(esquema_prev):
+        return {}
+    delta, _n = delta_por_huellas_costura(filas, aplicadas)
     return delta
-
-
-def delta_filas_tras_consumo(filas, last_applied):
-    remaining = {clave_lookup_mo(k): float(v or 0) for k, v in (last_applied or {}).items()}
-    delta = {}
-    for f in filas:
-        k = clave_lookup_mo(f["mo"])
-        if not k:
-            continue
-        qty = float(f["qty"] or 0)
-        prev = remaining.get(k, 0.0)
-        if prev >= qty:
-            remaining[k] = prev - qty
-        else:
-            delta[k] = delta.get(k, 0.0) + (qty - prev)
-            remaining[k] = 0.0
-    return delta
-
-
-def resolver_delta_costura(filas, esquema_prev, last_row_aplicada, last_applied=None):
-    if esquema_prev == SYNC_COSTURA_ESQUEMA:
-        corte = last_row_aplicada if last_row_aplicada > 0 else 2
-        return delta_filas_nuevas_costura(filas, corte)
-    if esquema_prev in ("5.9.11", "5.9.9"):
-        return delta_filas_tras_consumo(filas, last_applied or {})
-    return {}
 
 
 def inyectar_cantida_por_hacer(existente, mos_por_hacer, delta_por_mo):
@@ -1746,38 +1763,39 @@ class TestV597CapFamiliaSyncAlmacen(unittest.TestCase):
         self.assertEqual(DIAS_ENTRADA_ALMACEN, 4)
 
     def test_sync_suma_solo_el_delta(self):
+        import datetime
         filas = [
-            {"sheet_row": 3, "mo": "00071", "qty": 40},
-            {"sheet_row": 4, "mo": "00071", "qty": 10},
-            {"sheet_row": 5, "mo": "82-002", "qty": 25},
+            {"mo": "00071", "sku": "A", "qty": 40, "fecha": "d1", "linea": "2"},
+            {"mo": "00071", "sku": "A", "qty": 10, "fecha": "d2", "linea": "2"},
+            {"mo": "82-002", "sku": "B", "qty": 25, "fecha": "d3", "linea": "1"},
         ]
-        # Primera vez (sin marca): Por Hacer es la base, no suma el histórico
-        self.assertEqual(resolver_delta_costura(filas, "", 0, {}), {})
+        # "5.9.12" lo convierte Google en fecha: no es esquema válido → no suma
+        self.assertFalse(es_esquema_sync_actual(datetime.datetime(2012, 9, 5)))
+        self.assertEqual(resolver_delta_costura(filas, datetime.datetime(2012, 9, 5), {}), {})
+        # Primera vez sin SYNC-V13: Por Hacer es la base
+        self.assertEqual(resolver_delta_costura(filas, "", {}), {})
         self.assertEqual(inyectar_cantida_por_hacer(100, "00071", {}), 100)
-        # v5.9.12: solo filas debajo de la última vista (4) → la fila 5
-        delta = resolver_delta_costura(filas, "5.9.12", 4, {})
-        self.assertEqual(delta, {"82-002": 25.0})
-        self.assertEqual(inyectar_cantida_por_hacer(100, "00082-002", delta), 125)
-        # Misma marca otra vez: no duplica
-        self.assertEqual(resolver_delta_costura(filas, "5.9.12", 5, {}), {})
+        aplicadas = {}
+        for f in filas:
+            fp = huella_fila_costura(f)
+            aplicadas[fp] = aplicadas.get(fp, 0) + 1
+        nueva = {"mo": "00071", "sku": "C", "qty": 8, "fecha": "d4", "linea": "2"}
+        delta = resolver_delta_costura(filas + [nueva], "SYNC-V13", aplicadas)
+        self.assertEqual(delta, {"71": 8.0})
+        self.assertEqual(inyectar_cantida_por_hacer(100, "00071", delta), 108)
         self.assertEqual(fusionar_cantida_producida(100, 20), 120)
 
     def test_sync_invalida_baseline_vieja_y_padding_mo(self):
-        filas = [
-            {"sheet_row": 3, "mo": "00071", "qty": 50},
-            {"sheet_row": 4, "mo": "00071", "qty": 20},
-            {"sheet_row": 5, "mo": "00082-002", "qty": 30},
-        ]
         self.assertEqual(clave_lookup_mo("00071"), "71")
         self.assertEqual(clave_lookup_mo(71), "71")
         self.assertEqual(clave_lookup_mo("00082-002"), "82-002")
-        # v5.9.11 había visto 50 de MO 71: la fila extra de 20 y la 30 son nuevas
-        delta = resolver_delta_costura(filas, "5.9.11", 0, {"71": 50})
-        self.assertEqual(delta, {"71": 20.0, "82-002": 30.0})
-        self.assertEqual(inyectar_cantida_por_hacer(100, "00071", delta), 120)
-        self.assertEqual(inyectar_cantida_por_hacer(10, "82-002", delta), 40)
-        # Primera 5.9.12 sin esquema: no toca Por Hacer
-        self.assertEqual(inyectar_cantida_por_hacer(100, "00071", resolver_delta_costura(filas, "", 0, {})), 100)
+        self.assertTrue(es_esquema_sync_actual("SYNC-V13"))
+        # Misma huella dos veces: la segunda ocurrencia sí se suma
+        f = {"mo": "00071", "sku": "X", "qty": 12, "fecha": "d", "linea": "5"}
+        aplicadas = {huella_fila_costura(f): 1}
+        delta = resolver_delta_costura([f, f], "SYNC-V13", aplicadas)
+        self.assertEqual(delta, {"71": 12.0})
+        self.assertEqual(inyectar_cantida_por_hacer(22, "00071", delta), 34)
 
     def test_especial_hecho_no_entra_al_backlog(self):
         self.assertTrue(es_especial_hecho("Hecho"))

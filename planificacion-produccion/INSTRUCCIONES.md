@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.12 — códigos listos para pegar
+# Planificación de Producción v5.9.13 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -17,13 +17,13 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.12
+## Motor v5.9.13
 
 - **Fix de sintaxis:** Apps Script ya no falla con `Unexpected token '}'`. Se restauró `familiaOcupaLinea_` (un recorte de v5.9.7 dejaba un `}` suelto).
 - **Capacidad diaria por producto:** no se usa un techo fijo 130/40. Al planificar se lee `Cap Produccion por Dia` (Por Hacer col. N, Por Hacer - Especial col. O) y esa cifra es el cupo del día mientras el modelo ocupa la línea. Si cambia de modelo a media jornada, el sobrante se calcula con la cap del que entra. Si la celda viene vacía, respaldo L1-4=130 / L5=40.
 - **Secuencia de género:** si RIO CAB, RIO DAMA y RIO KIDS caen en la **misma** línea, salen en lotes diarios CAB → DAMA → KIDS (según capacidad). No se mezclan géneros el mismo día en L1-4 ni en paralelo en L5. Si cada género tiene otra línea libre, pueden ir separados.
 - **Almacén:** `Fecha Entrada de Almacen` = **4 días hábiles** después de salir de costura.
-- **Sincronizar Producción:** `Cantida Producida` en Por Hacer es la **base** y no se pisa. Cada **fila nueva al final** de `Produccion - Costura` se suma a esa celda según la MO. El histórico no se vuelve a sumar. Si una fila nueva no se aplicó, cópiala al final de Costura y vuelve a sincronizar.
+- **Sincronizar Producción:** `Cantida Producida` en Por Hacer es la **base**. Cada fila **nueva** de `Produccion - Costura` (huella MO+SKU+cantidad+fecha+línea) se suma a esa MO. La hoja oculta `Sync Costura Aplicada` guarda esas huellas con el sello de texto `SYNC-V13` (ya no `5.9.12`, que Google convertía en fecha y dejaba de detectar filas nuevas).
 - **Tableros por flujo:** el remanente (lote chico que cierra el día) va primero; el modelo que sigue el resto de la semana va después.
 - **Actualizar MOs:** las MO en **Hecho** de `Por Hacer - Especial` **no** se archivan ni se borran, y **no entran al backlog** ni a la planificación. Cancelada sí se archiva. Producción regular sigue igual.
 - **Línea 1 y cambio de modelo:** si el ocupante termina a media jornada, el sobrante pasa al siguiente especial. Un modelo que lista L1 pero ya está trabajando en otra línea **no bloquea** ese desborde. Dos modelos en L1 el mismo día van **en secuencia**, no en paralelo.
