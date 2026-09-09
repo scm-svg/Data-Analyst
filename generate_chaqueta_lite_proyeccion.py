@@ -34,10 +34,10 @@ COVER_MONTHS_MIN = 2.5
 COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
-WEB_VS_CERRO_VERDE = 0.50       # Web ≈ 50% de Cerro Verde
-GRAND_PLAZ_BONUS = 1.40         # Grand Plaz +40% sobre histórico
-PROD_RANGE_MIN = 850            # Rango global acordado
-PROD_RANGE_MAX = 940
+WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
+GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
+PROD_RANGE_MIN = 870            # Rango global acordado
+PROD_RANGE_MAX = 950
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
@@ -312,7 +312,7 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["  · Cierres 75 cm en stock", CIERRES_75CM, "und (adaptables a 60 cm)"],
         ["Lógica", "1 cierre = 1 chaqueta · pool global intercambiable", ""],
         ["Tope producción (inventario global)", zip_cap["cap_total"], "und"],
-        ["¿Rango 850–940 cabe en stock?", "SÍ" if prod["prod_max"] <= zip_cap["cap_total"] else "NO"],
+        [f"¿Rango {PROD_RANGE_MIN}–{PROD_RANGE_MAX} cabe en stock?", "SÍ" if prod["prod_max"] <= zip_cap["cap_total"] else "NO"],
         [],
         ["── RANGO DE PRODUCCIÓN (ACORDADO) ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
@@ -501,7 +501,7 @@ def write_cierres_sheet(wb, ref, prod, zip_cap):
         ["75 cm ideal", "L · XL", alloc["need_75_min"], alloc["need_75_max"]],
         ["TOTAL chaquetas", "", alloc["total_used_min"], alloc["total_used_max"]],
         [],
-        ["── ASIGNACIÓN AL MÁXIMO (940 und) ──"],
+        [f"── ASIGNACIÓN AL MÁXIMO ({prod['prod_max']} und) ──"],
         ["Concepto", "Und"],
         ["Cierres 60 cm usados (nativos XS/S/M)", alloc["from_60_max"]],
         ["Cierres 75 cm adaptados a 60 cm", alloc["adapt_75_max"]],
