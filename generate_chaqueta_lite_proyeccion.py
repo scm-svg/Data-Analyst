@@ -36,8 +36,8 @@ MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
 GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
-PROD_RANGE_MIN = 870            # Rango global acordado
-PROD_RANGE_MAX = 950
+PROD_RANGE_MIN = 890            # Rango global acordado
+PROD_RANGE_MAX = 970
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
@@ -54,6 +54,14 @@ COLOR_FILL = {
     "Verde Militar": PatternFill("solid", fgColor="4B5320"),
 }
 COLOR_FONT = {"Negro": "FFFFFF", "Vinotinto": "FFFFFF", "Verde Militar": "FFFFFF"}
+
+# Estilo curva completa (formato SPOTS)
+CURVA_HDR_FILL = PatternFill("solid", fgColor="1F3864")
+CURVA_DATA_FILL = PatternFill("solid", fgColor="D6E4BC")
+CURVA_TOT_FILL = PatternFill("solid", fgColor="A9D08E")
+CURVA_HDR_FONT = Font(bold=True, color="FFFFFF", size=11)
+CURVA_NUM_FONT = Font(bold=True, color="375623", size=11)
+CURVA_LBL_FONT = Font(bold=True, size=10)
 
 # ── Consumo tela VIORI por talla (ficha técnica DAMA) ──
 CONSUMO_MTS = {"XS": 1.19, "S": 1.22, "M": 1.28, "L": 1.34, "XL": 1.35}
@@ -391,7 +399,8 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Negro", f"{int(COLOR_PCT['Negro']*100)}%", "protagonista"],
         ["Vinotinto", f"{int(COLOR_PCT['Vinotinto']*100)}%", ""],
         ["Verde Militar", f"{int(COLOR_PCT['Verde Militar']*100)}%", ""],
-        ["Ver detalle", "Hoja Producción Color × Talla", ""],
+        ["Curva completa color × talla", "Hoja Cantidades por Colores", ""],
+        ["Detalle color/talla Mín-Máx", "Hoja Producción Color × Talla", ""],
         ["Compra tela VIORI", "Hoja Compra de Tela", ""],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
@@ -547,6 +556,112 @@ def write_tiendas_sheet(wb, ref, prod):
     ws.column_dimensions["D"].width = 16
     for i in range(2, 2 + len(TALLAS) * 2):
         ws.column_dimensions[get_column_letter(i)].width = 7
+
+
+def _write_curva_block(ws, start_row: int, block_title: str, color_matrix: dict) -> int:
+    """Escribe bloque curva color×talla estilo SPOTS. Retorna siguiente fila libre."""
+    ncol = len(TALLAS) + 2
+    ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=ncol)
+    c = ws.cell(row=start_row, column=1, value=block_title)
+    c.font = Font(bold=True, size=12, color="1F3864")
+    c.alignment = left
+    row = start_row + 1
+
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=1)
+    style_cell(ws.cell(row=row, column=1, value=f"{PRODUCTO} {GENERO}"), CURVA_HDR_FILL, bold=True, align=left)
+    ws.cell(row=row, column=1).font = CURVA_HDR_FONT
+    for i, t in enumerate(TALLAS, start=2):
+        style_cell(ws.cell(row=row, column=i, value=t), CURVA_HDR_FILL, bold=True)
+        ws.cell(row=row, column=i).font = CURVA_HDR_FONT
+    style_cell(ws.cell(row=row, column=ncol, value="Tot"), CURVA_HDR_FILL, bold=True)
+    ws.cell(row=row, column=ncol).font = CURVA_HDR_FONT
+    row += 1
+
+    col_totals = {t: 0 for t in TALLAS}
+    grand = 0
+    for color in COLORES:
+        pct = int(COLOR_PCT[color] * 100)
+        style_cell(ws.cell(row=row, column=1, value=f"{color} · {pct}%"), CURVA_DATA_FILL, align=left)
+        ws.cell(row=row, column=1).font = CURVA_LBL_FONT
+        row_sum = 0
+        for i, t in enumerate(TALLAS, start=2):
+            val = color_matrix[color][t]
+            cell = ws.cell(row=row, column=i, value=val)
+            style_cell(cell, CURVA_DATA_FILL)
+            cell.font = CURVA_NUM_FONT
+            col_totals[t] += val
+            row_sum += val
+        cell = ws.cell(row=row, column=ncol, value=row_sum)
+        style_cell(cell, CURVA_DATA_FILL)
+        cell.font = CURVA_NUM_FONT
+        grand += row_sum
+        row += 1
+
+    style_cell(ws.cell(row=row, column=1, value="TOTAL GENERAL"), CURVA_TOT_FILL, bold=True, align=left)
+    ws.cell(row=row, column=1).font = Font(bold=True, size=11)
+    for i, t in enumerate(TALLAS, start=2):
+        cell = ws.cell(row=row, column=i, value=col_totals[t])
+        style_cell(cell, CURVA_TOT_FILL, bold=True)
+        cell.font = Font(bold=True, size=11)
+    cell = ws.cell(row=row, column=ncol, value=grand)
+    style_cell(cell, CURVA_TOT_FILL, bold=True)
+    cell.font = Font(bold=True, size=11)
+    return row + 2
+
+
+def write_curva_completa_sheet(wb, ref, prod, zip_cap):
+    ws = wb.create_sheet("Cantidades por Colores")
+    color_min, _ = distribute_by_color_talla(prod["prod_min"], ref["talla_pct"])
+    color_max, _ = distribute_by_color_talla(prod["prod_max"], ref["talla_pct"])
+    tela_min = calc_tela_totals(color_min)
+    tela_max = calc_tela_totals(color_max)
+    talla_min = distribute_by_talla(prod["prod_min"], ref["talla_pct"])
+    talla_max = distribute_by_talla(prod["prod_max"], ref["talla_pct"])
+    ins_min = calc_insumos_totals(talla_min)
+    ins_max = calc_insumos_totals(talla_max)
+    alloc_max = calc_cierre_allocation(talla_min, talla_max)
+
+    ws.merge_cells("A1:G1")
+    style_cell(ws.cell(row=1, column=1, value="CANTIDADES POR COLORES"), title_fill, bold=True)
+    ws.cell(row=1, column=1).font = Font(bold=True, size=14, color="FFFFFF")
+    ws.cell(row=2, column=1, value=f"{PRODUCTO} · Proporción Negro 40% · Vinotinto 30% · Verde Militar 30%").font = Font(italic=True)
+    ws.cell(row=3, column=1, value=f"Rango producción: {prod['prod_min']} – {prod['prod_max']} und").font = Font(bold=True)
+
+    row = _write_curva_block(ws, 5, f"MÍNIMO — {prod['prod_min']} und (compromiso)", color_min)
+    row = _write_curva_block(ws, row, f"MÁXIMO — {prod['prod_max']} und (techo)", color_max)
+
+    ws.cell(row=row, column=1, value="── INSUMOS PARA COMPRA (Mín / Máx) ──").font = Font(bold=True, size=11, color="1F3864")
+    row += 1
+    ins_headers = ["Insumo", "Mín", "Máx", "Unidad", "Nota"]
+    for c, h in enumerate(ins_headers, 1):
+        style_cell(ws.cell(row=row, column=c, value=h), sub_fill, bold=True)
+    row += 1
+
+    ins_rows = [
+        ("Tela VIORI — Negro", tela_min["by_color"]["Negro"]["mts"], tela_max["by_color"]["Negro"]["mts"], "metros", f"{tela_max['by_color']['Negro']['kg']} kg al máx"),
+        ("Tela VIORI — Vinotinto", tela_min["by_color"]["Vinotinto"]["mts"], tela_max["by_color"]["Vinotinto"]["mts"], "metros", f"{tela_max['by_color']['Vinotinto']['kg']} kg al máx"),
+        ("Tela VIORI — Verde Militar", tela_min["by_color"]["Verde Militar"]["mts"], tela_max["by_color"]["Verde Militar"]["mts"], "metros", f"{tela_max['by_color']['Verde Militar']['kg']} kg al máx"),
+        ("TOTAL tela VIORI", tela_min["total_mts"], tela_max["total_mts"], "metros", f"{tela_max['total_kg']} kg al máx"),
+        ("Elástica 4.5 cm", ins_min["elastica_m"], ins_max["elastica_m"], "metros", "Ficha técnica"),
+        ("Sesgo cintura 2 cm", ins_min["sesgo_cintura_m"], ins_max["sesgo_cintura_m"], "metros", "Ficha técnica"),
+        ("Sesgo manga 2 cm", ins_min["sesgo_manga_m"], ins_max["sesgo_manga_m"], "metros", "Ficha técnica"),
+        ("Cierres QX Negro 0580", prod["total_used_min"], prod["total_used_max"], "und", f"Pool global {CIERRES_TOTAL} und · rem. {prod['rem_global_max']} al máx"),
+        ("  · Preferencia 60 cm (XS/S/M)", alloc_max["need_60_min"], alloc_max["need_60_max"], "und", f"Stock {CIERRES_60CM} und"),
+        ("  · Preferencia 75 cm (L/XL)", alloc_max["need_75_min"], alloc_max["need_75_max"], "und", f"Stock {CIERRES_75CM} und · adaptable"),
+    ]
+    for label, vmin, vmax, unit, note in ins_rows:
+        is_sub = label.startswith("  ·")
+        fill = white_fill if is_sub else color_fill
+        style_cell(ws.cell(row=row, column=1, value=label), fill, bold=not is_sub, align=left)
+        style_cell(ws.cell(row=row, column=2, value=vmin), min_fill if not is_sub else white_fill)
+        style_cell(ws.cell(row=row, column=3, value=vmax), max_fill if not is_sub else white_fill)
+        ws.cell(row=row, column=4, value=unit)
+        ws.cell(row=row, column=5, value=note)
+        row += 1
+
+    ws.column_dimensions["A"].width = 32
+    for col in "BCDE":
+        ws.column_dimensions[col].width = 14
 
 
 def write_colores_sheet(wb, ref, prod):
@@ -814,6 +929,7 @@ def main():
     wb.remove(wb.active)
     write_resumen(wb, ref, zip_cap, prod)
     write_tallas_sheet(wb, ref, prod)
+    write_curva_completa_sheet(wb, ref, prod, zip_cap)
     write_colores_sheet(wb, ref, prod)
     write_compra_tela_sheet(wb, ref, prod)
     write_tiendas_sheet(wb, ref, prod)
