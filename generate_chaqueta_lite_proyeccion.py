@@ -40,9 +40,10 @@ PROD_RANGE_MIN = 850            # Rango global acordado
 PROD_RANGE_MAX = 940
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
-# ── Insumo limitante: cierres ──
+# ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
 CIERRES_60CM = 748
 CIERRES_75CM = 744
+CIERRES_TOTAL = CIERRES_60CM + CIERRES_75CM
 
 # ── Tiendas ──
 HISTORICAL_STORES = ["SAMBIL", "GRIETA", "CERRO VERDE", "CHACAO", "GRAND PLAZ", "LA VELA"]
@@ -170,17 +171,49 @@ def analyze_reference(data: dict) -> dict:
 def calc_zipper_cap(talla_pct: dict) -> dict:
     pct_60 = sum(talla_pct[t] for t in TALLAS_60CM)
     pct_75 = sum(talla_pct[t] for t in TALLAS_75CM)
-    cap_60 = int(CIERRES_60CM / pct_60) if pct_60 else 0
-    cap_75 = int(CIERRES_75CM / pct_75) if pct_75 else 0
-    cap_total = min(cap_60, cap_75)
     return {
         "pct_60": pct_60,
         "pct_75": pct_75,
-        "cap_60": cap_60,
-        "cap_75": cap_75,
-        "cap_total": cap_total,
-        "use_60_at_cap": round(cap_total * pct_60),
-        "use_75_at_cap": round(cap_total * pct_75),
+        "cierres_total": CIERRES_TOTAL,
+        "cap_total": CIERRES_TOTAL,
+    }
+
+
+def calc_cierre_allocation(talla_min: dict, talla_max: dict) -> dict:
+    """Asigna cierres por longitud; excedente 60 cm se cubre adaptando 75 cm."""
+    need_60_min = sum(talla_min[t] for t in TALLAS_60CM)
+    need_60_max = sum(talla_max[t] for t in TALLAS_60CM)
+    need_75_min = sum(talla_min[t] for t in TALLAS_75CM)
+    need_75_max = sum(talla_max[t] for t in TALLAS_75CM)
+
+    from_60_max = min(need_60_max, CIERRES_60CM)
+    adapt_75_max = max(0, need_60_max - CIERRES_60CM)
+    from_75_lxl_max = need_75_max
+    total_75_used_max = from_75_lxl_max + adapt_75_max
+    total_used_max = need_60_max + need_75_max
+
+    from_60_min = min(need_60_min, CIERRES_60CM)
+    adapt_75_min = max(0, need_60_min - CIERRES_60CM)
+    total_75_used_min = need_75_min + adapt_75_min
+    total_used_min = need_60_min + need_75_min
+
+    return {
+        "need_60_min": need_60_min,
+        "need_60_max": need_60_max,
+        "need_75_min": need_75_min,
+        "need_75_max": need_75_max,
+        "from_60_min": from_60_min,
+        "from_60_max": from_60_max,
+        "adapt_75_min": adapt_75_min,
+        "adapt_75_max": adapt_75_max,
+        "from_75_lxl_min": need_75_min,
+        "from_75_lxl_max": from_75_lxl_max,
+        "total_75_used_min": total_75_used_min,
+        "total_75_used_max": total_75_used_max,
+        "total_used_min": total_used_min,
+        "total_used_max": total_used_max,
+        "rem_global_min": CIERRES_TOTAL - total_used_min,
+        "rem_global_max": CIERRES_TOTAL - total_used_max,
     }
 
 
@@ -196,12 +229,6 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
     prod_max = PROD_RANGE_MAX
     cap = zip_cap["cap_total"]
 
-    use_60_min = round(prod_min * zip_cap["pct_60"])
-    use_60_max = round(prod_max * zip_cap["pct_60"])
-    use_75_min = round(prod_min * zip_cap["pct_75"])
-    use_75_max = round(prod_max * zip_cap["pct_75"])
-    deficit_60_max = max(0, use_60_max - CIERRES_60CM)
-
     return {
         "vel_adj": vel_adj,
         "vel_network": vel_network,
@@ -211,11 +238,10 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
         "prod_min": prod_min,
         "prod_max": prod_max,
         "zipper_limited": prod_max > cap,
-        "use_60_min": use_60_min,
-        "use_60_max": use_60_max,
-        "use_75_min": use_75_min,
-        "use_75_max": use_75_max,
-        "deficit_60_max": deficit_60_max,
+        "total_used_min": prod_min,
+        "total_used_max": prod_max,
+        "rem_global_min": cap - prod_min,
+        "rem_global_max": cap - prod_max,
         "cap_cierres": cap,
     }
 
@@ -281,19 +307,20 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Demanda teórica máx (sin cap cierres)", prod["raw_max"], "und"],
         [],
         ["── INSUMO LIMITANTE: CIERRES QX NEGRO 0580 ──"],
-        ["Cierre 60 cm (XS · S · M)", CIERRES_60CM, "und disponibles"],
-        ["Cierre 75 cm (L · XL)", CIERRES_75CM, "und disponibles"],
-        ["Curva tallas → % cierre 60 cm", f"{zip_cap['pct_60']*100:.1f}%"],
-        ["Curva tallas → % cierre 75 cm", f"{zip_cap['pct_75']*100:.1f}%"],
-        ["Tope teórico cierres 60 cm", zip_cap["cap_total"], "und"],
-        ["¿Máximo supera cierres 60 cm?", "SÍ — ver hoja Cierres" if prod["deficit_60_max"] else "NO"],
+        ["Inventario global (60 + 75 cm)", CIERRES_TOTAL, "und disponibles"],
+        ["  · Cierres 60 cm en stock", CIERRES_60CM, "und"],
+        ["  · Cierres 75 cm en stock", CIERRES_75CM, "und (adaptables a 60 cm)"],
+        ["Lógica", "1 cierre = 1 chaqueta · pool global intercambiable", ""],
+        ["Tope producción (inventario global)", zip_cap["cap_total"], "und"],
+        ["¿Rango 850–940 cabe en stock?", "SÍ" if prod["prod_max"] <= zip_cap["cap_total"] else "NO"],
         [],
         ["── RANGO DE PRODUCCIÓN (ACORDADO) ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
         ["MÁXIMO", prod["prod_max"], "und"],
         ["Rango de acción", prod["prod_max"] - prod["prod_min"], "und"],
-        ["Cierres 60 cm al máximo", prod["use_60_max"], f"de {CIERRES_60CM} disp."],
-        ["Déficit cierres 60 cm al máximo", prod["deficit_60_max"] or "—", "und" if prod["deficit_60_max"] else ""],
+        ["Cierres usados al mínimo", prod["total_used_min"], f"de {CIERRES_TOTAL} disp."],
+        ["Cierres usados al máximo", prod["total_used_max"], f"de {CIERRES_TOTAL} disp."],
+        ["Remanente global al máximo", prod["rem_global_max"], "und"],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -311,7 +338,7 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["• Dashboards adjuntos Jacket 1.0 y Jacket 2.0 leídos y combinados."],
         ["• Producto NUEVO manufacturado — sin stock inicial."],
         ["• Solo género DAMA, tallas XS a XL."],
-        ["• Cierres 60 cm → XS, S, M | Cierres 75 cm → L, XL."],
+        ["• Preferencia: 60 cm → XS/S/M · 75 cm → L/XL · excedente 75 cm adaptable a 60 cm."],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -369,15 +396,18 @@ def write_tallas_sheet(wb, ref, prod):
     style_cell(ws.cell(row=r, column=7, value=c60_max), tot_fill, bold=True)
 
     r += 2
-    fill60 = warn_fill if c60_max > CIERRES_60CM else color_fill
-    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 60 cm"), fill60, align=left)
-    ws.cell(row=r, column=4, value=CIERRES_60CM)
-    deficit = c60_max - CIERRES_60CM
-    ws.cell(row=r, column=5, value=f"Usa máx {c60_max}" + (f" (faltan {deficit})" if deficit > 0 else f" ({c60_max/CIERRES_60CM*100:.0f}%)"))
+    alloc = calc_cierre_allocation(
+        {t: talla_min[t] for t in TALLAS},
+        {t: talla_max[t] for t in TALLAS},
+    )
+    style_cell(ws.cell(row=r, column=1, value="Inventario global cierres"), color_fill, align=left)
+    ws.cell(row=r, column=4, value=CIERRES_TOTAL)
+    ws.cell(row=r, column=5, value=f"Usa máx {t_max_total} ({t_max_total/CIERRES_TOTAL*100:.0f}%)")
     r += 1
-    style_cell(ws.cell(row=r, column=1, value="Disponible cierres 75 cm"), color_fill, align=left)
-    ws.cell(row=r, column=4, value=CIERRES_75CM)
-    ws.cell(row=r, column=5, value=f"Usa máx {c75_max} ({c75_max/CIERRES_75CM*100:.0f}%)")
+    style_cell(ws.cell(row=r, column=1, value="Remanente global al máximo"), color_fill, align=left)
+    ws.cell(row=r, column=4, value=alloc["rem_global_max"])
+    if alloc["adapt_75_max"]:
+        ws.cell(row=r, column=5, value=f"Incl. {alloc['adapt_75_max']} cierres 75→60 cm")
 
     for col in "ABCDEFG":
         ws.column_dimensions[col].width = 14
@@ -451,33 +481,37 @@ def write_cierres_sheet(wb, ref, prod, zip_cap):
     ws = wb.create_sheet("Cierres (Insumo)")
     talla_min = distribute_by_talla(prod["prod_min"], ref["talla_pct"])
     talla_max = distribute_by_talla(prod["prod_max"], ref["talla_pct"])
+    alloc = calc_cierre_allocation(talla_min, talla_max)
 
     rows = [
-        ["PLAN DE CIERRES — QX NEGRO 0580"],
+        ["PLAN DE CIERRES — QX NEGRO 0580 (INVENTARIO GLOBAL)"],
         ["Modelo", "QX Negro 0580"],
         ["Color producto", "Negro (inferido del insumo)"],
+        ["Lógica", "75 cm adaptable a 60 cm · 1 cierre = 1 chaqueta · pool global"],
         [],
-        ["Longitud", "Tallas", "Disponible", "Usa Mín", "Usa Máx", "Remanente Mín", "Remanente Máx", "% uso máx"],
-        [
-            "60 cm", "XS · S · M", CIERRES_60CM,
-            sum(talla_min[t] for t in TALLAS_60CM),
-            sum(talla_max[t] for t in TALLAS_60CM),
-            CIERRES_60CM - sum(talla_min[t] for t in TALLAS_60CM),
-            CIERRES_60CM - sum(talla_max[t] for t in TALLAS_60CM),
-            f"{sum(talla_max[t] for t in TALLAS_60CM)/CIERRES_60CM*100:.0f}%",
-        ],
-        [
-            "75 cm", "L · XL", CIERRES_75CM,
-            sum(talla_min[t] for t in TALLAS_75CM),
-            sum(talla_max[t] for t in TALLAS_75CM),
-            CIERRES_75CM - sum(talla_min[t] for t in TALLAS_75CM),
-            CIERRES_75CM - sum(talla_max[t] for t in TALLAS_75CM),
-            f"{sum(talla_max[t] for t in TALLAS_75CM)/CIERRES_75CM*100:.0f}%",
-        ],
+        ["── STOCK POR LONGITUD ──"],
+        ["Longitud", "Und disponibles", "Nota"],
+        ["60 cm", CIERRES_60CM, "Preferido XS · S · M"],
+        ["75 cm", CIERRES_75CM, "Preferido L · XL · adaptable a 60 cm"],
+        ["TOTAL GLOBAL", CIERRES_TOTAL, "Tope producción"],
+        [],
+        ["── DEMANDA POR TALLA (Mín / Máx) ──"],
+        ["Grupo", "Tallas", "Demanda Mín", "Demanda Máx"],
+        ["60 cm ideal", "XS · S · M", alloc["need_60_min"], alloc["need_60_max"]],
+        ["75 cm ideal", "L · XL", alloc["need_75_min"], alloc["need_75_max"]],
+        ["TOTAL chaquetas", "", alloc["total_used_min"], alloc["total_used_max"]],
+        [],
+        ["── ASIGNACIÓN AL MÁXIMO (940 und) ──"],
+        ["Concepto", "Und"],
+        ["Cierres 60 cm usados (nativos XS/S/M)", alloc["from_60_max"]],
+        ["Cierres 75 cm adaptados a 60 cm", alloc["adapt_75_max"]],
+        ["Cierres 75 cm usados en L/XL", alloc["from_75_lxl_max"]],
+        ["Total cierres 75 cm consumidos", alloc["total_75_used_max"]],
+        ["Total cierres consumidos (global)", alloc["total_used_max"]],
+        ["Remanente global", alloc["rem_global_max"]],
         [],
         ["Rango producción acordado", f"{prod['prod_min']} – {prod['prod_max']} und"],
-        ["Déficit cierres 60 cm al máximo", prod["deficit_60_max"] or 0, "und (comprar adicional)" if prod["deficit_60_max"] else "—"],
-        ["Nota", "Al máximo (940) se supera stock cierres 60 cm; comprar ~14 und extra o producir tope 921 con stock actual." if prod["deficit_60_max"] else ""],
+        ["¿Cabe en inventario global?", "SÍ" if prod["prod_max"] <= CIERRES_TOTAL else "NO"],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -517,10 +551,11 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"   Mínimo: {PROD_RANGE_MIN} und | Máximo: {PROD_RANGE_MAX} und.",
         f"   Demanda teórica calculada: {prod['raw_min']} – {prod['raw_max']} und (referencia).",
         "",
-        "5. INSUMO LIMITANTE — CIERRES",
-        f"   Tope teórico cierres 60 cm = {zip_cap['cap_total']} und.",
-        f"   Al máximo ({prod['prod_max']} und) se necesitan {prod['use_60_max']} cierres 60 cm.",
-        f"   Déficit al máximo: {prod['deficit_60_max']} und de cierre 60 cm (si no se compran más).",
+        "5. INSUMO LIMITANTE — CIERRES (INVENTARIO GLOBAL)",
+        f"   Stock total: {CIERRES_60CM} (60 cm) + {CIERRES_75CM} (75 cm) = {CIERRES_TOTAL} und.",
+        "   Los cierres 75 cm se adaptan a 60 cm → se considera pool global intercambiable.",
+        f"   Tope producción = {zip_cap['cap_total']} und (1 cierre por chaqueta).",
+        f"   Al máximo ({prod['prod_max']} und) quedan {prod['rem_global_max']} cierres remanentes.",
         "",
         "6. RANGO MÍNIMO / MÁXIMO",
         f"   Compromiso mín: {prod['prod_min']} und.",
