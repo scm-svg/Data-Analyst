@@ -32,17 +32,17 @@ STORE_MAP = {
 }
 
 # ── Parámetros de proyección ──
-HIGH_SEASON_FACTOR = 1.25
-SAFETY_STOCK_PCT = 0.15
-TELA_SS_PCT = 0.20             # Stock de seguridad tela +20% sobre consumo
+HIGH_SEASON_FACTOR = 1.40        # Temporada alta diciembre (ajustado ×1,4)
+SAFETY_STOCK_PCT = 0.15          # Stock de seguridad producción +15%
+TELA_SS_PCT = 0.20               # Stock de seguridad tela +20% sobre consumo
 COVER_MONTHS_MIN = 2.5
 COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
 GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
-PROD_RANGE_MIN = 890            # Mismo rango acordado que Chaqueta Lite
-PROD_RANGE_MAX = 970
+PROD_RANGE_MIN = 1280            # Mismo rango acordado que Chaqueta Lite
+PROD_RANGE_MAX = 1350
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # Ajuste curva tallas: M y S fijas; lo restado va a XS; L/XL sin cambio
@@ -350,12 +350,14 @@ def write_resumen(wb, ref, prod):
         ["Barquisimeto adicional (tienda nueva)", round(prod["barq_add"], 1), "und/mes"],
         ["Velocidad red completa ajustada", round(prod["vel_network"], 1), "und/mes"],
         [],
-        ["── COBERTURA Y STOCK DE SEGURIDAD ──"],
+        ["── COBERTURA Y STOCK ──"],
         ["Meses cobertura mínimo", COVER_MONTHS_MIN],
         ["Meses cobertura máximo", COVER_MONTHS_MAX],
-        ["Stock de seguridad", f"{int(SAFETY_STOCK_PCT * 100)}%"],
-        ["Demanda teórica mín", prod["raw_min"], "und"],
-        ["Demanda teórica máx", prod["raw_max"], "und"],
+        ["Stock de seguridad producción", f"+{int(SAFETY_STOCK_PCT * 100)}%", "sobre demanda teórica"],
+        ["Stock de seguridad tela (compra)", f"+{int(TELA_SS_PCT * 100)}%", "sobre consumo VIORI"],
+        ["Stock PT en taller", "Contemplado", "buffer operativo pre-distribución y reposición"],
+        ["Demanda teórica mín (referencia)", prod["raw_min"], "und"],
+        ["Demanda teórica máx (referencia)", prod["raw_max"], "und"],
         [],
         ["── RANGO DE PRODUCCIÓN (ACORDADO — IGUAL CHAQUETA LITE) ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
@@ -822,8 +824,12 @@ def write_metodologia(wb, ref, prod):
         f"   Velocidad base = promedio Jun–Jul–Ago 2026: {ref['vel_base']:.0f} und/mes.",
         "   Ficha técnica: Ficha_tecnica_LITE_PANT.xlsx (consumo VIORI + elástica).",
         "",
-        "2. AJUSTE TEMPORADA ALTA",
-        f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre). Diciembre 2025 combinado: {ref['dec_vel']} und.",
+        "2. AJUSTE TEMPORADA ALTA Y STOCK",
+        f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre — incrementado para escenario temporada alta).",
+        f"   Diciembre 2025 combinado: {ref['dec_vel']} und.",
+        f"   • Stock de seguridad producción: +{int(SAFETY_STOCK_PCT*100)}%.",
+        f"   • Stock de seguridad tela (compra): +{int(TELA_SS_PCT*100)}%.",
+        "   • Stock producto terminado en taller: buffer operativo pre-distribución y reposición.",
         "",
         "3. AJUSTES DE TIENDA (según indicación)",
         f"   • Tolón: proyectado al {int(TOLON_VS_CHACAO*100)}% de Chacao ({ref['chacao_m']:.0f} → {ref['tolon_proj']:.0f} und/mes).",

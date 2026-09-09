@@ -28,17 +28,17 @@ TALLAS_60CM = {"XS", "S", "M"}
 TALLAS_75CM = {"L", "XL"}
 
 # ── Parámetros de proyección ──
-HIGH_SEASON_FACTOR = 1.25
-SAFETY_STOCK_PCT = 0.15
-TELA_SS_PCT = 0.20             # Stock de seguridad tela +20% sobre consumo
+HIGH_SEASON_FACTOR = 1.40        # Temporada alta diciembre (ajustado ×1,4)
+SAFETY_STOCK_PCT = 0.15          # Stock de seguridad producción +15%
+TELA_SS_PCT = 0.20               # Stock de seguridad tela +20% sobre consumo
 COVER_MONTHS_MIN = 2.5
 COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
 GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
-PROD_RANGE_MIN = 890            # Rango global acordado
-PROD_RANGE_MAX = 970
+PROD_RANGE_MIN = 1280            # Rango global acordado (lanzamiento diciembre)
+PROD_RANGE_MAX = 1350
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
 
 # ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
@@ -389,12 +389,14 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Barquisimeto adicional (tienda nueva)", round(prod["barq_add"], 1), "und/mes"],
         ["Velocidad red completa ajustada", round(prod["vel_network"], 1), "und/mes"],
         [],
-        ["── COBERTURA Y STOCK DE SEGURIDAD ──"],
+        ["── COBERTURA Y STOCK ──"],
         ["Meses cobertura mínimo", COVER_MONTHS_MIN],
         ["Meses cobertura máximo", COVER_MONTHS_MAX],
-        ["Stock de seguridad", f"{int(SAFETY_STOCK_PCT * 100)}%"],
-        ["Demanda teórica mín (sin cap cierres)", prod["raw_min"], "und"],
-        ["Demanda teórica máx (sin cap cierres)", prod["raw_max"], "und"],
+        ["Stock de seguridad producción", f"+{int(SAFETY_STOCK_PCT * 100)}%", "sobre demanda teórica"],
+        ["Stock de seguridad tela (compra)", f"+{int(TELA_SS_PCT * 100)}%", "sobre consumo VIORI"],
+        ["Stock PT en taller", "Contemplado", "buffer operativo pre-distribución y reposición"],
+        ["Demanda teórica mín (referencia)", prod["raw_min"], "und"],
+        ["Demanda teórica máx (referencia)", prod["raw_max"], "und"],
         [],
         ["── INSUMO LIMITANTE: CIERRES QX NEGRO 0580 ──"],
         ["Inventario global (60 + 75 cm)", CIERRES_TOTAL, "und disponibles"],
@@ -902,7 +904,13 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"   Velocidad base = promedio Jun–Jul–Ago 2026: {ref['vel_base']:.0f} und/mes.",
         "",
         "2. AJUSTE TEMPORADA ALTA",
-        f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre). Diciembre 2025 combinado: {ref['dec_vel']} und.",
+        f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre — incrementado para escenario temporada alta).",
+        f"   Diciembre 2025 combinado: {ref['dec_vel']} und.",
+        "",
+        "   STOCK DE SEGURIDAD Y TALLER",
+        f"   • Producción: +{int(SAFETY_STOCK_PCT*100)}% SS sobre demanda teórica.",
+        f"   • Tela (compra): +{int(TELA_SS_PCT*100)}% SS sobre consumo VIORI.",
+        "   • Producto terminado en taller: buffer operativo (pre-distribución a tiendas y reposición).",
         "",
         "3. AJUSTES DE TIENDA (según indicación)",
         f"   • Tolón: proyectado al {int(TOLON_VS_CHACAO*100)}% de Chacao ({ref['chacao_m']:.0f} → {ref['tolon_proj']:.0f} und/mes).",
