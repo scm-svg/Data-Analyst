@@ -1,10 +1,12 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.9 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.10 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - FIX SINTAXIS: se restauró familiaOcupaLinea_ (un recorte de v5.9.7
+ *     dejaba un "}" suelto y Apps Script fallaba al guardar).
  *   - CAPACIDAD POR PRODUCTO: el techo diario de la línea es
  *     "Cap Produccion por Dia" (Por Hacer col. N / Especial col. O).
  *     Al cambiar de modelo, el sobrante del día usa la cap del que entra.
@@ -73,7 +75,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.9";
+var VERSION_SISTEMA = "5.9.10";
 var SYNC_COSTURA_ESQUEMA = "5.9.9";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1425,6 +1427,8 @@ function generarPlanificacionSemanal_() {
     }
     return false;
   }
+
+  function familiaOcupaLinea_(fam, lin, exceptNom) {
     if (!fam) return false;
     return (ocupante[lin] || []).some(function (nom) {
       if (exceptNom && nom === exceptNom) return false;
