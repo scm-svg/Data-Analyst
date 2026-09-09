@@ -30,6 +30,7 @@ TALLAS_75CM = {"L", "XL"}
 # ── Parámetros de proyección ──
 HIGH_SEASON_FACTOR = 1.25
 SAFETY_STOCK_PCT = 0.15
+TELA_SS_PCT = 0.20             # Stock de seguridad tela +20% sobre consumo
 COVER_MONTHS_MIN = 2.5
 COVER_MONTHS_MAX = 3.5
 MAX_PCT_ABOVE_MIN = 1.12
@@ -318,17 +319,33 @@ def distribute_by_color_talla(total: int, talla_pct: dict) -> tuple[dict, dict]:
 
 
 def calc_tela_totals(color_matrix: dict) -> dict:
-    """Calcula metros y kg de tela VIORI por color."""
+    """Calcula metros y kg de tela VIORI por color, con compra incluyendo SS."""
+    ss_factor = 1 + TELA_SS_PCT
     out = {}
     for color in COLORES:
         mts = sum(color_matrix[color][t] * CONSUMO_MTS[t] for t in TALLAS)
         kg = sum(color_matrix[color][t] * CONSUMO_KG[t] for t in TALLAS)
         und = sum(color_matrix[color][t] for t in TALLAS)
-        out[color] = {"und": und, "mts": round(mts, 2), "kg": round(kg, 3)}
+        out[color] = {
+            "und": und,
+            "mts": round(mts, 2),
+            "kg": round(kg, 3),
+            "mts_compra": round(mts * ss_factor, 2),
+            "kg_compra": round(kg * ss_factor, 3),
+        }
     total_mts = sum(v["mts"] for v in out.values())
     total_kg = sum(v["kg"] for v in out.values())
+    total_mts_compra = round(total_mts * ss_factor, 2)
+    total_kg_compra = round(total_kg * ss_factor, 3)
     total_und = sum(v["und"] for v in out.values())
-    return {"by_color": out, "total_mts": round(total_mts, 2), "total_kg": round(total_kg, 3), "total_und": total_und}
+    return {
+        "by_color": out,
+        "total_mts": round(total_mts, 2),
+        "total_kg": round(total_kg, 3),
+        "total_mts_compra": total_mts_compra,
+        "total_kg_compra": total_kg_compra,
+        "total_und": total_und,
+    }
 
 
 def calc_insumos_totals(talla_qty: dict) -> dict:
@@ -401,7 +418,7 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Verde Militar", f"{int(COLOR_PCT['Verde Militar']*100)}%", ""],
         ["Curva completa color × talla", "Hoja Cantidades por Colores", ""],
         ["Detalle color/talla Mín-Máx", "Hoja Producción Color × Talla", ""],
-        ["Compra tela VIORI", "Hoja Compra de Tela", ""],
+        ["Compra tela VIORI", f"Hoja Compra de Tela (+{int(TELA_SS_PCT*100)}% SS)", ""],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -638,10 +655,11 @@ def write_curva_completa_sheet(wb, ref, prod, zip_cap):
     row += 1
 
     ins_rows = [
-        ("Tela VIORI — Negro", tela_min["by_color"]["Negro"]["mts"], tela_max["by_color"]["Negro"]["mts"], "metros", f"{tela_max['by_color']['Negro']['kg']} kg al máx"),
-        ("Tela VIORI — Vinotinto", tela_min["by_color"]["Vinotinto"]["mts"], tela_max["by_color"]["Vinotinto"]["mts"], "metros", f"{tela_max['by_color']['Vinotinto']['kg']} kg al máx"),
-        ("Tela VIORI — Verde Militar", tela_min["by_color"]["Verde Militar"]["mts"], tela_max["by_color"]["Verde Militar"]["mts"], "metros", f"{tela_max['by_color']['Verde Militar']['kg']} kg al máx"),
-        ("TOTAL tela VIORI", tela_min["total_mts"], tela_max["total_mts"], "metros", f"{tela_max['total_kg']} kg al máx"),
+        ("Tela VIORI — Negro (consumo)", tela_min["by_color"]["Negro"]["mts"], tela_max["by_color"]["Negro"]["mts"], "metros", "Sin SS"),
+        ("Tela VIORI — Negro (compra +SS)", tela_min["by_color"]["Negro"]["mts_compra"], tela_max["by_color"]["Negro"]["mts_compra"], "metros", f"{tela_max['by_color']['Negro']['kg_compra']} kg al máx"),
+        ("Tela VIORI — Vinotinto (compra +SS)", tela_min["by_color"]["Vinotinto"]["mts_compra"], tela_max["by_color"]["Vinotinto"]["mts_compra"], "metros", f"{tela_max['by_color']['Vinotinto']['kg_compra']} kg al máx"),
+        ("Tela VIORI — Verde Militar (compra +SS)", tela_min["by_color"]["Verde Militar"]["mts_compra"], tela_max["by_color"]["Verde Militar"]["mts_compra"], "metros", f"{tela_max['by_color']['Verde Militar']['kg_compra']} kg al máx"),
+        ("TOTAL tela VIORI (compra +SS)", tela_min["total_mts_compra"], tela_max["total_mts_compra"], "metros", f"{tela_max['total_kg_compra']} kg al máx · SS {int(TELA_SS_PCT*100)}%"),
         ("Elástica 4.5 cm", ins_min["elastica_m"], ins_max["elastica_m"], "metros", "Ficha técnica"),
         ("Sesgo cintura 2 cm", ins_min["sesgo_cintura_m"], ins_max["sesgo_cintura_m"], "metros", "Ficha técnica"),
         ("Sesgo manga 2 cm", ins_min["sesgo_manga_m"], ins_max["sesgo_manga_m"], "metros", "Ficha técnica"),
@@ -737,39 +755,50 @@ def write_compra_tela_sheet(wb, ref, prod):
     ins_min = calc_insumos_totals(talla_min)
     ins_max = calc_insumos_totals(talla_max)
 
-    ws.merge_cells("A1:H1")
+    ws.merge_cells("A1:J1")
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — COMPRA DE TELA VIORI POR COLOR"), title_fill, bold=True)
-    ws.cell(row=2, column=1, value="Consumo por pieza según ficha técnica DAMA · 3 colores 40/30/30").font = Font(italic=True)
+    ws.cell(row=2, column=1, value=f"Consumo ficha técnica DAMA · 3 colores 40/30/30 · SS tela +{int(TELA_SS_PCT*100)}%").font = Font(italic=True)
 
-    headers = ["Color", "%", "Und Mín", "Und Máx", "Metros Mín", "Metros Máx", "Kg Mín", "Kg Máx"]
+    headers = [
+        "Color", "%", "Und Mín", "Und Máx",
+        "Mts consumo Mín", "Mts consumo Máx",
+        "Mts compra Mín (+SS)", "Mts compra Máx (+SS)",
+        "Kg compra Mín", "Kg compra Máx",
+    ]
     for c, h in enumerate(headers, 1):
         style_cell(ws.cell(row=4, column=c, value=h), sub_fill, bold=True)
 
     row = 5
     for color in COLORES:
+        bc = tela_min["by_color"][color]
+        bx = tela_max["by_color"][color]
         style_cell(ws.cell(row=row, column=1, value=color), COLOR_FILL[color], bold=True, align=left)
         ws.cell(row=row, column=1).font = Font(bold=True, color=COLOR_FONT[color])
         ws.cell(row=row, column=2, value=f"{int(COLOR_PCT[color]*100)}%")
-        ws.cell(row=row, column=3, value=tela_min["by_color"][color]["und"])
-        ws.cell(row=row, column=4, value=tela_max["by_color"][color]["und"])
-        style_cell(ws.cell(row=row, column=5, value=tela_min["by_color"][color]["mts"]), min_fill)
-        style_cell(ws.cell(row=row, column=6, value=tela_max["by_color"][color]["mts"]), max_fill)
-        style_cell(ws.cell(row=row, column=7, value=tela_min["by_color"][color]["kg"]), min_fill)
-        style_cell(ws.cell(row=row, column=8, value=tela_max["by_color"][color]["kg"]), max_fill)
+        ws.cell(row=row, column=3, value=bc["und"])
+        ws.cell(row=row, column=4, value=bx["und"])
+        ws.cell(row=row, column=5, value=bc["mts"])
+        ws.cell(row=row, column=6, value=bx["mts"])
+        style_cell(ws.cell(row=row, column=7, value=bc["mts_compra"]), min_fill, bold=True)
+        style_cell(ws.cell(row=row, column=8, value=bx["mts_compra"]), max_fill, bold=True)
+        style_cell(ws.cell(row=row, column=9, value=bc["kg_compra"]), min_fill)
+        style_cell(ws.cell(row=row, column=10, value=bx["kg_compra"]), max_fill)
         row += 1
 
     style_cell(ws.cell(row=row, column=1, value="TOTAL TELA VIORI"), tot_fill, bold=True, align=left)
     ws.cell(row=row, column=3, value=tela_min["total_und"])
     ws.cell(row=row, column=4, value=tela_max["total_und"])
-    style_cell(ws.cell(row=row, column=5, value=tela_min["total_mts"]), tot_fill, bold=True)
-    style_cell(ws.cell(row=row, column=6, value=tela_max["total_mts"]), tot_fill, bold=True)
-    style_cell(ws.cell(row=row, column=7, value=tela_min["total_kg"]), tot_fill, bold=True)
-    style_cell(ws.cell(row=row, column=8, value=tela_max["total_kg"]), tot_fill, bold=True)
+    ws.cell(row=row, column=5, value=tela_min["total_mts"])
+    ws.cell(row=row, column=6, value=tela_max["total_mts"])
+    style_cell(ws.cell(row=row, column=7, value=tela_min["total_mts_compra"]), tot_fill, bold=True)
+    style_cell(ws.cell(row=row, column=8, value=tela_max["total_mts_compra"]), tot_fill, bold=True)
+    style_cell(ws.cell(row=row, column=9, value=tela_min["total_kg_compra"]), tot_fill, bold=True)
+    style_cell(ws.cell(row=row, column=10, value=tela_max["total_kg_compra"]), tot_fill, bold=True)
     row += 2
 
     ws.cell(row=row, column=1, value="── DETALLE POR TALLA Y COLOR (MÁX) ──").font = Font(bold=True)
     row += 1
-    hdr = ["Color / Talla"] + TALLAS + ["Total", "Mts", "Kg"]
+    hdr = ["Color / Talla"] + TALLAS + ["Total", "Mts consumo", "Mts compra (+SS)", "Kg compra (+SS)"]
     for c, h in enumerate(hdr, 1):
         style_cell(ws.cell(row=row, column=c, value=h), sub_fill, bold=True)
     row += 1
@@ -780,7 +809,8 @@ def write_compra_tela_sheet(wb, ref, prod):
             ws.cell(row=row, column=i, value=color_max[color][t])
         ws.cell(row=row, column=7, value=tela_max["by_color"][color]["und"])
         ws.cell(row=row, column=8, value=tela_max["by_color"][color]["mts"])
-        ws.cell(row=row, column=9, value=tela_max["by_color"][color]["kg"])
+        style_cell(ws.cell(row=row, column=9, value=tela_max["by_color"][color]["mts_compra"]), max_fill, bold=True)
+        ws.cell(row=row, column=10, value=tela_max["by_color"][color]["kg_compra"])
         row += 1
 
     row += 1
@@ -908,6 +938,7 @@ def write_metodologia(wb, ref, zip_cap, prod):
         "   Colores: Negro 40% · Vinotinto 30% · Verde Militar 30%.",
         "   Dentro de cada color se aplica la misma curva de tallas.",
         "   Consumo VIORI por pieza (ficha técnica): XS 1.19m · S 1.22m · M 1.28m · L 1.34m · XL 1.35m.",
+        f"   Stock de seguridad tela: +{int(TELA_SS_PCT*100)}% sobre consumo (compra = consumo × {1+TELA_SS_PCT}).",
         "   Ver hojas 'Producción Color × Talla' y 'Compra de Tela VIORI'.",
     ]
     for r, line in enumerate(text, start=1):
@@ -947,7 +978,8 @@ def main():
     color_max_m, cx = distribute_by_color_talla(prod["prod_max"], ref["talla_pct"])
     tm = calc_tela_totals(color_min_m)
     tx = calc_tela_totals(color_max_m)
-    print(f"   Tela VIORI máx: {tx['total_mts']} mts / {tx['total_kg']} kg")
+    print(f"   Tela VIORI máx consumo: {tx['total_mts']} mts / {tx['total_kg']} kg")
+    print(f"   Tela VIORI máx compra (+{int(TELA_SS_PCT*100)}% SS): {tx['total_mts_compra']} mts / {tx['total_kg_compra']} kg")
     print(f"   Colores máx: Negro {cx['Negro']} · Vinotinto {cx['Vinotinto']} · V.Militar {cx['Verde Militar']}")
 
 
