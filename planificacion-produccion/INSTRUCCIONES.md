@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.7 — códigos listos para pegar
+# Planificación de Producción v5.9.8 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -17,14 +17,14 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.7
+## Motor v5.9.8
 
 - **Capacidad diaria por producto:** no se usa un techo fijo 130/40. Al planificar se lee `Cap Produccion por Dia` (Por Hacer col. N, Por Hacer - Especial col. O) y esa cifra es el cupo del día mientras el modelo ocupa la línea. Si cambia de modelo a media jornada, el sobrante se calcula con la cap del que entra. Si la celda viene vacía, respaldo L1-4=130 / L5=40.
 - **Secuencia de género:** si RIO CAB, RIO DAMA y RIO KIDS caen en la **misma** línea, salen en lotes diarios CAB → DAMA → KIDS (según capacidad). No se mezclan géneros el mismo día en L1-4 ni en paralelo en L5. Si cada género tiene otra línea libre, pueden ir separados.
 - **Almacén:** `Fecha Entrada de Almacen` = **4 días hábiles** después de salir de costura.
-- **Sincronizar Producción:** solo escribe `Cantida Producida` (Por Hacer col. L / Especial col. M). No pisa `Faltante`. Conserva extras: `max(existente, costura)`.
+- **Sincronizar Producción:** solo escribe `Cantida Producida` (Por Hacer col. L / Especial col. M). No pisa `Faltante`. Suma **solo el incremento** de Costura vs el último corte aplicado (hoja oculta `Sync Costura Aplicada`). La **primera** sync de v5.9.8 fija la línea base y **no vuelve a sumar** (el corte actual ya está en `Cantida Producida`). Después: `existente + (costura_ahora − ya_aplicado)`.
 - **Tableros por flujo:** el remanente (lote chico que cierra el día) va primero; el modelo que sigue el resto de la semana va después.
-- **Actualizar MOs:** las MO en **Hecho** de `Por Hacer - Especial` **no** se archivan ni se borran. Cancelada sí. Producción regular sigue igual.
+- **Actualizar MOs:** las MO en **Hecho** de `Por Hacer - Especial` **no** se archivan ni se borran, y **no entran al backlog** ni a la planificación. Cancelada sí se archiva. Producción regular sigue igual.
 - **Línea 1 y cambio de modelo:** si el ocupante termina a media jornada, el sobrante pasa al siguiente especial. Un modelo que lista L1 pero ya está trabajando en otra línea **no bloquea** ese desborde. Dos modelos en L1 el mismo día van **en secuencia**, no en paralelo.
 - **Cantidad mínima** (columna en `Priorizacion`): máxima prioridad **después de Especial**. El cupo es la cantidad pedida (ej. 100) tomada del **faltante**; lo ya producido **no recorta** ese cupo (no convierte 100 en 67). Solo si el piso ya está cubierto (producido ≥ mínima) el modelo no entra a esa banda. El cupo sale antes que Urgente / Alta / fecha. Cuando se cubre, el modelo **cede la línea** (el sobrante del día pasa al siguiente) y el resto de su pedido vuelve a la cola normal.
 - **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos.

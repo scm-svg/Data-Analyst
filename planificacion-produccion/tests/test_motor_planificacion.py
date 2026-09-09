@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.7 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.8 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -109,6 +109,25 @@ def cap_de_tarea(t, lin, caps_lineas):
 
 
 def fusionar_cantida_producida(existente, desde_costura):
+    """Compat: suma existente + delta (el 2º arg debe ser el incremento, no el total)."""
+    return aplicar_delta_cantida_producida(existente, desde_costura)
+
+
+def delta_costura_aplicar(costura_ahora, ya_aplicado, primer_sync):
+    if primer_sync:
+        return 0
+    try:
+        ahora = float(costura_ahora or 0)
+    except (TypeError, ValueError):
+        ahora = 0
+    try:
+        prev = float(ya_aplicado or 0)
+    except (TypeError, ValueError):
+        prev = 0
+    return max(0.0, ahora - prev)
+
+
+def aplicar_delta_cantida_producida(existente, delta):
     def n(v):
         try:
             if v in ("", None):
@@ -116,8 +135,12 @@ def fusionar_cantida_producida(existente, desde_costura):
             return float(v)
         except (TypeError, ValueError):
             return 0.0
-    m = max(n(existente), n(desde_costura))
+    m = n(existente) + max(0.0, n(delta))
     return m if m > 0 else ""
+
+
+def es_especial_hecho(status):
+    return quitar_tildes(norm(status)).lower() == "hecho"
 
 
 def debe_archivar_mo(tipo, status):
@@ -1661,10 +1684,19 @@ class TestV597CapFamiliaSyncAlmacen(unittest.TestCase):
         self.assertEqual(add_business_days_from_naive(viernes, 2).date(), datetime.date(2026, 9, 8))
         self.assertEqual(DIAS_ENTRADA_ALMACEN, 4)
 
-    def test_sync_conserva_extra_y_no_baja(self):
-        self.assertEqual(fusionar_cantida_producida(100, 80), 100)
-        self.assertEqual(fusionar_cantida_producida(20, 80), 80)
-        self.assertEqual(fusionar_cantida_producida("", 0), "")
+    def test_sync_suma_solo_el_delta(self):
+        self.assertEqual(delta_costura_aplicar(80, 80, True), 0)
+        self.assertEqual(delta_costura_aplicar(100, 80, False), 20)
+        self.assertEqual(delta_costura_aplicar(70, 80, False), 0)
+        self.assertEqual(aplicar_delta_cantida_producida(100, 20), 120)
+        self.assertEqual(aplicar_delta_cantida_producida(100, 0), 100)
+        self.assertEqual(fusionar_cantida_producida(100, 20), 120)
+
+    def test_especial_hecho_no_entra_al_backlog(self):
+        self.assertTrue(es_especial_hecho("Hecho"))
+        self.assertTrue(es_especial_hecho("hecho"))
+        self.assertFalse(es_especial_hecho("Confirmada"))
+        self.assertFalse(es_especial_hecho("Cancelada"))
 
     def test_especial_hecho_no_se_archiva(self):
         self.assertFalse(debe_archivar_mo("Especial", "Hecho"))
