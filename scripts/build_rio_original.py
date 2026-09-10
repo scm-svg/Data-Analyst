@@ -100,7 +100,8 @@ TALLA_ORDER = {
     "DAMA": ["XS", "S", "M", "L", "XL", "2XL", "3XL"],
     "KIDS": ["2", "4", "6", "8", "10", "12", "14"],
 }
-TARGET_PRODUCE_MIN = {"CAB": 2650, "DAMA": 2450, "KIDS": 2950}
+# Metas proporcionales al mix de ventas Rio (KIDS > DAMA > CAB), total 8,050
+TARGET_PRODUCE_MIN = {"CAB": 2596, "DAMA": 2703, "KIDS": 2751}
 MIN_VARIANT = {"CAB": 1, "DAMA": 1, "KIDS": 1}
 LOW_COLOR_FLOOR = {"CAB": 28, "DAMA": 32, "KIDS": 38}
 # Tallas fuera de proyección de producción (ventas históricas siguen en dashboard)
@@ -909,8 +910,10 @@ def export_excel(data: dict, path: Path) -> None:
         title = wb.add_format({"bold": True, "font_size": 14, "font_color": "#1F3864"})
         section = wb.add_format({"bold": True, "font_size": 11, "font_color": "#1F3864"})
         hdr = wb.add_format({"bold": True, "bg_color": "#4472C4", "font_color": "white", "border": 1})
-        pct = wb.add_format({"num_format": "0.0%"})
-        pct4 = wb.add_format({"num_format": "0.0000"})
+        pct = wb.add_format({"num_format": "0%"})
+        pct1 = wb.add_format({"num_format": "0.0%"})
+        pct2 = wb.add_format({"num_format": "0.00%"})
+        pct4 = wb.add_format({"num_format": "0.0000%"})
         num = wb.add_format({"num_format": "#,##0"})
         dec = wb.add_format({"num_format": "0.0"})
         blue = wb.add_format({"bg_color": "#DDEBF7", "num_format": "#,##0", "border": 1})
@@ -972,12 +975,12 @@ def export_excel(data: dict, path: Path) -> None:
                 ws.write(row, 0, sr["label"])
                 ws.write(row, 1, sr["vel_base"], dec)
                 ws.write(row, 2, sr["vel_hs"], dec)
-                ws.write(row, 3, sr["weight"], pct4)
+                ws.write(row, 3, sr["weight"], pct2)
                 row += 1
             ws.write(row, 0, "TOTAL RED", bold)
             ws.write(row, 1, gc["vel_base_total"], dec)
             ws.write(row, 2, gc["vel_hs_total"], dec)
-            ws.write(row, 3, 1, pct4)
+            ws.write(row, 3, 1, pct)
             row += 2
             ws.write(row, 0, "Stock actual (todas ubicaciones)", bold)
             ws.write(row, 1, gc["stock"], num)
@@ -1069,14 +1072,14 @@ def export_excel(data: dict, path: Path) -> None:
                 if td["min"] <= 0 and td["max"] <= 0:
                     continue
                 ws.write(row, 0, t)
-                ws.write(row, 1, td["curve_pct"] / 100, pct4)
+                ws.write(row, 1, round(td["curve_pct"]) / 100, pct)
                 ws.write(row, 2, td["min"], num)
                 ws.write(row, 3, td["max"], num)
                 tmin += td["min"]
                 tmax += td["max"]
                 row += 1
             ws.write(row, 0, "TOTAL", bold)
-            ws.write(row, 1, 1 if tmin else 0, pct4)
+            ws.write(row, 1, 1 if tmin else 0, pct)
             ws.write(row, 2, tmin, num)
             ws.write(row, 3, tmax, num)
             row += 2
@@ -1105,13 +1108,16 @@ def export_excel(data: dict, path: Path) -> None:
                     continue
                 share = cr["min"] / s["produce"] if s["produce"] else 0
                 ws.write(row, 0, cr["color"])
-                ws.write(row, 1, share, pct4)
+                ws.write(row, 1, share, pct2)
                 ws.write(row, 2, cr["min"], num)
                 ws.write(row, 3, cr["max"], num)
                 cmin += cr["min"]
                 cmax += cr["max"]
                 row += 1
-            ws.write_row(row, 0, ["TOTAL", 1 if cmin else 0, cmin, cmax], total_fmt)
+            ws.write(row, 0, "TOTAL", bold)
+            ws.write(row, 1, 1 if cmin else 0, pct)
+            ws.write(row, 2, cmin, num)
+            ws.write(row, 3, cmax, num)
             row += 2
 
         # ── 4. Producción Color × Talla (matriz) ──
@@ -1223,13 +1229,16 @@ def export_excel(data: dict, path: Path) -> None:
                 mn = int(round(prod_min * sr["weight"]))
                 mx = int(round(prod_max * sr["weight"]))
                 ws.write(row, 0, sr["label"])
-                ws.write(row, 1, sr["weight"], pct4)
+                ws.write(row, 1, sr["weight"], pct2)
                 ws.write(row, 2, mn, num)
                 ws.write(row, 3, mx, num)
                 t_min += mn
                 t_max += mx
                 row += 1
-            ws.write_row(row, 0, ["TOTAL", 1, t_min, t_max], total_fmt)
+            ws.write(row, 0, "TOTAL", bold)
+            ws.write(row, 1, 1, pct)
+            ws.write(row, 2, t_min, num)
+            ws.write(row, 3, t_max, num)
             row += 2
 
         # ── 7. Metodología ──
@@ -1303,7 +1312,7 @@ def patch_html(template: str, data: dict) -> str:
     html = html.replace(
         '<div class="sub">Sugerencia proporcional por color y talla · Clic en color para detalle · Basado en meses completos (excluye el mes en curso)</div>',
         '<div class="sub">Sugerencia proporcional por color y talla · Clic en color para detalle · Basado en meses completos (excluye el mes en curso) · '
-        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · objetivo CAB 2650 · DAMA 2450 · KIDS 2950 · KIDS sin talla 1</span></div>',
+        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · objetivo CAB 2596 · DAMA 2703 · KIDS 2751 · KIDS sin talla 1</span></div>',
     )
     html = html.replace(
         '<div class="sub">Distribución sugerida · <span style="color:#f97316">🆕 MARGARITA (1.5× GRIETA) es tienda nueva proyectada</span> · TOLON ya opera con histórico propio</div>',
