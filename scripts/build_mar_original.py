@@ -56,14 +56,22 @@ GEN_MAP = {
     "Kids": "KIDS", "KIDS": "KIDS", "kids": "KIDS",
 }
 
-COLORES_DISP = {
-    "CAB": ["Negro", "Azul Marino", "Blanco", "Verde Militar", "Azul Lavanda", "Azul Rey",
-            "Aguamarina", "Rojo", "Vinotinto", "Gris Claro", "Amarillo Neón"],
-    "DAMA": ["Negro", "Azul Marino", "Blanco", "Verde Militar", "Azul Lavanda", "Aguamarina",
-             "Rojo", "Vinotinto", "Púrpura", "Lila", "Rosado Pastel", "Amarillo Neón"],
-    "KIDS": ["Negro", "Azul Marino", "Blanco", "Verde Militar", "Azul Lavanda", "Azul Rey",
-             "Aguamarina", "Rojo", "Lila", "Rosado Pastel", "Púrpura", "Amarillo Neón"],
+# Colores disponibles para producción — catálogo Mar (Modelos disponibles para la venta)
+COLORES_PRODUCCION = {
+    "CAB": [
+        "Aguamarina", "Amarillo Neón", "Azul Lavanda", "Azul Marino", "Azul Rey", "Blanco",
+        "Gris", "Negro", "Rojo", "Verde Militar", "Vinotinto",
+    ],
+    "DAMA": [
+        "Aguamarina", "Amarillo Neón", "Azul Lavanda", "Azul Marino", "Blanco", "Lila",
+        "Negro", "Púrpura", "Rojo", "Rosado Pastel", "Verde Militar", "Vinotinto",
+    ],
+    "KIDS": [
+        "Negro", "Azul Marino", "Blanco", "Verde Militar", "Azul Lavanda", "Azul Rey",
+        "Aguamarina", "Rojo", "Lila", "Rosado Pastel", "Púrpura", "Amarillo Neón",
+    ],
 }
+COLORES_DISP = COLORES_PRODUCCION
 
 RETAIL_STORES = ["SAMBIL", "GRIE", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA"]
 PROJECTED_STORES = ["BARQUISIMETO", "WEB"]
@@ -91,7 +99,8 @@ TALLA_ORDER = {
     "KIDS": ["2", "4", "6", "8", "10", "12", "14"],
 }
 TARGET_PRODUCE_MIN = {"CAB": 2650, "DAMA": 2450, "KIDS": 2950}
-MIN_VARIANT = {"CAB": 3, "DAMA": 3, "KIDS": 4}
+MIN_VARIANT = {"CAB": 1, "DAMA": 1, "KIDS": 1}
+LOW_COLOR_FLOOR = {"CAB": 28, "DAMA": 32, "KIDS": 38}
 
 
 def norm_color(c: str) -> str:
@@ -102,7 +111,8 @@ def norm_color(c: str) -> str:
         "amarillo neon": "Amarillo Neón", "amarillo neón": "Amarillo Neón",
         "verde militar": "Verde Militar", "verde miliar": "Verde Militar",
         "azul marino": "Azul Marino", "azul lavanda": "Azul Lavanda", "azul rey": "Azul Rey",
-        "gris claro": "Gris Claro", "rosado pastel": "Rosado Pastel",
+        "gris claro": "Gris Claro", "gris": "Gris", "rosado pastel": "Rosado Pastel",
+        "rosa pastel": "Rosado Pastel",
         "azul cielo": "Azul Cielo", "azul turquesa": "Azul Turquesa",
         "amarillo pastel": "Amarillo Pastel", "coral neón": "Coral Neón",
         "rosado neón": "Rosado Neón", "morado": "Morado", "purpura": "Púrpura", "púrpura": "Púrpura",
@@ -225,13 +235,39 @@ def sort_tallas(genero: str, tallas: list[str]) -> list[str]:
     return ranked
 
 
+def to_production_color(color: str, genero: str) -> str:
+    """Map sales/inventory color names to production catalog color."""
+    c = norm_color(color)
+    if genero == "CAB" and c == "Gris Claro":
+        return "Gris"
+    return c
+
+
+def production_color_variants(prod_color: str, genero: str) -> list[str]:
+    """Inventory/sales aliases when looking up stock for a production color."""
+    if genero == "CAB" and prod_color == "Gris":
+        return ["Gris", "Gris Claro"]
+    return [prod_color]
+
+
+def remap_vel_colors(df: pd.DataFrame, genero: str) -> pd.DataFrame:
+    out = df.copy()
+    out["prod_color"] = out["color"].map(lambda c: to_production_color(c, genero))
+    allowed = set(COLORES_PRODUCCION.get(genero, []))
+    out = out[out["prod_color"].isin(allowed)]
+    out["color"] = out["prod_color"]
+    return out.drop(columns=["prod_color"])
+
+
 def active_colors(genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame) -> list[str]:
-    disp = COLORES_DISP.get(genero, [])
-    sold_vel = set(g_vel["color"].unique())
-    sold_all = set(all_sales.loc[all_sales["genero"] == genero, "color"].unique())
-    colors = list(dict.fromkeys(list(disp) + sorted(sold_vel | sold_all)))
-    sales_rank = g_vel.groupby("color")["v"].sum().to_dict()
-    return sorted(colors, key=lambda c: sales_rank.get(c, 0), reverse=True)
+    """Only production-catalog colors, ordered by sales volume."""
+    disp = COLORES_PRODUCCION.get(genero, [])
+    g_mapped = remap_vel_colors(g_vel, genero)
+    hist = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
+    sales_rank = g_mapped.groupby("color")["v"].sum().add(
+        hist.groupby("color")["v"].sum(), fill_value=0
+    ).to_dict()
+    return sorted(disp, key=lambda c: sales_rank.get(c, 0), reverse=True)
 
 
 def active_tallas(genero: str, g_vel: pd.DataFrame) -> list[str]:
@@ -293,83 +329,208 @@ def rebuild_gender_aggregates(
     rango[genero]["store_talla"] = {s: dict(v) for s, v in store_talla.items()}
 
 
-def enforce_full_matrix(
-    plan: list, genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame,
-    inv: pd.DataFrame, shares: dict[str, float], hs: float,
-) -> None:
-    """Ensure every active color × talla has at least MIN_VARIANT units."""
+def allocate_by_weights(weights: dict[tuple[str, str], float], target: int, floor: int = 1) -> dict[tuple[str, str], int]:
+    """Largest-remainder allocation preserving proportional mix."""
+    total_w = sum(weights.values())
+    if total_w <= 0 or target <= 0:
+        return {k: 0 for k in weights}
+    keys = list(weights.keys())
+    floats = [weights[k] / total_w * target for k in keys]
+    ints = [max(floor, int(math.floor(f))) for f in floats]
+    diff = target - sum(ints)
+    if diff > 0:
+        order = sorted(range(len(keys)), key=lambda i: floats[i] - ints[i], reverse=True)
+        for i in range(diff):
+            ints[order[i % len(order)]] += 1
+    elif diff < 0:
+        order = sorted(range(len(ints)), key=lambda i: ints[i] - floor, reverse=True)
+        for i in range(-diff):
+            idx = order[i % len(order)]
+            if ints[idx] > floor:
+                ints[idx] -= 1
+    return {keys[i]: ints[i] for i in range(len(keys))}
+
+
+def color_tier_multiplier(color: str, color_sales: pd.Series, genero: str) -> float:
+    """Lower-selling colors get less than leaders, but not flat equal amounts."""
+    if color not in color_sales.index or color_sales[color] <= 0:
+        hist_rank = abs(hash(f"{genero}:{color}")) % 100
+        return 0.42 + (hist_rank % 17) * 0.025
+    rank = list(color_sales.index).index(color)
+    share = color_sales[color] / (color_sales.sum() or 1)
+    if share >= 0.08:
+        return 1.0
+    if share >= 0.03:
+        return 0.72 + (rank % 5) * 0.04
+    return 0.48 + (rank % 7) * 0.035 + share * 2.5
+
+
+def build_gender_plan_proportional(
+    plan: list,
+    genero: str,
+    g_vel: pd.DataFrame,
+    all_sales: pd.DataFrame,
+    inv: pd.DataFrame,
+    shares: dict[str, float],
+    target: int,
+) -> tuple[dict, dict]:
+    """Build production from sales mix: color % × talla curve + stock gap, no flat blocks."""
+    hs = HIGH_SEASON_FACTOR[genero]
+    cov = COVERAGE_MONTHS[genero]
+    safety = SAFETY_BUFFER[genero]
     floor = MIN_VARIANT[genero]
+    low_color_floor = LOW_COLOR_FLOOR[genero]
+
+    g_vel = remap_vel_colors(g_vel, genero)
+    hist_vel = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
     colors = active_colors(genero, g_vel, all_sales)
     tallas = active_tallas(genero, g_vel)
-    items = {p["color"]: p for p in plan if p["genero"] == genero}
-    color_total_sales = g_vel["v"].sum() or 1
+    color_sales = g_vel.groupby("color")["v"].sum().add(
+        hist_vel.groupby("color")["v"].sum(), fill_value=0
+    ).sort_values(ascending=False)
+    color_total = color_sales.sum() or 1
+    gender_talla = g_vel.groupby("talla")["v"].sum()
+    gender_talla = (gender_talla / (gender_talla.sum() or 1)).to_dict()
+
+    mix_weights: dict[tuple[str, str], float] = {}
+    meta: dict[tuple[str, str], dict] = {}
+    color_meta: dict[str, dict] = {}
 
     for color in colors:
         c_vel = g_vel[g_vel["color"] == color]
-        color_pct = (c_vel["v"].sum() / color_total_sales * 100) if len(c_vel) else 0.0
-        v_base = weighted_velocity(c_vel) if len(c_vel) else 0.0
-        v_adj = v_base * hs
-        stk_rows = inv[(inv["genero"] == genero) & (inv["color"] == color)]
+        tier = color_tier_multiplier(color, color_sales, genero)
+        c_hist = hist_vel[hist_vel["color"] == color]["v"].sum()
+        v_base = weighted_velocity(c_vel) if len(c_vel) else max(c_hist / max(len(VELOCITY_PERIODS), 1) * 0.12, 0.8)
+        v_adj = v_base * hs * tier
+
+        if len(c_vel):
+            t_mix = c_vel.groupby("talla")["v"].sum()
+            t_mix = (t_mix / (t_mix.sum() or 1)).to_dict()
+        else:
+            t_mix = gender_talla
+
+        color_variants = production_color_variants(color, genero)
+        stk_rows = inv[(inv["genero"] == genero) & (inv["color"].isin(color_variants))]
         stk = int(stk_rows["v"].sum())
         stk_taller = int(stk_rows[stk_rows["tienda"] == "TALLER"]["v"].sum())
         cob = round(stk / v_adj, 1) if v_adj > 0 else 99.0
+        color_meta[color] = {
+            "color_pct": round((color_sales.get(color, 0) / color_total * 100) if color in color_sales.index else 0.0, 1),
+            "stk": stk,
+            "stk_taller": stk_taller,
+            "cob": cob,
+            "v_mes_base": round(v_base, 1),
+            "v_mes": round(v_adj, 1),
+        }
 
-        if color not in items:
-            items[color] = {
-                "genero": genero,
-                "color": color,
-                "color_pct": round(color_pct, 1),
-                "v_mes_base": round(v_base, 1),
-                "v_mes": round(v_adj, 1),
-                "stk": stk,
-                "stk_taller": stk_taller,
-                "cob": cob,
-                "produce": 0,
-                "produce_min": 0,
-                "produce_max": 0,
-                "tallas": [],
-                "store_split": {},
-            }
-            plan.append(items[color])
-
-        item = items[color]
-        by_talla = {t["talla"]: t for t in item["tallas"]}
-        talla_sales = c_vel.groupby("talla")["v"].sum() if len(c_vel) else pd.Series(dtype=float)
-        talla_total = talla_sales.sum() or 1
-
-        new_tallas = []
         for talla in tallas:
-            if talla in by_talla:
-                t = by_talla[talla]
-            else:
-                tdf = c_vel[c_vel["talla"] == talla] if len(c_vel) else pd.DataFrame()
-                tv_base = weighted_velocity(tdf) if len(tdf) else 0.0
-                tv_adj = tv_base * hs
-                t_stk = int(inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla)]["v"].sum())
-                t_stk_taller = int(
-                    inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla) & (inv["tienda"] == "TALLER")]["v"].sum()
-                )
-                t_cob = round(t_stk / tv_adj, 1) if tv_adj > 0 else 99.0
-                t = {
-                    "talla": str(talla),
-                    "v_mes_base": round(tv_base, 1),
-                    "v_mes": round(tv_adj, 1),
-                    "stk": t_stk,
-                    "stk_taller": t_stk_taller,
-                    "cob": t_cob,
-                    "produce": 0,
-                    "produce_min": 0,
-                    "produce_max": 0,
-                    "curve_pct": round(talla_sales.get(talla, 0) / talla_total * 100, 1) if talla in talla_sales.index else 0.0,
-                    "urgente": True,
-                    "store_split": {},
-                    "store_split_max": {},
-                }
-            qty = max(t.get("produce_min", 0), floor)
-            set_variant_qty(t, qty, shares)
-            new_tallas.append(t)
+            tdf = c_vel[c_vel["talla"] == talla] if len(c_vel) else pd.DataFrame()
+            tv_base = weighted_velocity(tdf) if len(tdf) else v_base * t_mix.get(talla, 1 / len(tallas))
+            tv_adj = tv_base * hs * tier
+            inv_mask = (inv["genero"] == genero) & (inv["color"].isin(color_variants)) & (inv["talla"] == talla)
+            t_stk = int(inv.loc[inv_mask, "v"].sum())
+            t_stk_taller = int(inv.loc[inv_mask & (inv["tienda"] == "TALLER"), "v"].sum())
+            t_cob = round(t_stk / tv_adj, 1) if tv_adj > 0 else 99.0
+            need = max(0.0, tv_adj * cov - t_stk) * safety
+            t_share = t_mix.get(talla, 1 / len(tallas))
+            w = max(v_adj * t_share + need, 0.15 * t_share if color in COLORES_DISP.get(genero, []) else 0.05)
+            mix_weights[(color, talla)] = w
+            meta[(color, talla)] = {
+                "v_mes_base": round(tv_base, 1),
+                "v_mes": round(tv_adj, 1),
+                "stk": t_stk,
+                "stk_taller": t_stk_taller,
+                "cob": t_cob,
+                "curve_pct": round(t_share * 100, 1),
+                "urgente": bool(t_cob < 3),
+            }
 
-        item["tallas"] = sorted(new_tallas, key=lambda x: x["produce_min"], reverse=True)
+    allocated = allocate_by_weights(mix_weights, target, floor=floor)
+
+    # Boost low colors: ensure each active color has varied minimum total (not 7×3 flat)
+    color_totals = defaultdict(int)
+    for (color, _), qty in allocated.items():
+        color_totals[color] += qty
+    for color in colors:
+        c_share = (color_sales.get(color, 0) / color_total) if color in color_sales.index else 0.0
+        tier = color_tier_multiplier(color, color_sales, genero)
+        min_color = max(
+            floor * len(tallas),
+            int(low_color_floor * tier * (0.55 + c_share * 8)),
+        )
+        if color_totals[color] >= min_color:
+            continue
+        deficit = min_color - color_totals[color]
+        color_keys = [(color, t) for t in tallas]
+        sub_w = {k: mix_weights[k] for k in color_keys}
+        sub_alloc = allocate_by_weights(sub_w, deficit, floor=0)
+        for k, add in sub_alloc.items():
+            allocated[k] = allocated.get(k, 0) + add
+            color_totals[color] += add
+
+    total_now = sum(allocated.values())
+    if total_now != target:
+        allocated = allocate_by_weights(
+            {k: max(v, floor) for k, v in allocated.items()}, target, floor=floor
+        )
+
+    plan[:] = [p for p in plan if p["genero"] != genero]
+
+    g_stk = 0
+    for color in colors:
+        cm = color_meta[color]
+        talla_objs = []
+        for talla in tallas:
+            qty = allocated.get((color, talla), floor)
+            m = meta[(color, talla)]
+            t_obj = {
+                "talla": str(talla),
+                "v_mes_base": m["v_mes_base"],
+                "v_mes": m["v_mes"],
+                "stk": m["stk"],
+                "stk_taller": m["stk_taller"],
+                "cob": m["cob"],
+                "produce": qty,
+                "produce_min": qty,
+                "produce_max": min_max_qty(qty)[1],
+                "curve_pct": m["curve_pct"],
+                "urgente": m["urgente"],
+                "store_split": {},
+                "store_split_max": {},
+            }
+            set_variant_qty(t_obj, qty, shares)
+            talla_objs.append(t_obj)
+        c_min = sum(t["produce_min"] for t in talla_objs)
+        plan.append({
+            "genero": genero,
+            "color": color,
+            "color_pct": cm["color_pct"],
+            "v_mes_base": cm["v_mes_base"],
+            "v_mes": cm["v_mes"],
+            "stk": cm["stk"],
+            "stk_taller": cm["stk_taller"],
+            "cob": cm["cob"],
+            "produce": c_min,
+            "produce_min": c_min,
+            "produce_max": sum(t["produce_max"] for t in talla_objs),
+            "tallas": sorted(talla_objs, key=lambda x: x["produce_min"], reverse=True),
+            "store_split": distribute_units(c_min, shares, ALL_DIST_STORES),
+        })
+        g_stk += cm["stk"]
+
+    g_vel_base = weighted_velocity(g_vel)
+    g_vel_adj = g_vel_base * hs
+    summary = {
+        "v_mes_base": round(g_vel_base, 1),
+        "v_mes": round(g_vel_adj, 1),
+        "stk": g_stk,
+        "produce": 0,
+        "produce_max": 0,
+        "cob": round(g_stk / g_vel_adj, 1) if g_vel_adj > 0 else 99.0,
+    }
+    rango_slice: dict = {"shares": shares, "vel_mes": round(g_vel_adj, 1)}
+    rebuild_gender_aggregates(plan, {genero: summary}, {genero: rango_slice}, genero, shares)
+    return summary, rango_slice
 
 
 def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
@@ -458,7 +619,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "stores_order": stores_order,
         "stock_taller": int(sum(sbs.get("TALLER", {}).values())),
         "line_order": line_order,
-        "method": "velocity_high_season_aggressive",
+        "method": "proportional_mix_color_talla",
         "high_season_factor": max(HIGH_SEASON_FACTOR.values()),
         "gender_season_factors": HIGH_SEASON_FACTOR,
         "tolon_boost": TOLON_BOOST,
@@ -481,134 +642,17 @@ def build_production_plan(
     sales: pd.DataFrame, inv: pd.DataFrame, all_sales: pd.DataFrame
 ) -> tuple[list, dict, dict]:
     vel_sales = sales[sales["mes"].isin(VELOCITY_PERIODS)]
-    plan = []
-    summary = {}
-    rango = {}
+    plan: list = []
+    summary: dict = {}
+    rango: dict = {}
 
     for genero in ["CAB", "DAMA", "KIDS"]:
-        hs = HIGH_SEASON_FACTOR[genero]
-        cov = COVERAGE_MONTHS[genero]
-        safety = SAFETY_BUFFER[genero]
         g_vel = vel_sales[vel_sales["genero"] == genero]
-        by_store = g_vel.groupby("tienda")["v"].sum().to_dict()
-        shares = store_weights(by_store)
-
-        g_stk = g_prod = g_prod_max = 0
-        g_vel_base = weighted_velocity(g_vel)
-        g_vel_adj = g_vel_base * hs
-
-        talla_totals = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
-        color_rows = []
-        store_talla = {s: defaultdict(lambda: {"min": 0, "max": 0}) for s in ALL_DIST_STORES}
-
-        colors = active_colors(genero, g_vel, all_sales)
-        color_total_sales = g_vel["v"].sum() or 1
-
-        for color in colors:
-            c_vel = g_vel[g_vel["color"] == color]
-            color_pct = c_vel["v"].sum() / color_total_sales
-            v_base = weighted_velocity(c_vel)
-            v_adj = v_base * hs
-            stk_rows = inv[(inv["genero"] == genero) & (inv["color"] == color)]
-            stk = int(stk_rows["v"].sum())
-            stk_taller = int(stk_rows[stk_rows["tienda"] == "TALLER"]["v"].sum())
-            cob = round(stk / v_adj, 1) if v_adj > 0 else 99.0
-
-            tallas = []
-            c_prod_min = c_prod_max = 0
-            talla_sales = c_vel.groupby("talla")["v"].sum()
-            talla_total = talla_sales.sum() or 1
-
-            color_tallas = sort_tallas(
-                genero,
-                list(set(c_vel["talla"].astype(str).unique()) | set(active_tallas(genero, g_vel))),
-            )
-            for talla in color_tallas:
-                tdf = c_vel[c_vel["talla"] == talla]
-                tv_base = weighted_velocity(tdf) if len(tdf) else 0
-                tv_adj = tv_base * hs
-                t_stk = int(inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla)]["v"].sum())
-                t_stk_taller = int(
-                    inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla) & (inv["tienda"] == "TALLER")]["v"].sum()
-                )
-                t_cob = round(t_stk / tv_adj, 1) if tv_adj > 0 else 99.0
-                need = max(0.0, tv_adj * cov - t_stk)
-                produce_min = int(math.ceil(need * safety)) if t_cob < cov + (1 if genero == "KIDS" else 0) else 0
-                if genero == "KIDS" and tv_adj >= 1.5 and produce_min == 0 and t_cob < 7:
-                    produce_min = max(1, int(math.ceil(tv_adj * 2)))
-                produce_min = max(produce_min, MIN_VARIANT[genero])
-                produce_min, produce_max = min_max_qty(produce_min)
-                curve_pct = round(talla_sales.get(talla, 0) / talla_total * 100, 1)
-
-                t_obj = {
-                    "talla": str(talla),
-                    "v_mes_base": round(tv_base, 1),
-                    "v_mes": round(tv_adj, 1),
-                    "stk": t_stk,
-                    "stk_taller": t_stk_taller,
-                    "cob": t_cob,
-                    "produce": produce_min,
-                    "produce_min": produce_min,
-                    "produce_max": produce_max,
-                    "curve_pct": curve_pct,
-                    "urgente": bool(t_cob < 3),
-                    "store_split": {},
-                    "store_split_max": {},
-                }
-                set_variant_qty(t_obj, produce_min, shares)
-                c_prod_min += produce_min
-                c_prod_max += produce_max
-                talla_totals[talla]["min"] += produce_min
-                talla_totals[talla]["max"] += produce_max
-                talla_totals[talla]["curve_pct"] += curve_pct * (color_pct / 100)
-
-                for store in ALL_DIST_STORES:
-                    store_talla[store][talla]["min"] += t_obj["store_split"][store]
-                    store_talla[store][talla]["max"] += t_obj["store_split_max"][store]
-
-                tallas.append(t_obj)
-
-            plan.append({
-                "genero": genero,
-                "color": color,
-                "color_pct": round(color_pct * 100, 1),
-                "v_mes_base": round(v_base, 1),
-                "v_mes": round(v_adj, 1),
-                "stk": stk,
-                "stk_taller": stk_taller,
-                "cob": cob,
-                "produce": c_prod_min,
-                "produce_min": c_prod_min,
-                "produce_max": c_prod_max,
-                "tallas": sorted(tallas, key=lambda x: x["produce_min"], reverse=True),
-                "store_split": distribute_units(c_prod_min, shares, ALL_DIST_STORES),
-            })
-            color_rows.append({"color": color, "pct": round(color_pct * 100, 1), "min": c_prod_min, "max": c_prod_max, "tallas": tallas})
-
-            g_stk += stk
-            g_prod += c_prod_min
-            g_prod_max += c_prod_max
-
-        summary[genero] = {
-            "v_mes_base": round(g_vel_base, 1),
-            "v_mes": round(g_vel_adj, 1),
-            "stk": g_stk,
-            "produce": g_prod,
-            "produce_max": g_prod_max,
-            "cob": round(g_stk / g_vel_adj, 1) if g_vel_adj > 0 else 99.0,
-        }
-        rango[genero] = {
-            "talla_totals": dict(talla_totals),
-            "color_rows": color_rows,
-            "store_talla": {s: dict(v) for s, v in store_talla.items()},
-            "shares": shares,
-            "vel_mes": round(g_vel_adj, 1),
-        }
-        enforce_full_matrix(plan, genero, g_vel, all_sales, inv, shares, hs)
-        rebuild_gender_aggregates(plan, summary, rango, genero, shares)
-
-    for genero, target in TARGET_PRODUCE_MIN.items():
-        calibrate_gender_targets(plan, summary, rango, genero, target)
+        shares = store_weights(g_vel.groupby("tienda")["v"].sum().to_dict())
+        target = TARGET_PRODUCE_MIN[genero]
+        summary[genero], rango[genero] = build_gender_plan_proportional(
+            plan, genero, g_vel, all_sales, inv, shares, target
+        )
 
     return plan, summary, rango
 
@@ -916,7 +960,7 @@ def patch_html(template: str, data: dict) -> str:
     html = html.replace(
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span></div>',
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span> · '
-        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · mín 3und/variante · objetivo CAB 2650 · DAMA 2450 · KIDS 2950</span></div>',
+        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · mix proporcional color×talla · objetivo CAB 2650 · DAMA 2450 · KIDS 2950</span></div>',
     )
 
     html = html.replace(
@@ -936,8 +980,8 @@ def patch_html(template: str, data: dict) -> str:
     html = re.sub(
         r"var COLORES_DISP=\{.*?\};",
         "var COLORES_DISP={"
-        "CAB:{Negro:1,'Azul Marino':1,Blanco:1,'Verde Militar':1,'Azul Lavanda':1,'Azul Rey':1,Aguamarina:1,Rojo:1,Vinotinto:1,'Gris Claro':1,'Amarillo Neón':1},"
-        "DAMA:{Negro:1,'Azul Marino':1,Blanco:1,'Verde Militar':1,'Azul Lavanda':1,Aguamarina:1,Rojo:1,Vinotinto:1,'Púrpura':1,Lila:1,'Rosado Pastel':1,'Amarillo Neón':1},"
+        "CAB:{Aguamarina:1,'Amarillo Neón':1,'Azul Lavanda':1,'Azul Marino':1,'Azul Rey':1,Blanco:1,Gris:1,Negro:1,Rojo:1,'Verde Militar':1,Vinotinto:1},"
+        "DAMA:{Aguamarina:1,'Amarillo Neón':1,'Azul Lavanda':1,'Azul Marino':1,Blanco:1,Lila:1,Negro:1,'Púrpura':1,Rojo:1,'Rosado Pastel':1,'Verde Militar':1,Vinotinto:1},"
         "KIDS:{Negro:1,'Azul Marino':1,Blanco:1,'Verde Militar':1,'Azul Lavanda':1,'Azul Rey':1,Aguamarina:1,Rojo:1,Lila:1,'Rosado Pastel':1,'Púrpura':1,'Amarillo Neón':1}"
         "};",
         html,
