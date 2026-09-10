@@ -1,10 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.15 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.16 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - FALTANTE SIN LÍNEA: las filas de Por Hacer con unidades faltantes
+ *     y Linea de Produccion vacía ya no se descartan. Se toma la línea
+ *     de Priorizacion, si no de la hoja BS (MODELO / Lineas de
+ *     Produccion) y si no un respaldo (cap ≤ 40 → L5; si no 2/3/4).
+ *     Así Proyeccion y los tableros semanales contabilizan todo el
+ *     faltante de Por Hacer (RIO KIDS, MAR ORIGINAL, VITA, etc.).
  *   - LOTES POR COLOR Y GÉNERO: si el mismo producto (ej. RIO CAB y RIO
  *     DAMA) está asignado a 2 líneas y esas líneas están libres, los
  *     géneros trabajan en paralelo (uno por línea). Si solo queda una
@@ -79,7 +85,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.15";
+var VERSION_SISTEMA = "5.9.16";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -438,6 +444,83 @@ function parsearLineas_(str) {
 
 function formatearLineas_(arr) {
   return (arr || []).join(" / ");
+}
+
+function claveModeloBusqueda_(nombre) {
+  return quitarTildes_(normUp_(nombre)).replace(/\s+/g, " ").trim();
+}
+
+function leerMapaBs_(ss) {
+  var out = {};
+  var hoja = ss ? ss.getSheetByName("BS") : null;
+  if (!hoja || hoja.getLastRow() < 2) return out;
+  var datos = hoja.getRange(1, 1, hoja.getLastRow(), hoja.getLastColumn()).getValues();
+  var headRow = -1;
+  var iMod = -1, iLin = -1, iCap = -1;
+  for (var r = 0; r < Math.min(5, datos.length); r++) {
+    var im = idxPorFragmento_(datos[r], ["modelo"]);
+    var il = idxPorFragmento_(datos[r], ["linea", "línea"]);
+    if (im !== -1 && il !== -1) {
+      headRow = r;
+      iMod = im;
+      iLin = il;
+      iCap = idxPorFragmento_(datos[r], ["cap produccion", "cap producción", "cap "]);
+      break;
+    }
+  }
+  if (headRow === -1) return out;
+  for (var i = headRow + 1; i < datos.length; i++) {
+    var nom = claveModeloBusqueda_(datos[i][iMod]);
+    if (!nom) continue;
+    var ls = parsearLineas_(datos[i][iLin]);
+    if (!ls.length) continue;
+    var cap = iCap !== -1 ? (Number(datos[i][iCap]) || 0) : 0;
+    if (!out[nom] || ls.length >= (out[nom].lineas || []).length) {
+      out[nom] = { lineas: ls, cap: cap };
+    }
+  }
+  return out;
+}
+
+function buscarRegistroBs_(nombre, mapaBs) {
+  var n = claveModeloBusqueda_(nombre);
+  if (!n || !mapaBs) return null;
+  if (mapaBs[n]) return mapaBs[n];
+  var best = "";
+  for (var k in mapaBs) {
+    if (n.indexOf(k + " ") === 0 && k.length > best.length) best = k;
+  }
+  return best ? mapaBs[best] : null;
+}
+
+function lineasPorDefecto_(t) {
+  if (t && t.esEspecial) return ["1"];
+  var cap = t ? (Number(t.cap) || 0) : 0;
+  if (cap > 0 && cap <= 40) return ["5"];
+  return ["2", "3", "4"];
+}
+
+function resolverLineasTarea_(t, mapaLineasModelo, mapaBs) {
+  if (!t) return;
+  var actuales = t.lineas || [];
+  var pref = mapaLineasModelo && t.modelo ? mapaLineasModelo[t.modelo] : null;
+  if (pref && pref.length) {
+    if (!actuales.length) {
+      t.lineas = pref.slice();
+      return;
+    }
+    var inter = actuales.filter(function (l) { return pref.indexOf(l) !== -1; });
+    if (inter.length) t.lineas = inter;
+    return;
+  }
+  if (actuales.length) return;
+  var rec = buscarRegistroBs_(t.familia, mapaBs) || buscarRegistroBs_(t.modelo, mapaBs);
+  if (rec && rec.lineas && rec.lineas.length) {
+    t.lineas = rec.lineas.slice();
+    if (!(Number(t.cap) > 0) && rec.cap > 0) t.cap = rec.cap;
+    return;
+  }
+  t.lineas = lineasPorDefecto_(t);
 }
 
 function prioridadNum_(txt) {
@@ -959,13 +1042,10 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     var lineasStr = iLin !== -1 ? norm_(fila[iLin]) : "";
 
     if (sku === "" || productoBase === "" || !(cantEfectiva > 0)) continue;
-    if (lineasStr === "") {
-      if (esEspecial) lineasStr = "1";
-      else continue;
-    }
+    if (lineasStr === "" && esEspecial) lineasStr = "1";
     if (!(cap > 0)) {
       var lsCap = parsearLineas_(lineasStr);
-      cap = capFallbackLinea_(lsCap.length ? lsCap[0] : "1");
+      if (lsCap.length) cap = capFallbackLinea_(lsCap[0]);
     }
 
     var genero = iGen !== -1 ? norm_(fila[iGen]) : "";
@@ -1107,6 +1187,7 @@ function generarPlanificacionSemanal_() {
   var mapaMinimas = {};
   var mapaLineasModelo = {};
   var mapaMinimasSku = leerMinimasSku_(ss);
+  var mapaBs = leerMapaBs_(ss);
 
   if (hojaPriorizacion && hojaPriorizacion.getLastRow() >= 3) {
     var anchoPrio = Math.max(6, hojaPriorizacion.getLastColumn());
@@ -1166,11 +1247,8 @@ function generarPlanificacionSemanal_() {
   }
 
   tareas.forEach(function (t) {
-    var pref = mapaLineasModelo[t.modelo];
-    if (pref && pref.length) {
-      var inter = t.lineas.filter(function (l) { return pref.indexOf(l) !== -1; });
-      if (inter.length) t.lineas = inter;
-    }
+    resolverLineasTarea_(t, mapaLineasModelo, mapaBs);
+    if (!(Number(t.cap) > 0)) t.cap = capFallbackLinea_((t.lineas && t.lineas[0]) || "1");
     t.colorRank = rangoColor_(t.color);
     var recSku = mapaMinimasSku[claveSku_(t.sku)];
     if (recSku && !recSku.modelo) recSku.modelo = t.modelo;
@@ -2060,6 +2138,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
+    "• Faltante de Por Hacer: si una fila no tiene línea, se usa Priorizacion o BS; no se omite.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
@@ -2928,6 +3007,7 @@ function actualizarModelosPriorizacion_() {
 
   var modelosUnicos = new Set();
   var quitadosCero = 0;
+  var mapaBsPrio = leerMapaBs_(ss);
 
   function procesarModelos(datos, tipo) {
     if (!datos || datos.length < 3) return;
@@ -2982,12 +3062,17 @@ function actualizarModelosPriorizacion_() {
 
       var clave = modP + "||" + tipoP;
       if (modelosUnicos.has(clave)) {
+        var linPrio = datosP[j][5] !== undefined ? datosP[j][5] : "";
+        if (norm_(linPrio) === "") {
+          var recBsP = buscarRegistroBs_(modP, mapaBsPrio);
+          if (recBsP && recBsP.lineas && recBsP.lineas.length) linPrio = formatearLineas_(recBsP.lineas);
+        }
         conservados.push([
           modP, tipoP,
           datosP[j][2] !== undefined ? datosP[j][2] : "",
           datosP[j][3] !== undefined ? datosP[j][3] : "",
           datosP[j][4] !== undefined ? datosP[j][4] : "",
-          datosP[j][5] !== undefined ? datosP[j][5] : ""
+          linPrio
         ]);
         existentes.add(clave);
       } else {
@@ -3000,7 +3085,10 @@ function actualizarModelosPriorizacion_() {
   modelosUnicos.forEach(function (clave) {
     if (!existentes.has(clave)) {
       var partes = clave.split("||");
-      conservados.push([partes[0], partes[1], "", "", "", ""]);
+      var linNueva = "";
+      var recBsN = buscarRegistroBs_(partes[0], mapaBsPrio);
+      if (recBsN && recBsN.lineas && recBsN.lineas.length) linNueva = formatearLineas_(recBsN.lineas);
+      conservados.push([partes[0], partes[1], "", "", "", linNueva]);
       nuevos++;
     }
   });

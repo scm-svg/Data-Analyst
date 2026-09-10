@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.15 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.16 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -359,6 +359,64 @@ def modelos_con_faltante(filas):
     return {k for k, v in tot.items() if v > 0}
 
 
+def clave_modelo_busqueda(nombre):
+    return re.sub(r"\s+", " ", quitar_tildes(norm(nombre)).upper()).strip()
+
+
+def buscar_registro_bs(nombre, mapa_bs):
+    n = clave_modelo_busqueda(nombre)
+    if not n or not mapa_bs:
+        return None
+    if n in mapa_bs:
+        return mapa_bs[n]
+    best = ""
+    for k in mapa_bs:
+        if n.startswith(k + " ") and len(k) > len(best):
+            best = k
+    return mapa_bs.get(best)
+
+
+def lineas_por_defecto(t):
+    if t and t.get("esEspecial"):
+        return ["1"]
+    try:
+        cap = float(t.get("cap") or 0)
+    except (TypeError, ValueError):
+        cap = 0
+    if cap > 0 and cap <= 40:
+        return ["5"]
+    return ["2", "3", "4"]
+
+
+def resolver_lineas_tarea(t, mapa_lineas_modelo, mapa_bs):
+    actuales = [str(x) for x in (t.get("lineas") or [])]
+    t["lineas"] = actuales
+    pref = (mapa_lineas_modelo or {}).get(t.get("modelo"))
+    if pref:
+        pref = [str(x) for x in pref]
+        if not actuales:
+            t["lineas"] = list(pref)
+            return t["lineas"]
+        inter = [l for l in actuales if l in pref]
+        if inter:
+            t["lineas"] = inter
+        return t["lineas"]
+    if actuales:
+        return actuales
+    rec = buscar_registro_bs(t.get("familia") or "", mapa_bs) or buscar_registro_bs(t.get("modelo") or "", mapa_bs)
+    if rec and rec.get("lineas"):
+        t["lineas"] = [str(x) for x in rec["lineas"]]
+        try:
+            cap = float(t.get("cap") or 0)
+        except (TypeError, ValueError):
+            cap = 0
+        if cap <= 0 and rec.get("cap"):
+            t["cap"] = rec["cap"]
+        return t["lineas"]
+    t["lineas"] = lineas_por_defecto(t)
+    return t["lineas"]
+
+
 def dia_inicio_efectivo(t):
     return t.get("diaIngreso") or 0
 
@@ -562,7 +620,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.15: géneros en paralelo si hay 2 líneas libres; si no, lotes color+género."""
+    """Motor v5.9.16: géneros en paralelo si hay 2 líneas libres; si no, lotes color+género."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
 
@@ -2069,6 +2127,63 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(out[1], 200)
         self.assertEqual(out[2], 300)
         self.assertTrue(all(x is None for x in out[3:]))
+
+
+class TestFaltanteSinLinea(unittest.TestCase):
+    def test_bs_prefijo_mas_largo(self):
+        mapa = {
+            "RIO": {"lineas": ["2", "3", "4"], "cap": 130},
+            "RIO ORIGINAL": {"lineas": ["5"], "cap": 40},
+        }
+        rec = buscar_registro_bs("RIO ORIGINAL DAMA", mapa)
+        self.assertEqual(rec["lineas"], ["5"])
+
+    def test_rio_kids_usa_rio_de_bs(self):
+        mapa = {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}}
+        rec = buscar_registro_bs("RIO KIDS", mapa)
+        self.assertEqual(rec["lineas"], ["2", "3", "4"])
+        t = {"modelo": "RIO KIDS", "familia": "RIO", "lineas": [], "cap": 130}
+        resolver_lineas_tarea(t, {}, mapa)
+        self.assertEqual(t["lineas"], ["2", "3", "4"])
+
+    def test_vestido_aryna_vacia_toma_l5(self):
+        t = {"modelo": "VESTIDO ARYNA DAMA", "familia": "VESTIDO ARYNA", "lineas": [], "cap": 40}
+        resolver_lineas_tarea(t, {}, {"VESTIDO ARYNA": {"lineas": ["5"], "cap": 40}})
+        self.assertEqual(t["lineas"], ["5"])
+
+    def test_respeta_linea_de_por_hacer(self):
+        t = {"modelo": "RIO CAB", "familia": "RIO", "lineas": ["4"], "cap": 130}
+        resolver_lineas_tarea(t, {}, {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}})
+        self.assertEqual(t["lineas"], ["4"])
+
+    def test_priorizacion_llena_si_por_hacer_vacio(self):
+        t = {"modelo": "RIO KIDS", "familia": "RIO", "lineas": [], "cap": 130}
+        resolver_lineas_tarea(t, {"RIO KIDS": ["2", "4"]}, {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}})
+        self.assertEqual(t["lineas"], ["2", "4"])
+
+    def test_lite_pant_sin_bs_va_a_l5(self):
+        t = {"modelo": "LITE PANT DAMA", "familia": "LITE PANT", "lineas": [], "cap": 40}
+        resolver_lineas_tarea(t, {}, {})
+        self.assertEqual(t["lineas"], ["5"])
+
+    def test_faltante_sin_linea_entra_a_la_meta(self):
+        """Filas sin línea se resuelven y su faltante suma en la meta del modelo."""
+        mapa_bs = {"MAR": {"lineas": ["2", "3", "4"], "cap": 130}}
+        con_linea = {
+            "sku": "A", "modelo": "MAR CAB", "mo": "MO-A", "cantidad": 100, "cap": 130,
+            "lineas": ["4"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20260924, "solicitadaOrig": 100, "familia": "MAR",
+        }
+        sin_linea = {
+            "sku": "B", "modelo": "MAR ORIGINAL CAB", "mo": "MO-B", "cantidad": 200, "cap": 130,
+            "lineas": [], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20260924, "solicitadaOrig": 200, "familia": "MAR ORIGINAL",
+        }
+        resolver_lineas_tarea(sin_linea, {}, mapa_bs)
+        self.assertTrue(sin_linea["lineas"])
+        out = planificar([con_linea, sin_linea], {}, total_dias=10)
+        self.assertEqual(sum(t["cantidad"] for t in out), 300)
+        self.assertGreater(sum(t["planificada"] for t in out if t["modelo"] == "MAR ORIGINAL CAB"), 0)
 
 
 if __name__ == "__main__":
