@@ -60,7 +60,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .cal-nav button:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal-dow{font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);text-align:center;padding:4px 0;font-weight:700}
-.cal-day{aspect-ratio:1;border:1px solid transparent;background:var(--s2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:.82rem;font-weight:600;position:relative;min-height:42px;transition:transform .12s,border-color .12s}
+.cal-day{aspect-ratio:1;border:1px solid transparent;background:var(--s2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:.82rem;font-weight:600;position:relative;min-height:38px;max-height:52px;transition:transform .12s,border-color .12s}
 .cal-day:hover{border-color:var(--ac);transform:translateY(-1px)}
 .cal-day.other{opacity:.28;cursor:default}
 .cal-day.today{border-color:var(--ac);box-shadow:0 0 0 2px rgba(91,106,247,.25);font-weight:800}
@@ -131,8 +131,8 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 /* Timeline overview */
 .overview{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 @media(max-width:780px){.overview{grid-template-columns:1fr}}
-.ov-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
-.ov-chip{flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:8px 10px;font-size:.72rem;font-weight:700}
+.ov-row{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:4px}
+.ov-chip{flex:0 1 auto;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:8px 10px;font-size:.72rem;font-weight:700}
 .ov-n{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:.7rem;font-weight:800;color:#fff}
 .ov-chip.taller .ov-n{background:var(--taller)}
 .ov-chip.sat .ov-n{background:var(--sat);color:#042024}
@@ -196,7 +196,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
       <h3 id="agendaTitle">Agenda</h3>
       <div class="sub" id="agendaSub">Selecciona un día para ver o agregar reuniones.</div>
       <div class="agenda-list" id="agendaList"></div>
-      <button class="btn meet" type="button" style="margin-top:12px" onclick="openMeetModal()">+ Agregar reunión</button>
+      <button class="btn meet" id="addMeetBtn" type="button" style="margin-top:12px" onclick="openMeetModal()">+ Agregar reunión</button>
     </div>
   </div>
 
@@ -398,6 +398,10 @@ function renderCalendar(){
     const click = cls.indexOf('other')>=0 ? '' : 'onclick="selectDay(\''+iso+'\')"';
     cells.push('<button type="button" class="'+cls+'" '+click+' aria-label="'+iso+'">'+day+'</button>');
   }
+  const lastWeek = cells.slice(7 + 35);
+  if(lastWeek.length===7 && lastWeek.every(function(h){ return h.indexOf(' other')>=0; })){
+    cells.splice(7+35, 7);
+  }
   document.getElementById('calGrid').innerHTML = cells.join('');
 }
 
@@ -518,17 +522,16 @@ function renderLane(lane, flowId, ovId){
   document.getElementById(flowId).innerHTML = ids.map(function(id, i){
     const p = CATALOG[id]; if(!p) return '';
     const st = statusMap[id] || 'pendiente';
-    const genders = (p.genders||[]).map(function(g){
-      return '<span class="tag '+g.toLowerCase()+'">'+g+'</span>';
-    }).join('');
     const seq = p.genders && p.genders.length
-      ? '<div class="mini-seq">'+p.genders.map(function(g,gi){ return (gi?'<span class="arrow">→</span>':'')+'<span class="mini-step">'+g+'</span>'; }).join('')+'</div>'
+      ? '<div class="mini-seq">'+p.genders.map(function(g,gi){
+          return (gi?'<span class="arrow">→</span>':'')+'<span class="mini-step tag '+g.toLowerCase()+'">'+g+'</span>';
+        }).join('')+'</div>'
       : '';
-    const link = p.link ? '<span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span>' : '';
+    const link = p.link ? '<div class="tags" style="margin-top:8px"><span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span></div>' : '';
     return '<article class="item" draggable="true" data-lane="'+lane+'" data-id="'+p.id+'">'+
       '<div class="num">'+(i+1)+'</div>'+
       '<div class="item-body"><h4>'+esc(p.name)+'</h4><div class="meta">'+esc(p.meta||'')+'</div>'+
-      '<div class="tags">'+genders+link+'</div>'+seq+'</div>'+
+      seq+link+'</div>'+
       '<button class="status '+st+'" type="button" onclick="cycleStatus(\''+p.id+'\')">'+STATUS_LABEL[st]+'</button>'+
     '</article>';
   }).join('');
