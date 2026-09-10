@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.21 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.22 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -580,7 +580,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
-    """Motor v5.9.21: Especial con Día de inicio reclama su línea al llegar la fecha."""
+    """Motor v5.9.22: Día de inicio reclama L1-4 si el modelo tiene mejor prioridad."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -950,15 +950,13 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             libres = lineas_libres_de(m, overflow)
             if not libres:
-                if banda_viva(m) > BANDA_ESPECIAL:
-                    continue
                 cands = []
                 seen = {}
                 for t in m["tareas"]:
                     if t["restante"] <= 0:
                         continue
                     for lin in elegibles(t, overflow):
-                        if seen.get(lin):
+                        if seen.get(lin) or max_ocupantes(lin) > 1:
                             continue
                         if not modelo_puede(m, d, lin, overflow):
                             continue
@@ -972,30 +970,37 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     carga[lin][d],
                     lin,
                 ))
-                b_new = banda_viva(m)
-                claimed = False
+
+                def ocupa_peor_que(nom_occ, m_new):
+                    m_o = modelos.get(nom_occ)
+                    if not m_o:
+                        return True
+                    if familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial"):
+                        return False
+                    b_o, b_n = banda_viva(m_o), banda_viva(m_new)
+                    if b_o != b_n:
+                        return b_o > b_n
+                    if m_o["prioMin"] != m_new["prioMin"]:
+                        return m_new["prioMin"] < m_o["prioMin"]
+                    return False
+
                 for lin in cands:
                     occ = ocupante.get(lin) or []
                     if m["nombre"] in occ:
-                        claimed = True
                         break
                     if len(occ) < max_ocupantes(lin):
                         ocupante[lin].append(m["nombre"])
-                        claimed = True
                         break
                     worst_i = -1
-                    worst_b = -1
                     for i_w, nom in enumerate(occ):
-                        b_o = banda_viva(modelos[nom]) if nom in modelos else 9
-                        if b_o > b_new and b_o >= worst_b:
-                            worst_b = b_o
+                        if ocupa_peor_que(nom, m):
                             worst_i = i_w
+                            break
                     if worst_i < 0:
                         continue
                     occ.pop(worst_i)
                     occ.append(m["nombre"])
                     ocupante[lin] = occ
-                    claimed = True
                     break
                 continue
             fam = familia_modelo(m)
@@ -1702,6 +1707,52 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(d16.get("RIO CAB", 0), 0)
         carr = [t for t in out if t["modelo"].startswith("CARRERA")][0]
         self.assertEqual(carr["planificada"], 1200)
+
+    def test_urgente_dia_inicio_desaloja_media_misma_linea(self):
+        """Excel (9): MAR KIDS Urgente con Día de inicio futuro cede L4 a RIO CAB hasta esa fecha; luego entra."""
+        tareas = [
+            {"sku": "MK1", "modelo": "MAR KIDS", "mo": "MO-MK",
+             "cantidad": 400, "cap": 95, "lineas": ["4"], "color": "Negro",
+             "prioridadNum": 1, "esEspecial": False, "diaIngreso": 5,
+             "fechaKey": 20260928, "solicitadaOrig": 400},
+            {"sku": "RC1", "modelo": "RIO CAB", "mo": "MO-RC",
+             "cantidad": 800, "cap": 80, "lineas": ["4"], "color": "Negro",
+             "prioridadNum": 3, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261030, "solicitadaOrig": 800},
+        ]
+        out = planificar(tareas, {}, total_dias=15)
+        d4 = defaultdict(int)
+        d5 = defaultdict(int)
+        for t in out:
+            d4[t["modelo"]] += t["plan"]["4"][4]
+            d5[t["modelo"]] += t["plan"]["4"][5]
+        self.assertEqual(d4.get("MAR KIDS", 0), 0)
+        self.assertEqual(d4["RIO CAB"], 80)
+        self.assertEqual(d5["MAR KIDS"], 95)
+        self.assertEqual(d5.get("RIO CAB", 0), 0)
+
+    def test_alta_dia_inicio_desaloja_media_misma_fecha(self):
+        """Alta con Día de inicio futuro entra el día que llega y saca a Media de L3."""
+        tareas = [
+            {"sku": "A1", "modelo": "ALTA FUTURA", "mo": "MO-A",
+             "cantidad": 260, "cap": 130, "lineas": ["3"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 2,
+             "fechaKey": 20261001, "solicitadaOrig": 260},
+            {"sku": "M1", "modelo": "MEDIA AHORA", "mo": "MO-M",
+             "cantidad": 400, "cap": 130, "lineas": ["3"], "color": "Rojo",
+             "prioridadNum": 3, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261001, "solicitadaOrig": 400},
+        ]
+        out = planificar(tareas, {}, total_dias=8)
+        d1 = defaultdict(int)
+        d2 = defaultdict(int)
+        for t in out:
+            d1[t["modelo"]] += t["plan"]["3"][1]
+            d2[t["modelo"]] += t["plan"]["3"][2]
+        self.assertEqual(d1.get("ALTA FUTURA", 0), 0)
+        self.assertEqual(d1["MEDIA AHORA"], 130)
+        self.assertEqual(d2["ALTA FUTURA"], 130)
+        self.assertEqual(d2.get("MEDIA AHORA", 0), 0)
 
     def test_linea5_sola_usa_capacidad_40(self):
         tareas = [{

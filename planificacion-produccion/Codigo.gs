@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.21 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.22 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - DÍA DE INICIO RECLAMA LA LÍNEA (L1-4): Urgente/mínima/especial
+ *     con fecha de inicio futura deja correr al modelo actual. El día
+ *     que llega, desaloja al ocupante de peor prioridad (MAR KIDS
+ *     Urgente vs RIO CAB Media). L5 no echa a nadie (sigue en paralelo).
  *   - ESPECIAL CON DÍA DE INICIO: al llegar esa fecha, el Especial
  *     reclama su Linea de Produccion aunque otro modelo (RIO, etc.)
  *     la esté ocupando. Antes se quedaba en 0 hasta que el ocupante
@@ -74,7 +78,7 @@
  *     Líneas 1-4 = un modelo a la vez (secuencial); L5 hasta 2 en paralelo.
  *   - ESPECIAL: respeta Linea de Produccion. Si la celda viene vacía
  *     se usa 1. No desborda a L1 desde otras líneas. Al llegar
- *     Día de inicio, desalojan a un ocupante de peor banda.
+ *     Día de inicio, desalojan a un ocupante de peor prioridad (L1-4).
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
  *   - Priorización elimina modelos con faltante total 0.
  *   - PROYECCIÓN: tablas desde B2; umbrales primer cruce; links a SKUS.
@@ -90,7 +94,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.21";
+var VERSION_SISTEMA = "5.9.22";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1729,23 +1733,31 @@ function generarPlanificacionSemanal_() {
       return out;
     }
 
+    function ocupaPeorQue_(nomOcc, mNew) {
+      var mO = mapaModelos[nomOcc];
+      if (!mO) return true;
+      if (familiaModelo_(mO) === familiaModelo_(mNew) && !mNew.esEspecial) return false;
+      var bO = bandaViva_(mO);
+      var bN = bandaViva_(mNew);
+      if (bO !== bN) return bO > bN;
+      if (mO.prioMin !== mNew.prioMin) return mNew.prioMin < mO.prioMin;
+      return false;
+    }
+
     function desalojarPara_(m, lin) {
+      if (maxOcupantes_(lin) > 1) return false;
       var occ = ocupante[lin] || [];
       if (occ.indexOf(m.nombre) !== -1) return true;
       if (occ.length < maxOcupantes_(lin)) {
         ocupante[lin].push(m.nombre);
         return true;
       }
-      var bNew = bandaViva_(m);
       var worstI = -1;
-      var worstB = -1;
       var iW;
       for (iW = 0; iW < occ.length; iW++) {
-        var mO = mapaModelos[occ[iW]];
-        var bO = mO ? bandaViva_(mO) : 9;
-        if (bO > bNew && bO >= worstB) {
-          worstB = bO;
+        if (ocupaPeorQue_(occ[iW], m)) {
           worstI = iW;
+          break;
         }
       }
       if (worstI < 0) return false;
@@ -1788,8 +1800,9 @@ function generarPlanificacionSemanal_() {
       if (debeEsperarLoteFamilia_(m, overflowL1)) return;
       var libres = lineasLibresDe_(m);
       if (libres.length === 0) {
-        if (bandaViva_(m) > BANDA_ESPECIAL) return;
-        libres = lineasDondePuedeHoy_(m);
+        libres = lineasDondePuedeHoy_(m).filter(function (lin) {
+          return maxOcupantes_(lin) === 1;
+        });
         if (libres.length === 0) return;
         libres.sort(function (a, b) {
           var fam = familiaModelo_(m);
@@ -2162,6 +2175,7 @@ function generarPlanificacionSemanal_() {
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: solo Linea de Produccion (si la celda viene vacía, 1). No desborda a L1.\n" +
+    "• Día de inicio (L1-4): al llegar esa fecha, el de mayor prioridad toma la línea (el actual cede).\n" +
     "• Especial con Día de inicio: ese día toma su línea (desaloja a un ocupante de peor prioridad).\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
