@@ -90,7 +90,8 @@ TALLA_ORDER = {
     "DAMA": ["XS", "S", "M", "L", "XL", "2XL", "3XL"],
     "KIDS": ["2", "4", "6", "8", "10", "12", "14"],
 }
-TARGET_PRODUCE_MIN = {"CAB": 2400, "DAMA": 2200, "KIDS": 2700}
+TARGET_PRODUCE_MIN = {"CAB": 2650, "DAMA": 2450, "KIDS": 2950}
+MIN_VARIANT = {"CAB": 3, "DAMA": 3, "KIDS": 4}
 
 
 def norm_color(c: str) -> str:
@@ -224,6 +225,153 @@ def sort_tallas(genero: str, tallas: list[str]) -> list[str]:
     return ranked
 
 
+def active_colors(genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame) -> list[str]:
+    disp = COLORES_DISP.get(genero, [])
+    sold_vel = set(g_vel["color"].unique())
+    sold_all = set(all_sales.loc[all_sales["genero"] == genero, "color"].unique())
+    colors = list(dict.fromkeys(list(disp) + sorted(sold_vel | sold_all)))
+    sales_rank = g_vel.groupby("color")["v"].sum().to_dict()
+    return sorted(colors, key=lambda c: sales_rank.get(c, 0), reverse=True)
+
+
+def active_tallas(genero: str, g_vel: pd.DataFrame) -> list[str]:
+    sold = set(g_vel["talla"].astype(str).unique())
+    standard = set(TALLA_ORDER.get(genero, []))
+    return sort_tallas(genero, list(sold | standard))
+
+
+def set_variant_qty(t: dict, qty: int, shares: dict[str, float]) -> None:
+    pm, px = min_max_qty(max(qty, 0))
+    t["produce_min"] = pm
+    t["produce"] = pm
+    t["produce_max"] = px
+    t["store_split"] = distribute_units(pm, shares, ALL_DIST_STORES)
+    t["store_split_max"] = distribute_units(px, shares, ALL_DIST_STORES)
+
+
+def rebuild_gender_aggregates(
+    plan: list, summary: dict, rango: dict, genero: str, shares: dict[str, float]
+) -> None:
+    items = [p for p in plan if p["genero"] == genero]
+    g_prod = g_prod_max = 0
+    color_rows = []
+    talla_totals: dict = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
+    store_talla = {s: defaultdict(lambda: {"min": 0, "max": 0}) for s in ALL_DIST_STORES}
+
+    for item in items:
+        c_min = sum(t["produce_min"] for t in item["tallas"])
+        c_max = sum(t["produce_max"] for t in item["tallas"])
+        item["produce_min"] = c_min
+        item["produce"] = c_min
+        item["produce_max"] = c_max
+        item["store_split"] = distribute_units(c_min, shares, ALL_DIST_STORES)
+        g_prod += c_min
+        g_prod_max += c_max
+        color_rows.append({
+            "color": item["color"],
+            "pct": item["color_pct"],
+            "min": c_min,
+            "max": c_max,
+            "tallas": item["tallas"],
+        })
+        for t in item["tallas"]:
+            if t["produce_min"] <= 0:
+                continue
+            talla_totals[t["talla"]]["min"] += t["produce_min"]
+            talla_totals[t["talla"]]["max"] += t["produce_max"]
+            for store in ALL_DIST_STORES:
+                store_talla[store][t["talla"]]["min"] += t["store_split"][store]
+                store_talla[store][t["talla"]]["max"] += t["store_split_max"][store]
+
+    for td in talla_totals.values():
+        td["curve_pct"] = round(td["min"] / g_prod * 100, 1) if g_prod else 0.0
+
+    summary[genero]["produce"] = g_prod
+    summary[genero]["produce_max"] = g_prod_max
+    rango[genero]["talla_totals"] = dict(talla_totals)
+    rango[genero]["color_rows"] = color_rows
+    rango[genero]["store_talla"] = {s: dict(v) for s, v in store_talla.items()}
+
+
+def enforce_full_matrix(
+    plan: list, genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame,
+    inv: pd.DataFrame, shares: dict[str, float], hs: float,
+) -> None:
+    """Ensure every active color × talla has at least MIN_VARIANT units."""
+    floor = MIN_VARIANT[genero]
+    colors = active_colors(genero, g_vel, all_sales)
+    tallas = active_tallas(genero, g_vel)
+    items = {p["color"]: p for p in plan if p["genero"] == genero}
+    color_total_sales = g_vel["v"].sum() or 1
+
+    for color in colors:
+        c_vel = g_vel[g_vel["color"] == color]
+        color_pct = (c_vel["v"].sum() / color_total_sales * 100) if len(c_vel) else 0.0
+        v_base = weighted_velocity(c_vel) if len(c_vel) else 0.0
+        v_adj = v_base * hs
+        stk_rows = inv[(inv["genero"] == genero) & (inv["color"] == color)]
+        stk = int(stk_rows["v"].sum())
+        stk_taller = int(stk_rows[stk_rows["tienda"] == "TALLER"]["v"].sum())
+        cob = round(stk / v_adj, 1) if v_adj > 0 else 99.0
+
+        if color not in items:
+            items[color] = {
+                "genero": genero,
+                "color": color,
+                "color_pct": round(color_pct, 1),
+                "v_mes_base": round(v_base, 1),
+                "v_mes": round(v_adj, 1),
+                "stk": stk,
+                "stk_taller": stk_taller,
+                "cob": cob,
+                "produce": 0,
+                "produce_min": 0,
+                "produce_max": 0,
+                "tallas": [],
+                "store_split": {},
+            }
+            plan.append(items[color])
+
+        item = items[color]
+        by_talla = {t["talla"]: t for t in item["tallas"]}
+        talla_sales = c_vel.groupby("talla")["v"].sum() if len(c_vel) else pd.Series(dtype=float)
+        talla_total = talla_sales.sum() or 1
+
+        new_tallas = []
+        for talla in tallas:
+            if talla in by_talla:
+                t = by_talla[talla]
+            else:
+                tdf = c_vel[c_vel["talla"] == talla] if len(c_vel) else pd.DataFrame()
+                tv_base = weighted_velocity(tdf) if len(tdf) else 0.0
+                tv_adj = tv_base * hs
+                t_stk = int(inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla)]["v"].sum())
+                t_stk_taller = int(
+                    inv[(inv["genero"] == genero) & (inv["color"] == color) & (inv["talla"] == talla) & (inv["tienda"] == "TALLER")]["v"].sum()
+                )
+                t_cob = round(t_stk / tv_adj, 1) if tv_adj > 0 else 99.0
+                t = {
+                    "talla": str(talla),
+                    "v_mes_base": round(tv_base, 1),
+                    "v_mes": round(tv_adj, 1),
+                    "stk": t_stk,
+                    "stk_taller": t_stk_taller,
+                    "cob": t_cob,
+                    "produce": 0,
+                    "produce_min": 0,
+                    "produce_max": 0,
+                    "curve_pct": round(talla_sales.get(talla, 0) / talla_total * 100, 1) if talla in talla_sales.index else 0.0,
+                    "urgente": True,
+                    "store_split": {},
+                    "store_split_max": {},
+                }
+            qty = max(t.get("produce_min", 0), floor)
+            set_variant_qty(t, qty, shares)
+            new_tallas.append(t)
+
+        item["tallas"] = sorted(new_tallas, key=lambda x: x["produce_min"], reverse=True)
+
+
 def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     retail_sales = sales[sales["tienda"].isin(RETAIL_STORES + ["WEB", "PEDIDOS", "CORPORATIVO", "VELA", "TOLON"])].copy()
 
@@ -283,7 +431,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         vel_adj = vel_base * HIGH_SEASON_FACTOR[g]
         line_order[g] = {"m1": int(round(vel_adj)), "m2": int(round(vel_adj * 1.10))}
 
-    production_plan, summary_genero, rango_data = build_production_plan(retail_sales, inv)
+    production_plan, summary_genero, rango_data = build_production_plan(retail_sales, inv, sales)
 
     return {
         "nombre": "MAR ORIGINAL",
@@ -329,7 +477,9 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
     }
 
 
-def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list, dict, dict]:
+def build_production_plan(
+    sales: pd.DataFrame, inv: pd.DataFrame, all_sales: pd.DataFrame
+) -> tuple[list, dict, dict]:
     vel_sales = sales[sales["mes"].isin(VELOCITY_PERIODS)]
     plan = []
     summary = {}
@@ -351,7 +501,7 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
         color_rows = []
         store_talla = {s: defaultdict(lambda: {"min": 0, "max": 0}) for s in ALL_DIST_STORES}
 
-        colors = g_vel.groupby("color")["v"].sum().sort_values(ascending=False).index.tolist()
+        colors = active_colors(genero, g_vel, all_sales)
         color_total_sales = g_vel["v"].sum() or 1
 
         for color in colors:
@@ -369,7 +519,11 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
             talla_sales = c_vel.groupby("talla")["v"].sum()
             talla_total = talla_sales.sum() or 1
 
-            for talla in sort_tallas(genero, list(c_vel["talla"].unique())):
+            color_tallas = sort_tallas(
+                genero,
+                list(set(c_vel["talla"].astype(str).unique()) | set(active_tallas(genero, g_vel))),
+            )
+            for talla in color_tallas:
                 tdf = c_vel[c_vel["talla"] == talla]
                 tv_base = weighted_velocity(tdf) if len(tdf) else 0
                 tv_adj = tv_base * hs
@@ -382,23 +536,11 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
                 produce_min = int(math.ceil(need * safety)) if t_cob < cov + (1 if genero == "KIDS" else 0) else 0
                 if genero == "KIDS" and tv_adj >= 1.5 and produce_min == 0 and t_cob < 7:
                     produce_min = max(1, int(math.ceil(tv_adj * 2)))
+                produce_min = max(produce_min, MIN_VARIANT[genero])
                 produce_min, produce_max = min_max_qty(produce_min)
                 curve_pct = round(talla_sales.get(talla, 0) / talla_total * 100, 1)
 
-                store_split_min = distribute_units(produce_min, shares, ALL_DIST_STORES)
-                store_split_max = distribute_units(produce_max, shares, ALL_DIST_STORES)
-
-                c_prod_min += produce_min
-                c_prod_max += produce_max
-                talla_totals[talla]["min"] += produce_min
-                talla_totals[talla]["max"] += produce_max
-                talla_totals[talla]["curve_pct"] += curve_pct * color_pct
-
-                for store in ALL_DIST_STORES:
-                    store_talla[store][talla]["min"] += store_split_min[store]
-                    store_talla[store][talla]["max"] += store_split_max[store]
-
-                tallas.append({
+                t_obj = {
                     "talla": str(talla),
                     "v_mes_base": round(tv_base, 1),
                     "v_mes": round(tv_adj, 1),
@@ -410,9 +552,21 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
                     "produce_max": produce_max,
                     "curve_pct": curve_pct,
                     "urgente": bool(t_cob < 3),
-                    "store_split": store_split_min,
-                    "store_split_max": store_split_max,
-                })
+                    "store_split": {},
+                    "store_split_max": {},
+                }
+                set_variant_qty(t_obj, produce_min, shares)
+                c_prod_min += produce_min
+                c_prod_max += produce_max
+                talla_totals[talla]["min"] += produce_min
+                talla_totals[talla]["max"] += produce_max
+                talla_totals[talla]["curve_pct"] += curve_pct * (color_pct / 100)
+
+                for store in ALL_DIST_STORES:
+                    store_talla[store][talla]["min"] += t_obj["store_split"][store]
+                    store_talla[store][talla]["max"] += t_obj["store_split_max"][store]
+
+                tallas.append(t_obj)
 
             plan.append({
                 "genero": genero,
@@ -450,6 +604,8 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
             "shares": shares,
             "vel_mes": round(g_vel_adj, 1),
         }
+        enforce_full_matrix(plan, genero, g_vel, all_sales, inv, shares, hs)
+        rebuild_gender_aggregates(plan, summary, rango, genero, shares)
 
     for genero, target in TARGET_PRODUCE_MIN.items():
         calibrate_gender_targets(plan, summary, rango, genero, target)
@@ -460,80 +616,63 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
 def calibrate_gender_targets(
     plan: list, summary: dict, rango: dict, genero: str, target: int
 ) -> None:
-    """Scale production proportionally to hit target min while preserving mix."""
+    """Scale to target while keeping every active color×talla >= MIN_VARIANT."""
     items = [p for p in plan if p["genero"] == genero]
     shares = rango[genero]["shares"]
-    refs: list[tuple[dict, dict, int]] = []
+    floor = MIN_VARIANT[genero]
+    refs: list[tuple[dict, dict]] = []
     for item in items:
         for t in item["tallas"]:
-            if t["produce_min"] > 0:
-                refs.append((item, t, t["produce_min"]))
+            set_variant_qty(t, max(t["produce_min"], floor), shares)
+            refs.append((item, t))
 
-    raw = sum(w for _, _, w in refs)
-    if raw <= 0:
+    current = sum(t["produce_min"] for _, t in refs)
+    if current <= 0:
         return
 
-    floats = [w * target / raw for _, _, w in refs]
-    ints = [int(math.floor(f)) for f in floats]
-    diff = target - sum(ints)
-    if diff > 0:
-        order = sorted(range(len(floats)), key=lambda i: floats[i] - ints[i], reverse=True)
-        for i in range(diff):
-            ints[order[i % len(order)]] += 1
-    elif diff < 0:
-        order = sorted(range(len(ints)), key=lambda i: ints[i], reverse=True)
-        for i in range(-diff):
-            if ints[order[i % len(order)]] > 0:
-                ints[order[i % len(order)]] -= 1
+    if current < target:
+        floats = [t["produce_min"] * target / current for _, t in refs]
+        ints = [int(math.floor(f)) for f in floats]
+        diff = target - sum(ints)
+        if diff > 0:
+            order = sorted(range(len(floats)), key=lambda i: floats[i] - ints[i], reverse=True)
+            for i in range(diff):
+                ints[order[i % len(order)]] += 1
+        for (_, t), qty in zip(refs, ints):
+            set_variant_qty(t, max(qty, floor), shares)
+    elif current > target:
+        reducible = [max(0, t["produce_min"] - floor) for _, t in refs]
+        pool = sum(reducible)
+        excess = current - target
+        if pool <= 0:
+            pass
+        elif excess >= pool:
+            for (_, t), _ in zip(refs, reducible):
+                set_variant_qty(t, floor, shares)
+        else:
+            cuts = [r * excess / pool for r in reducible]
+            new_vals = []
+            for (_, t), r, cut in zip(refs, reducible, cuts):
+                new_vals.append(max(floor, t["produce_min"] - int(math.floor(cut))))
+            diff = target - sum(new_vals)
+            if diff > 0:
+                order = sorted(
+                    range(len(new_vals)),
+                    key=lambda i: (refs[i][1]["produce_min"] - new_vals[i], new_vals[i]),
+                    reverse=True,
+                )
+                for i in range(diff):
+                    new_vals[order[i % len(order)]] += 1
+            elif diff < 0:
+                order = sorted(range(len(new_vals)), key=lambda i: new_vals[i] - floor, reverse=True)
+                for i in range(-diff):
+                    idx = order[i % len(order)]
+                    if new_vals[idx] > floor:
+                        new_vals[idx] -= 1
+            for (_, t), qty in zip(refs, new_vals):
+                set_variant_qty(t, max(qty, floor), shares)
 
-    idx = 0
-    for item, t, _ in refs:
-        pm, px = min_max_qty(ints[idx])
-        idx += 1
-        t["produce_min"] = pm
-        t["produce"] = pm
-        t["produce_max"] = px
-        t["store_split"] = distribute_units(pm, shares, ALL_DIST_STORES)
-        t["store_split_max"] = distribute_units(px, shares, ALL_DIST_STORES)
-
-    g_prod = g_prod_max = 0
-    color_rows = []
-    talla_totals: dict = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
-    store_talla = {s: defaultdict(lambda: {"min": 0, "max": 0}) for s in ALL_DIST_STORES}
-
-    for item in items:
-        c_min = sum(t["produce_min"] for t in item["tallas"])
-        c_max = sum(t["produce_max"] for t in item["tallas"])
-        item["produce_min"] = c_min
-        item["produce"] = c_min
-        item["produce_max"] = c_max
-        item["store_split"] = distribute_units(c_min, shares, ALL_DIST_STORES)
-        g_prod += c_min
-        g_prod_max += c_max
-        color_rows.append({
-            "color": item["color"],
-            "pct": item["color_pct"],
-            "min": c_min,
-            "max": c_max,
-            "tallas": item["tallas"],
-        })
-        for t in item["tallas"]:
-            if t["produce_min"] <= 0:
-                continue
-            talla_totals[t["talla"]]["min"] += t["produce_min"]
-            talla_totals[t["talla"]]["max"] += t["produce_max"]
-            for store in ALL_DIST_STORES:
-                store_talla[store][t["talla"]]["min"] += t["store_split"][store]
-                store_talla[store][t["talla"]]["max"] += t["store_split_max"][store]
-
-    for td in talla_totals.values():
-        td["curve_pct"] = round(td["min"] / g_prod * 100, 1) if g_prod else 0.0
-
-    summary[genero]["produce"] = g_prod
-    summary[genero]["produce_max"] = g_prod_max
-    rango[genero]["talla_totals"] = dict(talla_totals)
-    rango[genero]["color_rows"] = color_rows
-    rango[genero]["store_talla"] = {s: dict(v) for s, v in store_talla.items()}
+    rebuild_gender_aggregates(plan, summary, rango, genero, shares)
 
 
 def _write_rows(ws, start_row: int, rows: list[list]) -> int:
@@ -777,7 +916,7 @@ def patch_html(template: str, data: dict) -> str:
     html = html.replace(
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span></div>',
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span> · '
-        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · objetivo CAB 2400 · DAMA 2200 · KIDS 2700 und</span></div>',
+        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · mín 3und/variante · objetivo CAB 2650 · DAMA 2450 · KIDS 2950</span></div>',
     )
 
     html = html.replace(
