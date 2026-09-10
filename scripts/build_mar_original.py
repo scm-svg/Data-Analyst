@@ -86,7 +86,6 @@ TELA_CONSUMO = {"CAB": 0.50, "DAMA": 0.40, "KIDS": 0.26}
 TELA_UNIDAD = "kg"
 TELA_SS = 0.20
 TELA_NOMBRE = "Jabón Microfibra"
-STOCK_BLEND_SALES = 0.35  # mínimo peso por ventas aunque el stock cubra la sugerencia
 VELOCITY_PERIODS = ["mayo-2026", "junio-2026", "julio-2026", "agosto-2026"]
 VELOCITY_WEIGHTS = {"mayo-2026": 0.85, "junio-2026": 0.95, "julio-2026": 1.0, "agosto-2026": 1.15}
 ALL_DIST_STORES = ["SAMBIL", "GRIE", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA", "BARQUISIMETO", "WEB"]
@@ -277,12 +276,6 @@ def active_colors(genero: str, mix_vel: pd.DataFrame, all_sales: pd.DataFrame) -
     g_mapped = remap_vel_colors(mix_vel, genero)
     sales_rank = g_mapped.groupby("color")["v"].sum().to_dict()
     return sorted(disp, key=lambda c: sales_rank.get(c, 0), reverse=True)
-
-
-def variant_stock_need(suggested: float, stock: int, sales_weight: float) -> float:
-    """Suggested minus stock, con piso de participación por ventas (como dashboard − stock)."""
-    need = max(0.0, suggested - stock)
-    return need + STOCK_BLEND_SALES * sales_weight
 
 
 def active_tallas(genero: str, hist_vel: pd.DataFrame, *, for_production: bool = False) -> list[str]:
@@ -1202,7 +1195,6 @@ def export_excel(data: dict, path: Path) -> None:
         row = 0
         ws.write(row, 0, "MAR ORIGINAL — DISTRIBUCIÓN POR TIENDA", title)
         row += 2
-        store_label_map = {key: label for key, label in RESUMEN_STORES}
         for genero in ["CAB", "DAMA", "KIDS"]:
             gc = ctx["generos"][genero]
             g_label = GENDER_XL[genero]
