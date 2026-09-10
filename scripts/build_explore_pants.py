@@ -24,6 +24,16 @@ TELA_UNIDAD = "kg"
 TELA_SS = 0.20
 MAX_RANGE_PCT = 0.06
 
+# Consumo referencial (tela ya comprada — NO define las und a producir)
+TELA_CONSUMO = {"CAB": 0.30, "DAMA": 0.25, "KIDS": 0.22}  # KIDS ligeramente sobre 0.20
+
+# KIDS: peso un poco mayor que la curva pura de ventas
+KIDS_GENDER_BOOST = 1.12
+
+PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
+    "KIDS": {"1"},
+}
+
 # ── Fuente de verdad: justificación compra tela (Explore Pants) ──
 PRODUCE_TOTAL = 2908  # 80% pendiente sin tela
 DEMAND_JUL_DEC = 2228
@@ -40,6 +50,9 @@ TELA_KG_COLOR = {
     "Verde Militar": 66.0,
 }
 TELA_KG_TOTAL = sum(TELA_KG_COLOR.values())  # 1089
+
+# Proporción color de la compra (usa % del pedido, no convierte kg → und)
+COLOR_SHARE = {c: kg / TELA_KG_TOTAL for c, kg in TELA_KG_COLOR.items()}
 
 ORDEN1_ITEMS = [
     ("Gris Oscuro — TODO (Explore + Shorts)", 361.2, "CRÍTICA"),
@@ -150,9 +163,9 @@ def distribute_units(total: int, shares: dict[str, float], stores: list[str]) ->
 
 
 def color_unit_targets() -> dict[str, int]:
-    """Reparte PRODUCE_TOTAL según peso de kg de tela por color (justificación)."""
-    keys = list(TELA_KG_COLOR.keys())
-    floats = [PRODUCE_TOTAL * TELA_KG_COLOR[c] / TELA_KG_TOTAL for c in keys]
+    """Reparte PRODUCE_TOTAL según proporción color de la compra (justificación)."""
+    keys = list(COLOR_SHARE.keys())
+    floats = [PRODUCE_TOTAL * COLOR_SHARE[c] for c in keys]
     ints = [int(math.floor(f)) for f in floats]
     diff = PRODUCE_TOTAL - sum(ints)
     if diff > 0:
@@ -179,14 +192,22 @@ def build_production_plan(
     rango: dict = {}
     total_sales = df["v"].sum() or 1
 
-    # género × color targets desde ventas dentro de cada color
+    # género × color: curva de ventas por color, con boost moderado en KIDS
     gc_targets: dict[tuple[str, str], int] = {}
     for color, c_total in color_targets.items():
         cdf = df[df["prod_color"] == color]
-        c_sales = cdf["v"].sum() or 1
+        g_weights: dict[str, float] = {}
         for genero in ["CAB", "DAMA", "KIDS"]:
-            gcv = cdf[cdf["genero"] == genero]["v"].sum()
-            gc_targets[(genero, color)] = int(round(c_total * gcv / c_sales)) if gcv else 0
+            gcv = float(cdf[cdf["genero"] == genero]["v"].sum())
+            if genero == "KIDS" and gcv > 0:
+                gcv *= KIDS_GENDER_BOOST
+            g_weights[genero] = gcv
+        g_total = sum(g_weights.values()) or 1.0
+        allocated = allocate_by_weights(
+            {(genero, color): g_weights[genero] for genero in g_weights},
+            c_total,
+        )
+        gc_targets.update(allocated)
 
     # cuadrar total exacto
     current = sum(gc_targets.values())
@@ -212,9 +233,15 @@ def build_production_plan(
             if c_target <= 0:
                 continue
             cdf = gdf[gdf["prod_color"] == color]
+            excluded = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
             t_sales = cdf.groupby("talla")["v"].sum()
+            if excluded:
+                t_sales = t_sales.drop(labels=list(excluded), errors="ignore")
             if t_sales.sum() <= 0:
-                tallas = sort_tallas(genero, TALLA_ORDER[genero][:5])
+                tallas = sort_tallas(
+                    genero,
+                    [t for t in TALLA_ORDER[genero][:5] if t not in excluded],
+                )
                 t_mix = {t: 1 / len(tallas) for t in tallas}
             else:
                 tallas = sort_tallas(genero, list(t_sales.index.astype(str)))
@@ -294,19 +321,20 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     for color, kg in TELA_KG_COLOR.items():
         und = color_targets[color]
         net = kg / (1 + TELA_SS)
-        cons = net / und if und else 0
         tela_rows.append({
             "color": color,
             "und": und,
+            "share_pct": round(COLOR_SHARE[color] * 100, 2),
             "kg_compra": kg,
             "kg_consumo": round(net, 1),
-            "consumo_kg_und": round(cons, 3),
         })
 
     data = {**template}
     data.update({
         "nombre": MODELO,
-        "method": "justificacion_novaktex",
+        "method": "justificacion_novaktex_unidades",
+        "tela_consumo_ref": TELA_CONSUMO,
+        "kids_gender_boost": KIDS_GENDER_BOOST,
         "target_produce_min": {"TOTAL": PRODUCE_TOTAL, **{g: summary[g]["produce"] for g in summary}},
         "production_plan": plan,
         "summary_genero": summary,
@@ -348,8 +376,9 @@ def patch_html(template: str, data: dict) -> str:
     )
 
     note = (
-        " · <span style=\"color:#f97316\">Producción anclada a justificación Novaktex: "
-        f"{PRODUCE_TOTAL:,} und · tela {TELA_KG_TOTAL:.0f} kg · demanda Jul–Dic {DEMAND_JUL_DEC:,}</span>"
+        " · <span style=\"color:#f97316\">Producción: "
+        f"{PRODUCE_TOTAL:,} und (proporción color compra · talla ventas · KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}%) "
+        f"· demanda Jul–Dic {DEMAND_JUL_DEC:,}</span>"
     )
     if "justificación Novaktex" not in html:
         html = html.replace(
@@ -395,10 +424,12 @@ def export_excel(data: dict, path: Path) -> None:
             f"Demanda proyectada Jul–Dic: {DEMAND_JUL_DEC:,} und",
             f"Stock referencia justificación: {STOCK_REF:,} und ({STOCK_TIENDAS_REF:,} tiendas + {STOCK_TALLER_REF:,} taller)",
             f"Stock actual dashboard: {j['stock_actual']:,} und",
-            f"Tela Explore (kg con 20% merma): {TELA_KG_TOTAL:.0f} kg",
+            f"Tela ya comprada (referencia): {TELA_KG_TOTAL:.0f} kg Explore",
             f"Pedido total archivo (Explore + Shorts): {TELA_PEDIDO_TOTAL:.0f} kg · split 65% / 35%",
-            "Distribución color×talla/género: proporcional a ventas del dashboard",
-            "Gris (ventas) → Gris Oscuro (producción/tela)",
+            "Color: proporción del pedido (Negro 38% · Gris Oscuro 33% · Kaki 14% · Azul 8% · Verde 6%)",
+            "Talla/género: curva de ventas del dashboard · KIDS con boost moderado (+12%)",
+            f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
+            "Gris (ventas) → Gris Oscuro (producción)",
         ]
         for b in bullets:
             ws.write(row, 0, b)
@@ -442,16 +473,20 @@ def export_excel(data: dict, path: Path) -> None:
         # ── Cantidades por Colores ──
         ws = wb.add_worksheet("Cantidades por Colores")
         row = 0
-        ws.write(row, 0, "EXPLORE PANTS — CANTIDADES POR COLOR (meta = kg justificación)", title)
+        ws.write(row, 0, "EXPLORE PANTS — UNIDADES A PRODUCIR POR COLOR", title)
         row += 2
-        ws.write_row(row, 0, ["Color", "Und a producir", "% del total", "Kg tela (justif.)", "Kg consumo neto"], hdr)
+        ws.write_row(
+            row, 0,
+            ["Color", "Und a producir", "% compra (color)", "Kg tela comprada (ref.)", "Kg neto (ref.)"],
+            hdr,
+        )
         row += 1
         for color in COLORES_PRODUCCION:
             und = color_targets[color]
             kg = TELA_KG_COLOR[color]
             ws.write(row, 0, color)
             ws.write(row, 1, und, num)
-            ws.write(row, 2, und / PRODUCE_TOTAL if PRODUCE_TOTAL else 0, pct2)
+            ws.write(row, 2, COLOR_SHARE[color], pct2)
             ws.write(row, 3, kg, dec)
             ws.write(row, 4, round(kg / (1 + TELA_SS), 1), dec)
             row += 1
@@ -484,22 +519,34 @@ def export_excel(data: dict, path: Path) -> None:
             ws.write(row, 2, g_prod, num)
             row += 2
 
-        # ── Compra de Tela ──
-        ws = wb.add_worksheet("Compra de Tela")
+        # ── Tela comprada (referencia) ──
+        ws = wb.add_worksheet("Tela Comprada (ref.)")
         row = 0
-        ws.write(row, 0, f"EXPLORE PANTS — COMPRA TELA {TELA_NOMBRE.upper()}", title)
+        ws.write(row, 0, f"EXPLORE PANTS — TELA {TELA_NOMBRE.upper()} YA COMPRADA", title)
         row += 2
-        ws.write_row(row, 0, ["Color", "Und", "Kg compra (+20% SS)", "Consumo kg/und implícito"], hdr)
+        ws.write(row, 0, "La tela ya está pedida. Esta hoja es referencia del pedido, no recalcula las und.")
+        row += 2
+        ws.write_row(row, 0, ["Color", "Und a producir", "% color compra", "Kg compra (+20% SS)", "Kg neto"], hdr)
         row += 1
         for tr in j["tela_rows"]:
             ws.write(row, 0, tr["color"])
             ws.write(row, 1, tr["und"], num)
-            ws.write(row, 2, tr["kg_compra"], dec)
-            ws.write(row, 3, tr["consumo_kg_und"], dec)
+            ws.write(row, 2, tr["share_pct"] / 100, pct2)
+            ws.write(row, 3, tr["kg_compra"], dec)
+            ws.write(row, 4, tr["kg_consumo"], dec)
             row += 1
         ws.write(row, 0, "TOTAL EXPLORE", bold)
         ws.write(row, 1, PRODUCE_TOTAL, num)
-        ws.write(row, 2, TELA_KG_TOTAL, dec)
+        ws.write(row, 2, 1, pct)
+        ws.write(row, 3, TELA_KG_TOTAL, dec)
+        row += 2
+        ws.write(row, 0, "Consumo referencial por género (kg/und)", section)
+        row += 1
+        ws.write_row(row, 0, ["Género", "Consumo ref."], hdr)
+        row += 1
+        for g in ["CAB", "DAMA", "KIDS"]:
+            ws.write_row(row, 0, [GENDER_XL[g], TELA_CONSUMO[g]])
+            row += 1
 
         # ── Compra en 2 Órdenes (réplica justificación) ──
         ws = wb.add_worksheet("Compra en 2 Órdenes")
@@ -563,11 +610,13 @@ def export_excel(data: dict, path: Path) -> None:
         ws.write(row, 0, "METODOLOGÍA — EXPLORE PANTS", title)
         row += 2
         lines = [
-            "1. La cantidad TOTAL a producir (2,908 und) viene del 80% pendiente en la justificación Novaktex.",
-            "2. El reparto por COLOR sigue el peso de kg de tela del archivo: Negro 414 · Gris Oscuro 361 · Kaki 157 · Azul 91 · Verde 66 kg.",
-            "3. Dentro de cada color, género y talla se reparten según ventas del dashboard Explore Pants.",
-            "4. La demanda Jul–Dic (2,228 und) y escenarios mensuales se mantienen del archivo de justificación.",
-            "5. Compra de tela en 2 órdenes (65%/35%) es réplica del pedido aprobado; Shorts R1 van en la misma orden pero son producto aparte.",
+            "1. TOTAL a producir: 2,908 und (80% pendiente, justificación Novaktex). La tela ya está comprada.",
+            "2. COLOR: proporción del pedido de tela — Negro 38.0% · Gris Oscuro 33.1% · Kaki 14.4% · Azul Marino 8.4% · Verde Militar 6.1%.",
+            "3. GÉNERO y TALLA: curva de ventas del dashboard dentro de cada color; KIDS con boost +12% sobre su share de ventas.",
+            f"4. Consumo referencial (no define und): CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
+            "5. KIDS excluye talla 1 en producción (venta marginal). Gris (ventas) → Gris Oscuro (producción).",
+            "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
+            "7. Hoja 'Compra en 2 Órdenes': réplica del pedido de tela aprobado (referencia logística).",
         ]
         for line in lines:
             ws.write(row, 0, line)
@@ -586,12 +635,14 @@ def main() -> None:
     ct = color_unit_targets()
     print(f"Dashboard: {OUT_HTML}")
     print(f"Excel: {OUT_XLSX}")
-    print(f"Producir total: {PRODUCE_TOTAL:,} und (justificación)")
-    print("Por color (und / kg tela):")
+    print(f"Producir total: {PRODUCE_TOTAL:,} und (justificación · tela ya comprada)")
+    print("Por color (und / % compra):")
     for c in COLORES_PRODUCCION:
-        print(f"  {c}: {ct[c]:>4} und · {TELA_KG_COLOR[c]:.0f} kg")
+        print(f"  {c}: {ct[c]:>4} und · {COLOR_SHARE[c]*100:.1f}%")
     for g in ["CAB", "DAMA", "KIDS"]:
-        print(f"  {g}: {data['summary_genero'][g]['produce']} und")
+        s = data["summary_genero"][g]["produce"]
+        pct = s / PRODUCE_TOTAL * 100 if PRODUCE_TOTAL else 0
+        print(f"  {g}: {s} und ({pct:.1f}%)")
 
 
 if __name__ == "__main__":
