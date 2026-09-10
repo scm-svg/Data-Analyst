@@ -1,21 +1,29 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.13 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.14 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - LOTES POR COLOR Y GÉNERO: si el mismo producto (ej. DAILY CLÁSICA 3.0)
+ *     tiene CAB y DAMA asignados a la misma línea o a las mismas varias
+ *     líneas (3 y 4), ya no corren en paralelo un género por línea.
+ *     Los lotes salen por color (Negro → Blanco → Marino → resto) y
+ *     dentro de cada color por género (CAB → DAMA → KIDS). El sobrante
+ *     del día pasa al siguiente lote de la familia. Si cada género tiene
+ *     una línea distinta (RIO CAB en 2, RIO DAMA en 4), sí pueden ir
+ *     en paralelo. Especiales no entran a esta regla.
+ *   - HORIZONTE 10 SEMANAS: Proyeccion y Proyeccion - SKUS muestran
+ *     10 semanas (la actual + 9). Los tableros Semana 6 a Semana 10
+ *     se dibujan igual que Planificacion / Semana 2-5 (tablero, resumen
+ *     ejecutivo y alerta de pendientes). Menú Ver Pestañas actualizado.
  *   - FIX SINTAXIS: se restauró familiaOcupaLinea_ (un recorte de v5.9.7
  *     dejaba un "}" suelto y Apps Script fallaba al guardar).
  *   - CAPACIDAD POR PRODUCTO: el techo diario de la línea es
  *     "Cap Produccion por Dia" (Por Hacer col. N / Especial col. O).
  *     Al cambiar de modelo, el sobrante del día usa la cap del que entra.
  *     Si la celda viene vacía, se usa el respaldo L1-4=130 / L5=40.
- *   - SECUENCIA DE GÉNERO: si RIO CAB, RIO DAMA y RIO KIDS caen en la
- *     misma línea, salen en lotes diarios por género (CAB → DAMA → KIDS)
- *     según la capacidad. No se mezclan géneros el mismo día en L1-4
- *     ni en paralelo en L5. El sobrante del día puede pasar al siguiente
- *     género de la familia.
+ *   - SECUENCIA DE GÉNERO: ver LOTES POR COLOR Y GÉNERO (arriba).
  *   - ALMACÉN: Fecha Entrada de Almacen = 4 días hábiles después de
  *     salir de costura (antes eran 2).
  *   - SYNC TRACKING: Por Hacer (Cantida Producida) es la BASE. Cada
@@ -72,7 +80,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.13";
+var VERSION_SISTEMA = "5.9.14";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -94,6 +102,16 @@ var COLOR_META_TEXTO_PROY = "#38761D";
 var COLOR_BORDE_INTERNO = "#D0D0D0";
 var NOMBRES_PRIO_SKU = ["Priorizacion - SKUs", "Priorizacion - SKUS", "Priorización - SKUs", "Priorizacion SKUs"];
 var HOJA_SYNC_COSTURA = "Sync Costura Aplicada";
+var SEMANAS_DEFAULT = 10;
+var SEMANAS_MAX = 10;
+var NOMBRES_HOJAS_SEMANAS = [
+  "Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5",
+  "Semana 6", "Semana 7", "Semana 8", "Semana 9", "Semana 10"
+];
+
+function nombresHojasSemanas_() {
+  return NOMBRES_HOJAS_SEMANAS.slice();
+}
 
 // =====================================================================
 //  MENÚ Y BOTONES (UNIFICADOS)
@@ -120,6 +138,11 @@ function onOpen() {
     .addItem("📅 Semana 3", "mostrarSemana3")
     .addItem("📅 Semana 4", "mostrarSemana4")
     .addItem("📅 Semana 5", "mostrarSemana5")
+    .addItem("📅 Semana 6", "mostrarSemana6")
+    .addItem("📅 Semana 7", "mostrarSemana7")
+    .addItem("📅 Semana 8", "mostrarSemana8")
+    .addItem("📅 Semana 9", "mostrarSemana9")
+    .addItem("📅 Semana 10", "mostrarSemana10")
     .addSeparator()
     .addItem("⏳ Pendiente", "mostrarPendiente")
     .addSeparator()
@@ -148,6 +171,11 @@ function mostrarSemana2() { mostrarHoja_("Semana 2"); }
 function mostrarSemana3() { mostrarHoja_("Semana 3"); }
 function mostrarSemana4() { mostrarHoja_("Semana 4"); }
 function mostrarSemana5() { mostrarHoja_("Semana 5"); }
+function mostrarSemana6() { mostrarHoja_("Semana 6"); }
+function mostrarSemana7() { mostrarHoja_("Semana 7"); }
+function mostrarSemana8() { mostrarHoja_("Semana 8"); }
+function mostrarSemana9() { mostrarHoja_("Semana 9"); }
+function mostrarSemana10() { mostrarHoja_("Semana 10"); }
 function mostrarPendiente() { mostrarHoja_("Pendiente"); }
 function mostrarAlmacenModelo() { mostrarHoja_("Entrada de Almacen Modelo"); }
 function mostrarAlmacenSkus() { mostrarHoja_("Entrada de Almacen - Skus"); }
@@ -165,10 +193,9 @@ function mostrarHoja_(nombre) {
 
 function ocultarPestanasSemanales() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var hojas = [
-    "Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5",
+  var hojas = nombresHojasSemanas_().concat([
     "Pendiente", "Entrada de Almacen Modelo", "Entrada de Almacen - Skus"
-  ];
+  ]);
 
   hojas.forEach(function(nom) {
     var h = ss.getSheetByName(nom);
@@ -201,7 +228,7 @@ function filtrarVistas() {
   if (textoBuscar === "") return;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var hojasSemanales = ["Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5"];
+  var hojasSemanales = nombresHojasSemanas_();
   var hojasEstaticas = ["Proyeccion", "Proyeccion - SKUS", "Pendiente"];
 
   hojasSemanales.forEach(function(nom) {
@@ -255,7 +282,7 @@ function filtrarVistas() {
 
 function limpiarFiltros() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var hojasSemanales = ["Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5"];
+  var hojasSemanales = nombresHojasSemanas_();
   var hojasEstaticas = ["Proyeccion", "Proyeccion - SKUS", "Pendiente"];
 
   hojasSemanales.forEach(function(nom) {
@@ -281,7 +308,7 @@ function limpiarFiltros() {
 function leerConfig_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var cfg = {
-    semanas: 5,
+    semanas: SEMANAS_DEFAULT,
     forzarMeta: false,
     lunesBase: proximoLunes_(new Date()),
     tz: ss.getSpreadsheetTimeZone()
@@ -297,7 +324,7 @@ function leerConfig_() {
       var valor = datos[i][j + 1];
       if (etiqueta.indexOf("semanas") !== -1) {
         var n = Math.floor(Number(valor));
-        if (n >= 1 && n <= 8) cfg.semanas = n;
+        if (n >= 1 && n <= SEMANAS_MAX) cfg.semanas = n;
       }
       if (etiqueta.indexOf("forzar") !== -1) {
         var v = String(valor).trim().toLowerCase();
@@ -1052,12 +1079,12 @@ function generarPlanificacionSemanal_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   limpiarFiltros();
   var cfg = leerConfig_();
-  cfg.semanas = Math.max(cfg.semanas, 5);
+  cfg.semanas = Math.max(cfg.semanas, SEMANAS_DEFAULT);
   var totalDias = DIAS_LABORALES * cfg.semanas;
 
   var hojaPorHacer = ss.getSheetByName("Por Hacer");
   var hojaEspecial = ss.getSheetByName("Por Hacer - Especial");
-  var nombresHojasSemanas = ["Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5"];
+  var nombresHojasSemanas = nombresHojasSemanas_();
 
   var hojaPriorizacion = ss.getSheetByName("Priorizacion");
   var hojaPendiente = ss.getSheetByName("Pendiente");
@@ -1377,12 +1404,13 @@ function generarPlanificacionSemanal_() {
     return piezas;
   }
 
-  function producirLote_(mP, lin, d, overflow, maxLote, soloMinima) {
+  function producirLote_(mP, lin, d, overflow, maxLote, soloMinima, colorRankFiltro) {
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
       var diaSemanaActual = d % DIAS_LABORALES;
       if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) continue;
       if (soloMinima && !t.esMinima) continue;
+      if (colorRankFiltro !== undefined && colorRankFiltro !== null && rangoColor_(t.color) !== colorRankFiltro) continue;
       var clave = claveMO_(t);
       if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
       if (t.lineaFija && t.lineaFija !== lin) continue;
@@ -1404,9 +1432,27 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
-    var soloMinima = restanteMinima_(mP) > 0;
     while (carga[lin][d] < 0.999) {
-      if (producirLote_(mP, lin, d, overflow, 0, soloMinima) <= 0) break;
+      var soloMinima = restanteMinima_(mP) > 0;
+      var rank = null;
+      var hayRank = false;
+      for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
+        var tR = mP.tareas[tiR];
+        if (tR.restante <= 0) continue;
+        if (soloMinima && !tR.esMinima) continue;
+        var claveR = claveMO_(tR);
+        var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+        if (fijaR && fijaR !== lin) continue;
+        if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
+        rank = rangoColor_(tR.color);
+        hayRank = true;
+        break;
+      }
+      if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayRank ? rank : null) <= 0) break;
+      if (restanteMinima_(mP) <= 0 && tuvoMinima_(mP)) break;
+      var famP = familiaModelo_(mP);
+      var loteP = loteFamiliaActivo_(famP, overflow);
+      if (loteP && loteP.modelo !== mP.nombre && compartenLineas_(mP, loteP.m, overflow)) break;
     }
   }
 
@@ -1425,7 +1471,7 @@ function generarPlanificacionSemanal_() {
 
   var ocupante = { "1": [], "2": [], "3": [], "4": [], "5": [] };
 
-  function lineasClaveModelo_(m, overflow) {
+  function lineasModelo_(m, overflow) {
     var seen = {};
     var out = [];
     m.tareas.forEach(function (t) {
@@ -1437,31 +1483,58 @@ function generarPlanificacionSemanal_() {
       });
     });
     out.sort();
-    return out.join(",");
+    return out;
+  }
+
+  function lineasClaveModelo_(m, overflow) {
+    return lineasModelo_(m, overflow).join(",");
+  }
+
+  function compartenLineas_(a, b, overflow) {
+    if (!a || !b) return false;
+    var sa = lineasModelo_(a, overflow);
+    var sb = lineasModelo_(b, overflow);
+    for (var iS = 0; iS < sa.length; iS++) {
+      if (sb.indexOf(sa[iS]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function loteFamiliaActivo_(fam, overflow) {
+    if (!fam) return null;
+    var best = null;
+    for (var iL = 0; iL < listaModelos.length; iL++) {
+      var mL = listaModelos[iL];
+      if (familiaModelo_(mL) !== fam || restanteModelo_(mL) <= 0) continue;
+      if (mL.esEspecial) continue;
+      var soloMin = restanteMinima_(mL) > 0;
+      for (var tL = 0; tL < mL.tareas.length; tL++) {
+        var tF = mL.tareas[tL];
+        if (tF.restante <= 0) continue;
+        if (soloMin && !tF.esMinima) continue;
+        var rank = rangoColor_(tF.color);
+        var g = ordenGenero_(mL.genero);
+        if (!best || rank < best.colorRank || (rank === best.colorRank && g < best.genero) ||
+            (rank === best.colorRank && g === best.genero && mL.nombre < best.modelo)) {
+          best = { modelo: mL.nombre, m: mL, colorRank: rank, genero: g };
+        }
+      }
+    }
+    return best;
+  }
+
+  function debeEsperarLoteFamilia_(m, overflow) {
+    if (!m || m.esEspecial) return false;
+    var fam = familiaModelo_(m);
+    if (!fam) return false;
+    var lote = loteFamiliaActivo_(fam, overflow);
+    if (!lote || lote.modelo === m.nombre) return false;
+    if (lote.m && lote.m.esEspecial) return false;
+    return compartenLineas_(m, lote.m, overflow);
   }
 
   function hayGeneroAnteriorMismaLinea_(m, overflow, dHoy) {
-    var fam = familiaModelo_(m);
-    if (!fam) return false;
-    var g = ordenGenero_(m.genero);
-    var key = lineasClaveModelo_(m, overflow);
-    if (!key) return false;
-    for (var iH = 0; iH < listaModelos.length; iH++) {
-      var h = listaModelos[iH];
-      if (h.nombre === m.nombre) continue;
-      if (familiaModelo_(h) !== fam) continue;
-      if (restanteModelo_(h) <= 0) continue;
-      if (ordenGenero_(h.genero) >= g) continue;
-      if (lineasDondeEsta_(h.nombre).length > 0) continue;
-      if (lineasClaveModelo_(h, overflow) !== key) continue;
-      var puede = h.tareas.some(function (t) {
-        if (t.restante <= 0 || dHoy < diaInicioEfectivo_(t)) return false;
-        if (dHoy < DIAS_LABORALES && (dHoy % DIAS_LABORALES) === t.diaNoLaborable) return false;
-        return elegiblesTarea_(t, overflow).length > 0;
-      });
-      if (puede) return true;
-    }
-    return false;
+    return debeEsperarLoteFamilia_(m, overflow);
   }
 
   function familiaOcupaLinea_(fam, lin, exceptNom) {
@@ -1480,28 +1553,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function debeEsperarHermano_(m, overflow) {
-    var fam = familiaModelo_(m);
-    if (!fam) return false;
-    var misLineas = {};
-    m.tareas.forEach(function (t) {
-      if (t.restante <= 0) return;
-      elegiblesTarea_(t, overflow).forEach(function (lin) { misLineas[lin] = true; });
-    });
-    var tieneOtraLibre = false;
-    ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      if (!misLineas[lin]) return;
-      if (familiaOcupaLinea_(fam, lin, m.nombre)) return;
-      var occ = ocupante[lin] || [];
-      if (occ.indexOf(m.nombre) !== -1) return;
-      if (occ.length >= maxOcupantes_(lin)) return;
-      tieneOtraLibre = true;
-    });
-    var hermanoEnLineaCompartida = false;
-    ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      if (!misLineas[lin]) return;
-      if (familiaOcupaLinea_(fam, lin, m.nombre)) hermanoEnLineaCompartida = true;
-    });
-    return hermanoEnLineaCompartida && !tieneOtraLibre;
+    return debeEsperarLoteFamilia_(m, overflow);
   }
 
   function hermanosPendientesEnLinea_(lin, d, overflow, skip, fam) {
@@ -1549,6 +1601,7 @@ function generarPlanificacionSemanal_() {
       ocupante[lin] = ocupante[lin].filter(function (mod) {
         var mO = mapaModelos[mod];
         if (!mO || restanteModelo_(mO) <= 0) return false;
+        if (debeEsperarLoteFamilia_(mO, overflowL1)) return false;
         return mO.tareas.some(function (t) {
           if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
           if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
@@ -1562,6 +1615,8 @@ function generarPlanificacionSemanal_() {
     function lineasLibresDe_(m) {
       var out = [], seen = {};
       var fam = familiaModelo_(m);
+      var loteLib = loteFamiliaActivo_(fam, overflowL1);
+      var lineasLote = loteLib ? lineasModelo_(loteLib.m, overflowL1) : [];
       m.tareas.forEach(function (t) {
         if (t.restante <= 0) return;
         elegiblesTarea_(t, overflowL1).forEach(function (lin) {
@@ -1570,6 +1625,7 @@ function generarPlanificacionSemanal_() {
           if (occ.indexOf(m.nombre) !== -1) return;
           if (occ.length >= maxOcupantes_(lin)) return;
           if (fam && familiaOcupaLinea_(fam, lin, m.nombre)) return;
+          if (loteLib && loteLib.modelo !== m.nombre && lineasLote.indexOf(lin) !== -1) return;
           seen[lin] = true;
           out.push(lin);
         });
@@ -1582,11 +1638,18 @@ function generarPlanificacionSemanal_() {
       var lastNom = ultimoModeloLinea[lin];
       var lastM = lastNom ? mapaModelos[lastNom] : null;
       if (lastM && restanteModelo_(lastM) > 0 && modeloPuedeProducirHoyNom_(lastNom, lin, d, overflowL1) &&
-          lineasDondeEsta_(lastNom).length === 0) {
+          lineasDondeEsta_(lastNom).length === 0 && !debeEsperarLoteFamilia_(lastM, overflowL1)) {
         ocupante[lin].push(lastNom);
         return;
       }
       var famLast = lastM ? familiaModelo_(lastM) : (lastNom ? familiaDeNombre_(lastNom) : "");
+      var loteLast = loteFamiliaActivo_(famLast, overflowL1);
+      if (loteLast && modeloPuedeProducirHoyNom_(loteLast.modelo, lin, d, overflowL1) &&
+          (ocupante[lin] || []).length < maxOcupantes_(lin) &&
+          ocupante[lin].indexOf(loteLast.modelo) === -1) {
+        ocupante[lin].push(loteLast.modelo);
+        return;
+      }
       var hermanos = hermanosPendientesEnLinea_(lin, d, overflowL1, {}, famLast);
       if (hermanos.length > 0 && (ocupante[lin] || []).length < maxOcupantes_(lin)) {
         ocupante[lin].push(hermanos[0].nombre);
@@ -1599,8 +1662,7 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (ya) return;
-      if (debeEsperarHermano_(m, overflowL1)) return;
-      if (hayGeneroAnteriorMismaLinea_(m, overflowL1, d)) return;
+      if (debeEsperarLoteFamilia_(m, overflowL1)) return;
       var libres = lineasLibresDe_(m);
       if (libres.length === 0) return;
       libres.sort(function (a, b) {
@@ -1675,6 +1737,15 @@ function generarPlanificacionSemanal_() {
       var famRef = lastM ? familiaModelo_(lastM) : familiaDeNombre_(lastNom);
       if (!famRef && ocupante[lin].length) famRef = familiaModelo_(mapaModelos[ocupante[lin][0]]);
       var paraParalelo = ocupante[lin].length > 0;
+      if (famRef && !paraParalelo) {
+        var loteSig = loteFamiliaActivo_(famRef, overflow);
+        if (loteSig && loteSig.modelo !== lastNom && !skip[loteSig.modelo] &&
+            !(loteSig.m && loteSig.m.esEspecial) &&
+            modeloPuedeProducirHoy_(loteSig.modelo, lin, d, overflow) &&
+            ocupante[lin].indexOf(loteSig.modelo) === -1) {
+          return loteSig.modelo;
+        }
+      }
       var generoTerminado = lastM && restanteModelo_(lastM) <= 0;
       if (famRef && !paraParalelo && generoTerminado) {
         var hermanos = hermanosPendientesEnLinea_(lin, d, overflow, skip, famRef).filter(function (h) {
@@ -1727,6 +1798,9 @@ function generarPlanificacionSemanal_() {
           if (skip[nom] || !modeloPuedeProducirHoy_(nom, lin, d, overflow)) return false;
           var mOcc = mapaModelos[nom];
           if (tuvoMinima_(mOcc) && restanteMinima_(mOcc) <= 0) return false;
+          var famOcc = familiaModelo_(mOcc);
+          var loteOcc = loteFamiliaActivo_(famOcc, overflow);
+          if (loteOcc && loteOcc.modelo !== nom && compartenLineas_(mOcc, loteOcc.m, overflow)) return false;
           return true;
         });
         if (carga[lin][d] <= before + 0.0001) {
@@ -1953,7 +2027,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
-    "• Misma familia (RIO CAB/DAMA/KIDS) en una línea: lotes por género, no mezclados.\n" +
+    "• Misma familia en la misma línea (o las mismas varias): lotes por color y género, no en paralelo.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
@@ -1984,7 +2058,7 @@ function primerDiaFila_(row) {
 }
 
 function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, infoModelo, hojasLineas, hojaPendiente, jerarquiaInversa) {
-  for (var ws = 0; ws < 5; ws++) {
+  for (var ws = 0; ws < nombresHojasSemanas.length && ws < cfg.semanas; ws++) {
     var nombreHojaS = nombresHojasSemanas[ws];
     var hojaS = ss.getSheetByName(nombreHojaS);
     if (!hojaS) continue;
@@ -2480,8 +2554,8 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
 
   var hojaProy = ss.getSheetByName("Proyeccion") || ss.insertSheet("Proyeccion");
   var hojaProySkus = ss.getSheetByName("Proyeccion - SKUS") || ss.insertSheet("Proyeccion - SKUS");
-  limpiarHojaProy_(hojaProy, 12);
-  limpiarHojaProy_(hojaProySkus, 20);
+  limpiarHojaProy_(hojaProy, 3 + cfg.semanas + 5);
+  limpiarHojaProy_(hojaProySkus, 5 + cfg.semanas + 10);
 
   var cabProy = ["Modelo", "Fecha Objetivo", "Meta (Faltante)"];
   var cabProySku = ["SKU", "Modelo", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"];
@@ -3880,7 +3954,7 @@ function obtenerDatosDashboardCompleto() {
     }
   });
 
-  var nombresSemanas = ["Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5"];
+  var nombresSemanas = nombresHojasSemanas_();
   nombresSemanas.forEach(function (nom, idx) {
     var sh = ss.getSheetByName(nom);
     var semanaKey = "Semana " + (idx + 1);
