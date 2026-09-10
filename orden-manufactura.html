@@ -10,14 +10,14 @@
   --bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;
   --tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--a2:#f75b8a;
   --gr:#4caf76;--rd:#ef4444;--yw:#ffc107;
-  --taller:#f97316;--sat:#22d3ee;--meet:#f75b8a;
+  --taller:#f97316;--sat:#22d3ee;
   --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px;
 }
 body.light{
   --bg:#f5f6fa;--surf:#ffffff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;
   --tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5;--ac:#5b6af7;--a2:#f75b8a;
   --gr:#2e9e5e;--rd:#dc3545;--yw:#e6a800;
-  --taller:#ea580c;--sat:#0891b2;--meet:#e11d70;
+  --taller:#ea580c;--sat:#0891b2;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh;transition:background .3s,color .3s}
@@ -31,66 +31,21 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:9px 14px;text-align:center;min-width:76px}
 .kpib .kv{font-family:var(--fh);font-size:1.3rem;font-weight:800;color:var(--ac);line-height:1}
 .kpib .kl{font-size:.64rem;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.theme-btn,.icon-btn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb);transition:all .2s;white-space:nowrap}
-.theme-btn:hover,.icon-btn:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
+.theme-btn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb);transition:all .2s;white-space:nowrap}
+.theme-btn:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
 .content{padding:22px 40px;max-width:1600px;margin:0 auto}
-.g2{display:grid;grid-template-columns:1.05fr .95fr;gap:14px;margin-bottom:14px}
 .g-lanes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-@media(max-width:1100px){.g2,.g-lanes{grid-template-columns:1fr}}
-@media(max-width:780px){.content,.hdr{padding-left:16px;padding-right:16px}.speak-banner{margin:10px 16px}}
-.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;transition:border-color .2s,background .3s;position:relative}
+@media(max-width:1100px){.g-lanes{grid-template-columns:1fr}}
+@media(max-width:780px){.content,.hdr{padding-left:16px;padding-right:16px}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;transition:border-color .2s,background .3s;position:relative;margin-bottom:14px}
 .card:hover{border-color:#3a3b55}
 .card h3{font-family:var(--fh);font-size:.92rem;font-weight:700;margin-bottom:2px}
 .sub{font-size:.7rem;color:var(--mu);margin-bottom:12px}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
-
-/* Speak / meeting banner */
-.speak-banner{margin:14px 40px 0;border-radius:16px;padding:14px 18px;display:none;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid rgba(247,91,138,.45);background:linear-gradient(135deg,rgba(247,91,138,.16),rgba(91,106,247,.12));position:relative;overflow:hidden}
-.speak-banner.show{display:flex}
-.speak-banner .bubble{width:48px;height:48px;border-radius:16px;background:var(--meet);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;animation:pulse 1.8s ease-in-out infinite}
-@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
-.speak-banner h2{font-family:var(--fh);font-size:1.05rem;font-weight:800}
-.speak-banner p{font-size:.82rem;color:var(--mu);margin-top:2px}
-.speak-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
-
-/* Calendar */
-.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.cal-nav h4{font-family:var(--fh);font-size:1rem;font-weight:800;text-transform:capitalize}
-.cal-nav button{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:1rem}
-.cal-nav button:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.cal-dow{font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);text-align:center;padding:4px 0;font-weight:700}
-.cal-day{aspect-ratio:1;border:1px solid transparent;background:var(--s2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:.82rem;font-weight:600;position:relative;min-height:38px;max-height:52px;transition:transform .12s,border-color .12s}
-.cal-day:hover{border-color:var(--ac);transform:translateY(-1px)}
-.cal-day.other{opacity:.28;cursor:default}
-.cal-day.today{border-color:var(--ac);box-shadow:0 0 0 2px rgba(91,106,247,.25);font-weight:800}
-.cal-day.selected{background:var(--ac);color:#fff}
-.cal-day.has-meet::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--meet);position:absolute;bottom:5px}
-.cal-day.selected.has-meet::after{background:#fff}
-.cal-day.today-meet{background:linear-gradient(180deg,rgba(247,91,138,.22),var(--s2))}
-
-/* Agenda */
-.agenda-list{display:flex;flex-direction:column;gap:8px;min-height:120px}
-.meet-card{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start}
-.meet-card.today{border-color:rgba(247,91,138,.5);background:rgba(247,91,138,.08)}
-.meet-time{font-family:var(--fh);font-weight:800;color:var(--meet);min-width:52px;font-size:.95rem}
-.meet-card h5{font-size:.88rem;font-weight:700}
-.meet-card p{font-size:.74rem;color:var(--mu);margin-top:2px}
-.meet-del{margin-left:auto;background:transparent;border:none;color:var(--mu);cursor:pointer;font-size:.9rem;padding:4px}
-.meet-del:hover{color:var(--rd)}
-.empty{color:var(--mu);font-size:.8rem;padding:18px;text-align:center;border:1px dashed var(--brd);border-radius:12px}
-.add-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
-.add-form input,.add-form textarea,.modal input,.modal textarea{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:8px;padding:8px 10px;font-family:var(--fb);font-size:.8rem;outline:none}
-.add-form input:focus,.modal input:focus{border-color:var(--ac)}
-.add-form .full{grid-column:1/-1}
 .btn{background:var(--ac);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:var(--fb);font-size:.78rem;font-weight:700;cursor:pointer}
 .btn:hover{opacity:.88}
 .btn.ghost{background:var(--s2);color:var(--tx);border:1px solid var(--brd)}
-.btn.meet{background:var(--meet)}
-.btn.taller{background:var(--taller)}
-.btn.sat{background:var(--sat);color:#042024}
 
-/* Lanes */
 .lane{border-radius:18px;padding:16px;min-height:420px;position:relative;overflow:hidden}
 .lane.taller{background:linear-gradient(180deg,rgba(249,115,22,.12),var(--surf));border:1px solid rgba(249,115,22,.35)}
 .lane.sat{background:linear-gradient(180deg,rgba(34,211,238,.1),var(--surf));border:1px solid rgba(34,211,238,.32)}
@@ -126,10 +81,11 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .status.listo{background:rgba(76,175,118,.18);color:var(--gr)}
 .mini-seq{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
 .mini-step{background:var(--s3);border:1px solid var(--brd);border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700}
+.mini-step.prio{border-color:rgba(76,175,118,.55);box-shadow:0 0 0 1px rgba(76,175,118,.25);font-weight:800}
+.prio-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.4px;color:var(--gr);margin-left:4px}
 .arrow{color:var(--mu);font-size:.7rem}
 
-/* Timeline overview */
-.overview{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.overview{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
 @media(max-width:780px){.overview{grid-template-columns:1fr}}
 .ov-row{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:4px}
 .ov-chip{flex:0 1 auto;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:8px 10px;font-size:.72rem;font-weight:700}
@@ -140,13 +96,6 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .legend{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:.7rem;color:var(--mu)}
 .legend span{display:flex;align-items:center;gap:5px}
 .dot{width:8px;height:8px;border-radius:50%}
-
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
-.modal-bg.show{display:flex}
-.modal{background:var(--surf);border:1px solid var(--brd);border-radius:16px;padding:20px;width:min(440px,100%);display:flex;flex-direction:column;gap:8px}
-.modal h3{font-family:var(--fh);margin-bottom:6px}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
-
 .drop-hint{outline:2px dashed var(--ac);border-radius:14px}
 </style>
 </head>
@@ -154,61 +103,27 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 <div class="hdr">
   <div class="hdr-l">
     <h1>Orden de <em>Manufactura</em></h1>
-    <p>Calendario de reuniones · secuencia visual Taller y Satélite</p>
+    <p>Secuencia visual Taller y Satélite · en Río y Mar, KIDS va primero</p>
   </div>
   <div class="hdr-r">
     <div class="kpi-bar">
-      <div class="kpib"><div class="kv" id="kpiToday">—</div><div class="kl">Hoy</div></div>
-      <div class="kpib"><div class="kv" id="kpiMeet" style="color:var(--meet)">0</div><div class="kl">Reuniones hoy</div></div>
       <div class="kpib"><div class="kv" id="kpiTaller" style="color:var(--taller)">0</div><div class="kl">Líneas taller</div></div>
       <div class="kpib"><div class="kv" id="kpiSat" style="color:var(--sat)">0</div><div class="kl">Líneas satélite</div></div>
     </div>
-    <button class="icon-btn" id="speakBtn" type="button" onclick="speakToday()">🔊 Escuchar</button>
     <button class="theme-btn" id="themeBtn" type="button" onclick="toggleTheme()">☀️ Light</button>
   </div>
 </div>
 
-<div class="speak-banner" id="speakBanner" role="status">
-  <div class="bubble">💬</div>
-  <div>
-    <h2 id="bannerTitle">Hoy tienes reunión</h2>
-    <p id="bannerSub"></p>
-  </div>
-  <div class="speak-actions">
-    <button class="btn meet" type="button" onclick="speakToday()">Escuchar aviso</button>
-    <button class="btn ghost" type="button" onclick="document.getElementById('calCard').scrollIntoView({behavior:'smooth'})">Ver calendario</button>
-  </div>
-</div>
-
 <div class="content">
-  <div class="g2">
-    <div class="card" id="calCard">
-      <h3>Calendario</h3>
-      <div class="sub">Los días con punto rosa tienen reunión. Hoy se marca en azul.</div>
-      <div class="cal-nav">
-        <button type="button" onclick="shiftMonth(-1)" aria-label="Mes anterior">‹</button>
-        <h4 id="calTitle"></h4>
-        <button type="button" onclick="shiftMonth(1)" aria-label="Mes siguiente">›</button>
-      </div>
-      <div class="cal-grid" id="calGrid"></div>
-    </div>
-    <div class="card">
-      <h3 id="agendaTitle">Agenda</h3>
-      <div class="sub" id="agendaSub">Selecciona un día para ver o agregar reuniones.</div>
-      <div class="agenda-list" id="agendaList"></div>
-      <button class="btn meet" id="addMeetBtn" type="button" style="margin-top:12px" onclick="openMeetModal()">+ Agregar reunión</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px">
+  <div class="card">
     <h3>Secuencia de producción</h3>
     <div class="sub">Orden de manufactura en paralelo: Taller (interno) y Satélite. Arrastra las tarjetas para reordenar. Clic en el estado para cambiarlo.</div>
     <div class="legend">
       <span><i class="dot" style="background:var(--taller)"></i> Taller</span>
       <span><i class="dot" style="background:var(--sat)"></i> Satélite</span>
+      <span><i class="dot" style="background:#86efac"></i> KIDS prioridad</span>
       <span><i class="dot" style="background:#a5b4fc"></i> CAB</span>
       <span><i class="dot" style="background:#f9a8d4"></i> DAMA</span>
-      <span><i class="dot" style="background:#86efac"></i> KIDS</span>
     </div>
     <div class="overview">
       <div>
@@ -228,7 +143,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
         <div>
           <span class="lane-badge">🏭 Manufactura taller</span>
           <h3>Producción interna</h3>
-          <p class="hint">Río y Mar van por género: CAB → DAMA → KIDS</p>
+          <p class="hint">Río y Mar: KIDS es prioridad, luego CAB y DAMA</p>
         </div>
         <button class="btn ghost" type="button" onclick="resetLane('taller')">↺ Orden original</button>
       </div>
@@ -248,40 +163,10 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
   </div>
 </div>
 
-<div class="footer">Orden de manufactura · Taller &amp; Satélite · los cambios de orden, estado y reuniones se guardan en este navegador</div>
-
-<div class="modal-bg" id="meetModal" onclick="if(event.target===this)closeMeetModal()">
-  <div class="modal" role="dialog" aria-labelledby="meetModalTitle">
-    <h3 id="meetModalTitle">Nueva reunión</h3>
-    <label class="sub" for="mTitle">Título</label>
-    <input id="mTitle" placeholder="Reunión de manufactura">
-    <div class="add-form" style="margin-top:0">
-      <div>
-        <label class="sub" for="mDate">Fecha</label>
-        <input id="mDate" type="date">
-      </div>
-      <div>
-        <label class="sub" for="mTime">Hora</label>
-        <input id="mTime" type="time" value="10:00">
-      </div>
-      <input class="full" id="mPlace" placeholder="Lugar (ej. Taller)">
-      <textarea class="full" id="mNotes" rows="3" placeholder="Notas"></textarea>
-    </div>
-    <div class="modal-actions">
-      <button class="btn ghost" type="button" onclick="closeMeetModal()">Cancelar</button>
-      <button class="btn meet" type="button" onclick="saveMeeting()">Guardar</button>
-    </div>
-  </div>
-</div>
+<div class="footer">Orden de manufactura · Taller &amp; Satélite · el orden y el estado se guardan en este navegador</div>
 
 <script>
-const LS = {
-  meetings: 'om_meetings_v1',
-  order: 'om_order_v1',
-  status: 'om_status_v1',
-  theme: 'om_theme',
-  seeded: 'om_seeded_v1'
-};
+const LS = { order: 'om_order_v1', status: 'om_status_v1', theme: 'om_theme' };
 
 const LINKS = {
   rio: 'Dashboard_Rio_Original_Actualizado (1).html',
@@ -294,8 +179,8 @@ const LINKS = {
 
 const DEFAULTS = {
   taller: [
-    {id:'rio', name:'Río Original', meta:'Colección core · 3 géneros', genders:['CAB','DAMA','KIDS'], link:LINKS.rio},
-    {id:'mar', name:'Mar Original', meta:'Colección core · 3 géneros', genders:['CAB','DAMA','KIDS']},
+    {id:'rio', name:'Río Original', meta:'KIDS prioridad · luego CAB y DAMA', genders:['KIDS','CAB','DAMA'], link:LINKS.rio},
+    {id:'mar', name:'Mar Original', meta:'KIDS prioridad · luego CAB y DAMA', genders:['KIDS','CAB','DAMA']},
     {id:'basic', name:'Basic Line', meta:'Línea básica de continuidad', link:LINKS.basic},
     {id:'short-r1', name:'Short R1 / S', meta:'Shorts de taller'}
   ],
@@ -311,14 +196,9 @@ const DEFAULTS = {
 const CATALOG = {};
 DEFAULTS.taller.concat(DEFAULTS.satelite).forEach(function(p){ CATALOG[p.id] = p; });
 
-const DOW = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const STATUSES = ['pendiente','proceso','listo'];
 const STATUS_LABEL = {pendiente:'Pendiente', proceso:'En proceso', listo:'Listo'};
 
-let view = new Date();
-let selected = isoDate(new Date());
-let meetings = loadJSON(LS.meetings, []);
 let order = loadJSON(LS.order, {taller: DEFAULTS.taller.map(p=>p.id), satelite: DEFAULTS.satelite.map(p=>p.id)});
 let statusMap = loadJSON(LS.status, {});
 
@@ -329,187 +209,6 @@ function loadJSON(key, fallback){
   }catch(e){ return fallback; }
 }
 function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
-function isoDate(d){
-  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
-  return y+'-'+m+'-'+day;
-}
-function parseISO(s){
-  const p=s.split('-');
-  return new Date(+p[0], +p[1]-1, +p[2]);
-}
-function fmtLong(s){
-  const d=parseISO(s);
-  return d.toLocaleDateString('es-VE',{weekday:'long', day:'numeric', month:'long'});
-}
-function uid(){ return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
-
-function seedTodayMeeting(){
-  if(localStorage.getItem(LS.seeded)) return;
-  const today = isoDate(new Date());
-  const exists = meetings.some(function(m){ return m.date===today; });
-  if(!exists){
-    meetings.push({
-      id: uid(),
-      date: today,
-      time: '10:00',
-      title: 'Reunión de manufactura',
-      place: 'Taller',
-      notes: 'Revisar orden de producción: Taller (Río, Mar, Basic Line, Short R1/S) y Satélite (Costa, Explore, Lite, Daily Kids, Motion Loop Kids).'
-    });
-    saveJSON(LS.meetings, meetings);
-  }
-  localStorage.setItem(LS.seeded, '1');
-}
-
-function meetingsOn(date){
-  return meetings.filter(function(m){ return m.date===date; }).sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
-}
-
-function renderCalendar(){
-  const y=view.getFullYear(), m=view.getMonth();
-  document.getElementById('calTitle').textContent = MONTHS[m]+' '+y;
-  const first = new Date(y,m,1);
-  let start = first.getDay(); // 0 sun
-  start = start===0 ? 6 : start-1; // monday first
-  const daysIn = new Date(y,m+1,0).getDate();
-  const prevIn = new Date(y,m,0).getDate();
-  const today = isoDate(new Date());
-  const cells = [];
-  DOW.forEach(function(d){ cells.push('<div class="cal-dow">'+d+'</div>'); });
-  for(let i=0;i<42;i++){
-    let day, month=m, year=y, cls='cal-day';
-    if(i<start){
-      day = prevIn - start + i + 1;
-      month = m-1; if(month<0){month=11;year--;}
-      cls += ' other';
-    }else if(i>=start+daysIn){
-      day = i - start - daysIn + 1;
-      month = m+1; if(month>11){month=0;year++;}
-      cls += ' other';
-    }else{
-      day = i - start + 1;
-    }
-    const iso = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    if(iso===today) cls += ' today';
-    if(iso===selected) cls += ' selected';
-    const n = meetingsOn(iso).length;
-    if(n) cls += ' has-meet';
-    if(iso===today && n) cls += ' today-meet';
-    const click = cls.indexOf('other')>=0 ? '' : 'onclick="selectDay(\''+iso+'\')"';
-    cells.push('<button type="button" class="'+cls+'" '+click+' aria-label="'+iso+'">'+day+'</button>');
-  }
-  const lastWeek = cells.slice(7 + 35);
-  if(lastWeek.length===7 && lastWeek.every(function(h){ return h.indexOf(' other')>=0; })){
-    cells.splice(7+35, 7);
-  }
-  document.getElementById('calGrid').innerHTML = cells.join('');
-}
-
-function selectDay(iso){
-  selected = iso;
-  renderCalendar();
-  renderAgenda();
-}
-
-function renderAgenda(){
-  const list = meetingsOn(selected);
-  const today = isoDate(new Date());
-  document.getElementById('agendaTitle').textContent = selected===today ? 'Agenda de hoy' : 'Agenda';
-  document.getElementById('agendaSub').textContent = fmtLong(selected);
-  const el = document.getElementById('agendaList');
-  if(!list.length){
-    el.innerHTML = '<div class="empty">No hay reuniones este día. Agrega una para que el calendario la anuncie.</div>';
-    return;
-  }
-  el.innerHTML = list.map(function(m){
-    const isToday = m.date===today;
-    return '<article class="meet-card'+(isToday?' today':'')+'">'+
-      '<div class="meet-time">'+(m.time||'—')+'</div>'+
-      '<div><h5>'+esc(m.title)+'</h5><p>'+esc(m.place||'')+(m.notes?' · '+esc(m.notes):'')+'</p></div>'+
-      '<button class="meet-del" type="button" onclick="deleteMeeting(\''+m.id+'\')" aria-label="Eliminar">✕</button>'+
-    '</article>';
-  }).join('');
-}
-
-function renderBanner(){
-  const today = isoDate(new Date());
-  const list = meetingsOn(today);
-  const banner = document.getElementById('speakBanner');
-  document.getElementById('kpiToday').textContent = new Date().toLocaleDateString('es-VE',{day:'2-digit',month:'short'});
-  document.getElementById('kpiMeet').textContent = list.length;
-  if(!list.length){
-    banner.classList.remove('show');
-    return;
-  }
-  banner.classList.add('show');
-  const first = list[0];
-  document.getElementById('bannerTitle').textContent = list.length===1
-    ? 'Hoy tienes una reunión'
-    : 'Hoy tienes '+list.length+' reuniones';
-  document.getElementById('bannerSub').textContent = list.map(function(m){
-    return (m.time||'')+' · '+m.title+(m.place?' · '+m.place:'');
-  }).join('   |   ');
-  document.title = 'Hoy: '+(first.time||'')+' '+first.title+' · Orden de Manufactura';
-}
-
-function speakText(){
-  const today = isoDate(new Date());
-  const list = meetingsOn(today);
-  if(!window.speechSynthesis) return 'Este navegador no puede hablar.';
-  window.speechSynthesis.cancel();
-  let msg;
-  if(!list.length){
-    msg = 'Hoy '+fmtLong(today)+' no tienes reuniones en el calendario.';
-  }else{
-    msg = 'Atención. Hoy '+fmtLong(today)+' tienes '+list.length+' reunión'+(list.length>1?'es':'')+'. ';
-    msg += list.map(function(m,i){
-      return (list.length>1?('Reunión '+(i+1)+': '):'') + m.title + (m.time?(' a las '+m.time.replace(':',' ')+' horas'):'') + (m.place?(' en '+m.place):'') + '.';
-    }).join(' ');
-  }
-  const u = new SpeechSynthesisUtterance(msg);
-  u.lang = 'es-VE';
-  u.rate = 1;
-  const voices = window.speechSynthesis.getVoices();
-  const es = voices.find(function(v){ return v.lang && v.lang.toLowerCase().startsWith('es'); });
-  if(es) u.voice = es;
-  window.speechSynthesis.speak(u);
-  return msg;
-}
-function speakToday(){ speakText(); }
-
-function openMeetModal(){
-  document.getElementById('mDate').value = selected;
-  document.getElementById('mTime').value = '10:00';
-  document.getElementById('mTitle').value = 'Reunión de manufactura';
-  document.getElementById('mPlace').value = '';
-  document.getElementById('mNotes').value = '';
-  document.getElementById('meetModal').classList.add('show');
-  document.getElementById('mTitle').focus();
-}
-function closeMeetModal(){ document.getElementById('meetModal').classList.remove('show'); }
-function saveMeeting(){
-  const title = document.getElementById('mTitle').value.trim();
-  const date = document.getElementById('mDate').value;
-  if(!title || !date) return;
-  meetings.push({
-    id: uid(),
-    date: date,
-    time: document.getElementById('mTime').value,
-    title: title,
-    place: document.getElementById('mPlace').value.trim(),
-    notes: document.getElementById('mNotes').value.trim()
-  });
-  saveJSON(LS.meetings, meetings);
-  selected = date;
-  view = parseISO(date);
-  closeMeetModal();
-  refresh();
-}
-function deleteMeeting(id){
-  meetings = meetings.filter(function(m){ return m.id!==id; });
-  saveJSON(LS.meetings, meetings);
-  refresh();
-}
 
 function renderLanes(){
   renderLane('taller', 'flowTaller', 'ovTaller');
@@ -524,7 +223,9 @@ function renderLane(lane, flowId, ovId){
     const st = statusMap[id] || 'pendiente';
     const seq = p.genders && p.genders.length
       ? '<div class="mini-seq">'+p.genders.map(function(g,gi){
-          return (gi?'<span class="arrow">→</span>':'')+'<span class="mini-step tag '+g.toLowerCase()+'">'+g+'</span>';
+          const prio = g==='KIDS';
+          return (gi?'<span class="arrow">→</span>':'')+
+            '<span class="mini-step tag '+g.toLowerCase()+(prio?' prio':'')+'">'+g+(prio?'<span class="prio-lbl">prioridad</span>':'')+'</span>';
         }).join('')+'</div>'
       : '';
     const link = p.link ? '<div class="tags" style="margin-top:8px"><span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span></div>' : '';
@@ -599,28 +300,12 @@ function esc(s){
   });
 }
 
-function shiftMonth(n){
-  view = new Date(view.getFullYear(), view.getMonth()+n, 1);
-  renderCalendar();
-}
-
-function refresh(){
-  renderCalendar();
-  renderAgenda();
-  renderBanner();
-  renderLanes();
-}
-
 (function init(){
   if(localStorage.getItem(LS.theme)==='light'){
     document.body.classList.add('light');
     document.getElementById('themeBtn').textContent = '🌙 Dark';
   }
-  seedTodayMeeting();
-  refresh();
-  if(window.speechSynthesis){
-    window.speechSynthesis.onvoiceschanged = function(){};
-  }
+  renderLanes();
 })();
 </script>
 </body>
