@@ -270,10 +270,18 @@ def active_colors(genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame) -> 
     return sorted(disp, key=lambda c: sales_rank.get(c, 0), reverse=True)
 
 
-def active_tallas(genero: str, g_vel: pd.DataFrame) -> list[str]:
-    sold = set(g_vel["talla"].astype(str).unique())
-    standard = set(TALLA_ORDER.get(genero, []))
-    return sort_tallas(genero, list(sold | standard))
+def active_tallas(genero: str, hist_vel: pd.DataFrame) -> list[str]:
+    """Only tallas with real sales — same basis as dashboard talla charts."""
+    sold = hist_vel.groupby("talla")["v"].sum()
+    sold = sold[sold > 0].index.astype(str).tolist()
+    return sort_tallas(genero, sold)
+
+
+def calc_prop(hist: float, line_total: float, fc: float) -> int:
+    """Dashboard calcProp: round(hist / lineTotal * fc)."""
+    if not line_total or not fc:
+        return 0
+    return int(round(hist / line_total * fc))
 
 
 def set_variant_qty(t: dict, qty: int, shares: dict[str, float]) -> None:
@@ -374,23 +382,19 @@ def build_gender_plan_proportional(
     shares: dict[str, float],
     target: int,
 ) -> tuple[dict, dict]:
-    """Build production from sales mix: color % × talla curve + stock gap, no flat blocks."""
+    """Build production from dashboard-style sales proportions (color × talla)."""
     hs = HIGH_SEASON_FACTOR[genero]
-    cov = COVERAGE_MONTHS[genero]
-    safety = SAFETY_BUFFER[genero]
-    floor = MIN_VARIANT[genero]
     low_color_floor = LOW_COLOR_FLOOR[genero]
 
     g_vel = remap_vel_colors(g_vel, genero)
     hist_vel = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
     colors = active_colors(genero, g_vel, all_sales)
-    tallas = active_tallas(genero, g_vel)
-    color_sales = g_vel.groupby("color")["v"].sum().add(
-        hist_vel.groupby("color")["v"].sum(), fill_value=0
-    ).sort_values(ascending=False)
+    sold_tallas = active_tallas(genero, hist_vel)
+    color_sales = hist_vel.groupby("color")["v"].sum().sort_values(ascending=False)
     color_total = color_sales.sum() or 1
-    gender_talla = g_vel.groupby("talla")["v"].sum()
-    gender_talla = (gender_talla / (gender_talla.sum() or 1)).to_dict()
+    gender_total = hist_vel["v"].sum() or 1
+    gender_talla = hist_vel.groupby("talla")["v"].sum()
+    gender_talla_pct = (gender_talla / gender_total).to_dict()
 
     mix_weights: dict[tuple[str, str], float] = {}
     meta: dict[tuple[str, str], dict] = {}
@@ -398,16 +402,19 @@ def build_gender_plan_proportional(
 
     for color in colors:
         c_vel = g_vel[g_vel["color"] == color]
+        c_hist = hist_vel[hist_vel["color"] == color]
+        c_total = float(c_hist["v"].sum())
+        c_talla = c_hist.groupby("talla")["v"].sum()
         tier = color_tier_multiplier(color, color_sales, genero)
-        c_hist = hist_vel[hist_vel["color"] == color]["v"].sum()
-        v_base = weighted_velocity(c_vel) if len(c_vel) else max(c_hist / max(len(VELOCITY_PERIODS), 1) * 0.12, 0.8)
+        v_base = weighted_velocity(c_vel) if len(c_vel) else max(c_total / max(len(VELOCITY_PERIODS), 1) * 0.12, 0.8)
         v_adj = v_base * hs * tier
 
-        if len(c_vel):
-            t_mix = c_vel.groupby("talla")["v"].sum()
-            t_mix = (t_mix / (t_mix.sum() or 1)).to_dict()
+        if c_total > 0:
+            color_tallas = sort_tallas(genero, list(c_talla.index.astype(str)))
+            t_mix = (c_talla / c_total).to_dict()
         else:
-            t_mix = gender_talla
+            color_tallas = sold_tallas
+            t_mix = gender_talla_pct
 
         color_variants = production_color_variants(color, genero)
         stk_rows = inv[(inv["genero"] == genero) & (inv["color"].isin(color_variants))]
@@ -423,17 +430,28 @@ def build_gender_plan_proportional(
             "v_mes": round(v_adj, 1),
         }
 
-        for talla in tallas:
+        for talla in color_tallas:
+            ct = float(c_talla.get(talla, 0))
+            if ct > 0:
+                w = (ct / gender_total) * tier
+                t_share = ct / c_total if c_total else gender_talla_pct.get(talla, 0)
+            elif c_total > 0 and talla in sold_tallas:
+                t_share = gender_talla_pct.get(talla, 0)
+                w = (c_total * t_share / gender_total) * tier
+            else:
+                t_share = gender_talla_pct.get(talla, 0)
+                w = (t_share / max(len(colors), 1)) * tier * 0.25
+
+            if w <= 0:
+                continue
+
             tdf = c_vel[c_vel["talla"] == talla] if len(c_vel) else pd.DataFrame()
-            tv_base = weighted_velocity(tdf) if len(tdf) else v_base * t_mix.get(talla, 1 / len(tallas))
+            tv_base = weighted_velocity(tdf) if len(tdf) else v_base * t_share
             tv_adj = tv_base * hs * tier
             inv_mask = (inv["genero"] == genero) & (inv["color"].isin(color_variants)) & (inv["talla"] == talla)
             t_stk = int(inv.loc[inv_mask, "v"].sum())
             t_stk_taller = int(inv.loc[inv_mask & (inv["tienda"] == "TALLER"), "v"].sum())
             t_cob = round(t_stk / tv_adj, 1) if tv_adj > 0 else 99.0
-            need = max(0.0, tv_adj * cov - t_stk) * safety
-            t_share = t_mix.get(talla, 1 / len(tallas))
-            w = max(v_adj * t_share + need, 0.15 * t_share if color in COLORES_DISP.get(genero, []) else 0.05)
             mix_weights[(color, talla)] = w
             meta[(color, talla)] = {
                 "v_mes_base": round(tv_base, 1),
@@ -445,23 +463,21 @@ def build_gender_plan_proportional(
                 "urgente": bool(t_cob < 3),
             }
 
-    allocated = allocate_by_weights(mix_weights, target, floor=floor)
+    allocated = allocate_by_weights(mix_weights, target, floor=0)
 
-    # Boost low colors: ensure each active color has varied minimum total (not 7×3 flat)
     color_totals = defaultdict(int)
     for (color, _), qty in allocated.items():
         color_totals[color] += qty
     for color in colors:
         c_share = (color_sales.get(color, 0) / color_total) if color in color_sales.index else 0.0
         tier = color_tier_multiplier(color, color_sales, genero)
-        min_color = max(
-            floor * len(tallas),
-            int(low_color_floor * tier * (0.55 + c_share * 8)),
-        )
+        min_color = max(8, int(low_color_floor * tier * (0.55 + c_share * 8)))
         if color_totals[color] >= min_color:
             continue
         deficit = min_color - color_totals[color]
-        color_keys = [(color, t) for t in tallas]
+        color_keys = [k for k in mix_weights if k[0] == color]
+        if not color_keys:
+            continue
         sub_w = {k: mix_weights[k] for k in color_keys}
         sub_alloc = allocate_by_weights(sub_w, deficit, floor=0)
         for k, add in sub_alloc.items():
@@ -469,9 +485,9 @@ def build_gender_plan_proportional(
             color_totals[color] += add
 
     total_now = sum(allocated.values())
-    if total_now != target:
+    if total_now != target and total_now > 0:
         allocated = allocate_by_weights(
-            {k: max(v, floor) for k, v in allocated.items()}, target, floor=floor
+            {k: float(v) for k, v in allocated.items() if v > 0}, target, floor=0
         )
 
     plan[:] = [p for p in plan if p["genero"] != genero]
@@ -480,8 +496,9 @@ def build_gender_plan_proportional(
     for color in colors:
         cm = color_meta[color]
         talla_objs = []
-        for talla in tallas:
-            qty = allocated.get((color, talla), floor)
+        for (c, talla), qty in sorted(allocated.items(), key=lambda x: (-x[1], x[0][1])):
+            if c != color or qty <= 0:
+                continue
             m = meta[(color, talla)]
             t_obj = {
                 "talla": str(talla),
@@ -619,7 +636,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "stores_order": stores_order,
         "stock_taller": int(sum(sbs.get("TALLER", {}).values())),
         "line_order": line_order,
-        "method": "proportional_mix_color_talla",
+        "method": "sales_prop_color_talla",
         "high_season_factor": max(HIGH_SEASON_FACTOR.values()),
         "gender_season_factors": HIGH_SEASON_FACTOR,
         "tolon_boost": TOLON_BOOST,
