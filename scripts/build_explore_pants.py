@@ -28,7 +28,9 @@ MAX_RANGE_PCT = 0.06
 TELA_CONSUMO = {"CAB": 0.30, "DAMA": 0.25, "KIDS": 0.22}  # KIDS ligeramente sobre 0.20
 
 # Meta explícita KIDS (resto CAB/DAMA se reparte por ventas)
-KIDS_TARGET = 500
+KIDS_TARGET_MIN = 550
+KIDS_TARGET_MAX = 620
+KIDS_TARGET = 585  # centro del rango pedido
 
 PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
     "CAB": {"3XL"},
@@ -346,6 +348,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
         "method": "justificacion_novaktex_unidades",
         "tela_consumo_ref": TELA_CONSUMO,
         "kids_target": KIDS_TARGET,
+        "kids_target_range": [KIDS_TARGET_MIN, KIDS_TARGET_MAX],
         "color_production_boost": COLOR_PRODUCTION_BOOST,
         "production_exclude_tallas": {g: sorted(t) for g, t in PRODUCTION_EXCLUDE_TALLAS.items()},
         "target_produce_min": {"TOTAL": PRODUCE_TOTAL, **{g: summary[g]["produce"] for g in summary}},
@@ -390,7 +393,7 @@ def patch_html(template: str, data: dict) -> str:
 
     note = (
         " · <span style=\"color:#f97316\">Producción: "
-        f"{PRODUCE_TOTAL:,} und (color compra · talla ventas · KIDS {KIDS_TARGET:,}) "
+        f"{PRODUCE_TOTAL:,} und (color compra · talla ventas · KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,}) "
         f"· demanda Jul–Dic {DEMAND_JUL_DEC:,}</span>"
     )
     if "justificación Novaktex" not in html:
@@ -440,7 +443,7 @@ def export_excel(data: dict, path: Path) -> None:
             f"Tela ya comprada (referencia): {TELA_KG_TOTAL:.0f} kg Explore",
             f"Pedido total archivo (Explore + Shorts): {TELA_PEDIDO_TOTAL:.0f} kg · split 65% / 35%",
             "Color: base compra + boost Kaki/Azul/Verde para no dejarlos tan bajos",
-            f"Talla/género: curva ventas · KIDS meta {KIDS_TARGET:,} und · CAB sin 3XL",
+            f"Talla/género: curva ventas · KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und · CAB sin 3XL",
             f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
             "Gris (ventas) → Gris Oscuro (producción)",
         ]
@@ -628,7 +631,7 @@ def export_excel(data: dict, path: Path) -> None:
         lines = [
             "1. TOTAL a producir: 2,908 und (80% pendiente, justificación Novaktex). La tela ya está comprada.",
             f"2. COLOR: base compra + boost Kaki +10% · Azul Marino +15% · Verde Militar +15% → {color_pct}.",
-            f"3. GÉNERO y TALLA: curva ventas por color; KIDS meta {KIDS_TARGET:,} und; CAB sin 3XL; KIDS sin talla 1.",
+            f"3. GÉNERO y TALLA: curva ventas por color; KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und (meta {KIDS_TARGET:,}); CAB sin 3XL; KIDS sin talla 1.",
             f"4. Consumo referencial (no define und): CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
             "5. Gris (ventas) → Gris Oscuro (producción).",
             "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
