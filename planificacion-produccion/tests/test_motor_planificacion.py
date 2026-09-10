@@ -2202,6 +2202,9 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(d0_2, {"RIO CAB": 130}, d0_2)
         self.assertEqual(d0_4, {"RIO CAB": 130}, d0_4)
         self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "RIO DAMA" and t["plan"]["2"][0] + t["plan"]["4"][0] > 0), 0)
+        d1_2 = self._por_dia_linea(out, "2", 1)
+        d1_4 = self._por_dia_linea(out, "4", 1)
+        self.assertEqual(d1_2.get("RIO CAB", 0) + d1_4.get("RIO CAB", 0), 140, "2=%s 4=%s" % (d1_2, d1_4))
 
     def test_secuencia_vacia_sigue_paralelo(self):
         """Sin No, dos líneas libres siguen en paralelo (un género por línea)."""

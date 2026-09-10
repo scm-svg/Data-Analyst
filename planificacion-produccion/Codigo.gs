@@ -1777,7 +1777,7 @@ function generarPlanificacionSemanal_() {
         return mO.tareas.some(function (t) {
           if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
           if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
-          if (t.lineaFija && t.lineaFija !== lin) return false;
+          if (!mO.secuenciaNo && t.lineaFija && t.lineaFija !== lin) return false;
           return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
         });
       });
