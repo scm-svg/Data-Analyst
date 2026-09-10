@@ -101,6 +101,16 @@ TALLA_ORDER = {
 TARGET_PRODUCE_MIN = {"CAB": 2650, "DAMA": 2450, "KIDS": 2950}
 MIN_VARIANT = {"CAB": 1, "DAMA": 1, "KIDS": 1}
 LOW_COLOR_FLOOR = {"CAB": 28, "DAMA": 32, "KIDS": 38}
+# Tallas fuera de proyección de producción (ventas históricas siguen en dashboard)
+PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
+    "CAB": {"3XL", "4XL"},
+    "DAMA": {"2XL"},
+}
+# Ajuste fino sobre curva de ventas antes de repartir el objetivo
+TALLA_WEIGHT_BOOST: dict[str, dict[str, float]] = {
+    "CAB": {"2XL": 1.22},
+    "DAMA": {"L": 1.22},
+}
 
 
 def norm_color(c: str) -> str:
@@ -270,11 +280,19 @@ def active_colors(genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame) -> 
     return sorted(disp, key=lambda c: sales_rank.get(c, 0), reverse=True)
 
 
-def active_tallas(genero: str, hist_vel: pd.DataFrame) -> list[str]:
+def active_tallas(genero: str, hist_vel: pd.DataFrame, *, for_production: bool = False) -> list[str]:
     """Only tallas with real sales — same basis as dashboard talla charts."""
     sold = hist_vel.groupby("talla")["v"].sum()
     sold = sold[sold > 0].index.astype(str).tolist()
-    return sort_tallas(genero, sold)
+    tallas = sort_tallas(genero, sold)
+    if for_production:
+        excluded = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
+        tallas = [t for t in tallas if t not in excluded]
+    return tallas
+
+
+def production_talla_boost(genero: str, talla: str) -> float:
+    return TALLA_WEIGHT_BOOST.get(genero, {}).get(talla, 1.0)
 
 
 def calc_prop(hist: float, line_total: float, fc: float) -> int:
@@ -389,7 +407,8 @@ def build_gender_plan_proportional(
     g_vel = remap_vel_colors(g_vel, genero)
     hist_vel = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
     colors = active_colors(genero, g_vel, all_sales)
-    sold_tallas = active_tallas(genero, hist_vel)
+    sold_tallas = active_tallas(genero, hist_vel, for_production=True)
+    excluded_tallas = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
     color_sales = hist_vel.groupby("color")["v"].sum().sort_values(ascending=False)
     color_total = color_sales.sum() or 1
     gender_total = hist_vel["v"].sum() or 1
@@ -431,6 +450,8 @@ def build_gender_plan_proportional(
         }
 
         for talla in color_tallas:
+            if talla in excluded_tallas:
+                continue
             ct = float(c_talla.get(talla, 0))
             if ct > 0:
                 w = (ct / gender_total) * tier
@@ -442,6 +463,7 @@ def build_gender_plan_proportional(
                 t_share = gender_talla_pct.get(talla, 0)
                 w = (t_share / max(len(colors), 1)) * tier * 0.25
 
+            w *= production_talla_boost(genero, talla)
             if w <= 0:
                 continue
 
