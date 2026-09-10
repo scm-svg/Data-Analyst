@@ -1,10 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.16 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.17 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - SECUENCIA OPCIONAL POR MODELO: en Priorizacion columna H
+ *     ("Secuencia" / "Secuencia Genero"), si el valor es "No" ese
+ *     modelo no usa el lote producto-género-color. Puede ocupar todas
+ *     sus líneas asignadas hasta terminar. Vacío o cualquier otro valor
+ *     mantiene la distribución normal (paralelo si hay 2 líneas libres;
+ *     si no, Negro → Blanco → Marino y CAB → DAMA → KIDS).
  *   - FALTANTE SIN LÍNEA: las filas de Por Hacer con unidades faltantes
  *     y Linea de Produccion vacía ya no se descartan. Se toma la línea
  *     de Priorizacion, si no de la hoja BS (MODELO / Lineas de
@@ -85,7 +91,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.16";
+var VERSION_SISTEMA = "5.9.17";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -567,6 +573,26 @@ function minimaDeModelo_(mapaMinimas, modelo) {
     }
   }
   return 0;
+}
+
+function esSecuenciaNo_(val) {
+  return quitarTildes_(normLow_(val)) === "no";
+}
+
+function secuenciaNoDeModelo_(mapa, modelo) {
+  if (!mapa) return false;
+  if (mapa[modelo]) return true;
+  var alvo = claveModeloNorm_(modelo);
+  if (mapa[alvo]) return true;
+  var alvoBase = alvo.replace(/\s*\(especial\)\s*$/, "");
+  for (var k in mapa) {
+    if (!mapa[k]) continue;
+    var nk = claveModeloNorm_(k);
+    if (nk === alvo || nk === alvoBase || nk.replace(/\s*\(especial\)\s*$/, "") === alvoBase) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function diaInicioEfectivo_(t) {
@@ -1186,17 +1212,19 @@ function generarPlanificacionSemanal_() {
   var mapaFechaModelo = {};
   var mapaMinimas = {};
   var mapaLineasModelo = {};
+  var mapaSecuenciaNo = {};
   var mapaMinimasSku = leerMinimasSku_(ss);
   var mapaBs = leerMapaBs_(ss);
 
   if (hojaPriorizacion && hojaPriorizacion.getLastRow() >= 3) {
-    var anchoPrio = Math.max(6, hojaPriorizacion.getLastColumn());
+    var anchoPrio = Math.max(8, hojaPriorizacion.getLastColumn());
     var headersPrio = hojaPriorizacion.getRange(2, 2, 1, anchoPrio - 1).getValues()[0];
     var idxTipo = idxPorFragmento_(headersPrio, ["tipo"]);
     var idxPrio = idxPorFragmento_(headersPrio, ["prioridad"]);
     var idxFec = idxPorFragmento_(headersPrio, ["fecha"]);
     var idxMin = idxCantidadMinima_(headersPrio);
     var idxLinP = idxPorFragmento_(headersPrio, ["linea", "línea"]);
+    var idxSeq = idxPorFragmento_(headersPrio, ["secuencia"]);
 
     var datosPrio = hojaPriorizacion.getRange(3, 2, hojaPriorizacion.getLastRow() - 2, anchoPrio - 1).getValues();
     for (var p = 0; p < datosPrio.length; p++) {
@@ -1220,6 +1248,9 @@ function generarPlanificacionSemanal_() {
       if (idxLinP !== -1) {
         var lsPref = parsearLineas_(datosPrio[p][idxLinP]);
         if (lsPref.length > 0) mapaLineasModelo[modP] = lsPref;
+      }
+      if (idxSeq !== -1 && esSecuenciaNo_(datosPrio[p][idxSeq])) {
+        mapaSecuenciaNo[modP] = true;
       }
     }
   }
@@ -1299,7 +1330,8 @@ function generarPlanificacionSemanal_() {
         nombre: t.modelo, tareas: [], volumen: 0,
         prioMin: t.prioridadNum, fechaMin: t.fechaKey,
         esEspecial: !!t.esEspecial, banda: bandaDe_(t),
-        familia: familiaDeTarea_(t), genero: generoDeTarea_(t)
+        familia: familiaDeTarea_(t), genero: generoDeTarea_(t),
+        secuenciaNo: secuenciaNoDeModelo_(mapaSecuenciaNo, t.modelo)
       };
       ordenModelos.push(t.modelo);
     }
@@ -1489,8 +1521,10 @@ function generarPlanificacionSemanal_() {
       if (soloMinima && !t.esMinima) continue;
       if (colorRankFiltro !== undefined && colorRankFiltro !== null && rangoColor_(t.color) !== colorRankFiltro) continue;
       var clave = claveMO_(t);
-      if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
-      if (t.lineaFija && t.lineaFija !== lin) continue;
+      if (!mP.secuenciaNo) {
+        if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
+        if (t.lineaFija && t.lineaFija !== lin) continue;
+      }
       if (elegiblesTarea_(t, overflow).indexOf(lin) === -1) continue;
       var avail = 1 - carga[lin][d];
       if (avail <= 0.001) return 0;
@@ -1518,8 +1552,10 @@ function generarPlanificacionSemanal_() {
         if (tR.restante <= 0) continue;
         if (soloMinima && !tR.esMinima) continue;
         var claveR = claveMO_(tR);
-        var fijaR = lineaPorMO[claveR] || tR.lineaFija;
-        if (fijaR && fijaR !== lin) continue;
+        if (!mP.secuenciaNo) {
+          var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+          if (fijaR && fijaR !== lin) continue;
+        }
         if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
         rank = rangoColor_(tR.color);
         hayRank = true;
@@ -1618,6 +1654,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function hermanoSinLineaPuedeUsar_(m, lin, overflow) {
+    if (m && m.secuenciaNo) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     for (var iH = 0; iH < listaModelos.length; iH++) {
@@ -1631,7 +1668,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function debeEsperarLoteFamilia_(m, overflow) {
-    if (!m || m.esEspecial) return false;
+    if (!m || m.esEspecial || m.secuenciaNo) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     if (lineasDondeEsta_(m.nombre).length > 0) return false;
@@ -1639,6 +1676,10 @@ function generarPlanificacionSemanal_() {
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
+    if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
+      if (lineasDondeEsta_(lote.modelo).length === 0) return true;
+      if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+    }
     if (lineasDondeEsta_(lote.modelo).length > 0) return false;
     var libresLote = lineasLibresParaModelo_(lote.m, overflow);
     var libresMias = lineasLibresParaModelo_(m, overflow);
@@ -1666,13 +1707,17 @@ function generarPlanificacionSemanal_() {
   }
 
   function debeCederAlLoteFamilia_(m, overflow) {
-    if (!m || m.esEspecial) return false;
+    if (!m || m.esEspecial || m.secuenciaNo) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     var lote = loteFamiliaActivo_(fam, overflow);
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
+    if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
+      if (lineasDondeEsta_(lote.modelo).length === 0) return true;
+      if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+    }
     return lineasDondeEsta_(lote.modelo).length === 0;
   }
 
@@ -1709,8 +1754,10 @@ function generarPlanificacionSemanal_() {
       if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
       var clave = claveMO_(t);
-      if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
-      if (t.lineaFija && t.lineaFija !== lin) return false;
+      if (!mO.secuenciaNo) {
+        if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
+        if (t.lineaFija && t.lineaFija !== lin) return false;
+      }
       return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
     });
   }
@@ -1749,8 +1796,47 @@ function generarPlanificacionSemanal_() {
           lineasDondeEsta_(lastNom).length === 0 && !debeEsperarLoteFamilia_(lastM, overflowL1) &&
           !debeCederAlLoteFamilia_(lastM, overflowL1)) {
         ocupante[lin].push(lastNom);
-        return;
       }
+    });
+
+    function secuenciaNoQuiereLinea_(lin) {
+      var iSn;
+      for (iSn = 0; iSn < listaModelos.length; iSn++) {
+        var mSn = listaModelos[iSn];
+        if (!mSn.secuenciaNo || mSn.esEspecial || restanteModelo_(mSn) <= 0) continue;
+        if (ocupante[lin].indexOf(mSn.nombre) !== -1) continue;
+        if (lineasModelo_(mSn, overflowL1).indexOf(lin) === -1) continue;
+        if (!modeloPuedeProducirHoyNom_(mSn.nombre, lin, d, overflowL1)) continue;
+        return true;
+      }
+      return false;
+    }
+
+    listaModelos.forEach(function (mSn) {
+      if (!mSn.secuenciaNo || mSn.esEspecial || restanteModelo_(mSn) <= 0) return;
+      var libresSn = lineasLibresDe_(mSn);
+      libresSn.sort(function (a, b) {
+        var famSn = familiaModelo_(mSn);
+        var pa = (famSn && familiaDeNombre_(ultimoModeloLinea[a] || "") === famSn) ? 0 : 1;
+        var pb = (famSn && familiaDeNombre_(ultimoModeloLinea[b] || "") === famSn) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
+        return String(a).localeCompare(String(b));
+      });
+      if (lineasDondeEsta_(mSn.nombre).length === 0 && libresSn.length > 0) {
+        ocupante[libresSn[0]].push(mSn.nombre);
+      }
+      lineasLibresDe_(mSn).forEach(function (linSn) {
+        if (ocupante[linSn].indexOf(mSn.nombre) !== -1) return;
+        ocupante[linSn].push(mSn.nombre);
+      });
+    });
+
+    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+      if ((ocupante[lin] || []).length > 0) return;
+      if (secuenciaNoQuiereLinea_(lin)) return;
+      var lastNom = ultimoModeloLinea[lin];
+      var lastM = lastNom ? mapaModelos[lastNom] : null;
       var famLast = lastM ? familiaModelo_(lastM) : (lastNom ? familiaDeNombre_(lastNom) : "");
       var loteLast = loteFamiliaActivo_(famLast, overflowL1);
       if (loteLast && modeloPuedeProducirHoyNom_(loteLast.modelo, lin, d, overflowL1) &&
@@ -1786,16 +1872,16 @@ function generarPlanificacionSemanal_() {
       ocupante[libres[0]].push(m.nombre);
     });
     vivos.forEach(function (m) {
-      if (m.banda > BANDA_URGENTE) return;
+      if (m.banda > BANDA_URGENTE && !m.secuenciaNo) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
       var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
-      if (restanteModelo_(m) <= capOwned + 0.001) return;
+      if (!m.secuenciaNo && restanteModelo_(m) <= capOwned + 0.001) return;
       lineasLibresDe_(m).forEach(function (lin) {
-        if (restanteModelo_(m) <= capOwned + 0.001) return;
-        if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
+        if (!m.secuenciaNo && restanteModelo_(m) <= capOwned + 0.001) return;
+        if (!m.secuenciaNo && hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
         ocupante[lin].push(m.nombre);
         capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
@@ -2140,6 +2226,7 @@ function generarPlanificacionSemanal_() {
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
     "• Faltante de Por Hacer: si una fila no tiene línea, se usa Priorizacion o BS; no se omite.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
+    "• Priorizacion col. H Secuencia = No: ese modelo no secuencia género/color y usa todas sus líneas hasta terminar.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
@@ -3042,10 +3129,14 @@ function actualizarModelosPriorizacion_() {
   var ultPrio = hojaPrio.getLastRow();
 
   if (ultPrio < 2 || normUp_(hojaPrio.getRange("C2").getValue()) !== "TIPO") {
-    hojaPrio.getRange("B2:G2").setValues([["Modelo", "Tipo", "Prioridad", "Fecha de Salida Estimada", "Cantidad Minima", "Lineas"]]);
-    hojaPrio.getRange("B2:G2").setBackground("#434343").setFontColor("#FFFFFF")
+    hojaPrio.getRange("B2:H2").setValues([["Modelo", "Tipo", "Prioridad", "Fecha de Salida Estimada", "Cantidad Minima", "Lineas", "Secuencia"]]);
+    hojaPrio.getRange("B2:H2").setBackground("#434343").setFontColor("#FFFFFF")
       .setFontWeight("bold").setHorizontalAlignment("center");
     ultPrio = 2;
+  } else if (quitarTildes_(normLow_(hojaPrio.getRange("H2").getValue())).indexOf("secuencia") === -1) {
+    hojaPrio.getRange("H2").setValue("Secuencia")
+      .setBackground("#434343").setFontColor("#FFFFFF")
+      .setFontWeight("bold").setHorizontalAlignment("center");
   }
 
   var conservados = [];
@@ -3053,7 +3144,7 @@ function actualizarModelosPriorizacion_() {
   var huerfanos = 0;
 
   if (ultPrio >= 3) {
-    var colCount = Math.max(6, hojaPrio.getLastColumn() - 1);
+    var colCount = Math.max(7, hojaPrio.getLastColumn() - 1);
     var datosP = hojaPrio.getRange(3, 2, ultPrio - 2, colCount).getValues();
     for (var j = 0; j < datosP.length; j++) {
       var modP = norm_(datosP[j][0]);
@@ -3072,7 +3163,8 @@ function actualizarModelosPriorizacion_() {
           datosP[j][2] !== undefined ? datosP[j][2] : "",
           datosP[j][3] !== undefined ? datosP[j][3] : "",
           datosP[j][4] !== undefined ? datosP[j][4] : "",
-          linPrio
+          linPrio,
+          datosP[j][6] !== undefined ? datosP[j][6] : ""
         ]);
         existentes.add(clave);
       } else {
@@ -3088,20 +3180,21 @@ function actualizarModelosPriorizacion_() {
       var linNueva = "";
       var recBsN = buscarRegistroBs_(partes[0], mapaBsPrio);
       if (recBsN && recBsN.lineas && recBsN.lineas.length) linNueva = formatearLineas_(recBsN.lineas);
-      conservados.push([partes[0], partes[1], "", "", "", linNueva]);
+      conservados.push([partes[0], partes[1], "", "", "", linNueva, ""]);
       nuevos++;
     }
   });
 
-  if (ultPrio >= 3) hojaPrio.getRange(3, 2, ultPrio - 2, Math.max(6, hojaPrio.getLastColumn() - 1)).clearContent();
+  if (ultPrio >= 3) hojaPrio.getRange(3, 2, ultPrio - 2, Math.max(7, hojaPrio.getLastColumn() - 1)).clearContent();
   if (conservados.length > 0) {
-    var rDest = hojaPrio.getRange(3, 2, conservados.length, 6);
+    var rDest = hojaPrio.getRange(3, 2, conservados.length, 7);
     rDest.setValues(conservados)
       .setHorizontalAlignment("center").setVerticalAlignment("middle")
       .setBorder(true, true, true, true, false, false, "black", SpreadsheetApp.BorderStyle.SOLID);
     hojaPrio.getRange(3, 5, conservados.length, 1).setNumberFormat("dd/mm/yyyy");
     hojaPrio.getRange(3, 6, conservados.length, 1).setNumberFormat("0");
     hojaPrio.getRange(3, 7, conservados.length, 1).setNumberFormat("@");
+    hojaPrio.getRange(3, 8, conservados.length, 1).setNumberFormat("@");
   }
 
   asegurarHojaPriorizacionSkus_(ss);
@@ -3110,8 +3203,9 @@ function actualizarModelosPriorizacion_() {
   if (huerfanos > 0) msg += "🗑️ LIMPIEZA:\nSe eliminaron " + huerfanos + " modelos huérfanos.\n\n";
   if (quitadosCero > 0) msg += "📦 FALTANTE 0:\nSe quitaron " + quitadosCero + " modelos ya cubiertos (faltante total 0).\n\n";
   msg += nuevos > 0
-    ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima y Líneas."
+    ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima, Líneas y Secuencia."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
+  msg += "\n\nColumna H Secuencia: escribe No para que ese modelo no use el lote género/color y ocupe todas sus líneas hasta terminar.";
   msg += "\n\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
   SpreadsheetApp.getUi().alert("RESUMEN DE PRIORIZACIÓN\n\n" + msg);
 }
