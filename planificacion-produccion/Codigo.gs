@@ -1,16 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.17 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.18 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
  *   - SECUENCIA OPCIONAL POR MODELO: en Priorizacion columna H
  *     ("Secuencia" / "Secuencia Genero"), si el valor es "No" ese
- *     modelo no usa el lote producto-género-color. Puede ocupar todas
- *     sus líneas asignadas hasta terminar. Vacío o cualquier otro valor
- *     mantiene la distribución normal (paralelo si hay 2 líneas libres;
- *     si no, Negro → Blanco → Marino y CAB → DAMA → KIDS).
+ *     modelo NO cede ni espera el orden de género (CAB → DAMA → KIDS)
+ *     y puede usar todas sus líneas en el color activo. Sigue cediendo
+ *     al lote de color (Negro → Blanco → Marino → resto): no arranca
+ *     Blanco si en la familia queda Negro. Vacío u otro valor = normal.
  *   - FALTANTE SIN LÍNEA: las filas de Por Hacer con unidades faltantes
  *     y Linea de Produccion vacía ya no se descartan. Se toma la línea
  *     de Priorizacion, si no de la hoja BS (MODELO / Lineas de
@@ -91,7 +91,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.17";
+var VERSION_SISTEMA = "5.9.18";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1634,6 +1634,28 @@ function generarPlanificacionSemanal_() {
     return best;
   }
 
+  function colorRankVivo_(m) {
+    var best = 99;
+    if (!m) return best;
+    var soloMin = restanteMinima_(m) > 0;
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0) return;
+      if (soloMin && !t.esMinima) return;
+      var r = rangoColor_(t.color);
+      if (r < best) best = r;
+    });
+    return best;
+  }
+
+  function secuenciaNoBloqueadoPorColor_(m, overflow) {
+    if (!m || !m.secuenciaNo || m.esEspecial || restanteModelo_(m) <= 0) return false;
+    var lote = loteFamiliaActivo_(familiaModelo_(m), overflow);
+    if (!lote || lote.modelo === m.nombre) return false;
+    if (lote.m && lote.m.esEspecial) return false;
+    if (!compartenLineas_(m, lote.m, overflow)) return false;
+    return lote.colorRank < colorRankVivo_(m);
+  }
+
   function lineasLibresParaModelo_(m, overflow) {
     var fam = familiaModelo_(m);
     var out = [];
@@ -1668,7 +1690,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function debeEsperarLoteFamilia_(m, overflow) {
-    if (!m || m.esEspecial || m.secuenciaNo) return false;
+    if (!m || m.esEspecial) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     if (lineasDondeEsta_(m.nombre).length > 0) return false;
@@ -1676,9 +1698,16 @@ function generarPlanificacionSemanal_() {
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
+    var miRank = colorRankVivo_(m);
+    if (m.secuenciaNo) {
+      return lote.colorRank < miRank;
+    }
     if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
-      if (lineasDondeEsta_(lote.modelo).length === 0) return true;
-      if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+      var loteRank = colorRankVivo_(lote.m);
+      if (loteRank <= miRank) {
+        if (lineasDondeEsta_(lote.modelo).length === 0) return true;
+        if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+      }
     }
     if (lineasDondeEsta_(lote.modelo).length > 0) return false;
     var libresLote = lineasLibresParaModelo_(lote.m, overflow);
@@ -1707,16 +1736,24 @@ function generarPlanificacionSemanal_() {
   }
 
   function debeCederAlLoteFamilia_(m, overflow) {
-    if (!m || m.esEspecial || m.secuenciaNo) return false;
+    if (!m || m.esEspecial) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     var lote = loteFamiliaActivo_(fam, overflow);
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
+    var miRank = colorRankVivo_(m);
+    if (m.secuenciaNo) {
+      return lote.colorRank < miRank;
+    }
     if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
-      if (lineasDondeEsta_(lote.modelo).length === 0) return true;
-      if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+      var loteRank = colorRankVivo_(lote.m);
+      if (loteRank < miRank) return true;
+      if (loteRank === miRank) {
+        if (lineasDondeEsta_(lote.modelo).length === 0) return true;
+        if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+      }
     }
     return lineasDondeEsta_(lote.modelo).length === 0;
   }
@@ -1807,6 +1844,7 @@ function generarPlanificacionSemanal_() {
         if (ocupante[lin].indexOf(mSn.nombre) !== -1) continue;
         if (lineasModelo_(mSn, overflowL1).indexOf(lin) === -1) continue;
         if (!modeloPuedeProducirHoyNom_(mSn.nombre, lin, d, overflowL1)) continue;
+        if (secuenciaNoBloqueadoPorColor_(mSn, overflowL1)) continue;
         return true;
       }
       return false;
@@ -1814,6 +1852,7 @@ function generarPlanificacionSemanal_() {
 
     listaModelos.forEach(function (mSn) {
       if (!mSn.secuenciaNo || mSn.esEspecial || restanteModelo_(mSn) <= 0) return;
+      if (secuenciaNoBloqueadoPorColor_(mSn, overflowL1)) return;
       var libresSn = lineasLibresDe_(mSn);
       libresSn.sort(function (a, b) {
         var famSn = familiaModelo_(mSn);
@@ -1873,6 +1912,7 @@ function generarPlanificacionSemanal_() {
     });
     vivos.forEach(function (m) {
       if (m.banda > BANDA_URGENTE && !m.secuenciaNo) return;
+      if (m.secuenciaNo && secuenciaNoBloqueadoPorColor_(m, overflowL1)) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
@@ -2226,7 +2266,7 @@ function generarPlanificacionSemanal_() {
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
     "• Faltante de Por Hacer: si una fila no tiene línea, se usa Priorizacion o BS; no se omite.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
-    "• Priorizacion col. H Secuencia = No: ese modelo no secuencia género/color y usa todas sus líneas hasta terminar.\n" +
+    "• Priorizacion col. H Secuencia = No: no cede al orden CAB→DAMA→KIDS y usa sus líneas en el color activo; sí cede Negro→Blanco→Marino→resto.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
@@ -3205,7 +3245,7 @@ function actualizarModelosPriorizacion_() {
   msg += nuevos > 0
     ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima, Líneas y Secuencia."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
-  msg += "\n\nColumna H Secuencia: escribe No para que ese modelo no use el lote género/color y ocupe todas sus líneas hasta terminar.";
+  msg += "\n\nColumna H Secuencia: escribe No para no ceder al orden CAB→DAMA→KIDS. El lote Negro→Blanco→Marino→resto sí se respeta.";
   msg += "\n\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
   SpreadsheetApp.getUi().alert("RESUMEN DE PRIORIZACIÓN\n\n" + msg);
 }

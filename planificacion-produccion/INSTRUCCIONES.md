@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.17 — códigos listos para pegar
+# Planificación de Producción v5.9.18 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -17,11 +17,11 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.17
+## Motor v5.9.18
 
-- **Secuencia opcional por modelo:** en `Priorizacion` columna H (`Secuencia` o `Secuencia Genero`), si escribes **No** (mayúsculas o minúsculas) ese modelo **no** entra al lote producto-género-color. Puede ocupar **todas** sus líneas asignadas hasta terminar su faltante. Vacío o cualquier otro valor deja la regla normal. `Actualizar Priorización` conserva esa columna.
+- **Secuencia opcional por modelo:** en `Priorizacion` columna H (`Secuencia` o `Secuencia Genero`), si escribes **No** ese modelo **no** espera ni cede el orden de género (CAB → DAMA → KIDS) y puede ocupar **todas** sus líneas mientras corre el color activo. **Sí** cede al lote de color (Negro → Blanco → Marino → resto): no arranca Blanco si en la familia todavía hay Negro. Vacío o cualquier otro valor deja la regla normal. `Actualizar Priorización` conserva esa columna.
 - **Faltante sin línea:** una fila de `Por Hacer` con unidades faltantes y `Linea de Produccion` vacía **sí entra** a proyección y a los tableros semanales. La línea se toma de `Priorizacion`, si no de la hoja `BS` (columna Lineas de Produccion del MODELO) y si no un respaldo (cap ≤ 40 → línea 5; resto → 2 / 3 / 4). Antes esas filas (RIO KIDS, MAR ORIGINAL, VITA, VESTIDO ARYNA, etc.) desaparecían del conteo.
-- **Lotes por color y género:** si el mismo producto (ej. RIO CAB y RIO DAMA) está asignado a **2 líneas y esas líneas están libres**, los géneros trabajan **en paralelo** (uno por línea). Si solo queda **una** línea libre, secuencian ahí **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Los Especiales no usan esta regla. Si un modelo tiene Secuencia = No, esa familia no lo obliga a esperar ni a ceder.
+- **Lotes por color y género:** si el mismo producto (ej. RIO CAB y RIO DAMA) está asignado a **2 líneas y esas líneas están libres**, los géneros trabajan **en paralelo** (uno por línea). Si solo queda **una** línea libre, secuencian ahí **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Los Especiales no usan esta regla. Si un modelo tiene Secuencia = No, no se le aplica el orden de género; el lote de color sí.
 - **Horizonte 10 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 10 semanas (la actual + 9), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 6` a `Semana 10` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 5`. El menú **Ver Pestañas** las incluye.
 - **Fix de sintaxis:** Apps Script ya no falla con `Unexpected token '}'`. Se restauró `familiaOcupaLinea_` (un recorte de v5.9.7 dejaba un `}` suelto).
 - **Capacidad diaria por producto:** no se usa un techo fijo 130/40. Al planificar se lee `Cap Produccion por Dia` (Por Hacer col. N, Por Hacer - Especial col. O) y esa cifra es el cupo del día mientras el modelo ocupa la línea. Si cambia de modelo a media jornada, el sobrante se calcula con la cap del que entra. Si la celda viene vacía, respaldo L1-4=130 / L5=40.

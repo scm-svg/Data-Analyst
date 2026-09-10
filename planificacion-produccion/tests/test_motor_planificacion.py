@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.17 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.18 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -624,7 +624,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia_no=None):
-    """Motor v5.9.17: lotes color+género, salvo Secuencia=No por modelo."""
+    """Motor v5.9.18: Secuencia=No desactiva género, no el lote de color."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
 
@@ -834,6 +834,33 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     })
         return None if best is None else best[1]
 
+    def color_rank_vivo(m):
+        best = 99
+        if not m:
+            return best
+        solo_min = restante_minima(m) > 0
+        for t in m["tareas"]:
+            if t["restante"] <= 0:
+                continue
+            if solo_min and not t.get("esMinima"):
+                continue
+            rank = rango_color(t.get("color"))
+            if rank < best:
+                best = rank
+        return best
+
+    def secuencia_no_bloqueado_por_color(m, overflow):
+        if not m or not m.get("secuenciaNo") or m.get("esEspecial") or restante_modelo(m) <= 0:
+            return False
+        lote = lote_familia_activo(familia_modelo(m), overflow)
+        if not lote or lote["modelo"] == m["nombre"]:
+            return False
+        if lote["m"].get("esEspecial"):
+            return False
+        if not comparten_lineas(m, lote["m"], overflow):
+            return False
+        return lote["colorRank"] < color_rank_vivo(m)
+
     def lineas_libres_para_modelo(m, overflow):
         out = []
         seen = set()
@@ -873,7 +900,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return False
 
     def debe_esperar_lote_familia(m, overflow):
-        if not m or m.get("esEspecial") or m.get("secuenciaNo"):
+        if not m or m.get("esEspecial"):
             return False
         fam = familia_modelo(m)
         if not fam:
@@ -887,11 +914,16 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
+        mi_rank = color_rank_vivo(m)
+        if m.get("secuenciaNo"):
+            return lote["colorRank"] < mi_rank
         if lote["m"].get("secuenciaNo") and restante_modelo(lote["m"]) > 0:
-            if not lineas_donde_esta(lote["modelo"]):
-                return True
-            if lineas_libres_para_modelo(lote["m"], overflow):
-                return True
+            lote_rank = color_rank_vivo(lote["m"])
+            if lote_rank <= mi_rank:
+                if not lineas_donde_esta(lote["modelo"]):
+                    return True
+                if lineas_libres_para_modelo(lote["m"], overflow):
+                    return True
         if lineas_donde_esta(lote["modelo"]):
             return False
         libres_lote = lineas_libres_para_modelo(lote["m"], overflow)
@@ -901,7 +933,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return True
 
     def debe_ceder_al_lote_familia(m, overflow):
-        if not m or m.get("esEspecial") or m.get("secuenciaNo"):
+        if not m or m.get("esEspecial"):
             return False
         fam = familia_modelo(m)
         if not fam:
@@ -913,11 +945,18 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
+        mi_rank = color_rank_vivo(m)
+        if m.get("secuenciaNo"):
+            return lote["colorRank"] < mi_rank
         if lote["m"].get("secuenciaNo") and restante_modelo(lote["m"]) > 0:
-            if not lineas_donde_esta(lote["modelo"]):
+            lote_rank = color_rank_vivo(lote["m"])
+            if lote_rank < mi_rank:
                 return True
-            if lineas_libres_para_modelo(lote["m"], overflow):
-                return True
+            if lote_rank == mi_rank:
+                if not lineas_donde_esta(lote["modelo"]):
+                    return True
+                if lineas_libres_para_modelo(lote["m"], overflow):
+                    return True
         return not lineas_donde_esta(lote["modelo"])
 
     def debe_esperar_hermano(m, overflow):
@@ -984,11 +1023,15 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
                 if not modelo_puede(m_sn, d, lin, overflow):
                     continue
+                if secuencia_no_bloqueado_por_color(m_sn, overflow):
+                    continue
                 return True
             return False
 
         for m in lista:
             if not m.get("secuenciaNo") or m.get("esEspecial") or restante_modelo(m) <= 0:
+                continue
+            if secuencia_no_bloqueado_por_color(m, overflow):
                 continue
             libres = lineas_libres_de(m, overflow)
             fam = familia_modelo(m)
@@ -1039,6 +1082,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             ocupante[libres[0]].append(m["nombre"])
         for m in vivos:
             if m["banda"] not in (BANDA_ESPECIAL, BANDA_MINIMA, BANDA_URGENTE) and not m.get("secuenciaNo"):
+                continue
+            if m.get("secuenciaNo") and secuencia_no_bloqueado_por_color(m, overflow):
                 continue
             owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if not owned:
@@ -2218,8 +2263,8 @@ class TestLotesGeneroColor(unittest.TestCase):
         modelos_hoy = set(list(d0_2.keys()) + list(d0_4.keys()))
         self.assertEqual(modelos_hoy, {"RIO CAB", "RIO DAMA"}, "2=%s 4=%s" % (d0_2, d0_4))
 
-    def test_secuencia_no_en_linea_compartida_no_cede_color(self):
-        """En una sola línea, Secuencia=No termina el modelo antes de ceder al otro género."""
+    def test_secuencia_no_cede_color_no_genero(self):
+        """Con No, tras Negro CAB cede al Negro DAMA (lote color) y luego sigue Blanco CAB."""
         tareas = [
             self._t("CB", "RIO CAB", "Blanco", 130, ["4"]),
             self._t("CN", "RIO CAB", "Negro", 130, ["4"]),
@@ -2234,14 +2279,28 @@ class TestLotesGeneroColor(unittest.TestCase):
         )
         self.assertEqual(negro_d0, 130)
         d1 = self._por_dia_linea(out, "4", 1)
-        self.assertEqual(d1, {"RIO CAB": 130}, d1)
+        self.assertEqual(d1.get("RIO DAMA", 0), 20, d1)
         blanco_d1 = sum(
             t["plan"]["4"][1] for t in out
             if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
         )
-        self.assertEqual(blanco_d1, 130)
-        d2 = self._por_dia_linea(out, "4", 2)
-        self.assertEqual(d2, {"RIO DAMA": 20}, d2)
+        self.assertEqual(blanco_d1, 110, d1)
+
+    def test_secuencia_no_espera_negro_de_la_familia(self):
+        """CAB con No y solo Blanco no arranca mientras DAMA tenga Negro."""
+        tareas = [
+            self._t("CB", "RIO CAB", "Blanco", 400, ["2", "4"], fechaKey=20260912, prioridadNum=2),
+            self._t("DB", "RIO DAMA", "Negro", 200, ["2", "4"], fechaKey=20260910, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia_no={"RIO CAB": True})
+        d0_2 = self._por_dia_linea(out, "2", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0_2.get("RIO CAB", 0) + d0_4.get("RIO CAB", 0), 0, "2=%s 4=%s" % (d0_2, d0_4))
+        self.assertEqual(d0_2.get("RIO DAMA", 0) + d0_4.get("RIO DAMA", 0), 130, "2=%s 4=%s" % (d0_2, d0_4))
+        d1_2 = self._por_dia_linea(out, "2", 1)
+        d1_4 = self._por_dia_linea(out, "4", 1)
+        self.assertEqual(d1_2.get("RIO DAMA", 0) + d1_4.get("RIO DAMA", 0), 70)
+        self.assertEqual(d1_2.get("RIO CAB", 0) + d1_4.get("RIO CAB", 0), 60)
 
     def test_secuencia_no_solo_dama_no_espera(self):
         """Si solo DAMA tiene No, no espera el lote de CAB y toma sus líneas."""
