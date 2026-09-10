@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.20 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.21 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ESPECIAL CON DÍA DE INICIO: al llegar esa fecha, el Especial
+ *     reclama su Linea de Produccion aunque otro modelo (RIO, etc.)
+ *     la esté ocupando. Antes se quedaba en 0 hasta que el ocupante
+ *     terminara (CARRERA 29/09 en L4 no salía hasta noviembre).
  *   - ESPECIAL SIN DESBORDE A L1: Por Hacer - Especial se queda en
  *     Linea de Produccion. Si L1 queda libre, NO se redirigen ahí
  *     modelos de otras líneas. Vacío en la celda sigue siendo 1.
@@ -69,7 +73,8 @@
  *     fecha más próxima. Un modelo Urgente con 2+ líneas usa ambas.
  *     Líneas 1-4 = un modelo a la vez (secuencial); L5 hasta 2 en paralelo.
  *   - ESPECIAL: respeta Linea de Produccion. Si la celda viene vacía
- *     se usa 1. No desborda a L1 desde otras líneas.
+ *     se usa 1. No desborda a L1 desde otras líneas. Al llegar
+ *     Día de inicio, desalojan a un ocupante de peor banda.
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
  *   - Priorización elimina modelos con faltante total 0.
  *   - PROYECCIÓN: tablas desde B2; umbrales primer cruce; links a SKUS.
@@ -85,7 +90,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.20";
+var VERSION_SISTEMA = "5.9.21";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1709,6 +1714,46 @@ function generarPlanificacionSemanal_() {
       return lineasLibresParaModelo_(m, overflowL1);
     }
 
+    function lineasDondePuedeHoy_(m) {
+      var seen = {};
+      var out = [];
+      m.tareas.forEach(function (t) {
+        if (t.restante <= 0) return;
+        elegiblesTarea_(t, overflowL1).forEach(function (lin) {
+          if (seen[lin]) return;
+          if (!modeloPuedeProducirHoyNom_(m.nombre, lin, d, overflowL1)) return;
+          seen[lin] = true;
+          out.push(lin);
+        });
+      });
+      return out;
+    }
+
+    function desalojarPara_(m, lin) {
+      var occ = ocupante[lin] || [];
+      if (occ.indexOf(m.nombre) !== -1) return true;
+      if (occ.length < maxOcupantes_(lin)) {
+        ocupante[lin].push(m.nombre);
+        return true;
+      }
+      var bNew = bandaViva_(m);
+      var worstI = -1;
+      var worstB = -1;
+      var iW;
+      for (iW = 0; iW < occ.length; iW++) {
+        var mO = mapaModelos[occ[iW]];
+        var bO = mO ? bandaViva_(mO) : 9;
+        if (bO > bNew && bO >= worstB) {
+          worstB = bO;
+          worstI = iW;
+        }
+      }
+      if (worstI < 0) return false;
+      ocupante[lin].splice(worstI, 1);
+      ocupante[lin].push(m.nombre);
+      return true;
+    }
+
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
       if ((ocupante[lin] || []).length > 0) return;
       var lastNom = ultimoModeloLinea[lin];
@@ -1742,7 +1787,24 @@ function generarPlanificacionSemanal_() {
       if (ya) return;
       if (debeEsperarLoteFamilia_(m, overflowL1)) return;
       var libres = lineasLibresDe_(m);
-      if (libres.length === 0) return;
+      if (libres.length === 0) {
+        if (bandaViva_(m) > BANDA_ESPECIAL) return;
+        libres = lineasDondePuedeHoy_(m);
+        if (libres.length === 0) return;
+        libres.sort(function (a, b) {
+          var fam = familiaModelo_(m);
+          var pa = (fam && familiaDeNombre_(ultimoModeloLinea[a] || "") === fam) ? 0 : 1;
+          var pb = (fam && familiaDeNombre_(ultimoModeloLinea[b] || "") === fam) ? 0 : 1;
+          if (pa !== pb) return pa - pb;
+          if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
+          return String(a).localeCompare(String(b));
+        });
+        var iC;
+        for (iC = 0; iC < libres.length; iC++) {
+          if (desalojarPara_(m, libres[iC])) return;
+        }
+        return;
+      }
       libres.sort(function (a, b) {
         var fam = familiaModelo_(m);
         var pa = (fam && familiaDeNombre_(ultimoModeloLinea[a] || "") === fam) ? 0 : 1;
@@ -2100,6 +2162,7 @@ function generarPlanificacionSemanal_() {
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: solo Linea de Produccion (si la celda viene vacía, 1). No desborda a L1.\n" +
+    "• Especial con Día de inicio: ese día toma su línea (desaloja a un ocupante de peor prioridad).\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +

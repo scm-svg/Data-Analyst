@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.20 — códigos listos para pegar
+# Planificación de Producción v5.9.21 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -8,7 +8,7 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`.
 3. Guarda el proyecto. Recarga la hoja. Corre **2️⃣ Actualizar Priorización** si hace falta crear/verificar `Priorizacion - SKUs`, y luego **3️⃣ Generar Planificación**.
 
-Esta versión parte del motor bueno **5.9.15**. Conserva **Secuencia=No** de 5.9.19. El único cambio de 5.9.20 es que los Especiales **no desbordan a Línea 1**. No rellena líneas vacías desde `BS` ni deja que un modelo se quede con dos líneas.
+Esta versión parte del motor bueno **5.9.15**. Conserva **Secuencia=No** de 5.9.19 y el **no desborde a L1** de 5.9.20. En 5.9.21, un Especial con **Día de inicio** reclama su línea ese día (no espera a que termine el modelo que la ocupaba). No rellena líneas vacías desde `BS` ni deja que un modelo se quede con dos líneas.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -31,8 +31,9 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.20 (base 5.9.15 + Secuencia=No)
+## Motor v5.9.21 (base 5.9.15 + Secuencia=No)
 
+- **Especial con Día de inicio:** al llegar esa fecha, el modelo de `Por Hacer - Especial` toma su `Linea de Produccion` aunque otro (RIO, etc.) la esté usando. Antes se quedaba en 0 hasta que el ocupante terminara.
 - **Especial sin desborde a L1:** cada fila de `Por Hacer - Especial` se queda en su `Linea de Produccion`. Si L1 está libre, no se redirigen ahí modelos de L2–L5. Celda vacía sigue siendo 1.
 - **Secuencia=No:** desactiva solo el orden de género. El lote de color, la MO atómica y “un modelo a la vez en L1-4” no cambian.
 - **Lotes por color y género:** si el mismo producto (ej. RIO CAB y RIO DAMA) está asignado a **2 líneas y esas líneas están libres**, los géneros trabajan **en paralelo** (uno por línea). Si solo queda **una** línea libre, secuencian ahí **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Los Especiales no usan esta regla.
@@ -48,7 +49,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos.
 - **Líneas 1-4:** un modelo a la vez (**no en paralelo**). Si el modelo termina o no puede seguir, el **sobrante del mismo día** pasa al siguiente de la cola.
 - **Línea 5** es la única que puede trabajar **dos familias** en paralelo. Si va un modelo solo, usa su cap del día (típico 40). Si hay dos familias, se turnan en lotes de 5. El mismo producto en distinto género **no** corre en paralelo: va en secuencia por color y género.
-- **Especial:** se respeta `Linea de Produccion`. Si la celda viene vacía, se usa 1 (dato faltante, no desborde). Si L1 queda libre, **no** se redirigen ahí modelos/cantidades de otras líneas. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
+- **Especial:** se respeta `Linea de Produccion`. Si la celda viene vacía, se usa 1 (dato faltante, no desborde). Si L1 queda libre, **no** se redirigen ahí modelos/cantidades de otras líneas. Al llegar **Día de inicio**, el Especial desaloja a un ocupante de peor prioridad y entra ese día. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
 - **Priorización:** al actualizar, se eliminan modelos con faltante total 0.
 
 ## Proyección

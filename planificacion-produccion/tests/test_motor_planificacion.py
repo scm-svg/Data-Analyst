@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.20 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.21 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -580,7 +580,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
-    """Motor v5.9.20: 5.9.19 + Especial no desborda a L1."""
+    """Motor v5.9.21: Especial con Día de inicio reclama su línea al llegar la fecha."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -950,6 +950,53 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             libres = lineas_libres_de(m, overflow)
             if not libres:
+                if banda_viva(m) > BANDA_ESPECIAL:
+                    continue
+                cands = []
+                seen = {}
+                for t in m["tareas"]:
+                    if t["restante"] <= 0:
+                        continue
+                    for lin in elegibles(t, overflow):
+                        if seen.get(lin):
+                            continue
+                        if not modelo_puede(m, d, lin, overflow):
+                            continue
+                        seen[lin] = True
+                        cands.append(lin)
+                if not cands:
+                    continue
+                fam = familia_modelo(m)
+                cands.sort(key=lambda lin: (
+                    0 if fam and familia_de_nombre(ultimo_modelo.get(lin) or "") == fam else 1,
+                    carga[lin][d],
+                    lin,
+                ))
+                b_new = banda_viva(m)
+                claimed = False
+                for lin in cands:
+                    occ = ocupante.get(lin) or []
+                    if m["nombre"] in occ:
+                        claimed = True
+                        break
+                    if len(occ) < max_ocupantes(lin):
+                        ocupante[lin].append(m["nombre"])
+                        claimed = True
+                        break
+                    worst_i = -1
+                    worst_b = -1
+                    for i_w, nom in enumerate(occ):
+                        b_o = banda_viva(modelos[nom]) if nom in modelos else 9
+                        if b_o > b_new and b_o >= worst_b:
+                            worst_b = b_o
+                            worst_i = i_w
+                    if worst_i < 0:
+                        continue
+                    occ.pop(worst_i)
+                    occ.append(m["nombre"])
+                    ocupante[lin] = occ
+                    claimed = True
+                    break
                 continue
             fam = familia_modelo(m)
             libres.sort(key=lambda lin: (
@@ -1584,6 +1631,77 @@ class TestLineasExclusivas(unittest.TestCase):
         en_l3 = sum(sum(t["plan"]["3"]) for t in out if t["modelo"].startswith("DOMINIC"))
         self.assertEqual(en_l1, 0, "DOMINIC no debe salir de la línea 3")
         self.assertEqual(en_l3, 240)
+
+    def test_especial_dia_inicio_desaloja_ocupante(self):
+        """Excel (8): CARRERA Especial L4 desde un martes no espera a que RIO termine."""
+        tareas = [
+            {"sku": "CRR", "modelo": "CARRERA TODOS (Especial)", "mo": "MO-458",
+             "cantidad": 200, "cap": 100, "lineas": ["4"], "color": "TODOS",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 1,
+             "fechaKey": 20260929, "solicitadaOrig": 200},
+            {"sku": "RIO1", "modelo": "RIO CAB", "mo": "MO-R1",
+             "cantidad": 800, "cap": 80, "lineas": ["4"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261030, "solicitadaOrig": 800},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        d0 = defaultdict(int)
+        d1 = defaultdict(int)
+        for t in out:
+            d0[t["modelo"]] += t["plan"]["4"][0]
+            d1[t["modelo"]] += t["plan"]["4"][1]
+        self.assertGreater(d0["RIO CAB"], 0)
+        self.assertEqual(d0.get("CARRERA TODOS (Especial)", 0), 0)
+        self.assertEqual(d1["CARRERA TODOS (Especial)"], 100)
+        self.assertEqual(d1.get("RIO CAB", 0), 0)
+
+    def test_especial_dia_inicio_lunes_siguiente_semana(self):
+        """Si el Día de inicio cae el lunes siguiente, el Especial toma L4 ese día."""
+        tareas = [
+            {"sku": "CRR", "modelo": "CARRERA TODOS (Especial)", "mo": "MO-458",
+             "cantidad": 100, "cap": 100, "lineas": ["4"], "color": "TODOS",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 5,
+             "fechaKey": 20260929, "solicitadaOrig": 100},
+            {"sku": "RIO1", "modelo": "RIO CAB", "mo": "MO-R1",
+             "cantidad": 800, "cap": 80, "lineas": ["4"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261030, "solicitadaOrig": 800},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        d4 = defaultdict(int)
+        d5 = defaultdict(int)
+        for t in out:
+            d4[t["modelo"]] += t["plan"]["4"][4]
+            d5[t["modelo"]] += t["plan"]["4"][5]
+        self.assertGreater(d4["RIO CAB"], 0)
+        self.assertEqual(d4.get("CARRERA TODOS (Especial)", 0), 0)
+        self.assertEqual(d5["CARRERA TODOS (Especial)"], 100)
+        self.assertEqual(d5.get("RIO CAB", 0), 0)
+
+    def test_especial_carrera_semana4_desaloja_rio(self):
+        """Excel (8): Día de inicio = martes semana 4 (índice 16); CARRERA entra a L4 ese día."""
+        tareas = [
+            {"sku": "CRR-001", "modelo": "CARRERA TODOS (Especial)", "mo": "MO-458",
+             "cantidad": 1200, "cap": 100, "lineas": ["4"], "color": "TODOS",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 16,
+             "fechaKey": 20260929, "solicitadaOrig": 1200},
+            {"sku": "RIO1", "modelo": "RIO CAB", "mo": "MO-R1",
+             "cantidad": 1834, "cap": 80, "lineas": ["4"], "color": "Negro",
+             "prioridadNum": 2, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261030, "solicitadaOrig": 1834},
+        ]
+        out = planificar(tareas, {}, total_dias=50)
+        d15 = defaultdict(int)
+        d16 = defaultdict(int)
+        for t in out:
+            d15[t["modelo"]] += t["plan"]["4"][15]
+            d16[t["modelo"]] += t["plan"]["4"][16]
+        self.assertEqual(d15.get("CARRERA TODOS (Especial)", 0), 0)
+        self.assertEqual(d15["RIO CAB"], 80)
+        self.assertEqual(d16["CARRERA TODOS (Especial)"], 100)
+        self.assertEqual(d16.get("RIO CAB", 0), 0)
+        carr = [t for t in out if t["modelo"].startswith("CARRERA")][0]
+        self.assertEqual(carr["planificada"], 1200)
 
     def test_linea5_sola_usa_capacidad_40(self):
         tareas = [{
