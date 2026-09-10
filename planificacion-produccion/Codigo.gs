@@ -1,22 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.18 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.19 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - SECUENCIA OPCIONAL POR MODELO: en Priorizacion columna H
- *     ("Secuencia" / "Secuencia Genero"), si el valor es "No" ese
- *     modelo NO cede ni espera el orden de género (CAB → DAMA → KIDS)
- *     y puede usar todas sus líneas en el color activo. Sigue cediendo
- *     al lote de color (Negro → Blanco → Marino → resto): no arranca
- *     Blanco si en la familia queda Negro. Vacío u otro valor = normal.
- *   - FALTANTE SIN LÍNEA: las filas de Por Hacer con unidades faltantes
- *     y Linea de Produccion vacía ya no se descartan. Se toma la línea
- *     de Priorizacion, si no de la hoja BS (MODELO / Lineas de
- *     Produccion) y si no un respaldo (cap ≤ 40 → L5; si no 2/3/4).
- *     Así Proyeccion y los tableros semanales contabilizan todo el
- *     faltante de Por Hacer (RIO KIDS, MAR ORIGINAL, VITA, etc.).
+ *   - SECUENCIA=NO (Priorizacion col. H): desactiva SOLO el orden de
+ *     género (CAB → DAMA → KIDS). El lote de color sigue: Negro →
+ *     Blanco → Marino → resto. No reclama líneas extra. No parte MOs.
+ *     Vacío u otro valor deja la regla normal de 5.9.15.
  *   - LOTES POR COLOR Y GÉNERO: si el mismo producto (ej. RIO CAB y RIO
  *     DAMA) está asignado a 2 líneas y esas líneas están libres, los
  *     géneros trabajan en paralelo (uno por línea). Si solo queda una
@@ -91,7 +83,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.18";
+var VERSION_SISTEMA = "5.9.19";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -452,83 +444,6 @@ function formatearLineas_(arr) {
   return (arr || []).join(" / ");
 }
 
-function claveModeloBusqueda_(nombre) {
-  return quitarTildes_(normUp_(nombre)).replace(/\s+/g, " ").trim();
-}
-
-function leerMapaBs_(ss) {
-  var out = {};
-  var hoja = ss ? ss.getSheetByName("BS") : null;
-  if (!hoja || hoja.getLastRow() < 2) return out;
-  var datos = hoja.getRange(1, 1, hoja.getLastRow(), hoja.getLastColumn()).getValues();
-  var headRow = -1;
-  var iMod = -1, iLin = -1, iCap = -1;
-  for (var r = 0; r < Math.min(5, datos.length); r++) {
-    var im = idxPorFragmento_(datos[r], ["modelo"]);
-    var il = idxPorFragmento_(datos[r], ["linea", "línea"]);
-    if (im !== -1 && il !== -1) {
-      headRow = r;
-      iMod = im;
-      iLin = il;
-      iCap = idxPorFragmento_(datos[r], ["cap produccion", "cap producción", "cap "]);
-      break;
-    }
-  }
-  if (headRow === -1) return out;
-  for (var i = headRow + 1; i < datos.length; i++) {
-    var nom = claveModeloBusqueda_(datos[i][iMod]);
-    if (!nom) continue;
-    var ls = parsearLineas_(datos[i][iLin]);
-    if (!ls.length) continue;
-    var cap = iCap !== -1 ? (Number(datos[i][iCap]) || 0) : 0;
-    if (!out[nom] || ls.length >= (out[nom].lineas || []).length) {
-      out[nom] = { lineas: ls, cap: cap };
-    }
-  }
-  return out;
-}
-
-function buscarRegistroBs_(nombre, mapaBs) {
-  var n = claveModeloBusqueda_(nombre);
-  if (!n || !mapaBs) return null;
-  if (mapaBs[n]) return mapaBs[n];
-  var best = "";
-  for (var k in mapaBs) {
-    if (n.indexOf(k + " ") === 0 && k.length > best.length) best = k;
-  }
-  return best ? mapaBs[best] : null;
-}
-
-function lineasPorDefecto_(t) {
-  if (t && t.esEspecial) return ["1"];
-  var cap = t ? (Number(t.cap) || 0) : 0;
-  if (cap > 0 && cap <= 40) return ["5"];
-  return ["2", "3", "4"];
-}
-
-function resolverLineasTarea_(t, mapaLineasModelo, mapaBs) {
-  if (!t) return;
-  var actuales = t.lineas || [];
-  var pref = mapaLineasModelo && t.modelo ? mapaLineasModelo[t.modelo] : null;
-  if (pref && pref.length) {
-    if (!actuales.length) {
-      t.lineas = pref.slice();
-      return;
-    }
-    var inter = actuales.filter(function (l) { return pref.indexOf(l) !== -1; });
-    if (inter.length) t.lineas = inter;
-    return;
-  }
-  if (actuales.length) return;
-  var rec = buscarRegistroBs_(t.familia, mapaBs) || buscarRegistroBs_(t.modelo, mapaBs);
-  if (rec && rec.lineas && rec.lineas.length) {
-    t.lineas = rec.lineas.slice();
-    if (!(Number(t.cap) > 0) && rec.cap > 0) t.cap = rec.cap;
-    return;
-  }
-  t.lineas = lineasPorDefecto_(t);
-}
-
 function prioridadNum_(txt) {
   var p = quitarTildes_(normLow_(txt));
   if (p.indexOf("urgente") !== -1) return 1;
@@ -575,26 +490,6 @@ function minimaDeModelo_(mapaMinimas, modelo) {
   return 0;
 }
 
-function esSecuenciaNo_(val) {
-  return quitarTildes_(normLow_(val)) === "no";
-}
-
-function secuenciaNoDeModelo_(mapa, modelo) {
-  if (!mapa) return false;
-  if (mapa[modelo]) return true;
-  var alvo = claveModeloNorm_(modelo);
-  if (mapa[alvo]) return true;
-  var alvoBase = alvo.replace(/\s*\(especial\)\s*$/, "");
-  for (var k in mapa) {
-    if (!mapa[k]) continue;
-    var nk = claveModeloNorm_(k);
-    if (nk === alvo || nk === alvoBase || nk.replace(/\s*\(especial\)\s*$/, "") === alvoBase) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function diaInicioEfectivo_(t) {
   return (t && t.diaIngreso) ? t.diaIngreso : 0;
 }
@@ -608,6 +503,20 @@ function bandaDe_(t) {
   if (t.esMinima) return BANDA_MINIMA;
   if (esUrgente_(t)) return BANDA_URGENTE;
   return BANDA_RESTO;
+}
+
+function esSecuenciaNo_(val) {
+  return quitarTildes_(normLow_(val)) === "no";
+}
+
+function secuenciaNoDeModelo_(mapa, modelo) {
+  if (!mapa || !modelo) return false;
+  if (esSecuenciaNo_(mapa[modelo])) return true;
+  var alvo = claveModeloNorm_(modelo);
+  for (var k in mapa) {
+    if (mapa.hasOwnProperty(k) && claveModeloNorm_(k) === alvo && esSecuenciaNo_(mapa[k])) return true;
+  }
+  return false;
 }
 
 function faltanteDeFila_(fila, iCant, iFalt, iProdQty) {
@@ -1068,10 +977,13 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     var lineasStr = iLin !== -1 ? norm_(fila[iLin]) : "";
 
     if (sku === "" || productoBase === "" || !(cantEfectiva > 0)) continue;
-    if (lineasStr === "" && esEspecial) lineasStr = "1";
+    if (lineasStr === "") {
+      if (esEspecial) lineasStr = "1";
+      else continue;
+    }
     if (!(cap > 0)) {
       var lsCap = parsearLineas_(lineasStr);
-      if (lsCap.length) cap = capFallbackLinea_(lsCap[0]);
+      cap = capFallbackLinea_(lsCap.length ? lsCap[0] : "1");
     }
 
     var genero = iGen !== -1 ? norm_(fila[iGen]) : "";
@@ -1212,12 +1124,11 @@ function generarPlanificacionSemanal_() {
   var mapaFechaModelo = {};
   var mapaMinimas = {};
   var mapaLineasModelo = {};
-  var mapaSecuenciaNo = {};
+  var mapaSecuencia = {};
   var mapaMinimasSku = leerMinimasSku_(ss);
-  var mapaBs = leerMapaBs_(ss);
 
   if (hojaPriorizacion && hojaPriorizacion.getLastRow() >= 3) {
-    var anchoPrio = Math.max(8, hojaPriorizacion.getLastColumn());
+    var anchoPrio = Math.max(7, hojaPriorizacion.getLastColumn());
     var headersPrio = hojaPriorizacion.getRange(2, 2, 1, anchoPrio - 1).getValues()[0];
     var idxTipo = idxPorFragmento_(headersPrio, ["tipo"]);
     var idxPrio = idxPorFragmento_(headersPrio, ["prioridad"]);
@@ -1250,7 +1161,7 @@ function generarPlanificacionSemanal_() {
         if (lsPref.length > 0) mapaLineasModelo[modP] = lsPref;
       }
       if (idxSeq !== -1 && esSecuenciaNo_(datosPrio[p][idxSeq])) {
-        mapaSecuenciaNo[modP] = true;
+        mapaSecuencia[modP] = "no";
       }
     }
   }
@@ -1278,8 +1189,11 @@ function generarPlanificacionSemanal_() {
   }
 
   tareas.forEach(function (t) {
-    resolverLineasTarea_(t, mapaLineasModelo, mapaBs);
-    if (!(Number(t.cap) > 0)) t.cap = capFallbackLinea_((t.lineas && t.lineas[0]) || "1");
+    var pref = mapaLineasModelo[t.modelo];
+    if (pref && pref.length) {
+      var inter = t.lineas.filter(function (l) { return pref.indexOf(l) !== -1; });
+      if (inter.length) t.lineas = inter;
+    }
     t.colorRank = rangoColor_(t.color);
     var recSku = mapaMinimasSku[claveSku_(t.sku)];
     if (recSku && !recSku.modelo) recSku.modelo = t.modelo;
@@ -1331,7 +1245,7 @@ function generarPlanificacionSemanal_() {
         prioMin: t.prioridadNum, fechaMin: t.fechaKey,
         esEspecial: !!t.esEspecial, banda: bandaDe_(t),
         familia: familiaDeTarea_(t), genero: generoDeTarea_(t),
-        secuenciaNo: secuenciaNoDeModelo_(mapaSecuenciaNo, t.modelo)
+        secuenciaNo: secuenciaNoDeModelo_(mapaSecuencia, t.modelo)
       };
       ordenModelos.push(t.modelo);
     }
@@ -1521,10 +1435,8 @@ function generarPlanificacionSemanal_() {
       if (soloMinima && !t.esMinima) continue;
       if (colorRankFiltro !== undefined && colorRankFiltro !== null && rangoColor_(t.color) !== colorRankFiltro) continue;
       var clave = claveMO_(t);
-      if (!mP.secuenciaNo) {
-        if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
-        if (t.lineaFija && t.lineaFija !== lin) continue;
-      }
+      if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
+      if (t.lineaFija && t.lineaFija !== lin) continue;
       if (elegiblesTarea_(t, overflow).indexOf(lin) === -1) continue;
       var avail = 1 - carga[lin][d];
       if (avail <= 0.001) return 0;
@@ -1552,10 +1464,8 @@ function generarPlanificacionSemanal_() {
         if (tR.restante <= 0) continue;
         if (soloMinima && !tR.esMinima) continue;
         var claveR = claveMO_(tR);
-        if (!mP.secuenciaNo) {
-          var fijaR = lineaPorMO[claveR] || tR.lineaFija;
-          if (fijaR && fijaR !== lin) continue;
-        }
+        var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+        if (fijaR && fijaR !== lin) continue;
         if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
         rank = rangoColor_(tR.color);
         hayRank = true;
@@ -1634,28 +1544,6 @@ function generarPlanificacionSemanal_() {
     return best;
   }
 
-  function colorRankVivo_(m) {
-    var best = 99;
-    if (!m) return best;
-    var soloMin = restanteMinima_(m) > 0;
-    m.tareas.forEach(function (t) {
-      if (t.restante <= 0) return;
-      if (soloMin && !t.esMinima) return;
-      var r = rangoColor_(t.color);
-      if (r < best) best = r;
-    });
-    return best;
-  }
-
-  function secuenciaNoBloqueadoPorColor_(m, overflow) {
-    if (!m || !m.secuenciaNo || m.esEspecial || restanteModelo_(m) <= 0) return false;
-    var lote = loteFamiliaActivo_(familiaModelo_(m), overflow);
-    if (!lote || lote.modelo === m.nombre) return false;
-    if (lote.m && lote.m.esEspecial) return false;
-    if (!compartenLineas_(m, lote.m, overflow)) return false;
-    return lote.colorRank < colorRankVivo_(m);
-  }
-
   function lineasLibresParaModelo_(m, overflow) {
     var fam = familiaModelo_(m);
     var out = [];
@@ -1676,7 +1564,6 @@ function generarPlanificacionSemanal_() {
   }
 
   function hermanoSinLineaPuedeUsar_(m, lin, overflow) {
-    if (m && m.secuenciaNo) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
     for (var iH = 0; iH < listaModelos.length; iH++) {
@@ -1689,6 +1576,18 @@ function generarPlanificacionSemanal_() {
     return false;
   }
 
+  function colorRankVivo_(m) {
+    var best = 99;
+    var soloMin = restanteMinima_(m) > 0;
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0) return;
+      if (soloMin && !t.esMinima) return;
+      var r = rangoColor_(t.color);
+      if (r < best) best = r;
+    });
+    return best;
+  }
+
   function debeEsperarLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
     var fam = familiaModelo_(m);
@@ -1698,18 +1597,10 @@ function generarPlanificacionSemanal_() {
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
-    var miRank = colorRankVivo_(m);
-    if (m.secuenciaNo) {
-      return lote.colorRank < miRank;
-    }
-    if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
-      var loteRank = colorRankVivo_(lote.m);
-      if (loteRank <= miRank) {
-        if (lineasDondeEsta_(lote.modelo).length === 0) return true;
-        if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
-      }
-    }
     if (lineasDondeEsta_(lote.modelo).length > 0) return false;
+    if (m.secuenciaNo) {
+      return lote.colorRank < colorRankVivo_(m);
+    }
     var libresLote = lineasLibresParaModelo_(lote.m, overflow);
     var libresMias = lineasLibresParaModelo_(m, overflow);
     if (libresLote.length >= 2 && libresMias.length > 0) return false;
@@ -1743,17 +1634,11 @@ function generarPlanificacionSemanal_() {
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
-    var miRank = colorRankVivo_(m);
     if (m.secuenciaNo) {
-      return lote.colorRank < miRank;
-    }
-    if (lote.m && lote.m.secuenciaNo && restanteModelo_(lote.m) > 0) {
-      var loteRank = colorRankVivo_(lote.m);
-      if (loteRank < miRank) return true;
-      if (loteRank === miRank) {
-        if (lineasDondeEsta_(lote.modelo).length === 0) return true;
-        if (lineasLibresParaModelo_(lote.m, overflow).length > 0) return true;
+      if (lote.colorRank < colorRankVivo_(m)) {
+        return lineasDondeEsta_(lote.modelo).length === 0;
       }
+      return false;
     }
     return lineasDondeEsta_(lote.modelo).length === 0;
   }
@@ -1791,10 +1676,8 @@ function generarPlanificacionSemanal_() {
       if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
       var clave = claveMO_(t);
-      if (!mO.secuenciaNo) {
-        if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
-        if (t.lineaFija && t.lineaFija !== lin) return false;
-      }
+      if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
+      if (t.lineaFija && t.lineaFija !== lin) return false;
       return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
     });
   }
@@ -1814,7 +1697,7 @@ function generarPlanificacionSemanal_() {
         return mO.tareas.some(function (t) {
           if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
           if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
-          if (!mO.secuenciaNo && t.lineaFija && t.lineaFija !== lin) return false;
+          if (t.lineaFija && t.lineaFija !== lin) return false;
           return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
         });
       });
@@ -1833,49 +1716,8 @@ function generarPlanificacionSemanal_() {
           lineasDondeEsta_(lastNom).length === 0 && !debeEsperarLoteFamilia_(lastM, overflowL1) &&
           !debeCederAlLoteFamilia_(lastM, overflowL1)) {
         ocupante[lin].push(lastNom);
+        return;
       }
-    });
-
-    function secuenciaNoQuiereLinea_(lin) {
-      var iSn;
-      for (iSn = 0; iSn < listaModelos.length; iSn++) {
-        var mSn = listaModelos[iSn];
-        if (!mSn.secuenciaNo || mSn.esEspecial || restanteModelo_(mSn) <= 0) continue;
-        if (ocupante[lin].indexOf(mSn.nombre) !== -1) continue;
-        if (lineasModelo_(mSn, overflowL1).indexOf(lin) === -1) continue;
-        if (!modeloPuedeProducirHoyNom_(mSn.nombre, lin, d, overflowL1)) continue;
-        if (secuenciaNoBloqueadoPorColor_(mSn, overflowL1)) continue;
-        return true;
-      }
-      return false;
-    }
-
-    listaModelos.forEach(function (mSn) {
-      if (!mSn.secuenciaNo || mSn.esEspecial || restanteModelo_(mSn) <= 0) return;
-      if (secuenciaNoBloqueadoPorColor_(mSn, overflowL1)) return;
-      var libresSn = lineasLibresDe_(mSn);
-      libresSn.sort(function (a, b) {
-        var famSn = familiaModelo_(mSn);
-        var pa = (famSn && familiaDeNombre_(ultimoModeloLinea[a] || "") === famSn) ? 0 : 1;
-        var pb = (famSn && familiaDeNombre_(ultimoModeloLinea[b] || "") === famSn) ? 0 : 1;
-        if (pa !== pb) return pa - pb;
-        if (carga[a][d] !== carga[b][d]) return carga[a][d] - carga[b][d];
-        return String(a).localeCompare(String(b));
-      });
-      if (lineasDondeEsta_(mSn.nombre).length === 0 && libresSn.length > 0) {
-        ocupante[libresSn[0]].push(mSn.nombre);
-      }
-      lineasLibresDe_(mSn).forEach(function (linSn) {
-        if (ocupante[linSn].indexOf(mSn.nombre) !== -1) return;
-        ocupante[linSn].push(mSn.nombre);
-      });
-    });
-
-    ["1", "2", "3", "4", "5"].forEach(function (lin) {
-      if ((ocupante[lin] || []).length > 0) return;
-      if (secuenciaNoQuiereLinea_(lin)) return;
-      var lastNom = ultimoModeloLinea[lin];
-      var lastM = lastNom ? mapaModelos[lastNom] : null;
       var famLast = lastM ? familiaModelo_(lastM) : (lastNom ? familiaDeNombre_(lastNom) : "");
       var loteLast = loteFamiliaActivo_(famLast, overflowL1);
       if (loteLast && modeloPuedeProducirHoyNom_(loteLast.modelo, lin, d, overflowL1) &&
@@ -1911,17 +1753,16 @@ function generarPlanificacionSemanal_() {
       ocupante[libres[0]].push(m.nombre);
     });
     vivos.forEach(function (m) {
-      if (m.banda > BANDA_URGENTE && !m.secuenciaNo) return;
-      if (m.secuenciaNo && secuenciaNoBloqueadoPorColor_(m, overflowL1)) return;
+      if (m.banda > BANDA_URGENTE) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
       var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
-      if (!m.secuenciaNo && restanteModelo_(m) <= capOwned + 0.001) return;
+      if (restanteModelo_(m) <= capOwned + 0.001) return;
       lineasLibresDe_(m).forEach(function (lin) {
-        if (!m.secuenciaNo && restanteModelo_(m) <= capOwned + 0.001) return;
-        if (!m.secuenciaNo && hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
+        if (restanteModelo_(m) <= capOwned + 0.001) return;
+        if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
         ocupante[lin].push(m.nombre);
         capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
@@ -2264,9 +2105,8 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
-    "• Faltante de Por Hacer: si una fila no tiene línea, se usa Priorizacion o BS; no se omite.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
-    "• Priorizacion col. H Secuencia = No: no cede al orden CAB→DAMA→KIDS y usa sus líneas en el color activo; sí cede Negro→Blanco→Marino→resto.\n" +
+    "• Priorizacion col. H Secuencia=No: no espera/cede género; el lote de color sí. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
@@ -3134,7 +2974,6 @@ function actualizarModelosPriorizacion_() {
 
   var modelosUnicos = new Set();
   var quitadosCero = 0;
-  var mapaBsPrio = leerMapaBs_(ss);
 
   function procesarModelos(datos, tipo) {
     if (!datos || datos.length < 3) return;
@@ -3167,16 +3006,17 @@ function actualizarModelosPriorizacion_() {
   if (hojaEspecial) procesarModelos(hojaEspecial.getDataRange().getValues(), "Especial");
 
   var ultPrio = hojaPrio.getLastRow();
+  var cabPrio = ["Modelo", "Tipo", "Prioridad", "Fecha de Salida Estimada", "Cantidad Minima", "Lineas", "Secuencia"];
 
   if (ultPrio < 2 || normUp_(hojaPrio.getRange("C2").getValue()) !== "TIPO") {
-    hojaPrio.getRange("B2:H2").setValues([["Modelo", "Tipo", "Prioridad", "Fecha de Salida Estimada", "Cantidad Minima", "Lineas", "Secuencia"]]);
+    hojaPrio.getRange("B2:H2").setValues([cabPrio]);
     hojaPrio.getRange("B2:H2").setBackground("#434343").setFontColor("#FFFFFF")
       .setFontWeight("bold").setHorizontalAlignment("center");
     ultPrio = 2;
   } else if (quitarTildes_(normLow_(hojaPrio.getRange("H2").getValue())).indexOf("secuencia") === -1) {
     hojaPrio.getRange("H2").setValue("Secuencia")
-      .setBackground("#434343").setFontColor("#FFFFFF")
-      .setFontWeight("bold").setHorizontalAlignment("center");
+      .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
+      .setHorizontalAlignment("center");
   }
 
   var conservados = [];
@@ -3193,17 +3033,12 @@ function actualizarModelosPriorizacion_() {
 
       var clave = modP + "||" + tipoP;
       if (modelosUnicos.has(clave)) {
-        var linPrio = datosP[j][5] !== undefined ? datosP[j][5] : "";
-        if (norm_(linPrio) === "") {
-          var recBsP = buscarRegistroBs_(modP, mapaBsPrio);
-          if (recBsP && recBsP.lineas && recBsP.lineas.length) linPrio = formatearLineas_(recBsP.lineas);
-        }
         conservados.push([
           modP, tipoP,
           datosP[j][2] !== undefined ? datosP[j][2] : "",
           datosP[j][3] !== undefined ? datosP[j][3] : "",
           datosP[j][4] !== undefined ? datosP[j][4] : "",
-          linPrio,
+          datosP[j][5] !== undefined ? datosP[j][5] : "",
           datosP[j][6] !== undefined ? datosP[j][6] : ""
         ]);
         existentes.add(clave);
@@ -3217,10 +3052,7 @@ function actualizarModelosPriorizacion_() {
   modelosUnicos.forEach(function (clave) {
     if (!existentes.has(clave)) {
       var partes = clave.split("||");
-      var linNueva = "";
-      var recBsN = buscarRegistroBs_(partes[0], mapaBsPrio);
-      if (recBsN && recBsN.lineas && recBsN.lineas.length) linNueva = formatearLineas_(recBsN.lineas);
-      conservados.push([partes[0], partes[1], "", "", "", linNueva, ""]);
+      conservados.push([partes[0], partes[1], "", "", "", "", ""]);
       nuevos++;
     }
   });
@@ -3243,10 +3075,10 @@ function actualizarModelosPriorizacion_() {
   if (huerfanos > 0) msg += "🗑️ LIMPIEZA:\nSe eliminaron " + huerfanos + " modelos huérfanos.\n\n";
   if (quitadosCero > 0) msg += "📦 FALTANTE 0:\nSe quitaron " + quitadosCero + " modelos ya cubiertos (faltante total 0).\n\n";
   msg += nuevos > 0
-    ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima, Líneas y Secuencia."
+    ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima, Líneas y Secuencia (H)."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
-  msg += "\n\nColumna H Secuencia: escribe No para no ceder al orden CAB→DAMA→KIDS. El lote Negro→Blanco→Marino→resto sí se respeta.";
-  msg += "\n\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
+  msg += "\n\nColumna H Secuencia: escribe No para saltar el orden de género (el lote de color se mantiene).";
+  msg += "\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
   SpreadsheetApp.getUi().alert("RESUMEN DE PRIORIZACIÓN\n\n" + msg);
 }
 

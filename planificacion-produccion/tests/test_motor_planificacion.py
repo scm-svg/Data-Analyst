@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.18 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.19 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -25,10 +25,6 @@ def norm(s):
 def quitar_tildes(s):
     table = str.maketrans("áéíóúñÁÉÍÓÚÑ", "aeiounAEIOUN")
     return str(s).translate(table)
-
-
-def es_secuencia_no(val):
-    return quitar_tildes(norm(val)).lower() == "no"
 
 
 def rango_color(color):
@@ -297,6 +293,24 @@ def clave_modelo_norm(s):
     return " ".join(quitar_tildes(norm(s)).lower().split())
 
 
+def es_secuencia_no(val):
+    if val is True:
+        return True
+    return quitar_tildes(norm(val)).lower() == "no"
+
+
+def secuencia_no_de_modelo(mapa, modelo):
+    if not mapa or not modelo:
+        return False
+    if es_secuencia_no(mapa.get(modelo)):
+        return True
+    alvo = clave_modelo_norm(modelo)
+    for k, v in mapa.items():
+        if clave_modelo_norm(k) == alvo and es_secuencia_no(v):
+            return True
+    return False
+
+
 def minima_de_modelo(mapa, modelo):
     if not mapa:
         return 0
@@ -361,64 +375,6 @@ def modelos_con_faltante(filas):
     for f in filas:
         tot[(f["modelo"], f.get("tipo", "Producción"))] += float(f.get("faltante") or 0)
     return {k for k, v in tot.items() if v > 0}
-
-
-def clave_modelo_busqueda(nombre):
-    return re.sub(r"\s+", " ", quitar_tildes(norm(nombre)).upper()).strip()
-
-
-def buscar_registro_bs(nombre, mapa_bs):
-    n = clave_modelo_busqueda(nombre)
-    if not n or not mapa_bs:
-        return None
-    if n in mapa_bs:
-        return mapa_bs[n]
-    best = ""
-    for k in mapa_bs:
-        if n.startswith(k + " ") and len(k) > len(best):
-            best = k
-    return mapa_bs.get(best)
-
-
-def lineas_por_defecto(t):
-    if t and t.get("esEspecial"):
-        return ["1"]
-    try:
-        cap = float(t.get("cap") or 0)
-    except (TypeError, ValueError):
-        cap = 0
-    if cap > 0 and cap <= 40:
-        return ["5"]
-    return ["2", "3", "4"]
-
-
-def resolver_lineas_tarea(t, mapa_lineas_modelo, mapa_bs):
-    actuales = [str(x) for x in (t.get("lineas") or [])]
-    t["lineas"] = actuales
-    pref = (mapa_lineas_modelo or {}).get(t.get("modelo"))
-    if pref:
-        pref = [str(x) for x in pref]
-        if not actuales:
-            t["lineas"] = list(pref)
-            return t["lineas"]
-        inter = [l for l in actuales if l in pref]
-        if inter:
-            t["lineas"] = inter
-        return t["lineas"]
-    if actuales:
-        return actuales
-    rec = buscar_registro_bs(t.get("familia") or "", mapa_bs) or buscar_registro_bs(t.get("modelo") or "", mapa_bs)
-    if rec and rec.get("lineas"):
-        t["lineas"] = [str(x) for x in rec["lineas"]]
-        try:
-            cap = float(t.get("cap") or 0)
-        except (TypeError, ValueError):
-            cap = 0
-        if cap <= 0 and rec.get("cap"):
-            t["cap"] = rec["cap"]
-        return t["lineas"]
-    t["lineas"] = lineas_por_defecto(t)
-    return t["lineas"]
 
 
 def dia_inicio_efectivo(t):
@@ -623,10 +579,11 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia_no=None):
-    """Motor v5.9.18: Secuencia=No desactiva género, no el lote de color."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
+    """Motor v5.9.19: 5.9.15 + Secuencia=No desactiva género; el lote de color se mantiene."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
+    mapa_secuencia = mapa_secuencia or {}
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     for t in tareas:
@@ -657,12 +614,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 "banda": banda_de(t),
                 "familia": familia_de(t),
                 "genero": genero_de(t),
-                "secuenciaNo": bool((mapa_secuencia_no or {}).get(t["modelo"]) or t.get("secuenciaNo")),
+                "secuenciaNo": secuencia_no_de_modelo(mapa_secuencia, t["modelo"]),
             }
             orden.append(t["modelo"])
         m = modelos[t["modelo"]]
-        if t.get("secuenciaNo") or (mapa_secuencia_no or {}).get(t["modelo"]):
-            m["secuenciaNo"] = True
         m["tareas"].append(t)
         if t.get("fechaKey", float("inf")) < m["fechaMin"]:
             m["fechaMin"] = t.get("fechaKey", float("inf"))
@@ -760,12 +715,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
             return False
         mo = t.get("mo") or t["sku"]
-        m_t = modelos.get(t.get("modelo")) or {}
-        if not m_t.get("secuenciaNo"):
-            if mo in linea_por_mo and linea_por_mo[mo] != lin:
-                return False
-            if t.get("lineaFija") and t["lineaFija"] != lin:
-                return False
+        if mo in linea_por_mo and linea_por_mo[mo] != lin:
+            return False
+        if t.get("lineaFija") and t["lineaFija"] != lin:
+            return False
         return lin in elegibles(t, overflow)
 
     def modelo_puede(m, d, lin, overflow):
@@ -834,33 +787,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     })
         return None if best is None else best[1]
 
-    def color_rank_vivo(m):
-        best = 99
-        if not m:
-            return best
-        solo_min = restante_minima(m) > 0
-        for t in m["tareas"]:
-            if t["restante"] <= 0:
-                continue
-            if solo_min and not t.get("esMinima"):
-                continue
-            rank = rango_color(t.get("color"))
-            if rank < best:
-                best = rank
-        return best
-
-    def secuencia_no_bloqueado_por_color(m, overflow):
-        if not m or not m.get("secuenciaNo") or m.get("esEspecial") or restante_modelo(m) <= 0:
-            return False
-        lote = lote_familia_activo(familia_modelo(m), overflow)
-        if not lote or lote["modelo"] == m["nombre"]:
-            return False
-        if lote["m"].get("esEspecial"):
-            return False
-        if not comparten_lineas(m, lote["m"], overflow):
-            return False
-        return lote["colorRank"] < color_rank_vivo(m)
-
     def lineas_libres_para_modelo(m, overflow):
         out = []
         seen = set()
@@ -883,8 +809,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return out
 
     def hermano_sin_linea_puede_usar(m, lin, overflow):
-        if m.get("secuenciaNo"):
-            return False
         fam = familia_modelo(m)
         if not fam:
             return False
@@ -898,6 +822,19 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if lin in lineas_modelo(h, overflow):
                 return True
         return False
+
+    def color_rank_vivo(m):
+        best = 99
+        solo_min = restante_minima(m) > 0
+        for t in m["tareas"]:
+            if t["restante"] <= 0:
+                continue
+            if solo_min and not t.get("esMinima"):
+                continue
+            r = rango_color(t.get("color"))
+            if r < best:
+                best = r
+        return best
 
     def debe_esperar_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
@@ -914,18 +851,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
-        mi_rank = color_rank_vivo(m)
-        if m.get("secuenciaNo"):
-            return lote["colorRank"] < mi_rank
-        if lote["m"].get("secuenciaNo") and restante_modelo(lote["m"]) > 0:
-            lote_rank = color_rank_vivo(lote["m"])
-            if lote_rank <= mi_rank:
-                if not lineas_donde_esta(lote["modelo"]):
-                    return True
-                if lineas_libres_para_modelo(lote["m"], overflow):
-                    return True
         if lineas_donde_esta(lote["modelo"]):
             return False
+        if m.get("secuenciaNo"):
+            return lote["colorRank"] < color_rank_vivo(m)
         libres_lote = lineas_libres_para_modelo(lote["m"], overflow)
         libres_mias = lineas_libres_para_modelo(m, overflow)
         if len(libres_lote) >= 2 and len(libres_mias) > 0:
@@ -945,18 +874,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
-        mi_rank = color_rank_vivo(m)
         if m.get("secuenciaNo"):
-            return lote["colorRank"] < mi_rank
-        if lote["m"].get("secuenciaNo") and restante_modelo(lote["m"]) > 0:
-            lote_rank = color_rank_vivo(lote["m"])
-            if lote_rank < mi_rank:
-                return True
-            if lote_rank == mi_rank:
-                if not lineas_donde_esta(lote["modelo"]):
-                    return True
-                if lineas_libres_para_modelo(lote["m"], overflow):
-                    return True
+            if lote["colorRank"] < color_rank_vivo(m):
+                return not lineas_donde_esta(lote["modelo"])
+            return False
         return not lineas_donde_esta(lote["modelo"])
 
     def debe_esperar_hermano(m, overflow):
@@ -1012,48 +933,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if last_m and restante_modelo(last_m) > 0 and modelo_puede(last_m, d, lin, overflow) and not lineas_donde_esta(last_nom):
                 if not debe_esperar_lote_familia(last_m, overflow) and not debe_ceder_al_lote_familia(last_m, overflow):
                     ocupante[lin].append(last_nom)
-
-        def secuencia_no_quiere_linea(lin):
-            for m_sn in lista:
-                if not m_sn.get("secuenciaNo") or m_sn.get("esEspecial") or restante_modelo(m_sn) <= 0:
                     continue
-                if m_sn["nombre"] in (ocupante.get(lin) or []):
-                    continue
-                if lin not in lineas_modelo(m_sn, overflow):
-                    continue
-                if not modelo_puede(m_sn, d, lin, overflow):
-                    continue
-                if secuencia_no_bloqueado_por_color(m_sn, overflow):
-                    continue
-                return True
-            return False
-
-        for m in lista:
-            if not m.get("secuenciaNo") or m.get("esEspecial") or restante_modelo(m) <= 0:
-                continue
-            if secuencia_no_bloqueado_por_color(m, overflow):
-                continue
-            libres = lineas_libres_de(m, overflow)
-            fam = familia_modelo(m)
-            libres.sort(key=lambda lin: (
-                0 if fam and familia_de_nombre(ultimo_modelo.get(lin) or "") == fam else 1,
-                carga[lin][d],
-                lin,
-            ))
-            if not lineas_donde_esta(m["nombre"]) and libres:
-                ocupante[libres[0]].append(m["nombre"])
-            for lin in lineas_libres_de(m, overflow):
-                if m["nombre"] in (ocupante.get(lin) or []):
-                    continue
-                ocupante[lin].append(m["nombre"])
-
-        for lin in list(ocupante):
-            if ocupante[lin]:
-                continue
-            if secuencia_no_quiere_linea(lin):
-                continue
-            last_nom = ultimo_modelo.get(lin) or ""
-            last_m = modelos.get(last_nom)
             fam_last = familia_modelo(last_m) if last_m else familia_de_nombre(last_nom)
             lote = lote_familia_activo(fam_last, overflow)
             if lote and modelo_puede(lote["m"], d, lin, overflow) and len(ocupante[lin]) < max_ocupantes(lin):
@@ -1081,24 +961,20 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             ))
             ocupante[libres[0]].append(m["nombre"])
         for m in vivos:
-            if m["banda"] not in (BANDA_ESPECIAL, BANDA_MINIMA, BANDA_URGENTE) and not m.get("secuenciaNo"):
-                continue
-            if m.get("secuenciaNo") and secuencia_no_bloqueado_por_color(m, overflow):
+            if m["banda"] not in (BANDA_ESPECIAL, BANDA_MINIMA, BANDA_URGENTE):
                 continue
             owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if not owned:
                 continue
             cap_owned = sum(cap_restante_semana(lin, d, cap_modelo(m, lin)) for lin in owned)
-            if not m.get("secuenciaNo") and restante_modelo(m) <= cap_owned + 1e-6:
+            if restante_modelo(m) <= cap_owned + 1e-6:
                 continue
             for lin in lineas_libres_de(m, overflow):
-                if not m.get("secuenciaNo") and restante_modelo(m) <= cap_owned + 1e-6:
-                    break
-                if not m.get("secuenciaNo") and hermano_sin_linea_puede_usar(m, lin, overflow):
+                if hermano_sin_linea_puede_usar(m, lin, overflow):
                     continue
                 ocupante[lin].append(m["nombre"])
                 cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
-                if not m.get("secuenciaNo") and restante_modelo(m) <= cap_owned + 1e-6:
+                if restante_modelo(m) <= cap_owned + 1e-6:
                     break
         if overflow and len(ocupante.get("1") or []) == 0:
             for m in vivos:
@@ -1122,11 +998,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if color_rank is not None and rango_color(t.get("color")) != color_rank:
                 continue
             mo = t.get("mo") or t["sku"]
-            if not m.get("secuenciaNo"):
-                if mo in linea_por_mo:
-                    t["lineaFija"] = linea_por_mo[mo]
-                if t.get("lineaFija") and t["lineaFija"] != lin:
-                    continue
+            if mo in linea_por_mo:
+                t["lineaFija"] = linea_por_mo[mo]
+            if t.get("lineaFija") and t["lineaFija"] != lin:
+                continue
             if lin not in elegibles(t, overflow):
                 continue
             avail = 1.0 - carga[lin][d]
@@ -1158,10 +1033,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if solo_minima and not t.get("esMinima"):
                     continue
                 mo = t.get("mo") or t["sku"]
-                if not m.get("secuenciaNo"):
-                    fija = linea_por_mo.get(mo) or t.get("lineaFija")
-                    if fija and fija != lin:
-                        continue
+                fija = linea_por_mo.get(mo) or t.get("lineaFija")
+                if fija and fija != lin:
+                    continue
                 if lin not in elegibles(t, overflow):
                     continue
                 rank = rango_color(t.get("color"))
@@ -2226,6 +2100,85 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(d1.get("MAR CAB", 0), 70)
         self.assertEqual(d1.get("MAR DAMA", 0), 60)
 
+    def test_secuencia_no_no_espera_genero(self):
+        """Secuencia=No en DAMA: no espera a CAB del mismo color (sale por fecha/urgente)."""
+        tareas = [
+            self._t("D", "MAR DAMA", "Negro", 200, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("C", "MAR CAB", "Negro", 200, ["4"], fechaKey=20260920, prioridadNum=3),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"MAR DAMA": "No"})
+        d0 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0, {"MAR DAMA": 130}, d0)
+
+    def test_secuencia_no_sigue_cediendo_color(self):
+        """Secuencia=No no arranca Blanco si en la familia todavía hay Negro."""
+        tareas = [
+            self._t("D", "RIO DAMA", "Blanco", 200, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("C", "RIO CAB", "Negro", 200, ["4"], fechaKey=20260920, prioridadNum=3),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO DAMA": "NO"})
+        d0 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0, {"RIO CAB": 130}, d0)
+        negro_d0 = sum(
+            t["plan"]["4"][0] for t in out
+            if t["modelo"] == "RIO CAB" and t["color"] == "Negro"
+        )
+        self.assertEqual(negro_d0, 130)
+
+    def test_secuencia_no_no_toma_ambas_lineas(self):
+        """Secuencia=No no reclama las dos líneas: un género por línea, MO atómica."""
+        tareas = [
+            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=1),
+            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=1),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO CAB": "No"})
+        d0_2 = self._por_dia_linea(out, "2", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        modelos_hoy = set(list(d0_2.keys()) + list(d0_4.keys()))
+        self.assertEqual(modelos_hoy, {"RIO CAB", "RIO DAMA"}, "2=%s 4=%s" % (d0_2, d0_4))
+        self.assertEqual(len(d0_2), 1, d0_2)
+        self.assertEqual(len(d0_4), 1, d0_4)
+        self.assertEqual(sum(d0_2.values()) + sum(d0_4.values()), 260)
+
+    def test_secuencia_no_mo_atomica(self):
+        """Una MO de un modelo con Secuencia=No no se parte en dos líneas."""
+        tareas = [
+            self._t("S1", "RIO CAB", "Negro", 200, ["2", "4"], mo="M1"),
+            self._t("S2", "RIO CAB", "Negro", 200, ["2", "4"], mo="M1"),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO CAB": "No"})
+        lineas_usadas = set()
+        for t in out:
+            for lin, arr in t["plan"].items():
+                if sum(arr) > 0:
+                    lineas_usadas.add(lin)
+        self.assertEqual(len(lineas_usadas), 1, lineas_usadas)
+
+    def test_secuencia_no_negro_dama_antes_que_blanco_cab(self):
+        """CAB=No con Negro+Blanco y DAMA Negro en una línea: Negro CAB, Negro DAMA, luego Blanco CAB."""
+        tareas = [
+            self._t("CN", "RIO CAB", "Negro", 130, ["4"]),
+            self._t("CB", "RIO CAB", "Blanco", 130, ["4"]),
+            self._t("DN", "RIO DAMA", "Negro", 130, ["4"], fechaKey=20260901, prioridadNum=1),
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO CAB": "No"})
+        d0 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0, {"RIO CAB": 130}, d0)
+        negro_cab_d0 = sum(
+            t["plan"]["4"][0] for t in out
+            if t["modelo"] == "RIO CAB" and t["color"] == "Negro"
+        )
+        self.assertEqual(negro_cab_d0, 130)
+        d1 = self._por_dia_linea(out, "4", 1)
+        self.assertEqual(d1, {"RIO DAMA": 130}, d1)
+        d2 = self._por_dia_linea(out, "4", 2)
+        self.assertEqual(d2, {"RIO CAB": 130}, d2)
+        blanco_cab_d2 = sum(
+            t["plan"]["4"][2] for t in out
+            if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
+        )
+        self.assertEqual(blanco_cab_d2, 130)
+
     def test_acumulado_diez_semanas(self):
         vals = [100] * 10
         out = acumular_semanas(vals, 250)
@@ -2235,149 +2188,22 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(out[2], 300)
         self.assertTrue(all(x is None for x in out[3:]))
 
-    def test_secuencia_no_toma_todas_las_lineas(self):
-        """Secuencia=No en CAB: usa 2 y 4 el mismo día; DAMA espera."""
-        tareas = [
-            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=2),
-            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=2),
-        ]
-        out = planificar(tareas, {}, total_dias=5, mapa_secuencia_no={"RIO CAB": True})
-        d0_2 = self._por_dia_linea(out, "2", 0)
-        d0_4 = self._por_dia_linea(out, "4", 0)
-        self.assertEqual(d0_2, {"RIO CAB": 130}, d0_2)
-        self.assertEqual(d0_4, {"RIO CAB": 130}, d0_4)
-        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "RIO DAMA" and t["plan"]["2"][0] + t["plan"]["4"][0] > 0), 0)
-        d1_2 = self._por_dia_linea(out, "2", 1)
-        d1_4 = self._por_dia_linea(out, "4", 1)
-        self.assertEqual(d1_2.get("RIO CAB", 0) + d1_4.get("RIO CAB", 0), 140, "2=%s 4=%s" % (d1_2, d1_4))
 
-    def test_secuencia_vacia_sigue_paralelo(self):
-        """Sin No, dos líneas libres siguen en paralelo (un género por línea)."""
-        tareas = [
-            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=2),
-            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=2),
-        ]
-        out = planificar(tareas, {}, total_dias=5)
-        d0_2 = self._por_dia_linea(out, "2", 0)
-        d0_4 = self._por_dia_linea(out, "4", 0)
-        modelos_hoy = set(list(d0_2.keys()) + list(d0_4.keys()))
-        self.assertEqual(modelos_hoy, {"RIO CAB", "RIO DAMA"}, "2=%s 4=%s" % (d0_2, d0_4))
-
-    def test_secuencia_no_cede_color_no_genero(self):
-        """Con No, tras Negro CAB cede al Negro DAMA (lote color) y luego sigue Blanco CAB."""
-        tareas = [
-            self._t("CB", "RIO CAB", "Blanco", 130, ["4"]),
-            self._t("CN", "RIO CAB", "Negro", 130, ["4"]),
-            self._t("DN", "RIO DAMA", "Negro", 20, ["4"], fechaKey=20260901, prioridadNum=1),
-        ]
-        out = planificar(tareas, {}, total_dias=10, mapa_secuencia_no={"RIO CAB": True})
-        d0 = self._por_dia_linea(out, "4", 0)
-        self.assertEqual(d0, {"RIO CAB": 130}, d0)
-        negro_d0 = sum(
-            t["plan"]["4"][0] for t in out
-            if t["modelo"] == "RIO CAB" and t["color"] == "Negro"
-        )
-        self.assertEqual(negro_d0, 130)
-        d1 = self._por_dia_linea(out, "4", 1)
-        self.assertEqual(d1.get("RIO DAMA", 0), 20, d1)
-        blanco_d1 = sum(
-            t["plan"]["4"][1] for t in out
-            if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
-        )
-        self.assertEqual(blanco_d1, 110, d1)
-
-    def test_secuencia_no_espera_negro_de_la_familia(self):
-        """CAB con No y solo Blanco no arranca mientras DAMA tenga Negro."""
-        tareas = [
-            self._t("CB", "RIO CAB", "Blanco", 400, ["2", "4"], fechaKey=20260912, prioridadNum=2),
-            self._t("DB", "RIO DAMA", "Negro", 200, ["2", "4"], fechaKey=20260910, prioridadNum=2),
-        ]
-        out = planificar(tareas, {}, total_dias=5, mapa_secuencia_no={"RIO CAB": True})
-        d0_2 = self._por_dia_linea(out, "2", 0)
-        d0_4 = self._por_dia_linea(out, "4", 0)
-        self.assertEqual(d0_2.get("RIO CAB", 0) + d0_4.get("RIO CAB", 0), 0, "2=%s 4=%s" % (d0_2, d0_4))
-        self.assertEqual(d0_2.get("RIO DAMA", 0) + d0_4.get("RIO DAMA", 0), 130, "2=%s 4=%s" % (d0_2, d0_4))
-        d1_2 = self._por_dia_linea(out, "2", 1)
-        d1_4 = self._por_dia_linea(out, "4", 1)
-        self.assertEqual(d1_2.get("RIO DAMA", 0) + d1_4.get("RIO DAMA", 0), 70)
-        self.assertEqual(d1_2.get("RIO CAB", 0) + d1_4.get("RIO CAB", 0), 60)
-
-    def test_secuencia_no_solo_dama_no_espera(self):
-        """Si solo DAMA tiene No, no espera el lote de CAB y toma sus líneas."""
-        tareas = [
-            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=3),
-            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=2),
-        ]
-        out = planificar(tareas, {}, total_dias=5, mapa_secuencia_no={"RIO DAMA": True})
-        d0_2 = self._por_dia_linea(out, "2", 0)
-        d0_4 = self._por_dia_linea(out, "4", 0)
-        self.assertEqual(d0_2.get("RIO DAMA", 0) + d0_4.get("RIO DAMA", 0), 260, "2=%s 4=%s" % (d0_2, d0_4))
-        self.assertEqual(d0_2.get("RIO CAB", 0) + d0_4.get("RIO CAB", 0), 0, "2=%s 4=%s" % (d0_2, d0_4))
-
-    def test_parse_secuencia_no(self):
+class TestSecuenciaFlag(unittest.TestCase):
+    def test_es_secuencia_no(self):
         self.assertTrue(es_secuencia_no("No"))
         self.assertTrue(es_secuencia_no("NO"))
         self.assertTrue(es_secuencia_no(" no "))
+        self.assertTrue(es_secuencia_no(True))
         self.assertFalse(es_secuencia_no(""))
         self.assertFalse(es_secuencia_no("Si"))
-        self.assertFalse(es_secuencia_no("Sí"))
+        self.assertFalse(es_secuencia_no("CAB"))
 
-
-class TestFaltanteSinLinea(unittest.TestCase):
-    def test_bs_prefijo_mas_largo(self):
-        mapa = {
-            "RIO": {"lineas": ["2", "3", "4"], "cap": 130},
-            "RIO ORIGINAL": {"lineas": ["5"], "cap": 40},
-        }
-        rec = buscar_registro_bs("RIO ORIGINAL DAMA", mapa)
-        self.assertEqual(rec["lineas"], ["5"])
-
-    def test_rio_kids_usa_rio_de_bs(self):
-        mapa = {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}}
-        rec = buscar_registro_bs("RIO KIDS", mapa)
-        self.assertEqual(rec["lineas"], ["2", "3", "4"])
-        t = {"modelo": "RIO KIDS", "familia": "RIO", "lineas": [], "cap": 130}
-        resolver_lineas_tarea(t, {}, mapa)
-        self.assertEqual(t["lineas"], ["2", "3", "4"])
-
-    def test_vestido_aryna_vacia_toma_l5(self):
-        t = {"modelo": "VESTIDO ARYNA DAMA", "familia": "VESTIDO ARYNA", "lineas": [], "cap": 40}
-        resolver_lineas_tarea(t, {}, {"VESTIDO ARYNA": {"lineas": ["5"], "cap": 40}})
-        self.assertEqual(t["lineas"], ["5"])
-
-    def test_respeta_linea_de_por_hacer(self):
-        t = {"modelo": "RIO CAB", "familia": "RIO", "lineas": ["4"], "cap": 130}
-        resolver_lineas_tarea(t, {}, {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}})
-        self.assertEqual(t["lineas"], ["4"])
-
-    def test_priorizacion_llena_si_por_hacer_vacio(self):
-        t = {"modelo": "RIO KIDS", "familia": "RIO", "lineas": [], "cap": 130}
-        resolver_lineas_tarea(t, {"RIO KIDS": ["2", "4"]}, {"RIO": {"lineas": ["2", "3", "4"], "cap": 130}})
-        self.assertEqual(t["lineas"], ["2", "4"])
-
-    def test_lite_pant_sin_bs_va_a_l5(self):
-        t = {"modelo": "LITE PANT DAMA", "familia": "LITE PANT", "lineas": [], "cap": 40}
-        resolver_lineas_tarea(t, {}, {})
-        self.assertEqual(t["lineas"], ["5"])
-
-    def test_faltante_sin_linea_entra_a_la_meta(self):
-        """Filas sin línea se resuelven y su faltante suma en la meta del modelo."""
-        mapa_bs = {"MAR": {"lineas": ["2", "3", "4"], "cap": 130}}
-        con_linea = {
-            "sku": "A", "modelo": "MAR CAB", "mo": "MO-A", "cantidad": 100, "cap": 130,
-            "lineas": ["4"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
-            "diaIngreso": 0, "fechaKey": 20260924, "solicitadaOrig": 100, "familia": "MAR",
-        }
-        sin_linea = {
-            "sku": "B", "modelo": "MAR ORIGINAL CAB", "mo": "MO-B", "cantidad": 200, "cap": 130,
-            "lineas": [], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
-            "diaIngreso": 0, "fechaKey": 20260924, "solicitadaOrig": 200, "familia": "MAR ORIGINAL",
-        }
-        resolver_lineas_tarea(sin_linea, {}, mapa_bs)
-        self.assertTrue(sin_linea["lineas"])
-        out = planificar([con_linea, sin_linea], {}, total_dias=10)
-        self.assertEqual(sum(t["cantidad"] for t in out), 300)
-        self.assertGreater(sum(t["planificada"] for t in out if t["modelo"] == "MAR ORIGINAL CAB"), 0)
+    def test_secuencia_no_de_modelo_normaliza_nombre(self):
+        self.assertTrue(secuencia_no_de_modelo({"RIO KIDS": "No"}, "RIO KIDS"))
+        self.assertTrue(secuencia_no_de_modelo({"rio kids": "NO"}, "RIO KIDS"))
+        self.assertFalse(secuencia_no_de_modelo({"RIO KIDS": ""}, "RIO KIDS"))
+        self.assertFalse(secuencia_no_de_modelo({}, "RIO KIDS"))
 
 
 if __name__ == "__main__":
