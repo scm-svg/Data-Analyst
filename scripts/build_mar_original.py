@@ -18,7 +18,7 @@ TEMPLATE = UPLOADS / "DASHBOARD_MAR_ORIGINAL_7340.html"
 VENTAS_XLSX = UPLOADS / "VENTAS_ARREGLADAS_MAR_ORIGINAL_ACTUALIZADAS_5e6d.xlsx"
 INV_XLSX = UPLOADS / "MAR_ORIGINAL_INVENTARIO_ARREGLADO_b31f.xlsx"
 OUT_HTML = ROOT / "DASHBOARD_MAR_ORIGINAL.html"
-OUT_XLSX = ROOT / "MAR_ORIGINAL_RANGO_PRODUCCION.xlsx"
+OUT_XLSX = ROOT / "MAR_ORIGINAL_Proyeccion_Produccion.xlsx"
 
 MESES_NUM = {
     "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4, "MAYO": 5, "JUNIO": 6,
@@ -632,6 +632,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         line_order[g] = {"m1": int(round(vel_adj)), "m2": int(round(vel_adj * 1.10))}
 
     production_plan, summary_genero, rango_data = build_production_plan(retail_sales, inv, sales)
+    excel_context = build_excel_context(retail_sales, inv, summary_genero, sbs, meses_labels)
 
     return {
         "nombre": "MAR ORIGINAL",
@@ -674,6 +675,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "summary_genero": summary_genero,
         "rango_data": rango_data,
         "target_produce_min": TARGET_PRODUCE_MIN,
+        "excel_context": excel_context,
     }
 
 
@@ -758,27 +760,286 @@ def calibrate_gender_targets(
     rebuild_gender_aggregates(plan, summary, rango, genero, shares)
 
 
-def _write_rows(ws, start_row: int, rows: list[list]) -> int:
-    for i, row in enumerate(rows):
-        for j, val in enumerate(row):
-            ws.write(start_row + i, j, val)
-    return start_row + len(rows)
+GENDER_XL = {"CAB": "CABALLERO", "DAMA": "DAMA", "KIDS": "KIDS"}
+RESUMEN_STORES = [
+    ("SAMBIL", "SAMBIL VALENCIA"),
+    ("GRIE", "GRIETA"),
+    ("CHACAO", "SAMBIL CHACAO"),
+    ("CERRO VERDE", "CERRO VERDE"),
+    ("GRAND", "GRAND PLAZA"),
+    ("VELA", "LA VELA (Margarita)"),
+    ("TOLON", "TOLÓN"),
+    ("WEB", "WEB / PEDIDOS (online)"),
+    ("BARQUISIMETO", "BARQUISIMETO (nueva)"),
+]
+STOCK_COVERAGE_STORES = [
+    ("SAMBIL", "SAMBIL VALENCIA"),
+    ("GRIE", "GRIETA"),
+    ("CHACAO", "SAMBIL CHACAO"),
+    ("CERRO VERDE", "CERRO VERDE"),
+    ("GRAND", "GRAND PLAZA"),
+    ("VELA", "LA VELA (Margarita)"),
+    ("TOLON", "TOLÓN"),
+    ("TALLER", "TALLER (buffer PT)"),
+]
+
+
+def _store_vel_base(g_vel: pd.DataFrame, store_key: str) -> float:
+    if store_key == "VELA":
+        return weighted_velocity(g_vel[g_vel["tienda"] == "GRIE"])
+    if store_key == "BARQUISIMETO":
+        parts = [
+            weighted_velocity(g_vel[g_vel["tienda"] == "GRIE"]),
+            weighted_velocity(g_vel[g_vel["tienda"] == "CHACAO"]),
+            weighted_velocity(g_vel[g_vel["tienda"] == "TOLON"]),
+        ]
+        return sum(parts) / 3
+    if store_key == "WEB":
+        strongest = max(weighted_velocity(g_vel[g_vel["tienda"] == s]) for s in RETAIL_STORES)
+        return strongest * WEB_STRONGEST_RATIO
+    if store_key == "TOLON":
+        return weighted_velocity(g_vel[g_vel["tienda"] == "TOLON"]) * TOLON_BOOST
+    return weighted_velocity(g_vel[g_vel["tienda"] == store_key])
+
+
+def build_excel_context(
+    retail_sales: pd.DataFrame,
+    inv: pd.DataFrame,
+    summary_genero: dict,
+    stock_by_store: dict,
+    meses_labels: list[str],
+) -> dict:
+    vel_sales = retail_sales[retail_sales["mes"].isin(VELOCITY_PERIODS)]
+    periodo = f"{meses_labels[0]}–{meses_labels[-1]}" if meses_labels else ""
+    generos_ctx: dict = {}
+
+    for genero in ["CAB", "DAMA", "KIDS"]:
+        g_vel = vel_sales[vel_sales["genero"] == genero]
+        hs = HIGH_SEASON_FACTOR[genero]
+        cov = COVERAGE_MONTHS[genero]
+        s = summary_genero[genero]
+        store_rows = []
+        for key, label in RESUMEN_STORES:
+            base = _store_vel_base(g_vel, key)
+            store_rows.append({
+                "key": key,
+                "label": label,
+                "vel_base": round(base, 1),
+                "vel_hs": round(base * hs, 1),
+            })
+        total_base = sum(r["vel_base"] for r in store_rows)
+        total_hs = sum(r["vel_hs"] for r in store_rows)
+        for r in store_rows:
+            r["weight"] = round(r["vel_base"] / total_base, 4) if total_base else 0
+        generos_ctx[genero] = {
+            "label": GENDER_XL[genero],
+            "store_rows": store_rows,
+            "vel_base_total": round(total_base, 1),
+            "vel_hs_total": round(total_hs, 1),
+            "stock": s["stk"],
+            "demand_min": round(s["v_mes_base"] * cov * 1.15, 1),
+            "demand_max": round(s["v_mes"] * (cov + 0.5) * 1.20, 1),
+            "produce_min": s["produce"],
+            "produce_max": s["produce_max"],
+            "hs_factor": hs,
+            "coverage_min": cov,
+            "coverage_max": round(cov + 0.5, 1),
+            "safety_min": 0.15,
+            "safety_max": 0.20,
+        }
+
+    vel_by_store = vel_sales.groupby("tienda")["v"].sum().to_dict()
+    store_stock_rows = []
+    for key, label in STOCK_COVERAGE_STORES:
+        stk = int(sum(stock_by_store.get(key, {}).values()))
+        if key == "TALLER":
+            store_stock_rows.append({"label": label, "stock": stk, "vel_base": None, "coverage": None, "status": "Buffer operativo"})
+            continue
+        vel_b = vel_by_store.get(key, 0) / max(len(VELOCITY_PERIODS), 1)
+        if key == "TOLON":
+            vel_b *= TOLON_BOOST
+        if key == "VELA":
+            vel_b = vel_by_store.get("GRIE", 0) / max(len(VELOCITY_PERIODS), 1)
+        cov_m = round(stk / vel_b, 1) if vel_b > 0 else 999
+        if cov_m < 2:
+            status = "CRÍTICO"
+        elif cov_m < 3.5:
+            status = "AJUSTADO"
+        elif cov_m < 7:
+            status = "SALUDABLE"
+        else:
+            status = "SOBRESTOCK"
+        store_stock_rows.append({
+            "label": label,
+            "stock": stk,
+            "vel_base": round(vel_b, 1),
+            "coverage": cov_m,
+            "status": status,
+        })
+
+    jun_ago = [m for m in vel_sales["mes"].unique() if m in VELOCITY_PERIODS]
+    base_5 = vel_sales[vel_sales["tienda"].isin(RETAIL_STORES[:5])]["v"].sum() / max(len(jun_ago), 1)
+    dic = int(retail_sales[retail_sales["mes"] == "diciembre-2025"]["v"].sum())
+
+    return {
+        "periodo": periodo,
+        "generos": generos_ctx,
+        "store_stock_rows": store_stock_rows,
+        "season_ref": {"base_jun_ago": round(base_5, 0), "dic_2025": dic, "ratio": round(dic / base_5, 2) if base_5 else 0},
+    }
 
 
 def export_excel(data: dict, path: Path) -> None:
     summary = data["summary_genero"]
     rango = data["rango_data"]
+    ctx = data["excel_context"]
+    vel_label = data.get("velocity_months_label", "May–Ago 26")
 
     with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
         wb = writer.book
         bold = wb.add_format({"bold": True})
-        title = wb.add_format({"bold": True, "font_size": 13, "font_color": "#5b6af7"})
-        hdr = wb.add_format({"bold": True, "bg_color": "#5b6af7", "font_color": "white"})
+        wrap = wb.add_format({"text_wrap": True})
+        title = wb.add_format({"bold": True, "font_size": 14, "font_color": "#1F3864"})
+        section = wb.add_format({"bold": True, "font_size": 11, "font_color": "#1F3864"})
+        hdr = wb.add_format({"bold": True, "bg_color": "#4472C4", "font_color": "white", "border": 1})
         pct = wb.add_format({"num_format": "0.0%"})
+        pct4 = wb.add_format({"num_format": "0.0000"})
         num = wb.add_format({"num_format": "#,##0"})
-        dec = wb.add_format({"num_format": "0.00"})
+        dec = wb.add_format({"num_format": "0.0"})
+        blue = wb.add_format({"bg_color": "#DDEBF7", "num_format": "#,##0", "border": 1})
+        total_fmt = wb.add_format({"bold": True, "top": 2})
 
-        # ── 1. Producción por Talla ──
+        # ── 1. Resumen ──
+        ws = wb.add_worksheet("Resumen")
+        ws.set_column("A:A", 42)
+        ws.set_column("B:F", 16)
+        row = 0
+        ws.merge_range(row, 0, row, 5, "MAR ORIGINAL — PROYECCIÓN DE PRODUCCIÓN · CAB / DAMA / KIDS", title)
+        row += 1
+        ws.merge_range(
+            row, 0, row, 5,
+            f"Somos Cuadro · Logística e Inventarios · Ventas {ctx['periodo']} + inventario actual + colores activos para producción",
+            wrap,
+        )
+        row += 2
+        ws.merge_range(row, 0, row, 5, "CONSIDERACIONES APLICADAS", section)
+        row += 1
+        bullets = [
+            "• LA VELA (Margarita): tienda nueva → proyectada con la misma velocidad que GRIETA.",
+            f"• TOLÓN: velocidad reciente × {TOLON_BOOST} para subir su participación futura.",
+            "• BARQUISIMETO: tienda nueva sin histórico → promedio de GRIETA, SAMBIL CHACAO y TOLÓN.",
+            "• WEB/PEDIDOS: canal potenciado → 50% de la tienda física más fuerte.",
+            f"• TEMPORADA ALTA: factor ×{max(HIGH_SEASON_FACTOR.values()):.2f} (CAB/DAMA ×1.60 · KIDS ×2.05).",
+            "• Solo colores ACTIVOS para producción según catálogo Mar Original.",
+            f"• Meta de producción: CAB {TARGET_PRODUCE_MIN['CAB']:,} · DAMA {TARGET_PRODUCE_MIN['DAMA']:,} · KIDS {TARGET_PRODUCE_MIN['KIDS']:,} und (mínimo compromiso).",
+            "• CAB: sin 3XL ni 4XL en producción; 2XL con boost moderado (+22%).",
+            "• DAMA: sin 2XL en producción; L con boost moderado (+22%).",
+        ]
+        for b in bullets:
+            ws.merge_range(row, 0, row, 5, b, wrap)
+            row += 1
+
+        for genero in ["CAB", "DAMA", "KIDS"]:
+            gc = ctx["generos"][genero]
+            row += 1
+            ws.merge_range(row, 0, row, 5, f"{gc['label']} — SUPUESTOS, VELOCIDAD Y CANTIDAD A PRODUCIR", section)
+            row += 2
+            ws.write(row, 0, "Factor temporada alta", bold)
+            ws.write(row, 1, gc["hs_factor"])
+            ws.write(row, 2, "Meses cobertura MÍN / MÁX", bold)
+            ws.write(row, 3, gc["coverage_min"])
+            ws.write(row, 4, gc["coverage_max"])
+            row += 1
+            ws.write(row, 0, f"Boost Tolón (×{TOLON_BOOST})", bold)
+            ws.write(row, 1, TOLON_BOOST)
+            ws.write(row, 2, "Stock seguridad MÍN / MÁX", bold)
+            ws.write(row, 3, gc["safety_min"], pct)
+            ws.write(row, 4, gc["safety_max"], pct)
+            row += 2
+            ws.write_row(row, 0, ["Tienda", "Vel. Base (u/mes)", "Vel. Temporada Alta", "Peso %"], hdr)
+            row += 1
+            for sr in gc["store_rows"]:
+                ws.write(row, 0, sr["label"])
+                ws.write(row, 1, sr["vel_base"], dec)
+                ws.write(row, 2, sr["vel_hs"], dec)
+                ws.write(row, 3, sr["weight"], pct4)
+                row += 1
+            ws.write(row, 0, "TOTAL RED", bold)
+            ws.write(row, 1, gc["vel_base_total"], dec)
+            ws.write(row, 2, gc["vel_hs_total"], dec)
+            ws.write(row, 3, 1, pct4)
+            row += 2
+            ws.write(row, 0, "Stock actual (todas ubicaciones)", bold)
+            ws.write(row, 1, gc["stock"], num)
+            row += 1
+            ws.write(row, 0, "Demanda teórica MÍNIMO", bold)
+            ws.write(row, 1, gc["demand_min"], dec)
+            row += 1
+            ws.write(row, 0, "Demanda teórica MÁXIMO", bold)
+            ws.write(row, 1, gc["demand_max"], dec)
+            row += 1
+            ws.write(row, 0, "PRODUCIR — MÍNIMO (meta de negocio)", bold)
+            ws.write(row, 1, gc["produce_min"], blue)
+            row += 1
+            ws.write(row, 0, "PRODUCIR — MÁXIMO (meta de negocio)", bold)
+            ws.write(row, 1, gc["produce_max"], blue)
+            row += 1
+            ws.merge_range(
+                row, 0, row, 5,
+                "↑ Meta definida por decisión de negocio — alimenta talla, color, tienda y tela.",
+                wrap,
+            )
+            row += 1
+
+        row += 1
+        ws.merge_range(row, 0, row, 5, "RESUMEN — TOTAL A PRODUCIR POR GÉNERO", section)
+        row += 1
+        ws.write_row(row, 0, ["Género", "Vel. Base (u/mes)", "Vel. Temporada Alta", "Stock Actual", "PRODUCIR MÍN", "PRODUCIR MÁX"], hdr)
+        row += 1
+        totals = {"vb": 0, "vh": 0, "st": 0, "pm": 0, "px": 0}
+        for genero in ["CAB", "DAMA", "KIDS"]:
+            gc = ctx["generos"][genero]
+            ws.write_row(row, 0, [gc["label"], gc["vel_base_total"], gc["vel_hs_total"], gc["stock"], gc["produce_min"], gc["produce_max"]])
+            totals["vb"] += gc["vel_base_total"]
+            totals["vh"] += gc["vel_hs_total"]
+            totals["st"] += gc["stock"]
+            totals["pm"] += gc["produce_min"]
+            totals["px"] += gc["produce_max"]
+            row += 1
+        ws.write_row(row, 0, ["TOTAL GENERAL", totals["vb"], totals["vh"], totals["st"], totals["pm"], totals["px"]], total_fmt)
+
+        row += 2
+        sr = ctx["season_ref"]
+        ws.merge_range(row, 0, row, 5, "TEMPORADA ALTA — REFERENCIA", section)
+        row += 1
+        ws.write(row, 0, "Promedio base reciente (5 tiendas)", bold)
+        ws.write(row, 1, sr["base_jun_ago"], num)
+        row += 1
+        ws.write(row, 0, "Diciembre 2025 (pico real)", bold)
+        ws.write(row, 1, sr["dic_2025"], num)
+        row += 1
+        ws.write(row, 0, "Ratio observado (Dic / base)", bold)
+        ws.write(row, 1, sr["ratio"], dec)
+
+        row += 2
+        ws.merge_range(row, 0, row, 5, "STOCK ACTUAL Y COBERTURA POR TIENDA (todos los géneros)", section)
+        row += 1
+        ws.write_row(row, 0, ["Tienda", "Stock actual", "Vel. Base total (u/mes)", "Cobertura (meses)", "Estado"], hdr)
+        row += 1
+        for sr in ctx["store_stock_rows"]:
+            ws.write(row, 0, sr["label"])
+            ws.write(row, 1, sr["stock"], num)
+            if sr["vel_base"] is None:
+                ws.write(row, 2, "—")
+                ws.write(row, 3, "—")
+                ws.write(row, 4, sr["status"])
+            else:
+                ws.write(row, 2, sr["vel_base"], dec)
+                ws.write(row, 3, sr["coverage"], dec)
+                ws.write(row, 4, sr["status"])
+            row += 1
+
+        # ── 2. Producción por Talla ──
         ws = wb.add_worksheet("Producción por Talla")
         row = 0
         ws.write(row, 0, "MAR ORIGINAL — CANTIDADES POR TALLA (MÍN / MÁX)", title)
@@ -786,9 +1047,10 @@ def export_excel(data: dict, path: Path) -> None:
         for genero in ["CAB", "DAMA", "KIDS"]:
             rd = rango[genero]
             s = summary[genero]
-            ws.write(row, 0, f"{genero} · Rotación ajustada {s['v_mes']}/mes · Tela {TELA_NOMBRE} · consumo {TELA_CONSUMO[genero]} m/pieza", bold)
-            row += 2
-            ws.write_row(row, 0, ["Talla", "Curva %", "Mínimo", "Máximo"], hdr)
+            g_label = GENDER_XL[genero]
+            ws.write(row, 0, f"{g_label} — CURVA DE TALLA (% sobre venta {vel_label})", section)
+            row += 1
+            ws.write_row(row, 0, ["Talla", "%", "Mínimo", "Máximo"], hdr)
             row += 1
             tallas = sort_tallas(genero, list(rd["talla_totals"].keys()))
             tmin = tmax = 0
@@ -796,84 +1058,102 @@ def export_excel(data: dict, path: Path) -> None:
                 td = rd["talla_totals"][t]
                 if td["min"] <= 0 and td["max"] <= 0:
                     continue
-                ws.write_row(row, 0, [t, td["curve_pct"] / 100, td["min"], td["max"]])
+                ws.write(row, 0, t)
+                ws.write(row, 1, td["curve_pct"] / 100, pct4)
+                ws.write(row, 2, td["min"], num)
+                ws.write(row, 3, td["max"], num)
                 tmin += td["min"]
                 tmax += td["max"]
                 row += 1
-            ws.write_row(row, 0, ["TOTAL", "", tmin, tmax], bold)
-            row += 3
+            ws.write(row, 0, "TOTAL", bold)
+            ws.write(row, 1, 1 if tmin else 0, pct4)
+            ws.write(row, 2, tmin, num)
+            ws.write(row, 3, tmax, num)
+            row += 2
 
-        # ── 2. Cantidades por Colores ──
+        # ── 3. Cantidades por Colores ──
         ws = wb.add_worksheet("Cantidades por Colores")
         row = 0
-        ws.write(row, 0, "CANTIDADES POR COLORES — MAR ORIGINAL", title)
+        ws.write(row, 0, "MAR ORIGINAL — CANTIDADES POR COLOR (colores activos para producción)", title)
         row += 2
         for genero in ["CAB", "DAMA", "KIDS"]:
             rd = rango[genero]
             s = summary[genero]
-            tallas = sort_tallas(genero, list({t for cr in rd["color_rows"] for t in [x["talla"] for x in cr["tallas"]]}))
-            ws.write(row, 0, f"MAR ORIGINAL {genero} · Rango {s['produce']} – {s['produce_max']} und", bold)
+            g_label = GENDER_XL[genero]
+            ws.write(row, 0, f"{g_label} — CANTIDADES POR COLOR", section)
             row += 1
-            ws.write(row, 0, "MÍNIMO — compromiso", bold)
+            ws.write_row(row, 0, ["Color", "%", "Mínimo", "Máximo"], hdr)
             row += 1
-            hdr_row = ["Color", "%"] + tallas + ["Tot"]
-            ws.write_row(row, 0, hdr_row, hdr)
-            row += 1
+            cmin = cmax = 0
             for cr in rd["color_rows"]:
                 if cr["min"] <= 0:
                     continue
-                by_t = {t["talla"]: t["produce_min"] for t in cr["tallas"]}
-                ws.write_row(row, 0, [cr["color"], cr["pct"] / 100] + [by_t.get(t, 0) for t in tallas] + [cr["min"]])
+                share = cr["min"] / s["produce"] if s["produce"] else 0
+                ws.write(row, 0, cr["color"])
+                ws.write(row, 1, share, pct4)
+                ws.write(row, 2, cr["min"], num)
+                ws.write(row, 3, cr["max"], num)
+                cmin += cr["min"]
+                cmax += cr["max"]
                 row += 1
-            row += 1
-            ws.write(row, 0, "MÁXIMO — techo", bold)
-            row += 1
-            ws.write_row(row, 0, hdr_row, hdr)
-            row += 1
-            for cr in rd["color_rows"]:
-                if cr["max"] <= 0:
-                    continue
-                by_t = {t["talla"]: t["produce_max"] for t in cr["tallas"]}
-                ws.write_row(row, 0, [cr["color"], cr["pct"] / 100] + [by_t.get(t, 0) for t in tallas] + [cr["max"]])
-                row += 1
+            ws.write_row(row, 0, ["TOTAL", 1 if cmin else 0, cmin, cmax], total_fmt)
             row += 2
 
-        # ── 3. Producción Color × Talla ──
+        # ── 4. Producción Color × Talla (matriz) ──
         ws = wb.add_worksheet("Producción Color × Talla")
         row = 0
         ws.write(row, 0, "MAR ORIGINAL — PRODUCCIÓN POR COLOR Y TALLA", title)
         row += 2
         for genero in ["CAB", "DAMA", "KIDS"]:
-            ws.write(row, 0, f"{genero}", bold)
+            rd = rango[genero]
+            g_label = GENDER_XL[genero]
+            tallas = sort_tallas(
+                genero,
+                list({t["talla"] for cr in rd["color_rows"] for t in cr["tallas"] if t["produce_min"] > 0}),
+            )
+            if not tallas:
+                continue
+            ws.write(row, 0, f"{g_label} — PRODUCCIÓN COLOR × TALLA", section)
             row += 1
-            for cr in rango[genero]["color_rows"]:
+            ws.write_row(row, 0, ["Color / Talla"] + tallas + ["Total"], hdr)
+            row += 1
+            for cr in rd["color_rows"]:
                 if cr["min"] <= 0:
                     continue
-                ws.write(row, 0, f"{cr['color']} ({cr['pct']}%)", bold)
+                by_min = {t["talla"]: t["produce_min"] for t in cr["tallas"]}
+                by_max = {t["talla"]: t["produce_max"] for t in cr["tallas"]}
+                ws.write_row(row, 0, [f"{cr['color']} — Mín"] + [by_min.get(t, 0) for t in tallas] + [cr["min"]])
                 row += 1
-                ws.write_row(row, 0, ["Talla", "Mín", "Máx", "Vel/mes", "Stock", "Cob (m)"], hdr)
+                ws.write_row(row, 0, [f"{cr['color']} — Máx"] + [by_max.get(t, 0) for t in tallas] + [cr["max"]])
                 row += 1
-                for t in cr["tallas"]:
-                    if t["produce_min"] <= 0:
-                        continue
-                    ws.write_row(row, 0, [t["talla"], t["produce_min"], t["produce_max"], t["v_mes"], t["stk"], t["cob"]])
-                    row += 1
-                ws.write_row(row, 0, ["TOTAL color", cr["min"], cr["max"], "", "", ""])
-                row += 2
             row += 1
 
-        # ── 4. Compra de Tela Jabón ──
-        ws = wb.add_worksheet("Compra de Tela Jabón")
+        # ── 5. Compra de Tela ──
+        ws = wb.add_worksheet("Compra de Tela")
         row = 0
         ws.write(row, 0, f"MAR ORIGINAL — COMPRA DE TELA {TELA_NOMBRE.upper()}", title)
         row += 1
-        ws.write(row, 0, f"Consumo promedio · CAB {TELA_CONSUMO['CAB']} m · DAMA {TELA_CONSUMO['DAMA']} m · KIDS {TELA_CONSUMO['KIDS']} m · SS tela +{int(TELA_SS*100)}%", bold)
+        ws.write(row, 0, f"Consumo promedio por unidad (m/und) · SS tela +{int(TELA_SS * 100)}%", wrap)
         row += 2
-        ws.write_row(row, 0, ["Género", "Color", "%", "Und Mín", "Und Máx", "Mts consumo Mín", "Mts consumo Máx", "Mts compra Mín (+SS)", "Mts compra Máx (+SS)"], hdr)
+        ws.write(row, 0, "Stock de seguridad tela (compra)", bold)
+        ws.write(row, 1, TELA_SS, pct)
+        row += 2
+        ws.write(row, 0, "Género", bold)
+        ws.write(row, 1, "Consumo (m/und)", bold)
         row += 1
-        totals = {"min_u": 0, "max_u": 0, "min_m": 0.0, "max_m": 0.0, "min_c": 0.0, "max_c": 0.0}
+        for g in ["CAB", "DAMA", "KIDS"]:
+            ws.write_row(row, 0, [GENDER_XL[g], TELA_CONSUMO[g]])
+            row += 1
+        row += 1
+        tela_hdr = ["Color", "Und Mín", "Und Máx", "Mts consumo Mín", "Mts consumo Máx", "Mts compra Mín (+SS)", "Mts compra Máx (+SS)"]
         for genero in ["CAB", "DAMA", "KIDS"]:
             cons = TELA_CONSUMO[genero]
+            g_label = GENDER_XL[genero]
+            ws.write(row, 0, f"{g_label} — COMPRA DE TELA POR COLOR (consumo {cons} m/und)", section)
+            row += 1
+            ws.write_row(row, 0, tela_hdr, hdr)
+            row += 1
+            gmin = gmax = gm_min = gm_max = gc_min = gc_max = 0
             for cr in rango[genero]["color_rows"]:
                 if cr["min"] <= 0:
                     continue
@@ -881,23 +1161,25 @@ def export_excel(data: dict, path: Path) -> None:
                 mts_max = cr["max"] * cons
                 buy_min = mts_min * (1 + TELA_SS)
                 buy_max = mts_max * (1 + TELA_SS)
-                ws.write_row(row, 0, [genero, cr["color"], cr["pct"] / 100, cr["min"], cr["max"], round(mts_min, 2), round(mts_max, 2), round(buy_min, 2), round(buy_max, 2)])
-                totals["min_u"] += cr["min"]
-                totals["max_u"] += cr["max"]
-                totals["min_m"] += mts_min
-                totals["max_m"] += mts_max
-                totals["min_c"] += buy_min
-                totals["max_c"] += buy_max
+                ws.write_row(
+                    row, 0,
+                    [cr["color"], cr["min"], cr["max"], round(mts_min, 1), round(mts_max, 1), round(buy_min, 1), round(buy_max, 1)],
+                )
+                gmin += cr["min"]
+                gmax += cr["max"]
+                gm_min += mts_min
+                gm_max += mts_max
+                gc_min += buy_min
+                gc_max += buy_max
                 row += 1
-        ws.write_row(row, 0, ["TOTAL TELA", "", "", totals["min_u"], totals["max_u"], round(totals["min_m"], 2), round(totals["max_m"], 2), round(totals["min_c"], 2), round(totals["max_c"], 2)], bold)
-        row += 3
-        ws.write(row, 0, "Consumo unitario referencia (m/pieza)", bold)
-        row += 1
-        for g, c in TELA_CONSUMO.items():
-            ws.write_row(row, 0, [g, c])
-            row += 1
+            ws.write_row(
+                row, 0,
+                [f"TOTAL {g_label}", gmin, gmax, round(gm_min, 1), round(gm_max, 1), round(gc_min, 1), round(gc_max, 1)],
+                total_fmt,
+            )
+            row += 2
 
-        # ── 5. Distribución por Tienda ──
+        # ── 6. Distribución por Tienda ──
         ws = wb.add_worksheet("Distribución por Tienda")
         row = 0
         ws.write(row, 0, "MAR ORIGINAL — DISTRIBUCIÓN POR TIENDA Y TALLA", title)
@@ -910,7 +1192,8 @@ def export_excel(data: dict, path: Path) -> None:
             active_tallas = [t for t in tallas if rd["talla_totals"][t]["min"] > 0]
             if not active_tallas:
                 continue
-            ws.write(row, 0, f"{genero} · {summary[genero]['produce']} – {summary[genero]['produce_max']} und", bold)
+            g_label = GENDER_XL[genero]
+            ws.write(row, 0, f"{g_label} · {summary[genero]['produce']} – {summary[genero]['produce_max']} und", section)
             row += 1
             hdr_cells = ["Tienda"]
             for t in active_tallas:
@@ -943,13 +1226,13 @@ def export_excel(data: dict, path: Path) -> None:
                 vals.append(st_min)
                 ws.write_row(row, 0, vals)
                 row += 1
-            total_row = ["TOTAL"]
-            gt_min = gt_max = 0
+            dist_total = ["TOTAL"]
+            gt_min = 0
             for t in active_tallas:
-                total_row.extend([col_tot_min[t], col_tot_max[t]])
+                dist_total.extend([col_tot_min[t], col_tot_max[t]])
                 gt_min += col_tot_min[t]
-            total_row.append(gt_min)
-            ws.write_row(row, 0, total_row, bold)
+            dist_total.append(gt_min)
+            ws.write_row(row, 0, dist_total, bold)
             row += 2
             ws.write(row, 0, "Totales por tienda (Mín):", bold)
             row += 1
@@ -964,6 +1247,42 @@ def export_excel(data: dict, path: Path) -> None:
                 ws.write_row(row, 0, [STORE_LABELS_XL[store], st_min, vel_proy])
                 row += 1
             row += 2
+
+        # ── 7. Metodología ──
+        ws = wb.add_worksheet("Metodología")
+        ws.set_column("A:A", 100)
+        row = 0
+        ws.write(row, 0, "METODOLOGÍA — MAR ORIGINAL · PROYECCIÓN DE PRODUCCIÓN (CAB / DAMA / KIDS)", title)
+        row += 2
+        metodologia = [
+            ("1. FUENTES DE DATOS", None),
+            (f"• Ventas: {VENTAS_XLSX.name} — {ctx['periodo']} ({data['n_sem']} meses).", None),
+            (f"• Inventario actual: {INV_XLSX.name} — {data['stock_total']:,} unidades.", None),
+            (f"• Colores activos para producción: catálogo Mar Original ({len(COLORES_PRODUCCION['CAB'])} CAB · {len(COLORES_PRODUCCION['DAMA'])} DAMA · {len(COLORES_PRODUCCION['KIDS'])} KIDS).", None),
+            (f"• Consumo tela {TELA_NOMBRE}: CAB {TELA_CONSUMO['CAB']} m/und · DAMA {TELA_CONSUMO['DAMA']} m/und · KIDS {TELA_CONSUMO['KIDS']} m/und.", None),
+            ("2. VELOCIDAD BASE Y AJUSTES POR TIENDA", None),
+            (f"• Ventana base: {vel_label} ponderado por tienda y género.", None),
+            ("• LA VELA: tienda nueva → misma velocidad que GRIETA.", None),
+            (f"• TOLÓN: velocidad × {TOLON_BOOST}.", None),
+            ("• BARQUISIMETO: promedio GRIETA + CHACAO + TOLÓN.", None),
+            ("• WEB/PEDIDOS: 50% de la tienda física más fuerte.", None),
+            ("3. FACTOR DE TEMPORADA ALTA", None),
+            (f"• CAB/DAMA × {HIGH_SEASON_FACTOR['CAB']} · KIDS × {HIGH_SEASON_FACTOR['KIDS']}.", None),
+            (f"• Referencia Dic-25 vs base: ratio ≈ {ctx['season_ref']['ratio']}×.", None),
+            ("4. CANTIDAD A PRODUCIR", None),
+            (f"• Metas MÍN: CAB {TARGET_PRODUCE_MIN['CAB']:,} · DAMA {TARGET_PRODUCE_MIN['DAMA']:,} · KIDS {TARGET_PRODUCE_MIN['KIDS']:,} und.", None),
+            ("• Mix color × talla desde proporciones históricas de ventas (dashboard calcProp).", None),
+            ("• CAB: sin 3XL/4XL · boost 2XL +22%. DAMA: sin 2XL · boost L +22%.", None),
+            ("5. CURVAS DE TALLA, COLOR Y TELA", None),
+            ("• Producción Color × Talla: matriz color × talla (Mín/Máx por color).", None),
+            (f"• Compra de tela: metros = unidades × consumo género × (1 + {int(TELA_SS * 100)}% SS).", None),
+            ("6. DISTRIBUCIÓN POR TIENDA", None),
+            ("• Cada tienda recibe proporción igual a su peso en velocidad de red.", None),
+        ]
+        for heading, _ in metodologia:
+            fmt = section if heading and heading[0].isdigit() else wrap
+            ws.write(row, 0, heading, fmt)
+            row += 1
 
 
 def patch_html(template: str, data: dict) -> str:
