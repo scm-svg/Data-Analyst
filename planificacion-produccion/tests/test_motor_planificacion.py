@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.19 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.20 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -580,7 +580,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
-    """Motor v5.9.19: 5.9.15 + Secuencia=No desactiva género; el lote de color se mantiene."""
+    """Motor v5.9.20: 5.9.19 + Especial no desborda a L1."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -705,8 +705,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def elegibles(t, overflow):
         ls = list(t["lineas"])
-        if t.get("esEspecial") and overflow and "1" not in ls:
-            ls.append("1")
         return [l for l in ls if l in carga]
 
     def runnable(t, d, lin, overflow):
@@ -976,16 +974,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
                 if restante_modelo(m) <= cap_owned + 1e-6:
                     break
-        if overflow and len(ocupante.get("1") or []) == 0:
-            for m in vivos:
-                if not m["esEspecial"]:
-                    continue
-                if not any(t["restante"] > 0 and (not t.get("lineaFija") or t.get("lineaFija") == "1")
-                           for t in m["tareas"]):
-                    continue
-                if "1" in elegibles(m["tareas"][0], True) or overflow:
-                    ocupante["1"].append(m["nombre"])
-                    break
 
     def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None):
         for t in m["tareas"]:
@@ -1089,7 +1077,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 l2 != lin and m["nombre"] in (ocupante.get(l2) or [])
                 for l2 in ocupante
             )
-            if ya_otra and not (overflow and lin == "1" and m["esEspecial"]):
+            if ya_otra:
                 continue
             if para_paralelo and fam_ref and familia_modelo(m) == fam_ref:
                 continue
@@ -1551,28 +1539,51 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(sum(lunes.values()), 130)
 
     def test_linea1_cambio_secuencial_llena_sobrante(self):
-        """Excel (13): L1 no queda a 80/130 cuando el nativo termina; el siguiente especial usa el sobrante."""
+        """L1 no queda a 80/130 cuando el nativo termina; el siguiente especial que SÍ lista L1 usa el sobrante."""
         tareas = [
             {"sku": "MD1", "modelo": "MAR DAMA (Especial)", "color": "Blanco", "cantidad": 80,
              "solicitadaOrig": 80, "esEspecial": True, "mo": "MO-MD", "cap": 130,
              "lineas": ["1"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260828},
-            {"sku": "MC1", "modelo": "MAR CAB (Especial)", "color": "Blanco", "cantidad": 96,
-             "solicitadaOrig": 96, "esEspecial": True, "mo": "MO-MC", "cap": 130,
-             "lineas": ["1", "2"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
+            {"sku": "BC1", "modelo": "BASIC CAB (Especial)", "color": "Blanco", "cantidad": 96,
+             "solicitadaOrig": 96, "esEspecial": True, "mo": "MO-BC", "cap": 130,
+             "lineas": ["1"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
             {"sku": "CD1", "modelo": "CLÁSICA DAMA (Especial)", "color": "Negro", "cantidad": 149,
              "solicitadaOrig": 149, "esEspecial": True, "mo": "MO-CD", "cap": 130,
              "lineas": ["3"], "prioridadNum": 0, "diaIngreso": 0, "fechaKey": 20260904},
         ]
         out = planificar(tareas, {}, total_dias=5)
         lunes1 = defaultdict(int)
+        lunes3 = defaultdict(int)
         for t in out:
             lunes1[t["modelo"]] += t["plan"]["1"][0]
+            lunes3[t["modelo"]] += t["plan"]["3"][0]
         self.assertEqual(sum(lunes1.values()), 130, "L1 lunes incompleto: %s" % dict(lunes1))
         self.assertEqual(lunes1["MAR DAMA (Especial)"], 80)
-        self.assertGreater(lunes1["CLÁSICA DAMA (Especial)"], 0, "el sobrante de L1 debe ir al especial de otra línea")
-        self.assertEqual(lunes1["MAR DAMA (Especial)"] + lunes1["CLÁSICA DAMA (Especial)"], 130)
-        vivos = [m for m, q in lunes1.items() if q > 0]
-        self.assertEqual(len(vivos), 2)
+        self.assertEqual(lunes1["BASIC CAB (Especial)"], 50)
+        self.assertEqual(lunes1.get("CLÁSICA DAMA (Especial)", 0), 0)
+        self.assertGreater(lunes3["CLÁSICA DAMA (Especial)"], 0)
+
+    def test_especial_no_desborda_a_linea1(self):
+        """Un especial de L3 no se redirige a L1 aunque L1 quede libre."""
+        tareas = [
+            {"sku": "M1", "modelo": "MAR CAB (Especial)", "mo": "MO-M", "cantidad": 50, "cap": 130,
+             "lineas": ["1"], "color": "Azul", "prioridadNum": 0, "esEspecial": True,
+             "diaIngreso": 0, "fechaKey": 20260904, "solicitadaOrig": 50},
+            {"sku": "D1", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D1", "cantidad": 80, "cap": 130,
+             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
+            {"sku": "D2", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D2", "cantidad": 80, "cap": 130,
+             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
+            {"sku": "D3", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D3", "cantidad": 80, "cap": 130,
+             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
+             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        en_l1 = sum(sum(t["plan"]["1"]) for t in out if t["modelo"].startswith("DOMINIC"))
+        en_l3 = sum(sum(t["plan"]["3"]) for t in out if t["modelo"].startswith("DOMINIC"))
+        self.assertEqual(en_l1, 0, "DOMINIC no debe salir de la línea 3")
+        self.assertEqual(en_l3, 240)
 
     def test_linea5_sola_usa_capacidad_40(self):
         tareas = [{
@@ -1707,25 +1718,6 @@ class TestLineasExclusivas(unittest.TestCase):
             modelos_hoy = {t["modelo"] for t in out if t["plan"]["5"][d] > 0}
             self.assertLessEqual(len(modelos_hoy), 2, "día %s mezcló %s" % (d, modelos_hoy))
             self.assertEqual(sum(t["plan"]["5"][d] for t in out), 40)
-
-    def test_especial_overflow_a_linea1(self):
-        tareas = [
-            {"sku": "M1", "modelo": "MAR CAB (Especial)", "mo": "MO-M", "cantidad": 50, "cap": 130,
-             "lineas": ["1"], "color": "Azul", "prioridadNum": 0, "esEspecial": True,
-             "diaIngreso": 0, "fechaKey": 20260904, "solicitadaOrig": 50},
-            {"sku": "D1", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D1", "cantidad": 80, "cap": 130,
-             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
-             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
-            {"sku": "D2", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D2", "cantidad": 80, "cap": 130,
-             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
-             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
-            {"sku": "D3", "modelo": "DOMINIC CAB (Especial)", "mo": "MO-D3", "cantidad": 80, "cap": 130,
-             "lineas": ["3"], "color": "Blanco", "prioridadNum": 0, "esEspecial": True,
-             "diaIngreso": 0, "fechaKey": 20260828, "solicitadaOrig": 80},
-        ]
-        out = planificar(tareas, {}, total_dias=10)
-        en_l1 = sum(sum(t["plan"]["1"]) for t in out if t["modelo"].startswith("DOMINIC"))
-        self.assertGreater(en_l1, 0, "DOMINIC debía desbordar a línea 1 cuando MAR terminó")
 
     def test_especial_ordena_por_fecha(self):
         a = {"modelo": "CLÁSICA CAB", "esEspecial": True, "esMinima": False, "fechaKey": 20260904, "prioridadNum": 0}

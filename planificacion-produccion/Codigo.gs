@@ -1,10 +1,13 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.19 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.20 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ESPECIAL SIN DESBORDE A L1: Por Hacer - Especial se queda en
+ *     Linea de Produccion. Si L1 queda libre, NO se redirigen ahí
+ *     modelos de otras líneas. Vacío en la celda sigue siendo 1.
  *   - SECUENCIA=NO (Priorizacion col. H): desactiva SOLO el orden de
  *     género (CAB → DAMA → KIDS). El lote de color sigue: Negro →
  *     Blanco → Marino → resto. No reclama líneas extra. No parte MOs.
@@ -42,8 +45,7 @@
  *   - ACTUALIZAR MOs: las MO en Hecho de Por Hacer - Especial NO se
  *     archivan ni se borran. Cancelada sí. Producción regular igual.
  *   - LÍNEA 1: al cambiar de modelo el sobrante del día se llena
- *     (igual que L2-4). Un nativo de L1 que ya está en otra línea no
- *     bloquea el desborde; el overflow se recálcula al ceder la línea.
+ *     (igual que L2-4) con el siguiente que SÍ lista esa línea.
  *   - CANTIDAD MÍNIMA programa el cupo pedido (ej. 100 pzas) desde el
  *     faltante. Lo ya producido solo quita la banda si YA se cubrió
  *     el piso completo; no recorta 100 a 67. El modelo no cede la
@@ -66,8 +68,8 @@
  *   - URGENTE (después de Especial y de la cantidad mínima), luego la
  *     fecha más próxima. Un modelo Urgente con 2+ líneas usa ambas.
  *     Líneas 1-4 = un modelo a la vez (secuencial); L5 hasta 2 en paralelo.
- *   - ESPECIAL: respeta Linea de Produccion; línea 1 es la casa. Si L1
- *     termina y quedan Especiales en otras líneas, desbordan a L1.
+ *   - ESPECIAL: respeta Linea de Produccion. Si la celda viene vacía
+ *     se usa 1. No desborda a L1 desde otras líneas.
  *     Fecha de Salida Estimada en Por Hacer - Especial ordena Especiales.
  *   - Priorización elimina modelos con faltante total 0.
  *   - PROYECCIÓN: tablas desde B2; umbrales primer cruce; links a SKUS.
@@ -83,7 +85,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.19";
+var VERSION_SISTEMA = "5.9.20";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1414,7 +1416,6 @@ function generarPlanificacionSemanal_() {
 
   function elegiblesTarea_(t, overflow) {
     var ls = t.lineas.slice();
-    if (t.esEspecial && overflow && ls.indexOf("1") === -1) ls.push("1");
     return ls.filter(function (l) { return carga[l] !== undefined; });
   }
 
@@ -1767,18 +1768,6 @@ function generarPlanificacionSemanal_() {
         capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
     });
-    if (overflowL1 && ocupante["1"].length === 0) {
-      for (var iE = 0; iE < vivos.length; iE++) {
-        var mE = vivos[iE];
-        if (!mE.esEspecial) continue;
-        var hayPend = mE.tareas.some(function (t) {
-          return t.restante > 0 && (!t.lineaFija || t.lineaFija === "1");
-        });
-        if (!hayPend) continue;
-        ocupante["1"].push(mE.nombre);
-        break;
-      }
-    }
 
     vivos.forEach(function (m) {
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
@@ -1840,7 +1829,7 @@ function generarPlanificacionSemanal_() {
         var yaOtra = ["1", "2", "3", "4", "5"].some(function (l2) {
           return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
         });
-        if (yaOtra && !(overflow && lin === "1" && mC.esEspecial)) continue;
+        if (yaOtra) continue;
         if (paraParalelo && famRef && familiaModelo_(mC) === famRef) continue;
         if (debeEsperarHermano_(mC, overflow)) continue;
         if (!modeloPuedeProducirHoy_(mC.nombre, lin, d, overflow)) continue;
@@ -2110,6 +2099,7 @@ function generarPlanificacionSemanal_() {
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
+    "• Especial: solo Linea de Produccion (si la celda viene vacía, 1). No desborda a L1.\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
     "• Cupo mínimo de modelo (" + nModelosConMinima + "):\n  - " + txtMin + "\n" +
     "• Cupo mínimo de SKU (" + nSkusMin + "):\n  - " + txtSkuMin + "\n" +
