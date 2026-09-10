@@ -60,7 +60,7 @@ GEN_MAP = {
 COLORES_PRODUCCION = {
     "CAB": [
         "Aguamarina", "Amarillo Neón", "Azul Lavanda", "Azul Marino", "Azul Rey", "Blanco",
-        "Gris", "Negro", "Rojo", "Verde Militar", "Vinotinto",
+        "Gris Claro", "Negro", "Rojo", "Verde Militar", "Vinotinto",
     ],
     "DAMA": [
         "Aguamarina", "Amarillo Neón", "Azul Lavanda", "Azul Marino", "Blanco", "Lila",
@@ -248,15 +248,15 @@ def sort_tallas(genero: str, tallas: list[str]) -> list[str]:
 def to_production_color(color: str, genero: str) -> str:
     """Map sales/inventory color names to production catalog color."""
     c = norm_color(color)
-    if genero == "CAB" and c == "Gris Claro":
-        return "Gris"
+    if genero == "CAB" and c in ("Gris Claro", "Gris"):
+        return "Gris Claro"
     return c
 
 
 def production_color_variants(prod_color: str, genero: str) -> list[str]:
     """Inventory/sales aliases when looking up stock for a production color."""
-    if genero == "CAB" and prod_color == "Gris":
-        return ["Gris", "Gris Claro"]
+    if genero == "CAB" and prod_color == "Gris Claro":
+        return ["Gris Claro", "Gris"]
     return [prod_color]
 
 
@@ -269,14 +269,11 @@ def remap_vel_colors(df: pd.DataFrame, genero: str) -> pd.DataFrame:
     return out.drop(columns=["prod_color"])
 
 
-def active_colors(genero: str, g_vel: pd.DataFrame, all_sales: pd.DataFrame) -> list[str]:
-    """Only production-catalog colors, ordered by sales volume."""
+def active_colors(genero: str, period_vel: pd.DataFrame, all_sales: pd.DataFrame) -> list[str]:
+    """Only production-catalog colors, ordered by recent sales (May–Ago)."""
     disp = COLORES_PRODUCCION.get(genero, [])
-    g_mapped = remap_vel_colors(g_vel, genero)
-    hist = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
-    sales_rank = g_mapped.groupby("color")["v"].sum().add(
-        hist.groupby("color")["v"].sum(), fill_value=0
-    ).to_dict()
+    g_mapped = remap_vel_colors(period_vel, genero)
+    sales_rank = g_mapped.groupby("color")["v"].sum().to_dict()
     return sorted(disp, key=lambda c: sales_rank.get(c, 0), reverse=True)
 
 
@@ -332,6 +329,7 @@ def rebuild_gender_aggregates(
         color_rows.append({
             "color": item["color"],
             "pct": item["color_pct"],
+            "sales_pct": item.get("sales_pct", item["color_pct"] / 100),
             "min": c_min,
             "max": c_max,
             "tallas": item["tallas"],
@@ -351,6 +349,7 @@ def rebuild_gender_aggregates(
     summary[genero]["produce"] = g_prod
     summary[genero]["produce_max"] = g_prod_max
     rango[genero]["talla_totals"] = dict(talla_totals)
+    color_rows.sort(key=lambda x: x.get("sales_pct", x["pct"]), reverse=True)
     rango[genero]["color_rows"] = color_rows
     rango[genero]["store_talla"] = {s: dict(v) for s, v in store_talla.items()}
 
@@ -406,13 +405,14 @@ def build_gender_plan_proportional(
 
     g_vel = remap_vel_colors(g_vel, genero)
     hist_vel = remap_vel_colors(all_sales[all_sales["genero"] == genero], genero)
-    colors = active_colors(genero, g_vel, all_sales)
-    sold_tallas = active_tallas(genero, hist_vel, for_production=True)
+    period_vel = hist_vel[hist_vel["mes"].isin(VELOCITY_PERIODS)]
+    colors = active_colors(genero, period_vel, all_sales)
+    sold_tallas = active_tallas(genero, period_vel, for_production=True)
     excluded_tallas = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
-    color_sales = hist_vel.groupby("color")["v"].sum().sort_values(ascending=False)
+    color_sales = period_vel.groupby("color")["v"].sum().sort_values(ascending=False)
     color_total = color_sales.sum() or 1
-    gender_total = hist_vel["v"].sum() or 1
-    gender_talla = hist_vel.groupby("talla")["v"].sum()
+    gender_total = period_vel["v"].sum() or 1
+    gender_talla = period_vel.groupby("talla")["v"].sum()
     gender_talla_pct = (gender_talla / gender_total).to_dict()
 
     mix_weights: dict[tuple[str, str], float] = {}
@@ -421,7 +421,7 @@ def build_gender_plan_proportional(
 
     for color in colors:
         c_vel = g_vel[g_vel["color"] == color]
-        c_hist = hist_vel[hist_vel["color"] == color]
+        c_hist = period_vel[period_vel["color"] == color]
         c_total = float(c_hist["v"].sum())
         c_talla = c_hist.groupby("talla")["v"].sum()
         tier = color_tier_multiplier(color, color_sales, genero)
@@ -440,8 +440,10 @@ def build_gender_plan_proportional(
         stk = int(stk_rows["v"].sum())
         stk_taller = int(stk_rows[stk_rows["tienda"] == "TALLER"]["v"].sum())
         cob = round(stk / v_adj, 1) if v_adj > 0 else 99.0
+        sales_share = (color_sales.get(color, 0) / color_total) if color in color_sales.index else 0.0
         color_meta[color] = {
-            "color_pct": round((color_sales.get(color, 0) / color_total * 100) if color in color_sales.index else 0.0, 1),
+            "color_pct": round(sales_share * 100, 1),
+            "sales_share": sales_share,
             "stk": stk,
             "stk_taller": stk_taller,
             "cob": cob,
@@ -544,6 +546,7 @@ def build_gender_plan_proportional(
             "genero": genero,
             "color": color,
             "color_pct": cm["color_pct"],
+            "sales_pct": cm["sales_share"],
             "v_mes_base": cm["v_mes_base"],
             "v_mes": cm["v_mes"],
             "stk": cm["stk"],
@@ -1085,10 +1088,17 @@ def export_excel(data: dict, path: Path) -> None:
             ws.write_row(row, 0, ["Color", "%", "Mínimo", "Máximo"], hdr)
             row += 1
             cmin = cmax = 0
-            for cr in rd["color_rows"]:
+            color_rows_sorted = sorted(
+                rd["color_rows"],
+                key=lambda x: x.get("sales_pct", x["pct"] / 100 if isinstance(x["pct"], (int, float)) and x["pct"] > 1 else x.get("pct", 0)),
+                reverse=True,
+            )
+            for cr in color_rows_sorted:
                 if cr["min"] <= 0:
                     continue
-                share = cr["min"] / s["produce"] if s["produce"] else 0
+                share = cr.get("sales_pct")
+                if share is None:
+                    share = cr["pct"] / 100 if cr["pct"] > 1 else cr["pct"]
                 ws.write(row, 0, cr["color"])
                 ws.write(row, 1, share, pct4)
                 ws.write(row, 2, cr["min"], num)
@@ -1117,7 +1127,12 @@ def export_excel(data: dict, path: Path) -> None:
             row += 1
             ws.write_row(row, 0, ["Color / Talla"] + tallas + ["Total"], hdr)
             row += 1
-            for cr in rd["color_rows"]:
+            color_rows_sorted = sorted(
+                rd["color_rows"],
+                key=lambda x: x.get("sales_pct", x["pct"] / 100 if x["pct"] > 1 else x.get("pct", 0)),
+                reverse=True,
+            )
+            for cr in color_rows_sorted:
                 if cr["min"] <= 0:
                     continue
                 by_min = {t["talla"]: t["produce_min"] for t in cr["tallas"]}
@@ -1154,7 +1169,12 @@ def export_excel(data: dict, path: Path) -> None:
             ws.write_row(row, 0, tela_hdr, hdr)
             row += 1
             gmin = gmax = gm_min = gm_max = gc_min = gc_max = 0
-            for cr in rango[genero]["color_rows"]:
+            color_rows_sorted = sorted(
+                rango[genero]["color_rows"],
+                key=lambda x: x.get("sales_pct", x["pct"] / 100 if x["pct"] > 1 else x.get("pct", 0)),
+                reverse=True,
+            )
+            for cr in color_rows_sorted:
                 if cr["min"] <= 0:
                     continue
                 mts_min = cr["min"] * cons
@@ -1271,7 +1291,8 @@ def export_excel(data: dict, path: Path) -> None:
             (f"• Referencia Dic-25 vs base: ratio ≈ {ctx['season_ref']['ratio']}×.", None),
             ("4. CANTIDAD A PRODUCIR", None),
             (f"• Metas MÍN: CAB {TARGET_PRODUCE_MIN['CAB']:,} · DAMA {TARGET_PRODUCE_MIN['DAMA']:,} · KIDS {TARGET_PRODUCE_MIN['KIDS']:,} und.", None),
-            ("• Mix color × talla desde proporciones históricas de ventas (dashboard calcProp).", None),
+            (f"• Mix color × talla desde ventas {vel_label} (mismo criterio que curvas del Excel de referencia).", None),
+            ("• CAB: color de producción 'Gris Claro' (agrupa ventas Gris + Gris Claro).", None),
             ("• CAB: sin 3XL/4XL · boost 2XL +22%. DAMA: sin 2XL · boost L +22%.", None),
             ("5. CURVAS DE TALLA, COLOR Y TELA", None),
             ("• Producción Color × Talla: matriz color × talla (Mín/Máx por color).", None),
@@ -1338,7 +1359,7 @@ def patch_html(template: str, data: dict) -> str:
     html = re.sub(
         r"var COLORES_DISP=\{.*?\};",
         "var COLORES_DISP={"
-        "CAB:{Aguamarina:1,'Amarillo Neón':1,'Azul Lavanda':1,'Azul Marino':1,'Azul Rey':1,Blanco:1,Gris:1,Negro:1,Rojo:1,'Verde Militar':1,Vinotinto:1},"
+        "CAB:{Aguamarina:1,'Amarillo Neón':1,'Azul Lavanda':1,'Azul Marino':1,'Azul Rey':1,Blanco:1,'Gris Claro':1,Negro:1,Rojo:1,'Verde Militar':1,Vinotinto:1},"
         "DAMA:{Aguamarina:1,'Amarillo Neón':1,'Azul Lavanda':1,'Azul Marino':1,Blanco:1,Lila:1,Negro:1,'Púrpura':1,Rojo:1,'Rosado Pastel':1,'Verde Militar':1,Vinotinto:1},"
         "KIDS:{Negro:1,'Azul Marino':1,Blanco:1,'Verde Militar':1,'Azul Lavanda':1,'Azul Rey':1,Aguamarina:1,Rojo:1,Lila:1,'Rosado Pastel':1,'Púrpura':1,'Amarillo Neón':1}"
         "};",
