@@ -90,6 +90,7 @@ TALLA_ORDER = {
     "DAMA": ["XS", "S", "M", "L", "XL", "2XL", "3XL"],
     "KIDS": ["2", "4", "6", "8", "10", "12", "14"],
 }
+TARGET_PRODUCE_MIN = {"CAB": 2400, "DAMA": 2200, "KIDS": 2700}
 
 
 def norm_color(c: str) -> str:
@@ -324,6 +325,7 @@ def build_data(sales: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "production_plan": production_plan,
         "summary_genero": summary_genero,
         "rango_data": rango_data,
+        "target_produce_min": TARGET_PRODUCE_MIN,
     }
 
 
@@ -449,7 +451,89 @@ def build_production_plan(sales: pd.DataFrame, inv: pd.DataFrame) -> tuple[list,
             "vel_mes": round(g_vel_adj, 1),
         }
 
+    for genero, target in TARGET_PRODUCE_MIN.items():
+        calibrate_gender_targets(plan, summary, rango, genero, target)
+
     return plan, summary, rango
+
+
+def calibrate_gender_targets(
+    plan: list, summary: dict, rango: dict, genero: str, target: int
+) -> None:
+    """Scale production proportionally to hit target min while preserving mix."""
+    items = [p for p in plan if p["genero"] == genero]
+    shares = rango[genero]["shares"]
+    refs: list[tuple[dict, dict, int]] = []
+    for item in items:
+        for t in item["tallas"]:
+            if t["produce_min"] > 0:
+                refs.append((item, t, t["produce_min"]))
+
+    raw = sum(w for _, _, w in refs)
+    if raw <= 0:
+        return
+
+    floats = [w * target / raw for _, _, w in refs]
+    ints = [int(math.floor(f)) for f in floats]
+    diff = target - sum(ints)
+    if diff > 0:
+        order = sorted(range(len(floats)), key=lambda i: floats[i] - ints[i], reverse=True)
+        for i in range(diff):
+            ints[order[i % len(order)]] += 1
+    elif diff < 0:
+        order = sorted(range(len(ints)), key=lambda i: ints[i], reverse=True)
+        for i in range(-diff):
+            if ints[order[i % len(order)]] > 0:
+                ints[order[i % len(order)]] -= 1
+
+    idx = 0
+    for item, t, _ in refs:
+        pm, px = min_max_qty(ints[idx])
+        idx += 1
+        t["produce_min"] = pm
+        t["produce"] = pm
+        t["produce_max"] = px
+        t["store_split"] = distribute_units(pm, shares, ALL_DIST_STORES)
+        t["store_split_max"] = distribute_units(px, shares, ALL_DIST_STORES)
+
+    g_prod = g_prod_max = 0
+    color_rows = []
+    talla_totals: dict = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
+    store_talla = {s: defaultdict(lambda: {"min": 0, "max": 0}) for s in ALL_DIST_STORES}
+
+    for item in items:
+        c_min = sum(t["produce_min"] for t in item["tallas"])
+        c_max = sum(t["produce_max"] for t in item["tallas"])
+        item["produce_min"] = c_min
+        item["produce"] = c_min
+        item["produce_max"] = c_max
+        item["store_split"] = distribute_units(c_min, shares, ALL_DIST_STORES)
+        g_prod += c_min
+        g_prod_max += c_max
+        color_rows.append({
+            "color": item["color"],
+            "pct": item["color_pct"],
+            "min": c_min,
+            "max": c_max,
+            "tallas": item["tallas"],
+        })
+        for t in item["tallas"]:
+            if t["produce_min"] <= 0:
+                continue
+            talla_totals[t["talla"]]["min"] += t["produce_min"]
+            talla_totals[t["talla"]]["max"] += t["produce_max"]
+            for store in ALL_DIST_STORES:
+                store_talla[store][t["talla"]]["min"] += t["store_split"][store]
+                store_talla[store][t["talla"]]["max"] += t["store_split_max"][store]
+
+    for td in talla_totals.values():
+        td["curve_pct"] = round(td["min"] / g_prod * 100, 1) if g_prod else 0.0
+
+    summary[genero]["produce"] = g_prod
+    summary[genero]["produce_max"] = g_prod_max
+    rango[genero]["talla_totals"] = dict(talla_totals)
+    rango[genero]["color_rows"] = color_rows
+    rango[genero]["store_talla"] = {s: dict(v) for s, v in store_talla.items()}
 
 
 def _write_rows(ws, start_row: int, rows: list[list]) -> int:
@@ -693,7 +777,7 @@ def patch_html(template: str, data: dict) -> str:
     html = html.replace(
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span></div>',
         '<div class="sub">Orden sugerida − stock actual = producir · cobertura: <span id="propMesesLabel">2 meses</span> · '
-        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQUISIMETO prom(G+Ch+T) · WEB 50% líder · rot. ajustada CAB/DAMA ×1.60 · KIDS ×2.05 · cob 4–5m</span></div>',
+        '<span style="color:#f97316">VELA 1× GRIETA · TOLON ×1.45 · BARQ prom(G+Ch+T) · WEB 50% líder · objetivo CAB 2400 · DAMA 2200 · KIDS 2700 und</span></div>',
     )
 
     html = html.replace(
