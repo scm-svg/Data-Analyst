@@ -28,9 +28,10 @@ MAX_RANGE_PCT = 0.06
 TELA_CONSUMO = {"CAB": 0.30, "DAMA": 0.25, "KIDS": 0.22}  # KIDS ligeramente sobre 0.20
 
 # KIDS: peso un poco mayor que la curva pura de ventas
-KIDS_GENDER_BOOST = 1.12
+KIDS_GENDER_BOOST = 1.18
 
 PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
+    "CAB": {"3XL"},
     "KIDS": {"1"},
 }
 
@@ -51,8 +52,27 @@ TELA_KG_COLOR = {
 }
 TELA_KG_TOTAL = sum(TELA_KG_COLOR.values())  # 1089
 
-# Proporción color de la compra (usa % del pedido, no convierte kg → und)
-COLOR_SHARE = {c: kg / TELA_KG_TOTAL for c, kg in TELA_KG_COLOR.items()}
+# Proporción base del pedido de compra
+COLOR_PURCHASE_SHARE = {c: kg / TELA_KG_TOTAL for c, kg in TELA_KG_COLOR.items()}
+
+# Boost moderado en colores secundarios para no dejarlos tan bajos vs ventas
+COLOR_PRODUCTION_BOOST = {
+    "Kaki": 1.10,
+    "Azul Marino": 1.15,
+    "Verde Militar": 1.15,
+}
+
+
+def effective_color_share() -> dict[str, float]:
+    weighted = {
+        c: COLOR_PURCHASE_SHARE[c] * COLOR_PRODUCTION_BOOST.get(c, 1.0)
+        for c in COLOR_PURCHASE_SHARE
+    }
+    total = sum(weighted.values())
+    return {c: v / total for c, v in weighted.items()}
+
+
+COLOR_SHARE = effective_color_share()
 
 ORDEN1_ITEMS = [
     ("Gris Oscuro — TODO (Explore + Shorts)", 361.2, "CRÍTICA"),
@@ -335,6 +355,8 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
         "method": "justificacion_novaktex_unidades",
         "tela_consumo_ref": TELA_CONSUMO,
         "kids_gender_boost": KIDS_GENDER_BOOST,
+        "color_production_boost": COLOR_PRODUCTION_BOOST,
+        "production_exclude_tallas": {g: sorted(t) for g, t in PRODUCTION_EXCLUDE_TALLAS.items()},
         "target_produce_min": {"TOTAL": PRODUCE_TOTAL, **{g: summary[g]["produce"] for g in summary}},
         "production_plan": plan,
         "summary_genero": summary,
@@ -426,8 +448,8 @@ def export_excel(data: dict, path: Path) -> None:
             f"Stock actual dashboard: {j['stock_actual']:,} und",
             f"Tela ya comprada (referencia): {TELA_KG_TOTAL:.0f} kg Explore",
             f"Pedido total archivo (Explore + Shorts): {TELA_PEDIDO_TOTAL:.0f} kg · split 65% / 35%",
-            "Color: proporción del pedido (Negro 38% · Gris Oscuro 33% · Kaki 14% · Azul 8% · Verde 6%)",
-            "Talla/género: curva de ventas del dashboard · KIDS con boost moderado (+12%)",
+            "Color: base compra + boost Kaki/Azul/Verde para no dejarlos tan bajos",
+            f"Talla/género: curva ventas · KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}% · CAB sin 3XL",
             f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
             "Gris (ventas) → Gris Oscuro (producción)",
         ]
@@ -477,7 +499,7 @@ def export_excel(data: dict, path: Path) -> None:
         row += 2
         ws.write_row(
             row, 0,
-            ["Color", "Und a producir", "% compra (color)", "Kg tela comprada (ref.)", "Kg neto (ref.)"],
+            ["Color", "Und a producir", "% producción", "Kg tela comprada (ref.)", "Kg neto (ref.)"],
             hdr,
         )
         row += 1
@@ -609,12 +631,15 @@ def export_excel(data: dict, path: Path) -> None:
         row = 0
         ws.write(row, 0, "METODOLOGÍA — EXPLORE PANTS", title)
         row += 2
+        color_pct = " · ".join(
+            f"{c} {COLOR_SHARE[c] * 100:.1f}%" for c in COLORES_PRODUCCION
+        )
         lines = [
             "1. TOTAL a producir: 2,908 und (80% pendiente, justificación Novaktex). La tela ya está comprada.",
-            "2. COLOR: proporción del pedido de tela — Negro 38.0% · Gris Oscuro 33.1% · Kaki 14.4% · Azul Marino 8.4% · Verde Militar 6.1%.",
-            "3. GÉNERO y TALLA: curva de ventas del dashboard dentro de cada color; KIDS con boost +12% sobre su share de ventas.",
+            f"2. COLOR: base compra + boost Kaki +10% · Azul Marino +15% · Verde Militar +15% → {color_pct}.",
+            f"3. GÉNERO y TALLA: curva ventas por color; KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}%; CAB sin 3XL; KIDS sin talla 1.",
             f"4. Consumo referencial (no define und): CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
-            "5. KIDS excluye talla 1 en producción (venta marginal). Gris (ventas) → Gris Oscuro (producción).",
+            "5. Gris (ventas) → Gris Oscuro (producción).",
             "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
             "7. Hoja 'Compra en 2 Órdenes': réplica del pedido de tela aprobado (referencia logística).",
         ]
