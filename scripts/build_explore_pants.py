@@ -94,6 +94,7 @@ TALLA_ORDER = {
 }
 
 GENDER_XL = {"CAB": "CABALLERO", "DAMA": "DAMA", "KIDS": "KIDS"}
+GENEROS = ["CAB", "DAMA", "KIDS"]
 
 RETAIL_STORES = ["SAMBIL", "GRIE", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA", "WEB", "PEDIDOS"]
 ALL_DIST_STORES = ["SAMBIL", "GRIE", "CERRO VERDE", "CHACAO", "GRAND", "TOLON", "VELA", "WEB", "PEDIDOS"]
@@ -174,17 +175,143 @@ def gender_targets(df: pd.DataFrame) -> dict[str, int]:
     return {"CAB": cd["CAB"], "DAMA": cd["DAMA"], "KIDS": KIDS_TARGET}
 
 
-def sales_color_talla_weights(df: pd.DataFrame, genero: str) -> dict[tuple[str, str], float]:
-    """Pesos color×talla del dashboard para un género (excluye tallas bloqueadas)."""
+def kg_neto_color(color: str) -> float:
+    return TELA_KG_COLOR[color] / (1 + TELA_SS)
+
+
+def kg_needed_gc(gc: dict[tuple[str, str], int], color: str) -> float:
+    return sum(gc.get((g, color), 0) * TELA_CONSUMO[g] for g in GENEROS)
+
+
+def sales_weight_gc(df: pd.DataFrame, genero: str, color: str) -> float:
+    return float(df[(df["genero"] == genero) & (df["prod_color"] == color)]["v"].sum())
+
+
+def sales_color_talla_weights(
+    df: pd.DataFrame, genero: str, color: str | None = None
+) -> dict[str, float]:
+    """Pesos talla del dashboard (opcionalmente filtrado por color)."""
     gdf = df[df["genero"] == genero]
+    if color:
+        gdf = gdf[gdf["prod_color"] == color]
     excluded = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
-    weights: dict[tuple[str, str], float] = defaultdict(float)
+    weights: dict[str, float] = defaultdict(float)
     for _, row in gdf.iterrows():
         t = str(row["talla"])
         if t in excluded:
             continue
-        weights[(row["prod_color"], t)] += float(row["v"])
+        weights[t] += float(row["v"])
     return dict(weights)
+
+
+def ideal_gc_floats(df: pd.DataFrame, g_targets: dict[str, int]) -> dict[tuple[str, str], float]:
+    gc: dict[tuple[str, str], float] = {}
+    for genero in GENEROS:
+        gdf = df[df["genero"] == genero]
+        g_sales = float(gdf["v"].sum()) or 1.0
+        for color in COLORES_PRODUCCION:
+            gc[(genero, color)] = g_targets[genero] * float(
+                gdf[gdf["prod_color"] == color]["v"].sum()
+            ) / g_sales
+    return gc
+
+
+def fit_gc_to_tela(df: pd.DataFrame, g_targets: dict[str, int]) -> dict[tuple[str, str], int]:
+    """Ajusta género×color al ranking del dashboard sin exceder tela comprada."""
+    gc_f = ideal_gc_floats(df, g_targets)
+
+    for _ in range(60):
+        for color in COLORES_PRODUCCION:
+            kg_max = kg_neto_color(color)
+            kg_need = sum(gc_f[(g, color)] * TELA_CONSUMO[g] for g in GENEROS)
+            if kg_need > kg_max and kg_need > 0:
+                factor = kg_max / kg_need
+                for genero in GENEROS:
+                    gc_f[(genero, color)] *= factor
+        for genero in GENEROS:
+            row = sum(gc_f[(genero, c)] for c in COLORES_PRODUCCION)
+            if row <= 0:
+                continue
+            factor = g_targets[genero] / row
+            for color in COLORES_PRODUCCION:
+                gc_f[(genero, color)] *= factor
+
+    gc: dict[tuple[str, str], int] = {}
+    for genero in GENEROS:
+        weights = {c: gc_f[(genero, c)] for c in COLORES_PRODUCCION}
+        allocated = allocate_by_weights(weights, g_targets[genero])
+        for color in COLORES_PRODUCCION:
+            gc[(genero, color)] = allocated.get(color, 0)
+
+    for _ in range(800):
+        over = False
+        for color in COLORES_PRODUCCION:
+            while kg_needed_gc(gc, color) > kg_neto_color(color) + 0.001:
+                genero = max(
+                    GENEROS,
+                    key=lambda g: (gc.get((g, color), 0), TELA_CONSUMO[g]),
+                )
+                if gc.get((genero, color), 0) <= 0:
+                    break
+                gc[(genero, color)] -= 1
+                over = True
+        if not over:
+            break
+
+    for _ in range(6000):
+        if sum(gc.values()) >= PRODUCE_TOTAL:
+            break
+        options: list[tuple[float, str, str]] = []
+        for genero in GENEROS:
+            for color in COLORES_PRODUCCION:
+                if sales_weight_gc(df, genero, color) <= 0:
+                    continue
+                slack = kg_neto_color(color) - kg_needed_gc(gc, color)
+                if slack + 0.001 >= TELA_CONSUMO[genero]:
+                    options.append((sales_weight_gc(df, genero, color), genero, color))
+        if not options:
+            break
+        options.sort(reverse=True)
+        _, genero, color = options[0]
+        gc[(genero, color)] = gc.get((genero, color), 0) + 1
+
+    while sum(gc.values()) > PRODUCE_TOTAL:
+        options = [
+            (sales_weight_gc(df, g, c), g, c)
+            for g in GENEROS
+            for c in COLORES_PRODUCCION
+            if gc.get((g, c), 0) > 0
+        ]
+        options.sort()
+        _, genero, color = options[0]
+        gc[(genero, color)] -= 1
+
+    for genero in GENEROS:
+        diff = g_targets[genero] - sum(gc.get((genero, c), 0) for c in COLORES_PRODUCCION)
+        for _ in range(abs(diff)):
+            if diff > 0:
+                options = [
+                    (sales_weight_gc(df, genero, c), c)
+                    for c in COLORES_PRODUCCION
+                    if sales_weight_gc(df, genero, c) > 0
+                    and kg_neto_color(c) - kg_needed_gc(gc, c) + 0.001 >= TELA_CONSUMO[genero]
+                ]
+                if not options:
+                    break
+                options.sort(reverse=True)
+                gc[(genero, options[0][1])] = gc.get((genero, options[0][1]), 0) + 1
+            else:
+                options = [
+                    (sales_weight_gc(df, genero, c), c)
+                    for c in COLORES_PRODUCCION
+                    if gc.get((genero, c), 0) > 0
+                ]
+                if not options:
+                    break
+                options.sort()
+                gc[(genero, options[0][1])] -= 1
+
+    return gc
 
 
 def production_totals_by_color(plan: list) -> dict[str, int]:
@@ -235,42 +362,46 @@ def build_production_plan(
     summary: dict = {}
     rango: dict = {}
     g_targets = gender_targets(df)
+    gc = fit_gc_to_tela(df, g_targets)
 
-    for genero in ["CAB", "DAMA", "KIDS"]:
+    for genero in GENEROS:
         gdf = df[df["genero"] == genero]
-        g_total = g_targets[genero]
         g_sales = float(gdf["v"].sum()) or 1.0
         color_rows = []
         talla_totals: dict = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
 
-        # color×talla proporcional al dashboard (misma curva que ranking Colores/Tallas)
-        ct_weights = sales_color_talla_weights(df, genero)
-        ct_allocated = allocate_by_weights(ct_weights, g_total)
-
-        by_color: dict[str, list] = defaultdict(list)
-        for (color, talla), qty in ct_allocated.items():
-            if qty <= 0:
-                continue
-            cell_sales = ct_weights.get((color, talla), 0)
-            cell_pct = round(cell_sales / sum(ct_weights.values()) * 100, 1) if ct_weights else 0.0
-            pm, px = min_max_qty(qty)
-            t_obj = {
-                "talla": str(talla),
-                "produce": pm,
-                "produce_min": pm,
-                "produce_max": px,
-                "curve_pct": cell_pct,
-                "store_split": distribute_units(pm, shares, ALL_DIST_STORES),
-                "store_split_max": distribute_units(px, shares, ALL_DIST_STORES),
-            }
-            by_color[color].append(t_obj)
-            talla_totals[talla]["min"] += pm
-            talla_totals[talla]["max"] += px
-
         for color in COLORES_PRODUCCION:
-            talla_objs = sorted(by_color.get(color, []), key=lambda x: -x["produce_min"])
+            c_target = gc.get((genero, color), 0)
+            if c_target <= 0:
+                continue
+
+            t_weights = sales_color_talla_weights(df, genero, color)
+            if not t_weights:
+                t_weights = sales_color_talla_weights(df, genero)
+            t_allocated = allocate_by_weights(t_weights, c_target)
+            t_total_w = sum(t_weights.values()) or 1.0
+
+            talla_objs = []
+            for talla in sort_tallas(genero, list(t_allocated.keys())):
+                qty = t_allocated.get(talla, 0)
+                if qty <= 0:
+                    continue
+                pm, px = min_max_qty(qty)
+                talla_objs.append({
+                    "talla": str(talla),
+                    "produce": pm,
+                    "produce_min": pm,
+                    "produce_max": px,
+                    "curve_pct": round(t_weights.get(talla, 0) / t_total_w * 100, 1),
+                    "store_split": distribute_units(pm, shares, ALL_DIST_STORES),
+                    "store_split_max": distribute_units(px, shares, ALL_DIST_STORES),
+                })
+                talla_totals[talla]["min"] += pm
+                talla_totals[talla]["max"] += px
+
             if not talla_objs:
                 continue
+
             cdf = gdf[gdf["prod_color"] == color]
             c_sales = float(cdf["v"].sum())
             c_min = sum(t["produce_min"] for t in talla_objs)
@@ -284,7 +415,7 @@ def build_production_plan(
                 "produce": c_min,
                 "produce_min": c_min,
                 "produce_max": c_max,
-                "tallas": talla_objs,
+                "tallas": sorted(talla_objs, key=lambda x: -x["produce_min"]),
                 "store_split": distribute_units(c_min, shares, ALL_DIST_STORES),
             })
             color_rows.append({
@@ -299,7 +430,6 @@ def build_production_plan(
         g_prod = sum(p["produce_min"] for p in plan if p["genero"] == genero)
         g_prod_max = sum(p["produce_max"] for p in plan if p["genero"] == genero)
 
-        # curva talla agregada = dashboard (recomputada desde ventas del género)
         excluded = PRODUCTION_EXCLUDE_TALLAS.get(genero, set())
         t_sales = gdf.groupby("talla")["v"].sum()
         if excluded:
@@ -348,7 +478,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     data = {**template}
     data.update({
         "nombre": MODELO,
-        "method": "dashboard_color_talla_por_genero",
+        "method": "dashboard_ranking_ajustado_tela",
         "tela_consumo_ref": TELA_CONSUMO,
         "kids_target": KIDS_TARGET,
         "kids_target_range": [KIDS_TARGET_MIN, KIDS_TARGET_MAX],
@@ -396,7 +526,7 @@ def patch_html(template: str, data: dict) -> str:
 
     note = (
         " · <span style=\"color:#f97316\">Producción: "
-        f"{PRODUCE_TOTAL:,} und (color/talla dashboard · KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,}) "
+        f"{PRODUCE_TOTAL:,} und (ranking dashboard · tela comprada · KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,}) "
         f"· demanda Jul–Dic {DEMAND_JUL_DEC:,}</span>"
     )
     if "justificación Novaktex" not in html:
@@ -446,8 +576,8 @@ def export_excel(data: dict, path: Path) -> None:
             f"Stock actual dashboard: {j['stock_actual']:,} und",
             f"Tela ya comprada (referencia): {TELA_KG_TOTAL:.0f} kg Explore",
             f"Pedido total archivo (Explore + Shorts): {TELA_PEDIDO_TOTAL:.0f} kg · split 65% / 35%",
-            "Color y talla: proporción del dashboard por género (ranking Colores/Tallas)",
-            f"KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und · CAB sin 3XL · verificación tela comprada",
+            "Color/talla: ranking dashboard por género, ajustado a tela comprada (sin déficit kg)",
+            f"KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und · CAB sin 3XL",
             f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
             "Gris (ventas) → Gris Oscuro (producción)",
         ]
@@ -667,10 +797,10 @@ def export_excel(data: dict, path: Path) -> None:
         row += 2
         lines = [
             "1. TOTAL a producir: 2,908 und (80% pendiente, justificación Novaktex). La tela ya está comprada.",
-            "2. COLOR y TALLA: proporción del dashboard por género (misma curva que ranking Colores/Tallas).",
+            "2. COLOR y TALLA: ranking del dashboard por género; se ajusta iterativamente para no exceder kg de tela comprada.",
             f"3. KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und (meta {KIDS_TARGET:,}); CAB/DAMA reparten el resto por ventas.",
             "4. CAB sin 3XL · KIDS sin talla 1 · Gris (ventas) → Gris Oscuro (producción).",
-            f"5. Verificación tela: kg necesario vs kg comprado por color (consumo ref. CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']}).",
+            f"5. Verificación tela: kg necesario ≤ kg neto comprado por color (consumo ref. CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']}).",
             "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
             "7. Hoja 'Compra en 2 Órdenes': réplica del pedido de tela aprobado (referencia logística).",
         ]
