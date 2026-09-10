@@ -74,6 +74,8 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .tag.cab{background:rgba(91,106,247,.18);color:#a5b4fc}
 .tag.dama{background:rgba(247,91,138,.18);color:#f9a8d4}
 .tag.kids{background:rgba(76,175,118,.18);color:#86efac}
+.tag.proc{background:rgba(91,106,247,.16);color:#c7d2fe}
+.tag.proc.sat{background:rgba(34,211,238,.16);color:var(--sat)}
 .tag.link a{color:inherit;text-decoration:none}
 .status{align-self:center;border:none;border-radius:999px;padding:6px 10px;font-size:.64rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
 .status.pendiente{background:var(--s3);color:var(--mu);border:1px solid var(--brd)}
@@ -144,7 +146,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
         <div>
           <span class="lane-badge">🏭 Manufactura taller</span>
           <h3>Producción interna</h3>
-          <p class="hint">Río y Mar: KIDS es prioridad, luego CAB y DAMA</p>
+          <p class="hint">Río y Mar: KIDS primero · Lite Pant y Daily corte/confección acá</p>
         </div>
         <button class="btn ghost" type="button" onclick="resetLane('taller')">↺ Orden original</button>
       </div>
@@ -155,7 +157,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
         <div>
           <span class="lane-badge">🛰️ Manufactura satélite</span>
           <h3>Producción satélite</h3>
-          <p class="hint">Líneas especializadas y kids en paralelo al taller</p>
+          <p class="hint">Chaqueta Lite acá · Daily 3.0 Kids: serigrafía</p>
         </div>
         <button class="btn ghost" type="button" onclick="resetLane('satelite')">↺ Orden original</button>
       </div>
@@ -167,7 +169,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 <div class="footer">Orden de manufactura · Taller &amp; Satélite · el orden y el estado se guardan en este navegador</div>
 
 <script>
-const LS = { order: 'om_order_v3', status: 'om_status_v1', theme: 'om_theme' };
+const LS = { order: 'om_order_v4', status: 'om_status_v1', theme: 'om_theme' };
 
 const LINKS = {
   rio: 'Dashboard_Rio_Original_Actualizado (1).html',
@@ -185,13 +187,15 @@ const DEFAULTS = {
     {id:'basic', name:'Basic Line', meta:'Línea básica de continuidad', link:LINKS.basic},
     {id:'short-r1', name:'Short R1 / S', meta:'Shorts de taller'},
     {id:'microfibra', name:'Resto de modelos microfibra', meta:'Otras líneas de microfibra', note:'Evaluar variantes'},
-    {id:'cotton-kids', name:'Colección Cotton Kids', meta:'Kids · cotton', genders:['KIDS'], note:'Evaluar primera producción para activar 2ª ola'}
+    {id:'cotton-kids', name:'Colección Cotton Kids', meta:'Kids · cotton', genders:['KIDS'], note:'Evaluar primera producción para activar 2ª ola'},
+    {id:'lite-pant', name:'Lite Pant', meta:'Colección Lite · interno', process:'Corte y confección', link:LINKS.lite},
+    {id:'daily-kids-corte', name:'Daily 3.0 Kids', meta:'Manufactura interna', process:'Corte y confección', genders:['KIDS'], link:LINKS.daily}
   ],
   satelite: [
     {id:'costa', name:'Short Sublimado Costa', meta:'Short playa sublimado', link:LINKS.costa},
     {id:'explore', name:'Explore Pants', meta:'Pantalón explore', link:LINKS.explore},
-    {id:'lite', name:'Colección Lite', meta:'Sport Lite', link:LINKS.lite},
-    {id:'daily-kids', name:'Daily 3.0 Kids', meta:'Daily kids', link:LINKS.daily},
+    {id:'lite-chaqueta', name:'Chaqueta Lite', meta:'Colección Lite · satélite', process:'Satélite', link:LINKS.lite},
+    {id:'daily-kids-serigrafia', name:'Daily 3.0 Kids', meta:'Acabado en satélite', process:'Serigrafía', genders:['KIDS'], link:LINKS.daily},
     {id:'motion', name:'Motion Loop Kids', meta:'Kids · motion loop'}
   ]
 };
@@ -231,7 +235,8 @@ function renderLane(lane, flowId, ovId){
             '<span class="mini-step tag '+g.toLowerCase()+(prio?' prio':'')+'">'+g+(prio?'<span class="prio-lbl">prioridad</span>':'')+'</span>';
         }).join('')+'</div>'
       : '';
-    const link = p.link ? '<div class="tags" style="margin-top:8px"><span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span></div>' : '';
+    const proc = p.process ? '<span class="tag proc'+(lane==='satelite'?' sat':'')+'">'+esc(p.process)+'</span>' : '';
+    const link = (p.link || proc) ? '<div class="tags" style="margin-top:8px">'+proc+(p.link?'<span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span>':'')+'</div>' : '';
     const note = p.note ? '<div class="note">'+esc(p.note)+'</div>' : '';
     return '<article class="item" draggable="true" data-lane="'+lane+'" data-id="'+p.id+'">'+
       '<div class="num">'+(i+1)+'</div>'+
@@ -242,7 +247,8 @@ function renderLane(lane, flowId, ovId){
   }).join('');
   document.getElementById(ovId).innerHTML = ids.map(function(id,i){
     const p = CATALOG[id]; if(!p) return '';
-    return '<div class="ov-chip '+ (lane==='taller'?'taller':'sat') +'"><span class="ov-n">'+(i+1)+'</span>'+esc(p.name)+'</div>';
+    const extra = p.process ? ' · '+p.process : '';
+    return '<div class="ov-chip '+ (lane==='taller'?'taller':'sat') +'"><span class="ov-n">'+(i+1)+'</span>'+esc(p.name+extra)+'</div>';
   }).join('');
   bindDrag(flowId, lane);
 }
