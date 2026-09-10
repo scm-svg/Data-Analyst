@@ -27,8 +27,8 @@ MAX_RANGE_PCT = 0.06
 # Consumo referencial (tela ya comprada — NO define las und a producir)
 TELA_CONSUMO = {"CAB": 0.30, "DAMA": 0.25, "KIDS": 0.22}  # KIDS ligeramente sobre 0.20
 
-# KIDS: peso un poco mayor que la curva pura de ventas
-KIDS_GENDER_BOOST = 1.18
+# Meta explícita KIDS (resto CAB/DAMA se reparte por ventas)
+KIDS_TARGET = 500
 
 PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
     "CAB": {"3XL"},
@@ -144,7 +144,7 @@ def min_max_qty(qty: int) -> tuple[int, int]:
     return qty, int(math.ceil(qty * (1 + MAX_RANGE_PCT)))
 
 
-def allocate_by_weights(weights: dict[tuple[str, str, str], float], target: int) -> dict[tuple[str, str, str], int]:
+def allocate_by_weights(weights: dict, target: int) -> dict:
     total_w = sum(weights.values())
     if total_w <= 0 or target <= 0:
         return {k: 0 for k in weights}
@@ -212,36 +212,27 @@ def build_production_plan(
     rango: dict = {}
     total_sales = df["v"].sum() or 1
 
-    # género × color: curva de ventas por color, con boost moderado en KIDS
+    # KIDS meta fija; por color según ventas · CAB/DAMA reparten el resto
     gc_targets: dict[tuple[str, str], int] = {}
+    kids_weights: dict[str, float] = {}
     for color, c_total in color_targets.items():
         cdf = df[df["prod_color"] == color]
-        g_weights: dict[str, float] = {}
-        for genero in ["CAB", "DAMA", "KIDS"]:
-            gcv = float(cdf[cdf["genero"] == genero]["v"].sum())
-            if genero == "KIDS" and gcv > 0:
-                gcv *= KIDS_GENDER_BOOST
-            g_weights[genero] = gcv
-        g_total = sum(g_weights.values()) or 1.0
-        allocated = allocate_by_weights(
-            {(genero, color): g_weights[genero] for genero in g_weights},
-            c_total,
-        )
-        gc_targets.update(allocated)
+        c_sales = float(cdf["v"].sum()) or 1.0
+        kids_sales = float(cdf[cdf["genero"] == "KIDS"]["v"].sum())
+        kids_weights[color] = kids_sales / c_sales * c_total
 
-    # cuadrar total exacto
-    current = sum(gc_targets.values())
-    if current != PRODUCE_TOTAL and current > 0:
-        factor = PRODUCE_TOTAL / current
-        keys = list(gc_targets.keys())
-        floats = [gc_targets[k] * factor for k in keys]
-        ints = [int(math.floor(f)) for f in floats]
-        diff = PRODUCE_TOTAL - sum(ints)
-        if diff > 0:
-            order = sorted(range(len(keys)), key=lambda i: floats[i] - ints[i], reverse=True)
-            for i in range(diff):
-                ints[order[i % len(order)]] += 1
-        gc_targets = {keys[i]: ints[i] for i in range(len(keys))}
+    kids_by_color = allocate_by_weights(kids_weights, KIDS_TARGET)
+
+    for color, c_total in color_targets.items():
+        cdf = df[df["prod_color"] == color]
+        k = min(kids_by_color.get(color, 0), c_total)
+        remainder = c_total - k
+        cab_sales = float(cdf[cdf["genero"] == "CAB"]["v"].sum())
+        dama_sales = float(cdf[cdf["genero"] == "DAMA"]["v"].sum())
+        cd = allocate_by_weights({"CAB": cab_sales, "DAMA": dama_sales}, remainder)
+        gc_targets[("KIDS", color)] = k
+        gc_targets[("CAB", color)] = cd["CAB"]
+        gc_targets[("DAMA", color)] = cd["DAMA"]
 
     for genero in ["CAB", "DAMA", "KIDS"]:
         gdf = df[df["genero"] == genero]
@@ -354,7 +345,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
         "nombre": MODELO,
         "method": "justificacion_novaktex_unidades",
         "tela_consumo_ref": TELA_CONSUMO,
-        "kids_gender_boost": KIDS_GENDER_BOOST,
+        "kids_target": KIDS_TARGET,
         "color_production_boost": COLOR_PRODUCTION_BOOST,
         "production_exclude_tallas": {g: sorted(t) for g, t in PRODUCTION_EXCLUDE_TALLAS.items()},
         "target_produce_min": {"TOTAL": PRODUCE_TOTAL, **{g: summary[g]["produce"] for g in summary}},
@@ -399,7 +390,7 @@ def patch_html(template: str, data: dict) -> str:
 
     note = (
         " · <span style=\"color:#f97316\">Producción: "
-        f"{PRODUCE_TOTAL:,} und (proporción color compra · talla ventas · KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}%) "
+        f"{PRODUCE_TOTAL:,} und (color compra · talla ventas · KIDS {KIDS_TARGET:,}) "
         f"· demanda Jul–Dic {DEMAND_JUL_DEC:,}</span>"
     )
     if "justificación Novaktex" not in html:
@@ -449,7 +440,7 @@ def export_excel(data: dict, path: Path) -> None:
             f"Tela ya comprada (referencia): {TELA_KG_TOTAL:.0f} kg Explore",
             f"Pedido total archivo (Explore + Shorts): {TELA_PEDIDO_TOTAL:.0f} kg · split 65% / 35%",
             "Color: base compra + boost Kaki/Azul/Verde para no dejarlos tan bajos",
-            f"Talla/género: curva ventas · KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}% · CAB sin 3XL",
+            f"Talla/género: curva ventas · KIDS meta {KIDS_TARGET:,} und · CAB sin 3XL",
             f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
             "Gris (ventas) → Gris Oscuro (producción)",
         ]
@@ -637,7 +628,7 @@ def export_excel(data: dict, path: Path) -> None:
         lines = [
             "1. TOTAL a producir: 2,908 und (80% pendiente, justificación Novaktex). La tela ya está comprada.",
             f"2. COLOR: base compra + boost Kaki +10% · Azul Marino +15% · Verde Militar +15% → {color_pct}.",
-            f"3. GÉNERO y TALLA: curva ventas por color; KIDS +{int((KIDS_GENDER_BOOST - 1) * 100)}%; CAB sin 3XL; KIDS sin talla 1.",
+            f"3. GÉNERO y TALLA: curva ventas por color; KIDS meta {KIDS_TARGET:,} und; CAB sin 3XL; KIDS sin talla 1.",
             f"4. Consumo referencial (no define und): CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
             "5. Gris (ventas) → Gris Oscuro (producción).",
             "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
