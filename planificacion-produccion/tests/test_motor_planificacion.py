@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.14 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.15 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -562,7 +562,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None):
-    """Motor v5.9.14: cap por producto, lotes familia por color+género, L1-4 secuencial, L5 hasta 2 familias."""
+    """Motor v5.9.15: géneros en paralelo si hay 2 líneas libres; si no, lotes color+género."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
 
@@ -767,7 +767,66 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     })
         return None if best is None else best[1]
 
+    def lineas_libres_para_modelo(m, overflow):
+        out = []
+        seen = set()
+        fam = familia_modelo(m)
+        for t in m["tareas"]:
+            if t["restante"] <= 0:
+                continue
+            for lin in elegibles(t, overflow):
+                if lin in seen:
+                    continue
+                seen.add(lin)
+                occ = ocupante.get(lin) or []
+                if m["nombre"] in occ:
+                    continue
+                if len(occ) >= max_ocupantes(lin):
+                    continue
+                if fam and familia_ocupa_linea(fam, lin, m["nombre"]):
+                    continue
+                out.append(lin)
+        return out
+
+    def hermano_sin_linea_puede_usar(m, lin, overflow):
+        fam = familia_modelo(m)
+        if not fam:
+            return False
+        for h in lista:
+            if h["nombre"] == m["nombre"] or familia_modelo(h) != fam:
+                continue
+            if h.get("esEspecial") or restante_modelo(h) <= 0:
+                continue
+            if lineas_donde_esta(h["nombre"]):
+                continue
+            if lin in lineas_modelo(h, overflow):
+                return True
+        return False
+
     def debe_esperar_lote_familia(m, overflow):
+        if not m or m.get("esEspecial"):
+            return False
+        fam = familia_modelo(m)
+        if not fam:
+            return False
+        if lineas_donde_esta(m["nombre"]):
+            return False
+        lote = lote_familia_activo(fam, overflow)
+        if not lote or lote["modelo"] == m["nombre"]:
+            return False
+        if lote["m"].get("esEspecial"):
+            return False
+        if not comparten_lineas(m, lote["m"], overflow):
+            return False
+        if lineas_donde_esta(lote["modelo"]):
+            return False
+        libres_lote = lineas_libres_para_modelo(lote["m"], overflow)
+        libres_mias = lineas_libres_para_modelo(m, overflow)
+        if len(libres_lote) >= 2 and len(libres_mias) > 0:
+            return False
+        return True
+
+    def debe_ceder_al_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
         fam = familia_modelo(m)
@@ -778,7 +837,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if lote["m"].get("esEspecial"):
             return False
-        return comparten_lineas(m, lote["m"], overflow)
+        if not comparten_lineas(m, lote["m"], overflow):
+            return False
+        return not lineas_donde_esta(lote["modelo"])
 
     def debe_esperar_hermano(m, overflow):
         return debe_esperar_lote_familia(m, overflow)
@@ -806,29 +867,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return out
 
     def lineas_libres_de(m, overflow):
-        out = []
-        seen = set()
-        fam = familia_modelo(m)
-        lote = lote_familia_activo(fam, overflow)
-        lineas_lote = set(lineas_modelo(lote["m"], overflow)) if lote else set()
-        for t in m["tareas"]:
-            if t["restante"] <= 0:
-                continue
-            for lin in elegibles(t, overflow):
-                if lin in seen:
-                    continue
-                occ = ocupante.get(lin) or []
-                if m["nombre"] in occ:
-                    continue
-                if len(occ) >= max_ocupantes(lin):
-                    continue
-                if fam and familia_ocupa_linea(fam, lin, m["nombre"]):
-                    continue
-                if lote and lote["modelo"] != m["nombre"] and lin in lineas_lote:
-                    continue
-                seen.add(lin)
-                out.append(lin)
-        return out
+        return lineas_libres_para_modelo(m, overflow)
 
     def reclamar_lineas(d, ocupante, overflow):
         if d % DIAS_LABORALES == 0:
@@ -842,6 +881,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
                 if debe_esperar_lote_familia(m_occ, overflow):
                     continue
+                if debe_ceder_al_lote_familia(m_occ, overflow):
+                    continue
                 kept.append(mod)
             ocupante[lin] = kept
 
@@ -851,13 +892,13 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             last_nom = ultimo_modelo.get(lin) or ""
             last_m = modelos.get(last_nom)
             if last_m and restante_modelo(last_m) > 0 and modelo_puede(last_m, d, lin, overflow) and not lineas_donde_esta(last_nom):
-                if not debe_esperar_lote_familia(last_m, overflow):
+                if not debe_esperar_lote_familia(last_m, overflow) and not debe_ceder_al_lote_familia(last_m, overflow):
                     ocupante[lin].append(last_nom)
                     continue
             fam_last = familia_modelo(last_m) if last_m else familia_de_nombre(last_nom)
             lote = lote_familia_activo(fam_last, overflow)
             if lote and modelo_puede(lote["m"], d, lin, overflow) and len(ocupante[lin]) < max_ocupantes(lin):
-                if lote["modelo"] not in (ocupante.get(lin) or []):
+                if lote["modelo"] not in (ocupante.get(lin) or []) and not lineas_donde_esta(lote["modelo"]):
                     ocupante[lin].append(lote["modelo"])
                     continue
             hermanos = hermanos_pendientes(lin, d, overflow, {}, fam_last)
@@ -890,6 +931,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if restante_modelo(m) <= cap_owned + 1e-6:
                 continue
             for lin in lineas_libres_de(m, overflow):
+                if hermano_sin_linea_puede_usar(m, lin, overflow):
+                    continue
                 ocupante[lin].append(m["nombre"])
                 cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
                 if restante_modelo(m) <= cap_owned + 1e-6:
@@ -962,9 +1005,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 break
             if restante_minima(m) <= 0 and tuvo_minima(m):
                 break
-            fam = familia_modelo(m)
-            lote = lote_familia_activo(fam, overflow)
-            if lote and lote["modelo"] != m["nombre"] and comparten_lineas(m, lote["m"], overflow):
+            if debe_ceder_al_lote_familia(m, overflow):
                 break
 
     def producir_rueda_linea5(noms, d, overflow):
@@ -989,6 +1030,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             lote = lote_familia_activo(fam_ref, overflow)
             if (lote and lote["modelo"] != last_nom and not skip.get(lote["modelo"])
                     and not lote["m"].get("esEspecial")
+                    and not lineas_donde_esta(lote["modelo"])
                     and modelo_puede(lote["m"], d, lin, overflow)):
                 if lote["modelo"] not in (ocupante.get(lin) or []):
                     return lote["modelo"]
@@ -1028,6 +1070,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             ocupante[lin] = [
                 nom for nom in ocupante[lin]
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
+                and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
             ]
             noms = ocupante[lin]
             before = carga[lin][d]
@@ -1046,15 +1089,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 nom for nom in ocupante[lin]
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
                 and not (tuvo_minima(modelos[nom]) and restante_minima(modelos[nom]) <= 0)
+                and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
             ]
-            cedidos = []
-            for nom in ocupante[lin]:
-                fam_occ = familia_modelo(modelos[nom])
-                lote_occ = lote_familia_activo(fam_occ, overflow_now)
-                if lote_occ and lote_occ["modelo"] != nom and comparten_lineas(modelos[nom], lote_occ["m"], overflow_now):
-                    continue
-                cedidos.append(nom)
-            ocupante[lin] = cedidos
             if carga[lin][d] <= before + 1e-6:
                 for nom in list(ocupante[lin]):
                     skip[nom] = True
@@ -1877,23 +1913,97 @@ class TestLotesGeneroColor(unittest.TestCase):
             por[t["modelo"]] += t["plan"][lin][d]
         return dict((k, v) for k, v in por.items() if v > 0)
 
-    def test_familia_dos_lineas_no_parte_generos_en_paralelo(self):
-        """DAILY CAB/DAMA en 3 y 4: no corre un género por línea el mismo día mientras el lote activo vive."""
+    def test_familia_dos_lineas_libres_en_paralelo(self):
+        """Dos géneros asignados a 2 líneas libres: uno por línea el mismo día."""
         tareas = [
             self._t("CB", "DAILY CAB", "Blanco", 400, ["3", "4"], fechaKey=20260912, prioridadNum=2),
             self._t("DB", "DAILY DAMA", "Blanco", 400, ["3", "4"], fechaKey=20260910, prioridadNum=1),
         ]
         out = planificar(tareas, {}, total_dias=10)
-        cab_rest = 400
-        for d in range(10):
-            por3 = self._por_dia_linea(out, "3", d)
-            por4 = self._por_dia_linea(out, "4", d)
-            cab_hoy = por3.get("DAILY CAB", 0) + por4.get("DAILY CAB", 0)
-            dama_hoy = por3.get("DAILY DAMA", 0) + por4.get("DAILY DAMA", 0)
-            if cab_rest > 260:
-                self.assertEqual(dama_hoy, 0, "día %s partió géneros en paralelo: 3=%s 4=%s" % (d, por3, por4))
-            cab_rest -= cab_hoy
+        d0_3 = self._por_dia_linea(out, "3", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        modelos_hoy = set(list(d0_3.keys()) + list(d0_4.keys()))
+        self.assertEqual(modelos_hoy, {"DAILY CAB", "DAILY DAMA"}, "3=%s 4=%s" % (d0_3, d0_4))
+        self.assertEqual(sum(d0_3.values()) + sum(d0_4.values()), 260)
         self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "DAILY CAB"), 400)
+        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "DAILY DAMA"), 400)
+
+    def test_familia_una_linea_libre_secuencia(self):
+        """Si una de las dos líneas está ocupada, secuencian por color/género en la libre."""
+        tareas = [
+            self._t("CK", "COTTON KIDS", "Rojo", 800, ["3"], fechaKey=20260801, prioridadNum=1),
+            self._t("CB", "RIO CAB", "Negro", 200, ["3", "4"], fechaKey=20260912, prioridadNum=2),
+            self._t("DB", "RIO DAMA", "Negro", 200, ["3", "4"], fechaKey=20260910, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        d0_3 = self._por_dia_linea(out, "3", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0_3.get("COTTON KIDS", 0), 130, d0_3)
+        self.assertEqual(d0_4, {"RIO CAB": 130}, d0_4)
+        d1_4 = self._por_dia_linea(out, "4", 1)
+        self.assertEqual(d1_4.get("RIO CAB", 0), 70)
+        self.assertEqual(d1_4.get("RIO DAMA", 0), 60)
+
+    def test_familia_segunda_linea_se_libera_en_paralelo(self):
+        """RIO CAB/DAMA en 2 y 4: mientras COTTON ocupa la 2 van solo en la 4; al liberarse, un género por línea."""
+        tareas = [
+            self._t("CK", "COTTON KIDS", "Rojo", 130, ["2"], fechaKey=20260801, prioridadNum=1),
+            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=2),
+            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        d0_2 = self._por_dia_linea(out, "2", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0_2, {"COTTON KIDS": 130}, d0_2)
+        self.assertEqual(d0_4, {"RIO CAB": 130}, d0_4)
+        d1_2 = self._por_dia_linea(out, "2", 1)
+        d1_4 = self._por_dia_linea(out, "4", 1)
+        modelos_d1 = set(list(d1_2.keys()) + list(d1_4.keys()))
+        self.assertEqual(modelos_d1, {"RIO CAB", "RIO DAMA"}, "2=%s 4=%s" % (d1_2, d1_4))
+        self.assertEqual(len(d1_2), 1, d1_2)
+        self.assertEqual(len(d1_4), 1, d1_4)
+        self.assertEqual(sum(d1_2.values()) + sum(d1_4.values()), 260)
+
+    def test_familia_cotton_libera_linea2_rio_paralelo(self):
+        """Excel (4): COTTON KIDS en 2; RIO CAB/DAMA en 2 y 4. Al terminar COTTON, cada género toma una línea."""
+        tareas = [
+            self._t("CK", "COTTON KIDS", "Rojo", 800, ["2"], fechaKey=20260801, prioridadNum=1),
+            self._t("CB", "RIO CAB", "Negro", 2000, ["2", "4"], fechaKey=20260912, prioridadNum=2),
+            self._t("DB", "RIO DAMA", "Negro", 2000, ["2", "4"], fechaKey=20260910, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=15)
+        for d in range(6):
+            d2 = self._por_dia_linea(out, "2", d)
+            d4 = self._por_dia_linea(out, "4", d)
+            self.assertEqual(d2.get("COTTON KIDS", 0), 130, "día %s L2=%s" % (d, d2))
+            self.assertTrue(set(d4.keys()) <= {"RIO CAB", "RIO DAMA"}, d4)
+            self.assertNotIn("RIO CAB", d2)
+            self.assertNotIn("RIO DAMA", d2)
+        d6_2 = self._por_dia_linea(out, "2", 6)
+        self.assertEqual(d6_2.get("COTTON KIDS", 0), 20, d6_2)
+        self.assertEqual(d6_2.get("RIO DAMA", 0), 110, d6_2)
+        d6_4 = self._por_dia_linea(out, "4", 6)
+        self.assertEqual(d6_4, {"RIO CAB": 130}, d6_4)
+        for d in range(7, 12):
+            d2 = self._por_dia_linea(out, "2", d)
+            d4 = self._por_dia_linea(out, "4", d)
+            self.assertEqual(d2, {"RIO DAMA": 130}, "día %s L2=%s" % (d, d2))
+            self.assertEqual(d4, {"RIO CAB": 130}, "día %s L4=%s" % (d, d4))
+
+    def test_familia_urgente_no_acapara_segunda_linea(self):
+        """Urgente con 2 líneas no toma las dos si el otro género de la familia aún no tiene línea."""
+        tareas = [
+            self._t("CB", "RIO CAB", "Negro", 400, ["2", "4"], fechaKey=20260912, prioridadNum=1),
+            self._t("DB", "RIO DAMA", "Negro", 400, ["2", "4"], fechaKey=20260910, prioridadNum=1),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        d0_2 = self._por_dia_linea(out, "2", 0)
+        d0_4 = self._por_dia_linea(out, "4", 0)
+        modelos_hoy = set(list(d0_2.keys()) + list(d0_4.keys()))
+        self.assertEqual(modelos_hoy, {"RIO CAB", "RIO DAMA"}, "2=%s 4=%s" % (d0_2, d0_4))
+        self.assertEqual(len(d0_2), 1, d0_2)
+        self.assertEqual(len(d0_4), 1, d0_4)
+        self.assertEqual(sum(d0_2.values()) + sum(d0_4.values()), 260)
 
     def test_lote_color_luego_genero_en_lineas_compartidas(self):
         """Dentro de la familia, Negro (cualquier género) sale antes que Blanco; CAB antes que DAMA del mismo color."""

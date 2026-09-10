@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.14 — códigos listos para pegar
+# Planificación de Producción v5.9.15 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -17,9 +17,9 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.14
+## Motor v5.9.15
 
-- **Lotes por color y género:** si el mismo producto (ej. DAILY CLÁSICA 3.0 CAB y DAMA) está asignado a **la misma línea o a las mismas varias líneas** (3 y 4), ya no corre un género por línea el mismo día. Los lotes salen **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Si cada género tiene una línea distinta (RIO CAB en 2, RIO DAMA en 4), sí pueden ir en paralelo. Los Especiales no usan esta regla.
+- **Lotes por color y género:** si el mismo producto (ej. RIO CAB y RIO DAMA) está asignado a **2 líneas y esas líneas están libres**, los géneros trabajan **en paralelo** (uno por línea). Si solo queda **una** línea libre, secuencian ahí **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Los Especiales no usan esta regla.
 - **Horizonte 10 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 10 semanas (la actual + 9), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 6` a `Semana 10` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 5`. El menú **Ver Pestañas** las incluye.
 - **Fix de sintaxis:** Apps Script ya no falla con `Unexpected token '}'`. Se restauró `familiaOcupaLinea_` (un recorte de v5.9.7 dejaba un `}` suelto).
 - **Capacidad diaria por producto:** no se usa un techo fijo 130/40. Al planificar se lee `Cap Produccion por Dia` (Por Hacer col. N, Por Hacer - Especial col. O) y esa cifra es el cupo del día mientras el modelo ocupa la línea. Si cambia de modelo a media jornada, el sobrante se calcula con la cap del que entra. Si la celda viene vacía, respaldo L1-4=130 / L5=40.
