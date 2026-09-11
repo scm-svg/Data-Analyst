@@ -261,15 +261,15 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
     <h3>📋 Metodología</h3>
     <div id="decMethod" class="dnote"></div>
   </div>
+  <div class="card g1" style="margin-bottom:14px">
+    <h3>🏪 Reabastecimiento por tienda</h3>
+    <div class="sub">Distribución sugerida · <span style="color:#f97316">BARQUISIMETO 1× LA GRIETA · diciembre ×<span id="hsFactorLabel">2.47</span></span> · PEDIDOS/CORPORATIVO/WEB fuera del mix de tienda</div>
+    <div id="reabastGrid" style="margin-top:10px"></div>
+  </div>
   <div class="g1 card" style="margin-bottom:14px">
     <h3>🏭 Producción sugerida por diseño</h3>
     <div class="sub">Necesidad = velocidad retail × horizonte (dic. si 3m) × buffer corporativo × apertura Barquisimeto − stock actual</div>
     <div id="propGrid" style="display:flex;flex-direction:column;gap:14px;margin-top:10px"></div>
-  </div>
-  <div class="card g1">
-    <h3>🏪 Reabastecimiento por tienda</h3>
-    <div class="sub">Distribución sugerida · <span style="color:#f97316">BARQUISIMETO 1× LA GRIETA · diciembre ×<span id="hsFactorLabel">2.47</span></span> · PEDIDOS/CORPORATIVO/WEB fuera del mix de tienda</div>
-    <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
 </div>
 </div>
@@ -387,9 +387,14 @@ function updateKPIs(){
   var rows=fr(),total=0,ts={},cs={};rows.forEach(function(r){total+=r.v;ts[r.t]=1;cs[r.c]=1;});
   var mA=getMesesActivos(),byM={};mA.forEach(function(m){byM[m]=0;});rows.forEach(function(r){if(r.m in byM)byM[r.m]+=r.v;});
   var vals=mA.map(function(m){return byM[m];});
-  var lastV=vals[vals.length-1]||0,prevV=vals[vals.length-2]||0;
-  var varText='—',varSub='';
-  if(prevV>0&&mA.length>=2){var vp=Math.round((lastV-prevV)/prevV*100);varText='<span style="color:'+(vp>=0?'#4caf76':'#ef4444')+'">'+(vp>=0?'▲':'▼')+Math.abs(vp)+'%</span>';varSub='vs mes anterior';}
+  var lastV=vals[vals.length-1]||0,prevV=vals[vals.length-2]||0,varSub='vs mes anterior';
+  if(_per==='all'&&DATA.es_parcial&&mA.length>=3&&mA[mA.length-1]===DATA.mes_parcial){
+    var lastM=mA[mA.length-2],prevM=mA[mA.length-3];
+    function rv(mes){return rows.filter(function(r){return r.m===mes&&r.t!=='PEDIDOS'&&r.t!=='CORPORATIVO';}).reduce(function(a,r){return a+r.v;},0);}
+    lastV=rv(lastM);prevV=rv(prevM);varSub='retail vs mes cerrado';
+  }
+  var varText='—';
+  if(prevV>0&&mA.length>=2){var vp=Math.round((lastV-prevV)/prevV*100);varText='<span style="color:'+(vp>=0?'#4caf76':'#ef4444')+'">'+(vp>=0?'▲':'▼')+Math.abs(vp)+'%</span>';}
   var fC=document.getElementById('fC').value,gStk=0;
   if(fC){Object.keys(DATA.stock).forEach(function(k){var p=k.split('/');if((!_modelo||p[0]===_modelo)&&p[1]===fC)gStk+=DATA.stock[k];});}
   else if(_modelo){gStk=DATA.stock_by_modelo[_modelo]||0;}
@@ -925,7 +930,8 @@ document.addEventListener('click',function(e){
 Chart.register(ChartDataLabels);
 DATA.filtros.tiendas.forEach(function(t){document.getElementById('fT').innerHTML+='<option value="'+t+'">'+t+'</option>';});
 DATA.filtros.tipos.forEach(function(t){document.getElementById('fG').innerHTML+='<option value="'+t+'">'+(TICO[t]||'')+' '+t+'</option>';});
-updateColorFilter();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();rResumen();
+updateColorFilter();buildPeriodBtns();updateModeloCounts();updateKPIs();renderAlertas();
+(function(){var h=(location.hash||'').replace('#','');if(TABS.indexOf(h)>=0)st(h);else rResumen();})();
 
 </script>
 </body>
