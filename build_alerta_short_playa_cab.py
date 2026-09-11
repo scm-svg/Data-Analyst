@@ -1002,10 +1002,9 @@ HTML_HEAD = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Alerta de producción · Short Playa Cab</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
 <style>
-:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#14b8a6;--a2:#f97316;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--or:#f97316;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#14b8a6;--a2:#f97316;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--or:#f97316;--fh:ui-sans-serif,system-ui,sans-serif;--fb:ui-sans-serif,system-ui,sans-serif;--r:14px}
 body.light{--bg:#f4f6f8;--surf:#fff;--s2:#eef1f4;--s3:#e5e8ee;--brd:#d5d9e3;--tx:#1a1a2e;--mu:#5c5d73;--mu2:#8a8ba3}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
@@ -1115,7 +1114,7 @@ body.light .crit{color:#9f1239}body.light .alta{color:#9a3412}body.light .media{
   </div>
   <div class="sec" id="sec-tiendas">
     <div class="g2">
-      <div class="card"><h3>La Vela — quiebre y venta perdida</h3><div class="sub">Abierta en junio · agosto 45 und · stock 27, casi todo S · L y XL negativos</div><div class="cscroll"><table class="ct" id="velaTable"></table></div></div>
+      <div class="card"><h3>La Vela — quiebre y venta perdida</h3><div class="sub">Abierta en junio · agosto 45 und · 30 físicas (21 son S) · L y XL en negativo</div><div class="cscroll"><table class="ct" id="velaTable"></table></div></div>
       <div class="card"><h3>Velocidad por tienda</h3><div class="sub">Ago 26 vs ritmo ajustado de temporada alta</div><div class="cw t"><canvas id="cStore"></canvas></div></div>
     </div>
     <div id="storeList"></div>
@@ -1145,12 +1144,12 @@ function st(n){
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['resumen','produccion','tallas','tiendas','tela','dist'][i]===n);});
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.getElementById('sec-'+n).classList.add('active');
+  document.getElementById('alertBar').style.display=n==='resumen'?'flex':'none';
+  if(location.hash.slice(1)!==n) history.replaceState(null,'','#'+n);
   render();
 }
 function setSc(s){
   SC=s;
-  document.getElementById('btnRec').classList.toggle('on',s==='recomendado');
-  document.getElementById('btnCon').classList.toggle('on',s==='conservador');
   render();
 }
 function sevBadge(s){
@@ -1262,7 +1261,8 @@ function tiendas(){
     {label:'Venta agosto',data:DATA.stores.map(s=>s.aug),backgroundColor:'#f97316'},
     {label:'Vel. alta / mes',data:DATA.stores.map(s=>s.vel_hs),backgroundColor:'#14b8a6'}
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',boxWidth:10}}},scales:{x:{ticks:{color:'#94a3b8',font:{size:10}}},y:{ticks:{color:'#94a3b8'},grid:{color:'rgba(255,255,255,.04)'}}}}});
-  document.getElementById('storeList').innerHTML=DATA.stores.map(s=>{
+  const ordered=DATA.stores.slice().sort(function(a,b){const r=s=>s.tienda==='VELA'?0:s.nueva?1:2;return r(a)-r(b);});
+  document.getElementById('storeList').innerHTML=ordered.map(s=>{
     const cls=s.tienda==='VELA'?'hot':s.nueva?'new':'';
     const recv=P().rows.reduce((a,r)=>a+(r.dist[s.tienda]||0),0);
     const vel=s.tienda==='MGTA'?P().totals.v_mgta:P().rows.reduce((a,r)=>a+(r.store_vhs[s.tienda]||0),0);
@@ -1314,10 +1314,14 @@ function exportCSV(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='lote_short_playa_cab.csv';a.click();
 }
 function render(){
+  document.getElementById('btnRec').classList.toggle('on',SC==='recomendado');
+  document.getElementById('btnCon').classList.toggle('on',SC==='conservador');
   killCharts();
   kpis(); alerts(); story(); chartsResumen(); prod(); tallas(); tiendas(); tela(); dist();
 }
-render();
+if(new URLSearchParams(location.search).get('sc')==='conservador') SC='conservador';
+const _init=(location.hash||'#resumen').slice(1);
+st(['resumen','produccion','tallas','tiendas','tela','dist'].indexOf(_init)>=0?_init:'resumen');
 </script>
 </body>
 </html>
