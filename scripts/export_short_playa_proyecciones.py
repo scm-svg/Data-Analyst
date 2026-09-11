@@ -366,6 +366,37 @@ def vela_color_weights(data: dict, color_rows: list[dict]) -> dict[str, float]:
     return weights
 
 
+def _channel_plan_rows(
+    eligible: list[dict],
+    color_totals: dict[str, int],
+) -> tuple[list[dict], dict[str, dict[str, int]], dict[str, int]]:
+    """Arma filas detalle + matriz color×talla + totales por talla."""
+    curve = production_talla_curve()
+    rows: list[dict] = []
+    color_talla: dict[str, dict[str, int]] = {}
+    talla_totals: dict[str, int] = defaultdict(int)
+
+    for cr in eligible:
+        col = cr["color"]
+        ctotal = color_totals.get(col, 0)
+        if ctotal <= 0:
+            continue
+        small = ctotal <= LOW_TELA_UNITS
+        by_talla = distribute_tallas(ctotal, curve, small_batch=small)
+        color_talla[col] = {t: by_talla.get(t, 0) for t in PRODUCTION_TALLAS if by_talla.get(t, 0) > 0}
+        for t, n in color_talla[col].items():
+            talla_totals[t] += n
+            rows.append({
+                "color": col,
+                "tela": cr.get("tela_fabric", col),
+                "talla": t,
+                "qty": n,
+                "small_batch": small,
+            })
+
+    return rows, color_talla, dict(talla_totals)
+
+
 def build_vela_production(
     data: dict,
     color_rows: list[dict],
@@ -376,37 +407,21 @@ def build_vela_production(
     """Desglose color × talla para LA VELA (lote prioritario)."""
     eligible = [cr for cr in color_rows if not colors or cr["color"] in colors]
     weights = vela_color_weights(data, eligible)
-    color_totals = largest_remainder(weights, vela_total)
-    curve = production_talla_curve()
-    rows: list[dict] = []
-    talla_totals = defaultdict(int)
-
-    for cr in eligible:
-        col = cr["color"]
-        ctotal = color_totals.get(col, 0)
-        if ctotal <= 0:
-            continue
-        small = ctotal <= LOW_TELA_UNITS
-        by_talla = distribute_tallas(ctotal, curve, small_batch=small)
-        for t in PRODUCTION_TALLAS:
-            n = by_talla.get(t, 0)
-            if n <= 0:
-                continue
-            talla_totals[t] += n
-            rows.append({
-                "color": col,
-                "tela": cr.get("tela_fabric", col),
-                "talla": t,
-                "qty": n,
-                "small_batch": small,
-            })
+    vela_min, vela_max = min_max(vela_total)
+    color_totals_min = largest_remainder(weights, vela_min)
+    color_totals_max = largest_remainder(weights, vela_max)
+    rows, color_talla_min, talla_totals = _channel_plan_rows(eligible, color_totals_min)
 
     return {
-        "total": vela_total,
+        "total": vela_min,
+        "total_max": vela_max,
         "colors": sorted(colors or {cr["color"] for cr in eligible}),
         "rows": rows,
-        "color_totals": {k: v for k, v in color_totals.items() if v > 0},
-        "talla_totals": dict(talla_totals),
+        "color_totals": {k: v for k, v in color_totals_min.items() if v > 0},
+        "color_totals_min": {k: v for k, v in color_totals_min.items() if v > 0},
+        "color_totals_max": {k: v for k, v in color_totals_max.items() if v > 0},
+        "color_talla_min": color_talla_min,
+        "talla_totals": talla_totals,
     }
 
 
@@ -414,40 +429,75 @@ def build_satellite_production(
     color_rows: list[dict],
     vela_production: dict,
 ) -> dict:
-    """Global − lote VELA prioritario → producción satélite (resto tiendas)."""
-    vela_by_color = vela_production.get("color_totals", {})
+    """Global − lote VELA prioritario → producción satélite con rango mín/máx."""
+    vela_min = vela_production.get("color_totals_min", vela_production.get("color_totals", {}))
+    vela_max = vela_production.get("color_totals_max", vela_min)
     curve = production_talla_curve()
+    color_totals_min: dict[str, int] = {}
+    color_totals_max: dict[str, int] = {}
+    color_talla_min: dict[str, dict[str, int]] = {}
+    color_talla_max: dict[str, dict[str, int]] = {}
+    talla_totals_min: dict[str, int] = defaultdict(int)
+    talla_totals_max: dict[str, int] = defaultdict(int)
     rows: list[dict] = []
-    color_totals: dict[str, int] = {}
-    talla_totals: dict[str, int] = defaultdict(int)
+    color_tela: dict[str, str] = {}
 
     for cr in color_rows:
         col = cr["color"]
-        sat_qty = cr["min"] - vela_by_color.get(col, 0)
-        if sat_qty <= 0:
+        sat_min = cr["min"] - vela_min.get(col, 0)
+        sat_max = cr["max"] - vela_max.get(col, 0)
+        if sat_min <= 0 and sat_max <= 0:
             continue
-        color_totals[col] = sat_qty
-        small = sat_qty <= LOW_TELA_UNITS
-        by_talla = distribute_tallas(sat_qty, curve, small_batch=small)
-        for t in PRODUCTION_TALLAS:
-            n = by_talla.get(t, 0)
-            if n <= 0:
+        sat_min = max(0, sat_min)
+        sat_max = max(sat_min, sat_max)
+        color_totals_min[col] = sat_min
+        color_totals_max[col] = sat_max
+        color_tela[col] = cr.get("tela_fabric", col)
+
+        small_min = sat_min <= LOW_TELA_UNITS
+        small_max = sat_max <= LOW_TELA_UNITS
+        by_min = distribute_tallas(sat_min, curve, small_batch=small_min)
+        by_max = distribute_tallas(sat_max, curve, small_batch=small_max)
+        color_talla_min[col] = {t: by_min.get(t, 0) for t in PRODUCTION_TALLAS if by_min.get(t, 0) > 0}
+        color_talla_max[col] = {t: by_max.get(t, 0) for t in PRODUCTION_TALLAS if by_max.get(t, 0) > 0}
+
+        all_tallas = set(color_talla_min[col]) | set(color_talla_max[col])
+        for t in all_tallas:
+            mn = by_min.get(t, 0)
+            mx = by_max.get(t, 0)
+            if mn <= 0 and mx <= 0:
                 continue
-            talla_totals[t] += n
+            talla_totals_min[t] += mn
+            talla_totals_max[t] += mx
             rows.append({
                 "color": col,
-                "tela": cr.get("tela_fabric", col),
+                "tela": color_tela[col],
                 "talla": t,
-                "qty": n,
-                "small_batch": small,
-                "vela_deducted": vela_by_color.get(col, 0),
+                "min": mn,
+                "max": mx,
+                "qty": mn,
+                "small_batch": small_min,
+                "vela_deducted": vela_min.get(col, 0),
+                "vela_deducted_max": vela_max.get(col, 0),
             })
 
+    total_min = sum(color_totals_min.values())
+    total_max = sum(color_totals_max.values())
+
     return {
-        "total": sum(color_totals.values()),
+        "total": total_min,
+        "total_min": total_min,
+        "total_max": total_max,
         "rows": rows,
-        "color_totals": color_totals,
-        "talla_totals": dict(talla_totals),
+        "color_totals": color_totals_min,
+        "color_totals_min": color_totals_min,
+        "color_totals_max": color_totals_max,
+        "color_talla_min": color_talla_min,
+        "color_talla_max": color_talla_max,
+        "color_tela": color_tela,
+        "talla_totals": dict(talla_totals_min),
+        "talla_totals_min": dict(talla_totals_min),
+        "talla_totals_max": dict(talla_totals_max),
     }
 
 
@@ -646,6 +696,114 @@ def write_production_plan_sheet(
     ):
         note_txt = "lote chico" if ln.get("small_batch") else ""
         row_vals = [ln["color"], ln.get("tela", ""), ln["talla"], ln["qty"]]
+        if extra_cols:
+            for _, field_key in extra_cols:
+                row_vals.append(ln.get(field_key, ""))
+        row_vals.append(note_txt)
+        ws.write_row(row, 0, row_vals)
+        row += 1
+
+
+def write_production_range_sheet(
+    wb,
+    sheet_name: str,
+    plan: dict,
+    *,
+    title: str,
+    subtitle: str,
+    total_label: str,
+    extra_cols: list[tuple[str, str]] | None = None,
+) -> None:
+    """Hoja color × talla con bloques MÍNIMO / MÁXIMO (estilo global)."""
+    bold = wb.add_format({"bold": True})
+    title_fmt = wb.add_format({"bold": True, "font_size": 13, "font_color": "#f97316"})
+    hdr = wb.add_format({"bold": True, "bg_color": "#f97316", "font_color": "white"})
+    note = wb.add_format({"italic": True, "font_color": "#666666"})
+
+    ws = wb.add_worksheet(sheet_name)
+    row = 0
+    ws.write(row, 0, title, title_fmt)
+    row += 1
+    ws.write(row, 0, subtitle, note)
+    row += 1
+    ws.write(
+        row, 0,
+        f"Rango producción: {plan.get('total_min', plan.get('total', 0))} – "
+        f"{plan.get('total_max', plan.get('total', 0))} und",
+        bold,
+    )
+    row += 2
+
+    active_tallas = [
+        t for t in PRODUCTION_TALLAS
+        if plan.get("talla_totals_min", plan.get("talla_totals", {})).get(t, 0) > 0
+        or plan.get("talla_totals_max", {}).get(t, 0) > 0
+    ]
+    color_tela = plan.get("color_tela", {})
+    colors_sorted = sorted(
+        plan.get("color_totals_min", plan.get("color_totals", {})).keys(),
+        key=lambda c: -plan.get("color_totals_min", {}).get(c, 0),
+    )
+
+    for block_label, ct_key, tt_key, tot_key, block_total in (
+        (
+            f"MÍNIMO — {plan.get('total_min', 0)} und",
+            "color_talla_min", "talla_totals_min", "color_totals_min",
+            plan.get("total_min", 0),
+        ),
+        (
+            f"MÁXIMO — {plan.get('total_max', 0)} und (tope)",
+            "color_talla_max", "talla_totals_max", "color_totals_max",
+            plan.get("total_max", 0),
+        ),
+    ):
+        ws.write(row, 0, block_label, bold)
+        row += 1
+        ws.write_row(row, 0, ["Color", "Tela"] + active_tallas + ["Tot"], hdr)
+        row += 1
+        color_totals = plan.get(tot_key, {})
+        color_talla = plan.get(ct_key, {})
+        for col in colors_sorted:
+            ct = color_talla.get(col, {})
+            if not ct and not color_totals.get(col):
+                continue
+            ws.write_row(
+                row, 0,
+                [col, color_tela.get(col, "—")]
+                + [ct.get(t, 0) for t in active_tallas]
+                + [color_totals.get(col, sum(ct.values()))],
+            )
+            row += 1
+        ws.write_row(
+            row, 0,
+            [total_label, ""]
+            + [plan.get(tt_key, {}).get(t, 0) for t in active_tallas]
+            + [block_total],
+            bold,
+        )
+        row += 2
+
+    ws.write(row, 0, "Detalle línea a línea (Mín / Máx):", bold)
+    row += 1
+    detail_hdr = ["Color", "Tela", "Talla", "Mín", "Máx"]
+    if extra_cols:
+        detail_hdr.extend(h for h, _ in extra_cols)
+    detail_hdr.append("Nota")
+    ws.write_row(row, 0, detail_hdr, hdr)
+    row += 1
+    for ln in sorted(
+        plan.get("rows", []),
+        key=lambda x: (
+            -plan.get("color_totals_min", {}).get(x["color"], 0),
+            x["color"],
+            x["talla"],
+        ),
+    ):
+        note_txt = "lote chico" if ln.get("small_batch") else ""
+        row_vals = [
+            ln["color"], ln.get("tela", ""), ln["talla"],
+            ln.get("min", ln.get("qty", 0)), ln.get("max", ln.get("qty", 0)),
+        ]
         if extra_cols:
             for _, field_key in extra_cols:
                 row_vals.append(ln.get(field_key, ""))
@@ -902,22 +1060,24 @@ def export_excel(rango: dict, path: Path) -> None:
         total_label="TOTAL VELA",
     )
 
-    # ── 7. Producción Satélite (global − VELA prioritario) ──
+    # ── 7. Producción Satélite (global − VELA prioritario, con rango) ──
     sat = rango.get("satellite_production", {})
-    write_production_plan_sheet(
+    write_production_range_sheet(
         wb,
         "Producción Satélite",
         sat,
         title=(
             f"SHORT PLAYA CAB — PRODUCCIÓN SATÉLITE "
-            f"({sat.get('total', 0)} und)"
+            f"({sat.get('total_min', 0)} – {sat.get('total_max', 0)} und)"
         ),
         subtitle=(
-            f"Global {rango['total_min']} und − VELA prioritario {vela.get('total', VELA_PRODUCTION_PLAN_QTY)} und "
-            f"= {sat.get('total', 0)} und · resto tiendas (GRIETA, SAMBIL, CERRO VERDE, GRAND PLAZ, TOLON)"
+            f"Global {rango['total_min']}–{rango['total_max']} und − "
+            f"VELA prioritario {vela.get('total', VELA_PRODUCTION_PLAN_QTY)} und = "
+            f"{sat.get('total_min', 0)}–{sat.get('total_max', 0)} und · "
+            "resto tiendas (GRIETA, SAMBIL, CERRO VERDE, GRAND PLAZ, TOLON)"
         ),
         total_label="TOTAL SATÉLITE",
-        extra_cols=[("Resta VELA", "vela_deducted")],
+        extra_cols=[("Resta VELA mín", "vela_deducted"), ("Resta VELA máx", "vela_deducted_max")],
     )
 
     wb.close()
@@ -948,9 +1108,10 @@ def main():
     total_m = sum(tela_meters.values())
     print(f"✓ {args.out}")
     print(f"  Rango: {rango['total_min']} – {rango['total_max']} und · {total_m:.2f} m tela")
+    sat = rango["satellite_production"]
     print(
         f"  VELA prioritario: {rango['vela_production']['total']} und · "
-        f"Satélite: {rango['satellite_production']['total']} und"
+        f"Satélite: {sat['total_min']} – {sat['total_max']} und"
     )
     print(f"  Colores liso: {len(rango['color_rows'])} (sin sublimado)")
     for cr in rango["color_rows"]:
