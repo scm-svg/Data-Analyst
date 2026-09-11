@@ -65,6 +65,10 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .heat{border-radius:8px;padding:6px 4px;text-align:center;font-family:var(--fh);font-weight:800;font-size:.78rem;min-width:52px}
 .daycell{min-height:64px;background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:6px;font-size:.68rem}
 .daycell b{display:block;font-size:.62rem;color:var(--mu);margin-bottom:4px}
+.dayhead{min-height:auto;background:linear-gradient(180deg,rgba(91,106,247,.22),rgba(91,106,247,.08));border:1px solid rgba(91,106,247,.45);border-bottom:3px solid var(--ac);border-radius:10px;padding:10px 8px 9px;text-align:center}
+.dayhead .dn{display:block;font-family:var(--fh);font-size:.84rem;font-weight:800;color:var(--tx);letter-spacing:.2px;line-height:1.15}
+.dayhead .dd{display:block;margin-top:4px;font-family:var(--fh);font-size:.78rem;font-weight:700;color:var(--ac)}
+body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-color:#c5caf5}
 .pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem}
 .tl{width:100%;border-collapse:separate;border-spacing:0}
 .tl th,.tl td{padding:8px 6px;border-bottom:1px solid var(--brd);text-align:center;min-width:70px}
@@ -191,6 +195,9 @@ function boot(){
   document.getElementById('footVer').textContent = D.version||'';
   fillFilters();
   fillModelos();
+  var m='';
+  try{ m=(new URLSearchParams(location.search)).get('modelo')||''; }catch(e){}
+  if(m){ setModelo(m); return; }
   kpis();
   renderAll();
 }
@@ -230,11 +237,33 @@ function updateModeloCounts(){
     var n=document.getElementById('mcnt_'+i); if(n) n.textContent=fmtN(by[m]||0);
   });
 }
+function primeraSemanaModelo(){
+  if(!_modelo) return '';
+  var keys=weekKeys();
+  for(var i=0;i<keys.length;i++){
+    var hay=cargaFiltrada(keys[i]).some(function(c){ return (Number(c.total)||0)>0; });
+    if(hay) return keys[i];
+  }
+  return '';
+}
 function setModelo(m){
   _modelo=m||'';
   document.querySelectorAll('.mbtn').forEach(function(b){ b.classList.toggle('active', (b.dataset.m||'')===_modelo); });
   document.getElementById('titleModelo').textContent = _modelo ? shortMod(_modelo) : 'información';
+  if(_modelo){
+    var w=primeraSemanaModelo();
+    if(w) document.getElementById('f-sem').value=w;
+  }
   onFilter();
+}
+function fmtDiaHead(s){
+  var p=String(s||'').split('/');
+  var meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  if(p.length>=2){
+    var mes=meses[(parseInt(p[1],10)||1)-1]||p[1];
+    return p[0]+' '+mes+(p[2]?' '+p[2]:'');
+  }
+  return s;
 }
 function kpis(){
   var plan=0; weekKeys().forEach(function(k){ cargaFiltrada(k).forEach(function(c){ plan+=Number(c.total)||0; }); });
@@ -307,7 +336,9 @@ function renderCal(){
     byLin[l].push(c);
   });
   var gridHtml='<div class="cal-grid">';
-  gridHtml+='<div></div>'+DIA_LBL.map(function(d,i){ return '<div class="daycell"><b>'+d+(fechas[i]?' · '+fechas[i]:'')+'</b></div>'; }).join('');
+  gridHtml+='<div></div>'+DIA_LBL.map(function(d,i){
+    return '<div class="dayhead"><span class="dn">'+d+'</span>'+(fechas[i]?'<span class="dd">'+esc(fmtDiaHead(fechas[i]))+'</span>':'')+'</div>';
+  }).join('');
   lines.forEach(function(l){
     gridHtml+='<div class="daycell"><span class="chip '+linCls(l)+'">'+l+'</span></div>';
     DIAS.forEach(function(d){
@@ -322,10 +353,10 @@ function renderCal(){
   el.innerHTML=
     tk+
     '<div class="g2"><div class="card"><h3>Piezas por semana y línea</h3><p class="sub">Apilado L1–L5 en las 10 semanas.</p><div class="cw t"><canvas id="cWeek"></canvas></div></div>'+
-    '<div class="card"><h3>Calendario de producción</h3><p class="sub">Piezas por línea y semana. El detalle inferior es el día a día de la semana del filtro.</p>'+
+    '<div class="card"><h3>Calendario de producción</h3><p class="sub">Piezas por línea y semana. El detalle inferior es el día a día de la semana seleccionada.</p>'+
     '<div class="ctwrap"><table class="ct"><thead><tr>'+thead+'<th>Total</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>'+
     '<div class="card"><h3>Detalle diario · '+sel+(D.fechasSemanas[sel]?' ('+D.fechasSemanas[sel]+')':'')+'</h3>'+
-    '<p class="sub">Qué modelo corre en cada línea y cuántas piezas salen ese día.</p>'+gridHtml+'</div>';
+    '<p class="sub">'+(_modelo?'Semana en la que inicia '+esc(shortMod(_modelo))+'. ':'')+'Qué modelo corre en cada línea y cuántas piezas salen ese día.</p>'+gridHtml+'</div>';
 
   mc('cWeek','bar',{
     labels: keys.map(function(k){ return k.replace('Semana','S')+' '+(D.fechasSemanas[k]||''); }),
@@ -465,8 +496,7 @@ function renderAlm(){
   var el=document.getElementById('sec-alm');
   var mods=(D.almacenModelo||[]).filter(function(m){ return matchQ(m.modelo) && (!_modelo || m.modelo===_modelo); });
   var skus=D.almacenSku||[];
-  var html='<div class="card"><h3>Cantidad por modelo</h3><p class="sub">Entrada de almacén proyectada (4 días hábiles después de costura).</p><div class="cw t"><canvas id="cAlm"></canvas></div></div>';
-  html+='<div class="card"><h3>Entrada de almacén</h3><p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Clic en el modelo para ver SKUs.</p>';
+  var html='<div class="card"><h3>Entrada de almacén</h3><p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Clic en el modelo para ver SKUs.</p>';
   html+='<div class="ctwrap"><table class="ct"><thead><tr><th></th><th>Modelo</th><th>MOs</th><th>Cantidad</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
   mods.forEach(function(m,i){
     html+='<tr class="tr-exp" onclick="togAlm('+i+')"><td><span class="chev">▸</span></td><td>'+esc(m.modelo)+'</td><td class="num">'+fmtN(m.mos)+'</td><td class="num">'+fmtN(m.cantidad)+'</td><td>'+esc(m.salidaCostura)+'</td><td>'+esc(m.entradaAlmacen)+'</td></tr>';
@@ -476,10 +506,6 @@ function renderAlm(){
   el.innerHTML=html;
   window._almMods=mods;
   window._almSkus=skus;
-  mc('cAlm','bar',{
-    labels: mods.map(function(m){ return shortMod(m.modelo); }),
-    datasets: [{label:'Pzas', data: mods.map(function(m){ return Number(m.cantidad)||0; }), backgroundColor:'#4caf76', borderRadius:6}]
-  }, Object.assign(bo(false), {indexAxis:'y'}));
 }
 window.togAlm=function(i){
   var row=document.getElementById('alm-'+i); if(!row) return;
@@ -521,20 +547,14 @@ function renderSup(){
   html+='<div class="card"><h3>Reajustes mayores</h3><p class="sub">Este HTML no cambia el plan; lo lee.</p>';
   (s.notas||[]).forEach(function(n){ html+='<div class="note">'+esc(n)+'</div>'; });
   html+='</div></div>';
-  html+='<div class="card"><h3>Capacidad de producción por modelo</h3><p class="sub">Cap Produccion por Dia tomada de Proyeccion - SKUS.</p><div class="cw t"><canvas id="cCap"></canvas></div><table class="ct"><thead><tr><th>Modelo</th><th>Pzas / día</th></tr></thead><tbody>';
-  var capRows=[];
+  html+='<div class="card"><h3>Capacidad de producción por modelo</h3><p class="sub">Cap Produccion por Dia tomada de Proyeccion - SKUS.</p><table class="ct"><thead><tr><th>Modelo</th><th>Pzas / día</th></tr></thead><tbody>';
   Object.keys(caps).sort().forEach(function(m){
     if(!matchQ(m)) return;
     if(_modelo && m!==_modelo) return;
-    capRows.push({m:m, v:caps[m]});
     html+='<tr><td>'+esc(m)+'</td><td class="num">'+fmtN(caps[m])+'</td></tr>';
   });
   html+='</tbody></table></div>';
   document.getElementById('sec-sup').innerHTML=html;
-  mc('cCap','bar',{
-    labels: capRows.map(function(r){ return shortMod(r.m); }),
-    datasets: [{label:'Pzas/día', data: capRows.map(function(r){ return r.v; }), backgroundColor:'#a78bfa', borderRadius:6}]
-  }, Object.assign(bo(false), {indexAxis:'y'}));
 }
 
 function toggleTheme(){
