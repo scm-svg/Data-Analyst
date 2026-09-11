@@ -129,12 +129,12 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
   <button class="tab" data-tab="sup">⚙️ Supuestos</button>
 </div>
 <div class="content">
-  <div id="cal" class="sec active"></div>
-  <div id="salida" class="sec"></div>
-  <div id="seg" class="sec"></div>
-  <div id="pend" class="sec"></div>
-  <div id="alm" class="sec"></div>
-  <div id="sup" class="sec"></div>
+  <div id="sec-cal" class="sec active"></div>
+  <div id="sec-salida" class="sec"></div>
+  <div id="sec-seg" class="sec"></div>
+  <div id="sec-pend" class="sec"></div>
+  <div id="sec-alm" class="sec"></div>
+  <div id="sec-sup" class="sec"></div>
 </div>
 <div class="footer">Planificación de producción · v<span id="footVer"></span> · archivo autónomo (abrir en el navegador)</div>
 <script>
@@ -262,7 +262,7 @@ function cargaFiltrada(k){
 }
 
 function renderCal(){
-  var el=document.getElementById('cal');
+  var el=document.getElementById('sec-cal');
   var keys=weekKeys();
   var lines=['1','2','3','4','5'];
   var matrix={}; lines.forEach(function(l){ matrix[l]={}; keys.forEach(function(k){ matrix[l][k]=0; }); });
@@ -336,7 +336,7 @@ function renderCal(){
 }
 
 function renderSalida(){
-  var el=document.getElementById('salida');
+  var el=document.getElementById('sec-salida');
   window._salidaCarga = {};
   var keys=weekKeys();
   var weekVals=keys.map(function(k){ return cargaFiltrada(k).reduce(function(a,c){ return a+(Number(c.total)||0); },0); });
@@ -384,7 +384,7 @@ window.togSku=function(id, wi, mi){
 };
 
 function renderSeg(){
-  var el=document.getElementById('seg');
+  var el=document.getElementById('sec-seg');
   var keys=weekKeys();
   var map={};
   keys.forEach(function(k, wi){
@@ -429,7 +429,7 @@ window.togSeg=function(i){
 };
 
 function renderPend(){
-  var el=document.getElementById('pend');
+  var el=document.getElementById('sec-pend');
   var rows=(D.pendientes||[]).filter(function(p){
     if(_modelo && String(p.producto||'').toLowerCase().indexOf(_modelo.toLowerCase())<0) return false;
     if(q() && !matchQ(p.producto+p.sku+p.mo+p.para)) return false;
@@ -439,8 +439,8 @@ function renderPend(){
   var despues=rows.filter(function(p){ return !/fuera|sin capacidad/i.test(p.para||''); });
   var vDes=despues.reduce(function(a,p){return a+(Number(p.cant)||0);},0);
   var vFue=fuera.reduce(function(a,p){return a+(Number(p.cant)||0);},0);
-  var html='<div class="g2"><div class="card"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–10).</p><div class="tv" style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--ac)">'+fmtN(vDes)+'</div><div class="sub">'+despues.length+' MOs</div><div class="cw s" style="height:180px"><canvas id="cPend"></canvas></div></div>';
-  html+='<div class="card"><h3>Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las 10 semanas o no hay línea.</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--a2)">'+fmtN(vFue)+'</div><div class="sub">'+fuera.length+' MOs</div></div></div>';
+  var html='<div class="g2"><div class="card"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–10).</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--ac)">'+fmtN(vDes)+'</div><div class="sub">'+despues.length+' MOs</div><h3 style="margin-top:16px">Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las 10 semanas o no hay línea.</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--a2)">'+fmtN(vFue)+'</div><div class="sub">'+fuera.length+' MOs</div></div>';
+  html+='<div class="card"><h3>Mix de pendientes</h3><p class="sub">En horizonte vs fuera / sin programar.</p><div class="cw t"><canvas id="cPend"></canvas></div></div></div>';
   var sin=(D.proyModelo||[]).filter(function(m){ return (m.sin||0)>0 && matchQ(m.modelo) && (!_modelo || m.modelo===_modelo); });
   if(sin.length){
     html+='<div class="card"><h3>Modelos con piezas sin programar (Proyección)</h3><table class="ct"><thead><tr><th>Modelo</th><th>Meta</th><th>Sin programar</th><th>Estado</th></tr></thead><tbody>';
@@ -462,7 +462,7 @@ function renderPend(){
 }
 
 function renderAlm(){
-  var el=document.getElementById('alm');
+  var el=document.getElementById('sec-alm');
   var mods=(D.almacenModelo||[]).filter(function(m){ return matchQ(m.modelo) && (!_modelo || m.modelo===_modelo); });
   var skus=D.almacenSku||[];
   var html='<div class="card"><h3>Cantidad por modelo</h3><p class="sub">Entrada de almacén proyectada (4 días hábiles después de costura).</p><div class="cw t"><canvas id="cAlm"></canvas></div></div>';
@@ -530,7 +530,7 @@ function renderSup(){
     html+='<tr><td>'+esc(m)+'</td><td class="num">'+fmtN(caps[m])+'</td></tr>';
   });
   html+='</tbody></table></div>';
-  document.getElementById('sup').innerHTML=html;
+  document.getElementById('sec-sup').innerHTML=html;
   mc('cCap','bar',{
     labels: capRows.map(function(r){ return shortMod(r.m); }),
     datasets: [{label:'Pzas/día', data: capRows.map(function(r){ return r.v; }), backgroundColor:'#a78bfa', borderRadius:6}]
@@ -586,7 +586,7 @@ document.querySelectorAll('.tab').forEach(function(b){
     document.querySelectorAll('.sec').forEach(function(x){ x.classList.remove('active'); });
     b.classList.add('active');
     _tab=b.getAttribute('data-tab');
-    document.getElementById(_tab).classList.add('active');
+    document.getElementById('sec-'+_tab).classList.add('active');
     try { history.replaceState(null,'','#'+_tab); } catch(e) {}
   });
 });
