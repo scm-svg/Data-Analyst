@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.22 — códigos listos para pegar
+# Planificación de Producción v5.9.23 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -8,7 +8,7 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`.
 3. Guarda el proyecto. Recarga la hoja. Corre **2️⃣ Actualizar Priorización** si hace falta crear/verificar `Priorizacion - SKUs`, y luego **3️⃣ Generar Planificación**.
 
-Esta versión parte del motor bueno **5.9.15**. En 5.9.22, si un modelo de **mayor prioridad** (Urgente, mínima, Especial) tiene **Día de inicio** más adelante, el otro corre normal en la línea y, al llegar esa fecha, cede el puesto. L5 no echa a nadie. No rellena líneas vacías desde `BS`.
+Esta versión parte del motor bueno **5.9.15**. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**, y desde qué semana. Ese modelo produce también en L1 a media capacidad (cumple más rápido). Si en L2 quedan **menos de 2 días**, la línea pasa al siguiente programado.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -31,8 +31,10 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.22 (base 5.9.15 + Secuencia=No)
+## Motor v5.9.23 (base 5.9.15 + Secuencia=No)
 
+- **Apoyo L1 50% al modelo de L2:** al pulsar **Generar Planificación** el sistema pregunta si quieres disponer del 50% de la Línea 1. Si aceptas, pide la semana de inicio (1 = actual). Desde esa semana, el modelo que está corriendo en L2 también produce en L1 a la **mitad** de su `Cap Produccion por Dia` (p. ej. 65 si la cap es 130). El ocupante nativo de L1 se queda con el otro 50%. No hace falta que L2 liste la línea 1 en Por Hacer. La MO sigue anclada a L2; L1 es solo apoyo. Si ese modelo ya ocupa L1 (Urgente con 1 y 2), no se duplica.
+- **Remanente corto en L2:** si al modelo de L2 le quedan **menos de 2 días** de producción, termina (el apoyo L1 acelera el cierre) y L2 pasa al **siguiente programado**. No se queda ocupando la línea por un lote chico.
 - **Día de inicio reclama L1-4:** si MAR KIDS (Urgente) y RIO CAB (Media) comparten línea, RIO corre hasta el Día de inicio de MAR; ese día MAR entra y RIO cede. Vale para Especial, mínima, Urgente o mejor fecha/prioridad. **L5** no echa a nadie (sigue en paralelo).
 - **Especial con Día de inicio:** al llegar esa fecha, el modelo de `Por Hacer - Especial` toma su `Linea de Produccion` aunque otro (RIO, etc.) la esté usando. Antes se quedaba en 0 hasta que el ocupante terminara.
 - **Especial sin desborde a L1:** cada fila de `Por Hacer - Especial` se queda en su `Linea de Produccion`. Si L1 está libre, no se redirigen ahí modelos de L2–L5. Celda vacía sigue siendo 1.

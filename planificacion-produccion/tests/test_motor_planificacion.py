@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.22 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.23 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -12,6 +12,8 @@ BANDA_URGENTE = 2
 BANDA_RESTO = 3
 DIAS_LABORALES = 5
 DIAS_ENTRADA_ALMACEN = 4
+FRACCION_APOYO_L1 = 0.5
+DIAS_REMANENTE_CORTO_L2 = 2
 MAX_MODELOS_LINEA5 = 2
 MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
 LOTE_RUEDA_LINEA5 = 5
@@ -95,6 +97,24 @@ def genero_de(t):
     if len(parts) >= 2 and es_token_genero(parts[-1]):
         return parts[-1]
     return g or ""
+
+
+def parsear_semana_apoyo(txt, max_sem):
+    s = str("" if txt is None else txt).strip()
+    m = re.search(r"(\d+)", s)
+    if not m:
+        return 0
+    n = int(m.group(1))
+    if 1 <= n <= max_sem:
+        return n
+    return 0
+
+
+def apoyo_l1_activo_en_dia(apoyo, d):
+    if not apoyo or not apoyo.get("activo"):
+        return False
+    sem = (int(d) // DIAS_LABORALES) + 1
+    return sem >= int(apoyo.get("desde_semana") or 0)
 
 
 def cap_de_tarea(t, lin, caps_lineas):
@@ -579,11 +599,12 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
-    """Motor v5.9.22: Día de inicio reclama L1-4 si el modelo tiene mejor prioridad."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
+    """Motor v5.9.23: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
+    apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     for t in tareas:
@@ -1087,6 +1108,61 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if debe_ceder_al_lote_familia(m, overflow):
                 break
 
+    def remanente_corto_linea2(m):
+        if not m:
+            return False
+        rest = restante_modelo(m)
+        if rest <= 0:
+            return False
+        cap = cap_modelo(m, "2")
+        if cap <= 0:
+            return False
+        return rest < DIAS_REMANENTE_CORTO_L2 * cap
+
+    def producir_lote_apoyo_l1(m, d):
+        lin = "1"
+        for t in m["tareas"]:
+            if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
+                continue
+            if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
+                continue
+            avail = FRACCION_APOYO_L1 - carga[lin][d]
+            if avail <= 0.001:
+                return 0
+            cap_lin = cap_de_tarea(t, lin, caps_lineas)
+            piezas = min(t["restante"], math.floor(avail * cap_lin + 1e-9))
+            if piezas <= 0:
+                continue
+            t["plan"][lin][d] += piezas
+            carga[lin][d] += piezas / cap_lin
+            t["restante"] -= piezas
+            t["planificada"] += piezas
+            return piezas
+        return 0
+
+    def modelo_apoyo_linea2(d):
+        if not apoyo_l1_activo_en_dia(apoyo_l1, d):
+            return None
+        noms = ocupante.get("2") or []
+        if not noms:
+            return None
+        m = modelos.get(noms[0])
+        if not m or restante_modelo(m) <= 0:
+            return None
+        if m["nombre"] in (ocupante.get("1") or []):
+            return None
+        return m
+
+    def producir_apoyo_l1_dia(d):
+        m = modelo_apoyo_linea2(d)
+        if not m:
+            return
+        guard = 0
+        while carga["1"][d] < FRACCION_APOYO_L1 - 0.001 and restante_modelo(m) > 0 and guard < 40:
+            guard += 1
+            if producir_lote_apoyo_l1(m, d) <= 0:
+                break
+
     def producir_rueda_linea5(noms, d, overflow):
         lin = "5"
         i = 0
@@ -1169,6 +1245,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
                 and not (tuvo_minima(modelos[nom]) and restante_minima(modelos[nom]) <= 0)
                 and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
+                and not (str(lin) == "2" and remanente_corto_linea2(modelos[nom]) and restante_modelo(modelos[nom]) <= 0)
             ]
             if carga[lin][d] <= before + 1e-6:
                 for nom in list(ocupante[lin]):
@@ -1203,6 +1280,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 t["lineaFija"] = cands[0]
                 linea_por_mo[t.get("mo") or t["sku"]] = cands[0]
                 load[cands[0]] += 0.01
+        producir_apoyo_l1_dia(d)
         for lin in list(ocupante):
             producir_linea_dia(lin, d)
     return tareas
@@ -2365,6 +2443,126 @@ class TestSecuenciaFlag(unittest.TestCase):
         self.assertTrue(secuencia_no_de_modelo({"rio kids": "NO"}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({"RIO KIDS": ""}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({}, "RIO KIDS"))
+
+
+class TestApoyoLinea1(unittest.TestCase):
+    def _t(self, sku, modelo, lineas, cant, **kw):
+        d = {
+            "sku": sku, "modelo": modelo, "mo": "MO-" + sku,
+            "cantidad": cant, "cap": 130, "lineas": list(lineas),
+            "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": cant,
+        }
+        d.update(kw)
+        return d
+
+    def _por(self, out, lin, d):
+        por = defaultdict(int)
+        for t in out:
+            por[t["modelo"]] += t["plan"][lin][d]
+        return dict((k, v) for k, v in por.items() if v > 0)
+
+    def test_parsear_semana_apoyo(self):
+        self.assertEqual(parsear_semana_apoyo("3", 10), 3)
+        self.assertEqual(parsear_semana_apoyo("semana 2", 10), 2)
+        self.assertEqual(parsear_semana_apoyo("Semana 10", 10), 10)
+        self.assertEqual(parsear_semana_apoyo("0", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("11", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("abc", 10), 0)
+
+    def test_apoyo_l1_activo_desde_semana(self):
+        apoyo = {"activo": True, "desde_semana": 2}
+        self.assertFalse(apoyo_l1_activo_en_dia(apoyo, 4))
+        self.assertTrue(apoyo_l1_activo_en_dia(apoyo, 5))
+        self.assertFalse(apoyo_l1_activo_en_dia({"activo": False, "desde_semana": 1}, 0))
+
+    def test_sin_apoyo_modelo_l2_no_sale_en_l1(self):
+        """Sin confirmar el apoyo, un modelo solo de L2 no produce en L1."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 650, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 650, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(self._por(out, "2", 0), {"MODELO L2": 130})
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
+
+    def test_apoyo_l1_50_comparte_con_nativo(self):
+        """Con apoyo, L2 produce 65 en L1 y el nativo de L1 se queda con 65."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 2000, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 2000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        d0_2 = self._por(out, "2", 0)
+        self.assertEqual(d0_2, {"MODELO L2": 130})
+        self.assertEqual(d0_1.get("MODELO L2"), 65, d0_1)
+        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
+        self.assertEqual(sum(d0_1.values()), 130)
+
+    def test_apoyo_l1_desde_semana_2_no_toca_semana_1(self):
+        """El 50% de L1 solo arranca en la semana pedida."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 3000, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 3000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=10, apoyo_l1={"activo": True, "desde_semana": 2})
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
+        d5_1 = self._por(out, "1", 5)
+        self.assertEqual(d5_1.get("MODELO L2"), 65, d5_1)
+        self.assertEqual(d5_1.get("NATIVO L1"), 65, d5_1)
+
+    def test_apoyo_l1_aunque_el_modelo_no_liste_linea1(self):
+        """El apoyo no exige que L2 liste la línea 1 en Por Hacer."""
+        tareas = [
+            self._t("L2", "SOLO L2", ["2"], 800, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        self.assertEqual(self._por(out, "2", 0), {"SOLO L2": 130})
+        self.assertEqual(self._por(out, "1", 0), {"SOLO L2": 65})
+
+    def test_remanente_corto_l2_pasa_al_siguiente_con_apoyo(self):
+        """Menos de 2 días en L2: el apoyo cierra el lote y el siguiente entra el mismo día."""
+        tareas = [
+            self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
+            self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
+            self._t("C", "NATIVO L1", ["1"], 2000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        d0_2 = self._por(out, "2", 0)
+        self.assertEqual(d0_1.get("CIERRE L2"), 65, d0_1)
+        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
+        self.assertEqual(d0_2.get("CIERRE L2"), 85, d0_2)
+        self.assertEqual(d0_2.get("SIGUIENTE L2"), 45, d0_2)
+        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "CIERRE L2"), 150)
+
+    def test_remanente_corto_l2_sin_apoyo_cede_al_cerrar(self):
+        """Sin apoyo, un remanente de menos de 2 días cierra y L2 pasa al siguiente."""
+        tareas = [
+            self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
+            self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        d0 = self._por(out, "2", 0)
+        d1 = self._por(out, "2", 1)
+        self.assertEqual(d0, {"CIERRE L2": 130})
+        self.assertEqual(d1.get("CIERRE L2"), 20, d1)
+        self.assertEqual(d1.get("SIGUIENTE L2"), 110, d1)
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "CIERRE L2"), 0)
+
+    def test_apoyo_no_duplica_si_l2_ya_ocupa_l1(self):
+        """Si el modelo de L2 ya corre en L1 (Urgente 1/2), L1 sigue al 100%, no a 50%+50%."""
+        tareas = [
+            self._t("U1", "URGENTE DOS", ["1", "2"], 1000, prioridadNum=1, mo="MO-U1"),
+            self._t("U2", "URGENTE DOS", ["1", "2"], 1000, prioridadNum=1, mo="MO-U2"),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        self.assertEqual(self._por(out, "1", 0), {"URGENTE DOS": 130})
+        self.assertEqual(self._por(out, "2", 0), {"URGENTE DOS": 130})
 
 
 if __name__ == "__main__":
