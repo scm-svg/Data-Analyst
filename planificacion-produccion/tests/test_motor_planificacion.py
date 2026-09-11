@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.23 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.24 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -372,21 +372,177 @@ def banda_de(t):
     return BANDA_RESTO
 
 
-def faltante_de_fila(solicitada, producida=0, faltante=None):
-    if producida is None:
-        producida = 0
+def faltante_efectivo(solicitada, producida=0, faltante_celda="", hay_prod_col=True, hay_falt_celda=False):
+    """Espejo de faltanteEfectivo_: Faltante=0 gana aunque sol-prod > 0."""
     sol = float(solicitada or 0)
     prod = float(producida or 0)
-    if prod or solicitada is not None:
-        calc = max(0.0, sol - prod)
-        if faltante is None or faltante == "":
-            return calc
-    if faltante not in (None, ""):
+    falt_n = float("nan")
+    if hay_falt_celda and faltante_celda not in (None, ""):
         try:
-            return float(faltante)
+            falt_n = float(faltante_celda)
         except (TypeError, ValueError):
-            return calc if "calc" in dir() else 0.0
-    return max(0.0, sol - prod)
+            falt_n = float("nan")
+    elif hay_falt_celda:
+        hay_falt_celda = False
+    if hay_falt_celda and falt_n == falt_n and falt_n <= 0:
+        return 0.0
+    if hay_prod_col:
+        por_prod = max(0.0, sol - prod)
+        if por_prod > 0:
+            return por_prod
+    if hay_falt_celda and falt_n == falt_n and falt_n > 0:
+        return falt_n
+    if hay_prod_col:
+        return max(0.0, sol - prod)
+    return max(0.0, sol)
+
+
+def faltante_de_fila(solicitada, producida=0, faltante=None):
+    hay_falt = faltante not in (None, "")
+    return faltante_efectivo(solicitada, producida, faltante if hay_falt else "", True, hay_falt)
+
+
+def clave_mo(t):
+    mo = norm(t.get("mo")).upper()
+    tipo = "E" if t.get("esEspecial") else "R"
+    if mo:
+        return mo + "||" + tipo
+    return "SKU:" + norm(t.get("sku")).upper() + "||" + tipo
+
+
+def mos_de_tarea(t):
+    mo = t.get("mo")
+    if mo is None or mo == "":
+        return []
+    return [m.strip() for m in str(mo).split(",") if m.strip()]
+
+
+def asegurar_buckets_semana(obj, n_sem):
+    obj.setdefault("mosPorSemana", [])
+    obj.setdefault("solicitadaPorSemana", [])
+    obj.setdefault("clavesSemana", [])
+    while len(obj["mosPorSemana"]) < n_sem:
+        obj["mosPorSemana"].append(set())
+        obj["solicitadaPorSemana"].append(0)
+        obj["clavesSemana"].append({})
+    return obj
+
+
+def registrar_tarea_en_semana(obj, w, t, n_sem):
+    if w < 0 or w >= n_sem or not t or not (t.get("cantidad") or 0) > 0:
+        return
+    asegurar_buckets_semana(obj, n_sem)
+    for m in mos_de_tarea(t):
+        obj["mosPorSemana"][w].add(m)
+    k = clave_mo(t)
+    if not obj["clavesSemana"][w].get(k):
+        obj["clavesSemana"][w][k] = True
+        obj["solicitadaPorSemana"][w] += t["cantidad"]
+
+
+def agregar_conteo_semanal(tareas, n_sem=10, dias_lab=5):
+    """Espejo de la agregación post-plan: MOs y solicitada por semana, Línea solo sem 1."""
+    info_modelo = {}
+    mapa_global = {}
+    consol_linea = {str(i): {} for i in range(1, 6)}
+    for t in tareas:
+        modelo = t.get("modelo")
+        if modelo not in info_modelo:
+            info_modelo[modelo] = {
+                "solicitada": 0,
+                "porSemana": [0] * n_sem,
+                "mos": set(),
+            }
+            asegurar_buckets_semana(info_modelo[modelo], n_sem)
+        im = info_modelo[modelo]
+        im["solicitada"] += t.get("cantidad") or 0
+        for m in mos_de_tarea(t):
+            im["mos"].add(m)
+        plan = t.get("plan") or {}
+        for lin, arr in plan.items():
+            total_linea = sum(arr or [])
+            if total_linea <= 0:
+                continue
+            sem1 = sum((arr or [])[:dias_lab])
+            if sem1 > 0:
+                k_lin = "%s_%s_%s" % (t.get("sku"), t.get("mo"), "E" if t.get("esEspecial") else "R")
+                if k_lin not in consol_linea[str(lin)]:
+                    consol_linea[str(lin)][k_lin] = {
+                        "mo": t.get("mo"),
+                        "sku": t.get("sku"),
+                        "solicitada": t.get("cantidad") or 0,
+                        "sem1Linea": 0,
+                        "totalLinea": 0,
+                    }
+                cl = consol_linea[str(lin)][k_lin]
+                cl["sem1Linea"] += sem1
+                cl["totalLinea"] += total_linea
+            clave = str(lin) + "_" + str(modelo)
+            if clave not in mapa_global:
+                mapa_global[clave] = {
+                    "linea": str(lin),
+                    "modelo": modelo,
+                    "solicitada": 0,
+                    "dias": [0] * (n_sem * dias_lab),
+                    "mos": set(),
+                }
+                asegurar_buckets_semana(mapa_global[clave], n_sem)
+            mg = mapa_global[clave]
+            mg["solicitada"] += total_linea
+            for d, v in enumerate(arr or []):
+                if d < len(mg["dias"]):
+                    mg["dias"][d] += v
+                w = d // dias_lab
+                if w < n_sem:
+                    im["porSemana"][w] += v
+                if v > 0 and w < n_sem:
+                    registrar_tarea_en_semana(mg, w, t, n_sem)
+                    registrar_tarea_en_semana(im, w, t, n_sem)
+                    for m in mos_de_tarea(t):
+                        mg["mos"].add(m)
+    return info_modelo, mapa_global, consol_linea
+
+
+def filas_tablero_semana(mapa_global, ws, dias_lab=5):
+    filas = []
+    for reg in mapa_global.values():
+        ini = ws * dias_lab
+        vals = (reg.get("dias") or [])[ini:ini + dias_lab]
+        plan = sum(vals)
+        if plan <= 0:
+            continue
+        mos = len(reg["mosPorSemana"][ws]) if ws < len(reg.get("mosPorSemana") or []) else 0
+        sol = reg["solicitadaPorSemana"][ws] if ws < len(reg.get("solicitadaPorSemana") or []) else 0
+        filas.append({
+            "linea": reg["linea"],
+            "modelo": reg["modelo"],
+            "mos": mos,
+            "solicitada": sol,
+            "plan": plan,
+        })
+    return filas
+
+
+def filas_resumen_semana(info_modelo, ws):
+    filas = []
+    for modelo, im in info_modelo.items():
+        plan = im["porSemana"][ws] if ws < len(im.get("porSemana") or []) else 0
+        if plan <= 0:
+            continue
+        mos = len(im["mosPorSemana"][ws]) if ws < len(im.get("mosPorSemana") or []) else 0
+        meta = im["solicitadaPorSemana"][ws] if ws < len(im.get("solicitadaPorSemana") or []) else 0
+        if meta <= 0:
+            meta = plan
+        filas.append({"modelo": modelo, "mos": mos, "meta": meta, "plan": plan})
+    return filas
+
+
+def filas_linea_semana1(consol_linea, lin):
+    return [r for r in consol_linea[str(lin)].values() if r.get("sem1Linea", 0) > 0]
+
+
+def filas_proyeccion(info, clave_solicitada="solicitada"):
+    return [k for k, v in info.items() if (v.get(clave_solicitada) or 0) > 0]
 
 
 def modelos_con_faltante(filas):
@@ -600,7 +756,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.23: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
+    """Motor v5.9.24: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -2563,6 +2719,86 @@ class TestApoyoLinea1(unittest.TestCase):
         out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
         self.assertEqual(self._por(out, "1", 0), {"URGENTE DOS": 130})
         self.assertEqual(self._por(out, "2", 0), {"URGENTE DOS": 130})
+
+
+class TestConteoSemanal(unittest.TestCase):
+    def _tarea(self, sku, modelo, mo, cant, plan, **kw):
+        t = {
+            "sku": sku, "modelo": modelo, "mo": mo, "cantidad": cant,
+            "esEspecial": False, "plan": plan,
+        }
+        t.update(kw)
+        return t
+
+    def test_faltante_cero_gana_aunque_sol_menos_prod_sea_positivo(self):
+        self.assertEqual(faltante_de_fila(30, 0, 0), 0)
+        self.assertEqual(faltante_de_fila(100, 20, 0), 0)
+        self.assertEqual(faltante_efectivo(100, 20, 0, True, True), 0)
+        self.assertEqual(faltante_de_fila(100, 20, ""), 80)
+        self.assertEqual(faltante_de_fila(100, 20, 15), 80)
+        self.assertEqual(faltante_efectivo(100, 0, 40, False, True), 40)
+
+    def test_tablero_no_repite_mos_de_otras_semanas(self):
+        """COTTON-style: 16 MOs / 480 en el horizonte no deben salir en Semana 1."""
+        plan_s1 = {"2": [100, 0, 0, 0, 0] + [0] * 5}
+        plan_s2 = {"2": [0, 0, 0, 0, 0, 30, 0, 0, 0, 0]}
+        tareas = [
+            self._tarea("C1", "COTTON KIDS", "MO-01", 100, plan_s1),
+        ]
+        for i in range(2, 17):
+            tareas.append(self._tarea(
+                "C%02d" % i, "COTTON KIDS", "MO-%02d" % i, 25, plan_s2,
+            ))
+        info, mapa, consol = agregar_conteo_semanal(tareas, n_sem=2)
+        tab1 = filas_tablero_semana(mapa, 0)
+        tab2 = filas_tablero_semana(mapa, 1)
+        self.assertEqual(len(tab1), 1)
+        self.assertEqual(tab1[0]["mos"], 1)
+        self.assertEqual(tab1[0]["solicitada"], 100)
+        self.assertEqual(tab1[0]["plan"], 100)
+        self.assertEqual(tab2[0]["mos"], 15)
+        self.assertEqual(tab2[0]["solicitada"], 375)
+        res1 = filas_resumen_semana(info, 0)
+        res2 = filas_resumen_semana(info, 1)
+        self.assertEqual(res1[0]["mos"], 1)
+        self.assertEqual(res1[0]["meta"], 100)
+        self.assertEqual(res2[0]["mos"], 15)
+        self.assertEqual(info["COTTON KIDS"]["solicitada"], 475)
+        self.assertEqual(len(info["COTTON KIDS"]["mos"]), 16)
+
+    def test_resumen_omite_modelo_con_cero_en_la_semana(self):
+        tareas = [
+            self._tarea("A1", "ACTIVO", "MO-A", 50, {"1": [50, 0, 0, 0, 0, 0, 0, 0, 0, 0]}),
+            self._tarea("B1", "FUTURO", "MO-B", 1200, {"4": [0, 0, 0, 0, 0, 80, 80, 80, 80, 80]}),
+        ]
+        info, mapa, _ = agregar_conteo_semanal(tareas, n_sem=2)
+        res1 = {r["modelo"]: r for r in filas_resumen_semana(info, 0)}
+        self.assertIn("ACTIVO", res1)
+        self.assertNotIn("FUTURO", res1)
+        tab1 = {r["modelo"]: r for r in filas_tablero_semana(mapa, 0)}
+        self.assertIn("ACTIVO", tab1)
+        self.assertNotIn("FUTURO", tab1)
+        self.assertEqual(sum(r["mos"] for r in res1.values()), 1)
+
+    def test_linea_omite_mo_solo_de_semanas_futuras(self):
+        tareas = [
+            self._tarea("N1", "AHORA", "MO-N", 80, {"4": [80, 0, 0, 0, 0, 0, 0, 0, 0, 0]}),
+            self._tarea("C1", "CARRERA", "MO-C", 1200, {"4": [0, 0, 0, 0, 0] + [80] * 5}),
+        ]
+        _, _, consol = agregar_conteo_semanal(tareas, n_sem=2)
+        filas = filas_linea_semana1(consol, 4)
+        mos = {f["mo"] for f in filas}
+        self.assertIn("MO-N", mos)
+        self.assertNotIn("MO-C", mos)
+        ahora = [f for f in filas if f["mo"] == "MO-N"][0]
+        self.assertEqual(ahora["solicitada"], 80)
+
+    def test_proyeccion_omite_faltante_cero(self):
+        info = {
+            "OK": {"solicitada": 30, "porSemana": [10, 20]},
+            "CERO": {"solicitada": 0, "porSemana": [0, 0]},
+        }
+        self.assertEqual(filas_proyeccion(info), ["OK"])
 
 
 if __name__ == "__main__":

@@ -1,10 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.23 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.24 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CONTEO POR SEMANA (MOs Y CANTIDADES): cada pestaña semanal, el
+ *     resumen ejecutivo y las pestañas de Línea solo cuentan las MOs
+ *     y el faltante de esa semana. Ya no se repiten las 365 MOs ni
+ *     el pedido completo en Semana 1–10. Proyeccion / Proyeccion -
+ *     SKUS omiten filas con faltante 0. Si Faltante dice 0, esa MO
+ *     no entra al plan aunque Cantidad Solicitada tenga valor.
  *   - APOYO L1 50% AL MODELO DE L2: al generar el plan pregunta si se
  *     dispone del 50% de la Línea 1 y desde qué semana. Desde esa
  *     semana, el modelo que corre en L2 también produce en L1 a la
@@ -103,7 +109,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.23";
+var VERSION_SISTEMA = "5.9.24";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -541,15 +547,25 @@ function secuenciaNoDeModelo_(mapa, modelo) {
   return false;
 }
 
+function faltanteEfectivo_(solicitada, producida, faltanteCelda, hayProdCol, hayFaltCelda) {
+  var sol = Number(solicitada) || 0;
+  var prod = Number(producida) || 0;
+  var faltN = hayFaltCelda ? Number(faltanteCelda) : NaN;
+  if (hayFaltCelda && !isNaN(faltN) && faltN <= 0) return 0;
+  if (hayProdCol) {
+    var porProd = Math.max(0, sol - prod);
+    if (porProd > 0) return porProd;
+  }
+  if (hayFaltCelda && !isNaN(faltN) && faltN > 0) return faltN;
+  if (hayProdCol) return Math.max(0, sol - prod);
+  return Math.max(0, sol);
+}
+
 function faltanteDeFila_(fila, iCant, iFalt, iProdQty) {
   var sol = iCant !== -1 ? (Number(fila[iCant]) || 0) : 0;
   var prod = iProdQty !== -1 ? (Number(fila[iProdQty]) || 0) : 0;
-  if (iProdQty !== -1) return Math.max(0, sol - prod);
-  if (iFalt !== -1 && fila[iFalt] !== "") {
-    var f = Number(fila[iFalt]);
-    if (!isNaN(f)) return f;
-  }
-  return Math.max(0, sol);
+  var hayFalt = iFalt !== -1 && fila[iFalt] !== "";
+  return faltanteEfectivo_(sol, prod, hayFalt ? fila[iFalt] : "", iProdQty !== -1, hayFalt);
 }
 
 function rangoColor_(color) {
@@ -730,6 +746,43 @@ function claveMO_(t) {
   var tipo = t.esEspecial ? "E" : "R";
   if (mo !== "") return mo + "||" + tipo;
   return "SKU:" + normUp_(t.sku) + "||" + tipo;
+}
+
+function mosDeTarea_(t) {
+  if (!t || t.mo === "" || t.mo === undefined || t.mo === null) return [];
+  return String(t.mo).split(",").map(function (m) { return m.trim(); }).filter(function (m) { return m !== ""; });
+}
+
+function asegurarBucketsSemana_(obj, nSem) {
+  if (!obj.mosPorSemana) obj.mosPorSemana = [];
+  if (!obj.solicitadaPorSemana) obj.solicitadaPorSemana = [];
+  if (!obj.clavesSemana) obj.clavesSemana = [];
+  while (obj.mosPorSemana.length < nSem) {
+    obj.mosPorSemana.push(new Set());
+    obj.solicitadaPorSemana.push(0);
+    obj.clavesSemana.push({});
+  }
+}
+
+function registrarTareaEnSemana_(obj, w, t, nSem) {
+  if (w < 0 || w >= nSem || !t || !(t.cantidad > 0)) return;
+  asegurarBucketsSemana_(obj, nSem);
+  mosDeTarea_(t).forEach(function (m) { obj.mosPorSemana[w].add(m); });
+  var k = claveMO_(t);
+  if (!obj.clavesSemana[w][k]) {
+    obj.clavesSemana[w][k] = true;
+    obj.solicitadaPorSemana[w] += t.cantidad;
+  }
+}
+
+function mosDeSemana_(obj, w) {
+  if (!obj || !obj.mosPorSemana || !obj.mosPorSemana[w]) return 0;
+  return obj.mosPorSemana[w].size;
+}
+
+function solicitadaDeSemana_(obj, w) {
+  if (!obj || !obj.solicitadaPorSemana || obj.solicitadaPorSemana[w] === undefined) return 0;
+  return obj.solicitadaPorSemana[w] || 0;
 }
 
 function cloneTask(t, newQty, isFase2) {
@@ -986,14 +1039,14 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
 
     var cantSolicitada = Number(fila[iCant]) || 0;
     var cantProducida = iProdQty !== -1 ? (Number(fila[iProdQty]) || 0) : 0;
-
-    var cantEfectiva = cantSolicitada;
-    if (iProdQty !== -1) {
-      cantEfectiva = Math.max(0, cantSolicitada - cantProducida);
-    } else if (iFalt !== -1 && fila[iFalt] !== "") {
-      var faltanteCelda = Number(fila[iFalt]);
-      if (!isNaN(faltanteCelda)) cantEfectiva = faltanteCelda;
-    }
+    var hayFaltCelda = iFalt !== -1 && fila[iFalt] !== "";
+    var cantEfectiva = faltanteEfectivo_(
+      cantSolicitada,
+      cantProducida,
+      hayFaltCelda ? fila[iFalt] : "",
+      iProdQty !== -1,
+      hayFaltCelda
+    );
 
     var cap = Number(fila[iCap]);
     var lineasStr = iLin !== -1 ? norm_(fila[iLin]) : "";
@@ -2135,6 +2188,7 @@ function generarPlanificacionSemanal_() {
         bandaMin: 9
       };
       for (var w = 0; w < cfg.semanas; w++) infoModelo[t.modelo].porSemana.push(0);
+      asegurarBucketsSemana_(infoModelo[t.modelo], cfg.semanas);
     }
     var im = infoModelo[t.modelo];
     im.solicitada += t.cantidad;
@@ -2199,17 +2253,18 @@ function generarPlanificacionSemanal_() {
       if (totalLinea <= 0) continue;
       lineasUsadasTarea.push(lin);
 
-      if (sem1Linea > 0 || totalLinea > 0) {
+      if (sem1Linea > 0) {
         var kLin = t.sku + "_" + t.mo + "_" + (t.esEspecial ? "E" : "R");
         if (!consolLineaData[lin][kLin]) {
           consolLineaData[lin][kLin] = {
             mo: t.mo, sku: t.sku, detalle: t.detalle, totalLinea: 0,
-            dias: [0, 0, 0, 0, 0], sem1Linea: 0
+            solicitada: t.cantidad, dias: [0, 0, 0, 0, 0], sem1Linea: 0
           };
         }
         var cl = consolLineaData[lin][kLin];
         cl.totalLinea += totalLinea;
         cl.sem1Linea += sem1Linea;
+        if (!(cl.solicitada > 0)) cl.solicitada = t.cantidad;
         for (var dDia = 0; dDia < 5; dDia++) cl.dias[dDia] += arr[dDia];
       }
 
@@ -2220,15 +2275,18 @@ function generarPlanificacionSemanal_() {
           dias: new Array(totalDias).fill(0),
           totalSemana: 0, mos: new Set()
         };
+        asegurarBucketsSemana_(mapaGlobal[clave], cfg.semanas);
       }
       var mg = mapaGlobal[clave];
       mg.solicitada += totalLinea;
       for (var d5 = 0; d5 < totalDias; d5++) mg.dias[d5] += arr[d5];
       mg.totalSemana += sem1Linea;
-      if (t.mo !== "") {
-        t.mo.split(",").map(function (mm) { return mm.trim(); })
-          .filter(function (mm) { return mm !== ""; })
-          .forEach(function (mm) { mg.mos.add(mm); });
+      for (var dReg = 0; dReg < totalDias; dReg++) {
+        if ((arr[dReg] || 0) > 0) {
+          var wReg = Math.floor(dReg / DIAS_LABORALES);
+          registrarTareaEnSemana_(mg, wReg, t, cfg.semanas);
+          registrarTareaEnSemana_(im, wReg, t, cfg.semanas);
+        }
       }
     }
     if (lineasUsadasTarea.length > 1) {
@@ -2245,7 +2303,7 @@ function generarPlanificacionSemanal_() {
     for (var k in consolLineaData[l]) {
       var clD = consolLineaData[l][k];
       datosPorLinea[l].push([
-        clD.mo, clD.sku, clD.detalle, clD.totalLinea,
+        clD.mo, clD.sku, clD.detalle, clD.solicitada > 0 ? clD.solicitada : clD.sem1Linea,
         clD.dias[0] === 0 ? "--" : clD.dias[0],
         clD.dias[1] === 0 ? "--" : clD.dias[1],
         clD.dias[2] === 0 ? "--" : clD.dias[2],
@@ -2374,8 +2432,10 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
 
       totalesPorLineaS[regS.linea] = (totalesPorLineaS[regS.linea] || 0) + sumS;
 
+      var mosSem = mosDeSemana_(regS, ws);
+      var solSem = solicitadaDeSemana_(regS, ws);
       datosGlobalesS.push([
-        regS.linea, regS.modelo, regS.mos.size, regS.solicitada,
+        regS.linea, regS.modelo, mosSem, solSem,
         valDias[0] === 0 ? "--" : valDias[0],
         valDias[1] === 0 ? "--" : valDias[1],
         valDias[2] === 0 ? "--" : valDias[2],
@@ -2385,7 +2445,9 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
       ]);
       for (var dx2 = 0; dx2 < 5; dx2++) totDiasS[dx2] += valDias[dx2];
       granTotalS += sumS;
-      regS.mos.forEach(function (m) { totalMOsGlobalS.add(m); });
+      if (regS.mosPorSemana && regS.mosPorSemana[ws]) {
+        regS.mosPorSemana[ws].forEach(function (m) { totalMOsGlobalS.add(m); });
+      }
     }
 
     datosGlobalesS.forEach(function (row) { row[10] = totalesPorLineaS[row[0]]; });
@@ -2467,27 +2529,39 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
     }
 
     var datosResumenS = [];
+    var datosAlertaS = [];
     var totalSolS = 0, totalPlanS = 0, totalMOsResS = new Set();
 
     for (var modS in infoModelo) {
       var imS = infoModelo[modS];
-      var acumuladoPrevio = 0;
-      for (var prev = 0; prev < ws; prev++) acumuladoPrevio += imS.porSemana[prev];
-      var metaSemanaActual = Math.max(0, imS.solicitada - acumuladoPrevio);
+      var planS = imS.porSemana[ws] || 0;
+      var acumHastaS = 0;
+      for (var wAc = 0; wAc <= ws; wAc++) acumHastaS += (imS.porSemana[wAc] || 0);
+      var pendS = Math.max(0, imS.solicitada - acumHastaS);
+      var metaSemanaActual = solicitadaDeSemana_(imS, ws);
+      if (metaSemanaActual <= 0 && planS > 0) metaSemanaActual = planS;
 
-      if (metaSemanaActual <= 0 && imS.porSemana[ws] <= 0) continue;
+      if (planS > 0) {
+        var mosSemR = mosDeSemana_(imS, ws);
+        datosResumenS.push({
+          modelo: modS, mos: mosSemR, meta: metaSemanaActual, plan: planS,
+          pct: metaSemanaActual > 0 ? planS / metaSemanaActual : 1,
+          pendiente: pendS, prioMin: imS.prioMin, fechaObj: imS.fechaObj,
+          bandaMin: (imS.bandaMin !== undefined) ? imS.bandaMin : 9
+        });
+        totalSolS += metaSemanaActual; totalPlanS += planS;
+        if (imS.mosPorSemana && imS.mosPorSemana[ws]) {
+          imS.mosPorSemana[ws].forEach(function (m) { totalMOsResS.add(m); });
+        }
+      }
 
-      var planS = imS.porSemana[ws];
-      var pendS = Math.max(0, metaSemanaActual - planS);
-
-      datosResumenS.push({
-        modelo: modS, mos: imS.mos.size, meta: metaSemanaActual, plan: planS,
-        pct: metaSemanaActual > 0 ? planS / metaSemanaActual : (planS > 0 ? 1 : 0),
-        pendiente: pendS, prioMin: imS.prioMin, fechaObj: imS.fechaObj,
-        bandaMin: (imS.bandaMin !== undefined) ? imS.bandaMin : 9
-      });
-      totalSolS += metaSemanaActual; totalPlanS += planS;
-      imS.mos.forEach(function (m) { totalMOsResS.add(m); });
+      if (pendS > 0) {
+        datosAlertaS.push({
+          modelo: modS, pendiente: pendS, prioMin: imS.prioMin, fechaObj: imS.fechaObj,
+          bandaMin: (imS.bandaMin !== undefined) ? imS.bandaMin : 9,
+          plan: planS, meta: metaSemanaActual
+        });
+      }
     }
 
     datosResumenS.sort(function (a, b) {
@@ -2528,7 +2602,7 @@ function dibujarTablerosSemanales_(ss, cfg, nombresHojasSemanas, mapaGlobal, inf
       hojaS.getRange(filaTotalesResumenS, 7).setNumberFormat("0.00%");
     }
 
-    var pendientesS = datosResumenS.filter(function (x) { return x.pendiente > 0; });
+    var pendientesS = datosAlertaS.slice();
     if (pendientesS.length > 0) {
       var filaAlertaS = filaTotalesResumenS + 3;
 
@@ -2907,6 +2981,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     if (isku.diaFinEstimado >= 0) {
       fechaFinMsSku = fechaDeDia_(cfg, isku.diaFinEstimado).getTime();
     }
+    if (!(isku.solicitada > 0)) continue;
     var estadoSku = estadoProyeccion_(isku.restante, isku.fechaObj, fechaFinMsSku);
     var filaS = [isku.sku, isku.modelo, isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
     var acumSku = valoresAcumuladosSemanas_(isku.porSemana, cfg.semanas, isku.solicitada);
@@ -2928,7 +3003,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     fuentesSku.push(estSku.fuentes);
     estilosSku.push(estSku);
 
-    if (!primeraFilaSku[isku.modelo]) primeraFilaSku[isku.modelo] = filaDatos + miS;
+    if (!primeraFilaSku[isku.modelo]) primeraFilaSku[isku.modelo] = filaDatos + filasProySku.length - 1;
   }
 
   escribirTablaProyeccion_(hojaProySkus, cabProySku, filasProySku, fondosSku, fuentesSku, estilosSku, COL_INI, FILA_ENC);
@@ -2948,6 +3023,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     if (im3.diaFinEstimado >= 0) {
       fechaFinMs = fechaDeDia_(cfg, im3.diaFinEstimado).getTime();
     }
+    if (!(im3.solicitada > 0)) continue;
     var estado = estadoProyeccion_(im3.restante, im3.fechaObj, fechaFinMs);
     var fila = [nomMod, formatoFecha_(cfg, im3.fechaObj), im3.solicitada];
     var acumMod = valoresAcumuladosSemanas_(im3.porSemana, cfg.semanas, im3.solicitada);
