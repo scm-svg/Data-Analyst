@@ -2985,7 +2985,13 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 1"]["carga"]), 0)
         cotton = [s for s in d["proySku"] if s["modelo"] == "COTTON KIDS"]
         self.assertTrue(cotton)
-        self.assertEqual(len(cotton[0]["weeks"]), 10)
+        self.assertEqual(len(cotton[0]["weeks"]), 12)
+        self.assertIn("Semana 11", d["semanas"])
+        self.assertIn("Semana 12", d["semanas"])
+        self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 11"]["carga"]), 0)
+        self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 12"]["carga"]), 0)
+        self.assertEqual(d["supuestos"]["semanas"], 12)
+        self.assertEqual(d["version"], "5.9.28")
 
 
 if __name__ == "__main__":
