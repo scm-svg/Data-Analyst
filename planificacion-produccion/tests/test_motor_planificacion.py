@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.25 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.27 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -18,6 +18,13 @@ MAX_MODELOS_LINEA5 = 2
 MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
 LOTE_RUEDA_LINEA5 = 5
 CAP_POR_LINEA = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
+SEMANAS_DEFAULT = 12
+SEMANAS_MAX = 12
+NOMBRES_HOJAS_SEMANAS = [
+    "Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5",
+    "Semana 6", "Semana 7", "Semana 8", "Semana 9", "Semana 10",
+    "Semana 11", "Semana 12",
+]
 
 
 def norm(s):
@@ -434,7 +441,7 @@ def registrar_tarea_en_semana(obj, w, t, n_sem):
         obj["solicitadaPorSemana"][w] += t["cantidad"]
 
 
-def agregar_conteo_semanal(tareas, n_sem=10, dias_lab=5):
+def agregar_conteo_semanal(tareas, n_sem=12, dias_lab=5):
     """Espejo de la agregación post-plan: MOs y solicitada por semana, Línea solo sem 1."""
     info_modelo = {}
     mapa_global = {}
@@ -687,6 +694,22 @@ def acumular_semanas(por_semana, meta=0):
             if meta_num > 0 and acum >= meta_num:
                 alcanzada = True
     return out
+
+
+def cabeceras_proyeccion(n_sem=12):
+    cab = ["Modelo", "Fecha Objetivo", "Meta (Faltante)"]
+    for w in range(n_sem):
+        cab.append("Acum Sem %d" % (w + 1))
+    cab.extend(["Sin Programar", "Fecha Estim. Término", "Estado"])
+    return cab
+
+
+def idx_col_sem_dash(h_arr, n):
+    pat = re.compile(r"sem\s*%d(?!\d)" % n)
+    for i, h in enumerate(h_arr):
+        if pat.search(str(h)):
+            return i
+    return -1
 
 
 COLOR_MINIMA_PROY = "#FFE599"
@@ -2577,6 +2600,22 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(out[2], 300)
         self.assertTrue(all(x is None for x in out[3:]))
 
+    def test_acumulado_doce_semanas(self):
+        vals = [100] * 12
+        out = acumular_semanas(vals, 250)
+        self.assertEqual(len(out), 12)
+        self.assertEqual(out[0], 100)
+        self.assertEqual(out[1], 200)
+        self.assertEqual(out[2], 300)
+        self.assertTrue(all(x is None for x in out[3:]))
+        self.assertEqual(len(cabeceras_proyeccion(12)), 18)
+        self.assertEqual(cabeceras_proyeccion(12)[3], "Acum Sem 1")
+        self.assertEqual(cabeceras_proyeccion(12)[14], "Acum Sem 12")
+        self.assertEqual(len(NOMBRES_HOJAS_SEMANAS), 12)
+        self.assertEqual(NOMBRES_HOJAS_SEMANAS[-2:], ["Semana 11", "Semana 12"])
+        self.assertEqual(SEMANAS_DEFAULT, 12)
+        self.assertEqual(SEMANAS_MAX, 12)
+
 
 class TestSecuenciaFlag(unittest.TestCase):
     def test_es_secuencia_no(self):
@@ -2618,6 +2657,10 @@ class TestApoyoLinea1(unittest.TestCase):
         self.assertEqual(parsear_semana_apoyo("Semana 10", 10), 10)
         self.assertEqual(parsear_semana_apoyo("0", 10), 0)
         self.assertEqual(parsear_semana_apoyo("11", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("11", 12), 11)
+        self.assertEqual(parsear_semana_apoyo("12", 12), 12)
+        self.assertEqual(parsear_semana_apoyo("Semana 12", 12), 12)
+        self.assertEqual(parsear_semana_apoyo("13", 12), 0)
         self.assertEqual(parsear_semana_apoyo("", 10), 0)
         self.assertEqual(parsear_semana_apoyo("abc", 10), 0)
 
@@ -2839,6 +2882,17 @@ class TestDashboardInfo(unittest.TestCase):
     def test_acum_a_cantidad_semanal(self):
         self.assertEqual(semanas_de_acum([105, 480, "--", "--"]), [105, 375, 0, 0])
         self.assertEqual(semanas_de_acum(["--", 114, 192]), [0, 114, 78])
+
+    def test_idx_col_sem_no_confunde_1_con_11(self):
+        headers = [
+            "modelo", "fecha objetivo", "meta (faltante)",
+            "acum sem 1 (07/09)", "acum sem 10 (09/11)",
+            "acum sem 11 (16/11)", "acum sem 12 (23/11)",
+        ]
+        self.assertEqual(idx_col_sem_dash(headers, 1), 3)
+        self.assertEqual(idx_col_sem_dash(headers, 10), 4)
+        self.assertEqual(idx_col_sem_dash(headers, 11), 5)
+        self.assertEqual(idx_col_sem_dash(headers, 12), 6)
 
     def test_payload_json_tiene_pestanias(self):
         import json, os

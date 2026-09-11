@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.26 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.27 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - HORIZONTE 12 SEMANAS: Proyeccion y Proyeccion - SKUS muestran
+ *     12 semanas (la actual + 11). Los tableros Semana 11 y Semana 12
+ *     se dibujan igual que Planificacion / Semana 2-10 (tablero,
+ *     resumen ejecutivo y alerta de pendientes). Menú Ver Pestañas
+ *     incluye Semana 11 y Semana 12. SEMANAS_DEFAULT / SEMANAS_MAX = 12.
  *   - DASHBOARD DE INFORMACIÓN: calendario de producción (semana/día/
  *     línea), drill-down semana→modelo→SKU, seguimiento de líneas
  *     (puntos por semana), pendientes, pestaña de almacén y supuestos
@@ -18,7 +23,7 @@
  *   - CONTEO POR SEMANA (MOs Y CANTIDADES): cada pestaña semanal, el
  *     resumen ejecutivo y las pestañas de Línea solo cuentan las MOs
  *     y el faltante de esa semana. Ya no se repiten las 365 MOs ni
- *     el pedido completo en Semana 1–10. Proyeccion / Proyeccion -
+ *     el pedido completo en Semana 1–12. Proyeccion / Proyeccion -
  *     SKUS omiten filas con faltante 0. Si Faltante dice 0, esa MO
  *     no entra al plan aunque Cantidad Solicitada tenga valor.
  *   - APOYO L1 50% AL MODELO DE L2: al generar el plan pregunta si se
@@ -52,10 +57,9 @@
  *     resto) y dentro del color por género (CAB → DAMA → KIDS). El
  *     sobrante del día pasa al siguiente lote. Especiales no usan esta
  *     regla.
- *   - HORIZONTE 10 SEMANAS: Proyeccion y Proyeccion - SKUS muestran
- *     10 semanas (la actual + 9). Los tableros Semana 6 a Semana 10
- *     se dibujan igual que Planificacion / Semana 2-5 (tablero, resumen
- *     ejecutivo y alerta de pendientes). Menú Ver Pestañas actualizado.
+ *   - HORIZONTE (hist. 10 → 12): Proyeccion y Proyeccion - SKUS
+ *     proyectan el horizonte completo. Los tableros Semana 6 a Semana 12
+ *     se dibujan igual que Planificacion / Semana 2-5. Ver Pestañas.
  *   - FIX SINTAXIS: se restauró familiaOcupaLinea_ (un recorte de v5.9.7
  *     dejaba un "}" suelto y Apps Script fallaba al guardar).
  *   - CAPACIDAD POR PRODUCTO: el techo diario de la línea es
@@ -119,7 +123,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.26";
+var VERSION_SISTEMA = "5.9.27";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -143,11 +147,12 @@ var COLOR_META_TEXTO_PROY = "#38761D";
 var COLOR_BORDE_INTERNO = "#D0D0D0";
 var NOMBRES_PRIO_SKU = ["Priorizacion - SKUs", "Priorizacion - SKUS", "Priorización - SKUs", "Priorizacion SKUs"];
 var HOJA_SYNC_COSTURA = "Sync Costura Aplicada";
-var SEMANAS_DEFAULT = 10;
-var SEMANAS_MAX = 10;
+var SEMANAS_DEFAULT = 12;
+var SEMANAS_MAX = 12;
 var NOMBRES_HOJAS_SEMANAS = [
   "Planificacion", "Semana 2", "Semana 3", "Semana 4", "Semana 5",
-  "Semana 6", "Semana 7", "Semana 8", "Semana 9", "Semana 10"
+  "Semana 6", "Semana 7", "Semana 8", "Semana 9", "Semana 10",
+  "Semana 11", "Semana 12"
 ];
 
 function nombresHojasSemanas_() {
@@ -185,6 +190,8 @@ function onOpen() {
     .addItem("📅 Semana 8", "mostrarSemana8")
     .addItem("📅 Semana 9", "mostrarSemana9")
     .addItem("📅 Semana 10", "mostrarSemana10")
+    .addItem("📅 Semana 11", "mostrarSemana11")
+    .addItem("📅 Semana 12", "mostrarSemana12")
     .addSeparator()
     .addItem("⏳ Pendiente", "mostrarPendiente")
     .addSeparator()
@@ -225,6 +232,8 @@ function mostrarSemana7() { mostrarHoja_("Semana 7"); }
 function mostrarSemana8() { mostrarHoja_("Semana 8"); }
 function mostrarSemana9() { mostrarHoja_("Semana 9"); }
 function mostrarSemana10() { mostrarHoja_("Semana 10"); }
+function mostrarSemana11() { mostrarHoja_("Semana 11"); }
+function mostrarSemana12() { mostrarHoja_("Semana 12"); }
 function mostrarPendiente() { mostrarHoja_("Pendiente"); }
 function mostrarAlmacenModelo() { mostrarHoja_("Entrada de Almacen Modelo"); }
 function mostrarAlmacenSkus() { mostrarHoja_("Entrada de Almacen - Skus"); }
@@ -2861,8 +2870,14 @@ function estiloEncabezadoProy_(hoja, fila, colIni, nCols) {
 }
 
 function limpiarHojaProy_(hoja, nColsMin) {
+  var need = Math.max(nColsMin || 12, 1);
+  var maxC = hoja.getMaxColumns();
+  if (maxC < need) {
+    try { hoja.insertColumnsAfter(maxC, need - maxC); } catch (eIns) {}
+    maxC = hoja.getMaxColumns();
+  }
+  maxC = Math.max(need, maxC);
   var maxF = hoja.getMaxRows();
-  var maxC = Math.max(nColsMin || 12, hoja.getMaxColumns());
   if (maxF > 0) {
     try { hoja.getRange(1, 1, maxF, maxC).clear(); } catch (e) {}
   }
@@ -4161,6 +4176,8 @@ function idxColSemDash_(hArr, n) {
   }
   return -1;
 }
+
+function semanasDeAcum_(vals) {
   var prev = 0, out = [];
   for (var i = 0; i < vals.length; i++) {
     var x = numCeldaDash_(vals[i]);
@@ -4588,7 +4605,7 @@ function obtenerDatosDashboardCompleto() {
       var iFecM = hArrM.indexOf("fecha objetivo") !== -1 ? hArrM.indexOf("fecha objetivo") : hArrM.findIndex(function (x) { return x.indexOf("fecha") !== -1; });
       var iMetaM = hArrM.findIndex(function (x) { return x.indexOf("meta") !== -1 || x.indexOf("faltante") !== -1; });
       var iIdxSemM = [];
-      for (var wM = 1; wM <= 10; wM++) iIdxSemM.push(idxColSemDash_(hArrM, wM));
+      for (var wM = 1; wM <= SEMANAS_DEFAULT; wM++) iIdxSemM.push(idxColSemDash_(hArrM, wM));
       var iSinM = hArrM.findIndex(function (x) { return x.indexOf("sin programar") !== -1; });
       var iTermM = hArrM.findIndex(function (x) { return x.indexOf("término") !== -1 || x.indexOf("termino") !== -1; });
       var iEstM = hArrM.findIndex(function (x) { return x.indexOf("estado") !== -1; });
@@ -4624,7 +4641,7 @@ function obtenerDatosDashboardCompleto() {
       var iDetS = hArrS.indexOf("detalle del producto") !== -1 ? hArrS.indexOf("detalle del producto") : hArrS.findIndex(function (x) { return x.indexOf("detalle") !== -1; });
       var iMetaS = hArrS.findIndex(function (x) { return x.indexOf("meta") !== -1 || x.indexOf("faltante") !== -1; });
       var iIdxSemS = [];
-      for (var wS = 1; wS <= 10; wS++) iIdxSemS.push(idxColSemDash_(hArrS, wS));
+      for (var wS = 1; wS <= SEMANAS_DEFAULT; wS++) iIdxSemS.push(idxColSemDash_(hArrS, wS));
       var iSinS = hArrS.findIndex(function (x) { return x.indexOf("sin programar") !== -1; });
       var iTermS = hArrS.findIndex(function (x) { return x.indexOf("término") !== -1 || x.indexOf("termino") !== -1; });
       var iEstS = hArrS.findIndex(function (x) { return x.indexOf("estado") !== -1; });
