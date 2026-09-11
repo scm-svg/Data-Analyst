@@ -76,7 +76,7 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
   </div>
   <div class="hdr-r">
     <div class="kpi-bar">
-      <div class="kpib"><div class="kv" id="k-plan">—</div><div class="kl">Plan 10 sem</div></div>
+      <div class="kpib"><div class="kv" id="k-plan">—</div><div class="kl" id="k-plan-lbl">Plan 12 sem</div></div>
       <div class="kpib"><div class="kv" id="k-pend">—</div><div class="kl">Pendiente</div></div>
       <div class="kpib"><div class="kv" id="k-alm">—</div><div class="kl">Almacén</div></div>
       <div class="kpib"><div class="kv" id="k-mod">—</div><div class="kl">Modelos</div></div>
@@ -116,6 +116,11 @@ var LINE_COLORS = {1:'#5b6af7',2:'#f75b8a',3:'#4caf76',4:'#e6a800',5:'#7c3aed'};
 var DIAS = ['lunes','martes','miercoles','jueves','viernes'];
 var DIA_LBL = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
 
+function nSemanasDash(){
+  var n = weekKeys().length;
+  if (n) return n;
+  return (D.supuestos && D.supuestos.semanas) || 12;
+}
 function weekKeys() {
   var s = D.semanas || {};
   return Object.keys(s).sort(function(a,b){ return parseInt(a.replace(/\D/g,''),10)-parseInt(b.replace(/\D/g,''),10); });
@@ -144,7 +149,7 @@ function init(payload){
   var parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
   D = parsed.data || parsed;
   var ver = parsed.version || D.version || '';
-  document.getElementById('status').textContent = 'v'+ver+' · datos de Planificación / Semana 2–10 / Proyección / Almacén';
+  document.getElementById('status').textContent = 'v'+ver+' · datos de Planificación / Semana 2–12 / Proyección / Almacén';
   fillFilters();
   kpis();
   renderAll();
@@ -167,6 +172,8 @@ function kpis(){
   var pend=(D.pendientes||[]).reduce(function(a,p){ return a+(Number(p.cant)||0); },0);
   var alm=(D.almacenModelo||[]).reduce(function(a,p){ return a+(Number(p.cantidad)||0); },0);
   document.getElementById('k-plan').textContent=fmtN(plan);
+  var lbl=document.getElementById('k-plan-lbl');
+  if(lbl) lbl.textContent='Plan '+nSemanasDash()+' sem';
   document.getElementById('k-pend').textContent=fmtN(pend);
   document.getElementById('k-alm').textContent=fmtN(alm);
   document.getElementById('k-mod').textContent=String((D.proyModelo||[]).length);
@@ -336,8 +343,8 @@ function renderPend(){
   });
   var fuera=rows.filter(function(p){ return /fuera|sin capacidad/i.test(p.para||''); });
   var despues=rows.filter(function(p){ return !/fuera|sin capacidad/i.test(p.para||''); });
-  var html='<div class="g2"><div class="card"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–10).</p><div class="kv" style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--ac)">'+fmtN(despues.reduce(function(a,p){return a+p.cant;},0))+'</div><div class="sub">'+despues.length+' MOs</div></div>';
-  html+='<div class="card"><h3>Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las 10 semanas o no hay línea.</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--a2)">'+fmtN(fuera.reduce(function(a,p){return a+p.cant;},0))+'</div><div class="sub">'+fuera.length+' MOs</div></div></div>';
+  var html='<div class="g2"><div class="card"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–'+nSemanasDash()+').</p><div class="kv" style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--ac)">'+fmtN(despues.reduce(function(a,p){return a+p.cant;},0))+'</div><div class="sub">'+despues.length+' MOs</div></div>';
+  html+='<div class="card"><h3>Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las '+nSemanasDash()+' semanas o no hay línea.</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--a2)">'+fmtN(fuera.reduce(function(a,p){return a+p.cant;},0))+'</div><div class="sub">'+fuera.length+' MOs</div></div></div>';
   var sin=(D.proyModelo||[]).filter(function(m){ return (m.sin||0)>0 && matchQ(m.modelo); });
   if(sin.length){
     html+='<div class="card"><h3>Modelos con piezas sin programar (Proyección)</h3><table class="ct"><thead><tr><th>Modelo</th><th>Meta</th><th>Sin programar</th><th>Estado</th></tr></thead><tbody>';
@@ -396,7 +403,7 @@ function renderSup(){
   var html='<div class="g2">';
   html+='<div class="card"><h3>Capacidad y horizonte</h3><p class="sub">Reglas con las que se armó el plan.</p>';
   html+='<table class="ct"><tbody>';
-  html+='<tr><td>Horizonte</td><td class="num">'+(s.semanas||10)+' semanas · '+(s.diasLaborales||5)+' días hábiles</td></tr>';
+  html+='<tr><td>Horizonte</td><td class="num">'+(s.semanas||12)+' semanas · '+(s.diasLaborales||5)+' días hábiles</td></tr>';
   html+='<tr><td>Lead time costura → almacén</td><td class="num">'+(s.leadTimeAlmacenDias||4)+' días hábiles</td></tr>';
   html+='<tr><td>Apoyo Línea 1</td><td class="num">'+Math.round((s.apoyoL1Fraccion||0.5)*100)+'% de L1 al modelo de L2</td></tr>';
   html+='<tr><td>Remanente corto L2</td><td class="num">cede si quedan &lt; '+(s.remanenteCortoL2Dias||2)+' días</td></tr>';
