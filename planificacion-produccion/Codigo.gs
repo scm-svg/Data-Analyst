@@ -1,10 +1,19 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.22 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.23 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - APOYO L1 50% AL MODELO DE L2: al generar el plan pregunta si se
+ *     dispone del 50% de la Línea 1 y desde qué semana. Desde esa
+ *     semana, el modelo que corre en L2 también produce en L1 a la
+ *     mitad de su Cap Produccion por Dia (sin quitarle la MO a L2).
+ *     El ocupante nativo de L1 se queda con el otro 50%. Si L2 ya
+ *     lista L1 y la ocupa, no se duplica el apoyo.
+ *   - REMANENTE CORTO EN L2: si al modelo de L2 le quedan menos de
+ *     2 días, termina (el apoyo L1 acelera el cierre) y la línea
+ *     pasa al siguiente programado. No se queda ocupando L2.
  *   - DÍA DE INICIO RECLAMA LA LÍNEA (L1-4): Urgente/mínima/especial
  *     con fecha de inicio futura deja correr al modelo actual. El día
  *     que llega, desaloja al ocupante de peor prioridad (MAR KIDS
@@ -94,7 +103,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.22";
+var VERSION_SISTEMA = "5.9.23";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -102,6 +111,8 @@ var BANDA_URGENTE = 2;
 var BANDA_RESTO = 3;
 var DIAS_LABORALES = 5;
 var DIAS_ENTRADA_ALMACEN = 4;
+var FRACCION_APOYO_L1 = 0.5;
+var DIAS_REMANENTE_CORTO_L2 = 2;
 var MAX_MODELOS_LINEA5 = 2;
 var MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5;
 var MAX_SNAPSHOTS = 8;
@@ -1099,6 +1110,52 @@ function conLock_(fn) {
 // =====================================================================
 //  MOTOR CENTRAL: generarPlanificacionSemanal()
 // =====================================================================
+function parsearSemanaApoyo_(txt, maxSem) {
+  var s = String(txt === null || txt === undefined ? "" : txt).trim();
+  var m = s.match(/(\d+)/);
+  if (!m) return 0;
+  var n = Math.floor(Number(m[1]));
+  if (n >= 1 && n <= maxSem) return n;
+  return 0;
+}
+
+function apoyoL1ActivoEnDia_(apoyo, d) {
+  if (!apoyo || !apoyo.activo) return false;
+  var sem = Math.floor(Number(d) / DIAS_LABORALES) + 1;
+  return sem >= apoyo.desdeSemana;
+}
+
+function preguntarApoyoLinea1_(cfg) {
+  var off = { activo: false, desdeSemana: 0 };
+  try {
+    var ui = SpreadsheetApp.getUi();
+    var r1 = ui.alert(
+      "Apoyo Línea 1 al 50%",
+      "¿Quieres disponer del 50% de la Línea 1 para el modelo que corre en la Línea 2?\n\n" +
+      "Si aceptas, desde la semana que indiques ese modelo también produce en L1 " +
+      "a la mitad de su Cap Produccion por Dia. Así cumple la meta más rápido.\n\n" +
+      "Si en L2 queda menos de 2 días de un modelo, la línea pasa al siguiente programado.",
+      ui.ButtonSet.YES_NO
+    );
+    if (r1 !== ui.Button.YES) return off;
+    var r2 = ui.prompt(
+      "Semana de inicio del apoyo",
+      "¿Desde qué semana se usa el 50% de la Línea 1?\n" +
+      "1 = semana actual. Máximo: " + cfg.semanas + ".",
+      ui.ButtonSet.OK_CANCEL
+    );
+    if (r2.getSelectedButton() !== ui.Button.OK) return off;
+    var n = parsearSemanaApoyo_(r2.getResponseText(), cfg.semanas);
+    if (!n) {
+      ui.alert("Semana inválida. Se genera el plan sin apoyo de Línea 1.");
+      return off;
+    }
+    return { activo: true, desdeSemana: n };
+  } catch (errApoyo) {
+    return off;
+  }
+}
+
 function generarPlanificacionSemanal() {
   conLock_(generarPlanificacionSemanal_);
 }
@@ -1199,6 +1256,8 @@ function generarPlanificacionSemanal_() {
     return;
   }
 
+  cfg.apoyoL1 = preguntarApoyoLinea1_(cfg);
+
   tareas.forEach(function (t) {
     var pref = mapaLineasModelo[t.modelo];
     if (pref && pref.length) {
@@ -1239,7 +1298,10 @@ function generarPlanificacionSemanal_() {
     return a.indice - b.indice;
   });
 
-  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, cambio secuencial, L5 hasta 2)...", "⚙️ Planificando", 5);
+  var txtApoyoToast = (cfg.apoyoL1 && cfg.apoyoL1.activo)
+    ? (", apoyo L1 50% desde sem " + cfg.apoyoL1.desdeSemana)
+    : "";
+  ss.toast("Asignando capacidad (" + cfg.semanas + " semanas, cambio secuencial, L5 hasta 2" + txtApoyoToast + ")...", "⚙️ Planificando", 5);
 
   var carga = {};
   ["1", "2", "3", "4", "5"].forEach(function (l) {
@@ -1352,6 +1414,22 @@ function generarPlanificacionSemanal_() {
     if (d < DIAS_LABORALES) t.planificadaSem1 += piezas;
     if (d > t.ultimoDia) t.ultimoDia = d;
     t.lineaFija = lin;
+    return piezas;
+  }
+
+  function asignarApoyo_(t, lin, d, maxPiezas) {
+    if (maxPiezas <= 0 || t.restante <= 0) return 0;
+    var piezas = Math.min(t.restante, maxPiezas);
+    if (!t.plan[lin]) {
+      t.plan[lin] = [];
+      for (var kA = 0; kA < totalDias; kA++) t.plan[lin].push(0);
+    }
+    t.plan[lin][d] += piezas;
+    carga[lin][d] += piezas / capDeTarea_(t, lin);
+    t.restante -= piezas;
+    t.planificada += piezas;
+    if (d < DIAS_LABORALES) t.planificadaSem1 += piezas;
+    if (d > t.ultimoDia) t.ultimoDia = d;
     return piezas;
   }
 
@@ -1484,6 +1562,53 @@ function generarPlanificacionSemanal_() {
       if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayRank ? rank : null) <= 0) break;
       if (restanteMinima_(mP) <= 0 && tuvoMinima_(mP)) break;
       if (debeCederAlLoteFamilia_(mP, overflow)) break;
+    }
+  }
+
+  function remanenteCortoLinea2_(m) {
+    if (!m) return false;
+    var rest = restanteModelo_(m);
+    if (!(rest > 0)) return false;
+    var cap = capModelo_(m, "2");
+    if (!(cap > 0)) return false;
+    return rest < DIAS_REMANENTE_CORTO_L2 * cap;
+  }
+
+  function producirLoteApoyoL1_(mP, d) {
+    var lin = "1";
+    for (var tiA = 0; tiA < mP.tareas.length; tiA++) {
+      var tA = mP.tareas[tiA];
+      var diaSemA = d % DIAS_LABORALES;
+      if (tA.restante <= 0 || d < diaInicioEfectivo_(tA)) continue;
+      if (d < DIAS_LABORALES && diaSemA === tA.diaNoLaborable) continue;
+      var availA = FRACCION_APOYO_L1 - carga[lin][d];
+      if (availA <= 0.001) return 0;
+      var capA = capDeTarea_(tA, lin);
+      var piezasA = Math.floor(availA * capA + 0.0001);
+      if (piezasA <= 0) return 0;
+      var puestasA = asignarApoyo_(tA, lin, d, piezasA);
+      if (puestasA > 0) return puestasA;
+    }
+    return 0;
+  }
+
+  function modeloApoyoLinea2_(d) {
+    if (!apoyoL1ActivoEnDia_(cfg.apoyoL1, d)) return null;
+    var nomsA = ocupante["2"] || [];
+    if (nomsA.length === 0) return null;
+    var mA = mapaModelos[nomsA[0]];
+    if (!mA || restanteModelo_(mA) <= 0) return null;
+    if ((ocupante["1"] || []).indexOf(mA.nombre) !== -1) return null;
+    return mA;
+  }
+
+  function producirApoyoL1Dia_(d) {
+    var mA = modeloApoyoLinea2_(d);
+    if (!mA) return;
+    var guardA = 0;
+    while (carga["1"][d] < FRACCION_APOYO_L1 - 0.001 && restanteModelo_(mA) > 0 && guardA < 40) {
+      guardA++;
+      if (producirLoteApoyoL1_(mA, d) <= 0) break;
     }
   }
 
@@ -1943,6 +2068,7 @@ function generarPlanificacionSemanal_() {
           var mOcc = mapaModelos[nom];
           if (tuvoMinima_(mOcc) && restanteMinima_(mOcc) <= 0) return false;
           if (debeCederAlLoteFamilia_(mOcc, overflow)) return false;
+          if (String(lin) === "2" && remanenteCortoLinea2_(mOcc) && restanteModelo_(mOcc) <= 0) return false;
           return true;
         });
         if (carga[lin][d] <= before + 0.0001) {
@@ -1958,6 +2084,7 @@ function generarPlanificacionSemanal_() {
       }
     }
 
+    producirApoyoL1Dia_(d);
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
       producirLineaDia_(lin, d);
     });
@@ -2104,8 +2231,14 @@ function generarPlanificacionSemanal_() {
           .forEach(function (mm) { mg.mos.add(mm); });
       }
     }
-    if (lineasUsadasTarea.length > 1) mosMultiLinea++;
-    else if (lineasUsadasTarea.length === 1) mosAtomicas++;
+    if (lineasUsadasTarea.length > 1) {
+      var esApoyoL1L2 = cfg.apoyoL1 && cfg.apoyoL1.activo &&
+        lineasUsadasTarea.length === 2 &&
+        lineasUsadasTarea.indexOf("1") !== -1 &&
+        lineasUsadasTarea.indexOf("2") !== -1;
+      if (esApoyoL1L2) mosAtomicas++;
+      else mosMultiLinea++;
+    } else if (lineasUsadasTarea.length === 1) mosAtomicas++;
   });
 
   for (var l in consolLineaData) {
@@ -2175,6 +2308,10 @@ function generarPlanificacionSemanal_() {
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos). Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: solo Linea de Produccion (si la celda viene vacía, 1). No desborda a L1.\n" +
+    "• Apoyo L1 50%: " + ((cfg.apoyoL1 && cfg.apoyoL1.activo)
+      ? ("sí, desde semana " + cfg.apoyoL1.desdeSemana + " el modelo de L2 produce también en L1 a media cap.")
+      : "no. Al generar puedes activarlo y elegir la semana.") + "\n" +
+    "• L2 remanente corto: si quedan menos de 2 días, termina y la línea pasa al siguiente programado.\n" +
     "• Día de inicio (L1-4): al llegar esa fecha, el de mayor prioridad toma la línea (el actual cede).\n" +
     "• Especial con Día de inicio: ese día toma su línea (desaloja a un ocupante de peor prioridad).\n" +
     "• Orden de carga: 1) Especial  →  2) Cantidad mínima  →  3) Urgente / resto.\n" +
