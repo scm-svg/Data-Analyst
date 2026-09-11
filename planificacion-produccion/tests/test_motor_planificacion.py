@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.27 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.28 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -773,7 +773,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.25: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
+    """Motor v5.9.28: Secuencia=No en L5 es ocupante exclusivo."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -946,6 +946,27 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     seen.append(lin)
         return seen
 
+    def es_exclusivo_linea5(m):
+        return bool(m and m.get("secuenciaNo") and not m.get("esEspecial"))
+
+    def linea5_ocupada_por_exclusivo(except_nom=None):
+        for nom in ocupante.get("5") or []:
+            if except_nom and nom == except_nom:
+                continue
+            if es_exclusivo_linea5(modelos.get(nom)):
+                return True
+        return False
+
+    def max_ocupantes_ahora(lin, m=None):
+        if str(lin) != "5":
+            return 1
+        if es_exclusivo_linea5(m):
+            return 1
+        except_nom = m["nombre"] if m else None
+        if linea5_ocupada_por_exclusivo(except_nom):
+            return 1
+        return MAX_MODELOS_LINEA5
+
     def lineas_clave_modelo(m, overflow):
         return ",".join(sorted(lineas_modelo(m, overflow)))
 
@@ -993,7 +1014,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 occ = ocupante.get(lin) or []
                 if m["nombre"] in occ:
                     continue
-                if len(occ) >= max_ocupantes(lin):
+                if len(occ) >= max_ocupantes_ahora(lin, m):
                     continue
                 if fam and familia_ocupa_linea(fam, lin, m["nombre"]):
                     continue
@@ -1031,6 +1052,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def debe_esperar_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
+        if es_exclusivo_linea5(m) and "5" in lineas_modelo(m, overflow):
+            return False
         fam = familia_modelo(m)
         if not fam:
             return False
@@ -1055,6 +1078,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def debe_ceder_al_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
+            return False
+        if es_exclusivo_linea5(m) and ("5" in lineas_donde_esta(m["nombre"]) or "5" in lineas_modelo(m, overflow)):
             return False
         fam = familia_modelo(m)
         if not fam:
@@ -1128,12 +1153,12 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
             fam_last = familia_modelo(last_m) if last_m else familia_de_nombre(last_nom)
             lote = lote_familia_activo(fam_last, overflow)
-            if lote and modelo_puede(lote["m"], d, lin, overflow) and len(ocupante[lin]) < max_ocupantes(lin):
+            if lote and modelo_puede(lote["m"], d, lin, overflow) and len(ocupante[lin]) < max_ocupantes_ahora(lin, lote["m"]):
                 if lote["modelo"] not in (ocupante.get(lin) or []) and not lineas_donde_esta(lote["modelo"]):
                     ocupante[lin].append(lote["modelo"])
                     continue
             hermanos = hermanos_pendientes(lin, d, overflow, {}, fam_last)
-            if hermanos and len(ocupante[lin]) < max_ocupantes(lin):
+            if hermanos and len(ocupante[lin]) < max_ocupantes_ahora(lin, hermanos[0]):
                 ocupante[lin].append(hermanos[0]["nombre"])
 
         vivos = [m for m in lista if restante_modelo(m) > 0]
@@ -1150,7 +1175,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     if t["restante"] <= 0:
                         continue
                     for lin in elegibles(t, overflow):
-                        if seen.get(lin) or max_ocupantes(lin) > 1:
+                        if seen.get(lin) or max_ocupantes_ahora(lin, m) > 1:
                             continue
                         if not modelo_puede(m, d, lin, overflow):
                             continue
@@ -1182,7 +1207,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     occ = ocupante.get(lin) or []
                     if m["nombre"] in occ:
                         break
-                    if len(occ) < max_ocupantes(lin):
+                    if len(occ) < max_ocupantes_ahora(lin, m):
                         ocupante[lin].append(m["nombre"])
                         break
                     worst_i = -1
@@ -1192,6 +1217,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                             break
                     if worst_i < 0:
                         continue
+                    if es_exclusivo_linea5(m) and str(lin) == "5":
+                        ocupante[lin] = [m["nombre"]]
+                        break
                     occ.pop(worst_i)
                     occ.append(m["nombre"])
                     ocupante[lin] = occ
@@ -1354,6 +1382,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if not fam_ref and ocupante.get(lin):
             fam_ref = familia_modelo(modelos[ocupante[lin][0]])
         para_paralelo = bool(ocupante.get(lin))
+        if str(lin) == "5" and para_paralelo and linea5_ocupada_por_exclusivo():
+            return None
         if fam_ref and not para_paralelo:
             lote = lote_familia_activo(fam_ref, overflow)
             if (lote and lote["modelo"] != last_nom and not skip.get(lote["modelo"])
@@ -1382,6 +1412,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             if para_paralelo and fam_ref and familia_modelo(m) == fam_ref:
                 continue
+            if str(lin) == "5" and para_paralelo and es_exclusivo_linea5(m):
+                continue
             if debe_esperar_hermano(m, overflow):
                 continue
             if not modelo_puede(m, d, lin, overflow):
@@ -1401,6 +1433,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
             ]
             noms = ocupante[lin]
+            if str(lin) == "5":
+                excl = [nom for nom in noms if es_exclusivo_linea5(modelos.get(nom))]
+                if excl:
+                    ocupante[lin] = [excl[0]]
+                    noms = ocupante[lin]
             before = carga[lin][d]
             if str(lin) == "5" and len(noms) >= 2:
                 fam0 = familia_modelo(modelos[noms[0]])
@@ -1426,7 +1463,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 ocupante[lin] = [nom for nom in ocupante[lin] if not skip.get(nom)]
             refrescar_cola()
             overflow_now = not nativos_linea1_pendientes(d)
-            if len(ocupante[lin]) >= max_ocupantes(lin):
+            if len(ocupante[lin]) >= max_ocupantes_ahora(lin):
                 break
             nxt = siguiente_candidato(lin, d, overflow_now, skip)
             if not nxt:
@@ -2590,6 +2627,45 @@ class TestLotesGeneroColor(unittest.TestCase):
             if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
         )
         self.assertEqual(blanco_cab_d2, 130)
+
+    def test_secuencia_no_linea5_no_comparte_paralelo(self):
+        """Secuencia=No en L5: el modelo usa toda la cap y el otro espera."""
+        tareas = [
+            self._t("A", "MODELO A", "Negro", 400, ["5"], cap=40, fechaKey=1, prioridadNum=1),
+            self._t("B", "MODELO B", "Negro", 400, ["5"], cap=40, fechaKey=1, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=1, mapa_secuencia={"MODELO A": "No"})
+        d0 = self._por_dia_linea(out, "5", 0)
+        self.assertEqual(d0, {"MODELO A": 40}, d0)
+
+    def test_secuencia_no_linea5_tras_cerrar_entra_el_siguiente(self):
+        """Cuando el exclusivo de L5 termina, la línea pasa al siguiente."""
+        tareas = [
+            self._t("A", "MODELO A", "Negro", 40, ["5"], cap=40, fechaKey=1, prioridadNum=1),
+            self._t("B", "MODELO B", "Negro", 80, ["5"], cap=40, fechaKey=1, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=2, mapa_secuencia={"MODELO A": "No"})
+        self.assertEqual(self._por_dia_linea(out, "5", 0), {"MODELO A": 40})
+        self.assertEqual(self._por_dia_linea(out, "5", 1), {"MODELO B": 40})
+
+    def test_secuencia_no_linea5_no_espera_color_genero(self):
+        """En L5, Secuencia=No no espera el Negro de otro género de la familia."""
+        tareas = [
+            self._t("C", "SHORT SPORT R1 CAB", "Blanco", 80, ["5"], cap=40, fechaKey=1, prioridadNum=3),
+            self._t("D", "SHORT SPORT R1 DAMA", "Negro", 80, ["5"], cap=40, fechaKey=1, prioridadNum=3),
+        ]
+        out = planificar(tareas, {}, total_dias=1, mapa_secuencia={"SHORT SPORT R1 CAB": "No"})
+        d0 = self._por_dia_linea(out, "5", 0)
+        self.assertEqual(d0, {"SHORT SPORT R1 CAB": 40}, d0)
+
+    def test_secuencia_no_en_l4_no_cambia_lote_color(self):
+        """Regresión: en L1-4, Secuencia=No sigue respetando el lote de color."""
+        tareas = [
+            self._t("D", "RIO DAMA", "Blanco", 200, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("C", "RIO CAB", "Negro", 200, ["4"], fechaKey=20260920, prioridadNum=3),
+        ]
+        out = planificar(tareas, {}, total_dias=1, mapa_secuencia={"RIO DAMA": "NO"})
+        self.assertEqual(self._por_dia_linea(out, "4", 0), {"RIO CAB": 130})
 
     def test_acumulado_diez_semanas(self):
         vals = [100] * 10
