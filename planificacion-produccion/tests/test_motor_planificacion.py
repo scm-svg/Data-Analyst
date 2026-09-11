@@ -2992,6 +2992,8 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 12"]["carga"]), 0)
         self.assertEqual(d["supuestos"]["semanas"], 12)
         self.assertEqual(d["version"], "5.9.28")
+        lineas = {c["linea"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
+        self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
 
 
 if __name__ == "__main__":
