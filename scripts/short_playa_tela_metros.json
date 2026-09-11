@@ -1,9 +1,12 @@
 {
-  "_nota": "Metros EXISTENTES de tela a agotar. Tela Rojo = producto Cereza. Actualizar con INVENTARIO TELA SHORT PLAYA.xlsx o editar aquí.",
-  "Aguamarina": 90.0,
-  "Verde Oliva": 150.0,
-  "Azul Marino": 120.0,
-  "Gris Azulado": 75.0,
-  "Rojo": 180.0,
-  "Verde Pino": 200.0
+  "_nota": "Metros reales INVENTARIO TELA SHORT PLAYA · Rojo=Cereza · Habano=Marron · Azul Pizzarra=Azul Pizarra · Solo liso CAB, sin sublimado",
+  "Aguamarina": 11.5,
+  "Verde Oliva": 29.13,
+  "Azul Marino": 24.25,
+  "Gris Azulado": 28.67,
+  "Habano": 200.83,
+  "Azul Pizzarra": 163.3,
+  "Azul Verdoso": 163.94,
+  "Verde Pino": 76.33,
+  "Rojo": 65.0
 }

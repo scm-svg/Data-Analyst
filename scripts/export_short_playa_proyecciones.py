@@ -4,11 +4,10 @@ Exporta SHORT PLAYA CAB — Cantidades Sugeridas Proyecciones.xlsx
 (estilo Chaqueta Lite).
 
 Reglas:
-  · Agotar tela existente: Aguamarina, Verde Oliva, Azul Marino, Gris Azulado,
-    Rojo (→ producto Cereza), Verde Pino → und = floor(metros / 0,75)
-  · Otros colores activos: producción reforzada (+70% vs plan base, cobertura 4m)
-  · Curva tallas por historial de ventas CAB
-  · Distribución tienda con boost MGTA (LA VELA 1,5× GRIETA)
+  · Solo SHORT PLAYA liso CAB — sin sublimado (Playuela, Sal, Tucupido)
+  · Agotar 100% tela disponible (INVENTARIO TELA SHORT PLAYA.xlsx) @ 0,75 m/pza
+  · Mapeos: Rojo→Cereza · Habano→Marron · Azul Pizzarra→Azul Pizarra
+  · Curva tallas por historial ventas CAB · MGTA (LA VELA 1,5× GRIETA)
 
 Uso:
   python scripts/export_short_playa_proyecciones.py
@@ -34,25 +33,33 @@ TELA_JSON = Path(__file__).resolve().parent / "short_playa_tela_metros.json"
 OUT_XLSX = ROOT / "SHORT_PLAYA_CAB_Cantidades_Sugeridas_Proyecciones.xlsx"
 
 HIGH_SEASON = 1.25
-TARGET_COB_BOOST = 4
-OTHER_BOOST = 2.0
-ESTAMPADO_BOOST = 1.35  # extra sobre reforzado para sublimado
 FABRIC_M = 0.75
 MAX_RANGE_PCT = 0.06
-TELA_SS = 0.20
 VELOCITY_MONTHS = 6
+MODELO = "Short Playa"
 
-TELA_AGOTAR = {
-    "Aguamarina": ("Short Playa", "Aguamarina"),
-    "Verde Oliva": ("Short Playa", "Verde Oliva"),
-    "Azul Marino": ("Short Playa", "Azul Marino"),
-    "Gris Azulado": ("Short Playa", "Gris Azulado"),
-    "Rojo": ("Short Playa", "Cereza"),
-    "Verde Pino": ("Short Playa", "Verde Pino"),
+# Tela en almacén → color producto Short Playa liso
+TELA_TO_PRODUCT: dict[str, tuple[str, str]] = {
+    "Aguamarina": (MODELO, "Aguamarina"),
+    "Verde Oliva": (MODELO, "Verde Oliva"),
+    "Azul Marino": (MODELO, "Azul Marino"),
+    "Gris Azulado": (MODELO, "Gris Azulado"),
+    "Habano": (MODELO, "Marron"),
+    "Azul Pizzarra": (MODELO, "Azul Pizarra"),
+    "Azul Verdoso": (MODELO, "Azul Verdoso"),
+    "Verde Pino": (MODELO, "Verde Pino"),
+    "Rojo": (MODELO, "Cereza"),
 }
 
-BOOST_LISO = ["Azul Pizarra", "Azul Verdoso", "Marron"]
-BOOST_ESTAMPADO = ["Playuela", "Sal", "Tucupido", "Sombrero"]
+# Orden de presentación en Excel (mayor tela primero)
+TELA_ORDER = [
+    "Habano", "Azul Verdoso", "Azul Pizzarra", "Verde Pino", "Rojo",
+    "Verde Oliva", "Gris Azulado", "Azul Marino", "Aguamarina",
+]
+
+DEFAULT_TELA_XLSX = Path(
+    "/home/ubuntu/.cursor/projects/workspace/uploads/INVENTARIO_TELA_SHORT_PLAYA_d4be.xlsx"
+)
 
 TALLAS = ["XS", "S", "M", "L", "XL", "2XL", "3XL"]
 TALLA_ORDER = {t: i for i, t in enumerate(TALLAS)}
@@ -96,38 +103,72 @@ def find_col(cols, *candidates):
     return None
 
 
+def canonical_tela_name(raw: str) -> str | None:
+    """Normaliza nombre de tela extraído del inventario Odoo."""
+    if not raw or str(raw).lower() == "nan":
+        return None
+    s = str(raw).strip()
+    low = norm_col(s)
+    aliases = {
+        "aguamarina": "Aguamarina",
+        "verde oliva": "Verde Oliva",
+        "azul marino": "Azul Marino",
+        "gris azulado": "Gris Azulado",
+        "habano": "Habano",
+        "azul pizzarra": "Azul Pizzarra",
+        "azul pizarra": "Azul Pizzarra",
+        "azul verdoso": "Azul Verdoso",
+        "verde pino": "Verde Pino",
+        "rojo": "Rojo",
+    }
+    for key, canon in aliases.items():
+        if key in low or low == key:
+            return canon
+    return s.title()
+
+
+def parse_producto_tela(producto: str) -> str | None:
+    """Extrae color de filas tipo: ... / AGUAMARINA - 135313)"""
+    m = re.search(r"/\s*([^/]+?)\s*-\s*\d", str(producto), re.I)
+    if not m:
+        return None
+    return canonical_tela_name(m.group(1).strip())
+
+
 def load_tela_meters(path: Path | None, json_path: Path | None) -> dict[str, float]:
     meters: dict[str, float] = {}
+
+    if path and path.exists():
+        df = pd.read_excel(path)
+        df.columns = [str(c).strip() for c in df.columns]
+        col_prod = find_col(df.columns, "producto", "descripcion", "articulo", "nombre")
+        col_qty = find_col(
+            df.columns,
+            "cantidad en inventario", "cantidad", "metros", "metraje",
+            "stock", "disponible", "existencia",
+        )
+        if col_prod and col_qty:
+            for _, row in df.iterrows():
+                name = parse_producto_tela(row[col_prod])
+                if not name or name not in TELA_TO_PRODUCT:
+                    continue
+                try:
+                    val = float(row[col_qty])
+                except (TypeError, ValueError):
+                    continue
+                if val <= 0:
+                    continue
+                meters[name] = meters.get(name, 0) + val
+
     if json_path and json_path.exists():
         raw = json.loads(json_path.read_text(encoding="utf-8"))
         for k, v in raw.items():
             if k.startswith("_"):
                 continue
-            meters[k] = float(v)
+            canon = canonical_tela_name(k)
+            if canon and float(v) > 0:
+                meters[canon] = float(v)
 
-    if path and path.exists():
-        df = pd.read_excel(path)
-        df.columns = [str(c).strip() for c in df.columns]
-        col_color = find_col(df.columns, "color", "tela", "nombre", "descripcion", "articulo")
-        col_m = find_col(df.columns, "metros", "metraje", "cantidad", "stock", "disponible", "existencia", "m")
-        if col_color and col_m:
-            for _, row in df.iterrows():
-                name = str(row[col_color]).strip()
-                if not name or name.lower() in ("nan", "color"):
-                    continue
-                try:
-                    val = float(row[col_m])
-                except (TypeError, ValueError):
-                    continue
-                if val <= 0:
-                    continue
-                key = name.title() if name.islower() else name
-                for tela_key in TELA_AGOTAR:
-                    if norm_col(tela_key) in norm_col(name) or norm_col(name) in norm_col(tela_key):
-                        meters[tela_key] = meters.get(tela_key, 0) + val
-                        break
-                else:
-                    meters[key] = meters.get(key, 0) + val
     return meters
 
 
@@ -186,7 +227,7 @@ def distribute_tallas(total: int, curve: dict[str, float], tallas: list[str]) ->
     return largest_remainder(weights, total)
 
 
-def store_weights(data: dict, modelo: str | None = None) -> dict[str, float]:
+def store_weights(data: dict, modelo: str | None = MODELO) -> dict[str, float]:
     skus = cab_skus(data, modelo)
     by_store = defaultdict(float)
     for s in skus:
@@ -203,26 +244,6 @@ def store_weights(data: dict, modelo: str | None = None) -> dict[str, float]:
     return {k: v / total for k, v in w.items() if k in DIST_STORES}
 
 
-def boosted_qty(skus: list[dict], months: list[str], extra_mult: float = 1.0) -> int:
-    total = 0
-    color_v_mes = 0.0
-    color_stk = 0
-    for s in skus:
-        by_m = s.get("ventas_by_mes") or {}
-        vel = sum(by_m.get(m, 0) for m in months) / max(len(months), 1)
-        v_mes = vel * HIGH_SEASON * extra_mult
-        color_v_mes += v_mes
-        stk = int(s.get("inv_total") or 0)
-        color_stk += stk
-        need = max(0, TARGET_COB_BOOST * v_mes * OTHER_BOOST - stk)
-        total += int(round(need))
-    # Temporada alta: mínimo 2 meses extra si el color sigue vendiendo
-    if color_v_mes > 0:
-        floor = int(round(color_v_mes * 2))
-        total = max(total, max(0, floor - color_stk // max(len(skus), 1)))
-    return total
-
-
 def build_color_row(
     modelo: str,
     color: str,
@@ -230,8 +251,8 @@ def build_color_row(
     qty_max: int,
     skus: list[dict],
     months: list[str],
-    strategy: str,
-    tela_m: float | None = None,
+    tela_fabric: str,
+    tela_m: float,
 ) -> dict:
     color_skus = [s for s in skus if s.get("modelo") == modelo and s.get("color") == color]
     curve = talla_curve(color_skus, TALLAS)
@@ -260,8 +281,7 @@ def build_color_row(
     return {
         "modelo": modelo,
         "color": color,
-        "strategy": strategy,
-        "tela_fabric": next((k for k, v in TELA_AGOTAR.items() if v == (modelo, color)), None),
+        "tela_fabric": tela_fabric,
         "tela_m": tela_m,
         "min": qty_min,
         "max": qty_max,
@@ -273,37 +293,25 @@ def build_color_row(
 
 def build_rango(data: dict, tela_meters: dict[str, float]) -> dict:
     months = velocity_months(data.get("meses_order", []))
-    all_cab = cab_skus(data)
+    all_cab = cab_skus(data, MODELO)
     color_rows: list[dict] = []
 
-    for tela_name, (modelo, color) in TELA_AGOTAR.items():
+    ordered_telas = [t for t in TELA_ORDER if t in TELA_TO_PRODUCT]
+    for t in tela_meters:
+        if t not in ordered_telas:
+            ordered_telas.append(t)
+
+    for tela_name in ordered_telas:
+        modelo, color = TELA_TO_PRODUCT.get(tela_name, (MODELO, tela_name))
         meters = tela_meters.get(tela_name, 0)
         if meters <= 0:
             continue
-        units_max = int(math.floor(meters / FABRIC_M))
-        units_min, units_max = min_max(units_max)
+        units_base = int(math.floor(meters / FABRIC_M))
+        units_min, units_max = min_max(units_base)
         if units_max <= 0:
             continue
         color_rows.append(
-            build_color_row(modelo, color, units_min, units_max, all_cab, months, "agotar_tela", meters)
-        )
-
-    for color in BOOST_LISO:
-        sk = cab_skus(data, "Short Playa", color)
-        q = boosted_qty(sk, months)
-        qmin, qmax = min_max(q)
-        if qmax <= 0:
-            continue
-        color_rows.append(build_color_row("Short Playa", color, qmin, qmax, all_cab, months, "reforzado"))
-
-    for color in BOOST_ESTAMPADO:
-        sk = cab_skus(data, "Short Playa Estampado", color)
-        q = boosted_qty(sk, months, ESTAMPADO_BOOST)
-        qmin, qmax = min_max(q)
-        if qmax <= 0:
-            continue
-        color_rows.append(
-            build_color_row("Short Playa Estampado", color, qmin, qmax, all_cab, months, "reforzado")
+            build_color_row(modelo, color, units_min, units_max, all_cab, months, tela_name, meters)
         )
 
     talla_totals_min = defaultdict(int)
@@ -372,8 +380,8 @@ def export_excel(rango: dict, path: Path) -> None:
     row += 1
     ws.write(
         row, 0,
-        "SHORT PLAYA CAB · Agotar tela: Aguamarina, Verde Oliva, Azul Marino, Gris Azulado, "
-        f"Verde Pino · Tela ROJO = producto CEREZA · Otros colores reforzados ×{OTHER_BOOST}",
+        "SHORT PLAYA CAB liso · Agotar tela disponible · Rojo→Cereza · Habano→Marron · "
+        "Azul Pizzarra→Azul Pizarra · Sin sublimado",
         note,
     )
     row += 1
@@ -389,8 +397,6 @@ def export_excel(rango: dict, path: Path) -> None:
         label = cr["color"]
         if cr.get("tela_fabric"):
             label += f" · tela {cr['tela_fabric']}"
-        if cr["strategy"] == "reforzado":
-            label += " · REF ↑"
         ws.write_row(
             row, 0,
             [label] + [cr["talla_totals_min"].get(t, 0) for t in active_tallas] + [cr["min"]],
@@ -446,11 +452,8 @@ def export_excel(rango: dict, path: Path) -> None:
     for cr in rango["color_rows"]:
         if cr["min"] <= 0:
             continue
-        strat = "AGOTAR TELA" if cr["strategy"] == "agotar_tela" else "REFORZADO"
-        extra = ""
-        if cr.get("tela_fabric"):
-            extra = f" · Tela {cr['tela_fabric']} ({cr.get('tela_m', 0):.1f} m)"
-        ws.write(row, 0, f"{cr['modelo']} · {cr['color']} [{strat}{extra}]", bold)
+        extra = f" · Tela {cr['tela_fabric']} ({cr.get('tela_m', 0):.2f} m)"
+        ws.write(row, 0, f"{cr['modelo']} · {cr['color']} [AGOTAR TELA{extra}]", bold)
         row += 1
         ws.write_row(row, 0, ["Talla", "Mín", "Máx", "Vel/mes", "Stock", "Cob (m)"], hdr)
         row += 1
@@ -502,9 +505,9 @@ def export_excel(rango: dict, path: Path) -> None:
     # ── 5. Uso de Tela Short Playa ──
     ws = wb.add_worksheet("Uso de Tela Short Playa")
     row = 0
-    ws.write(row, 0, "SHORT PLAYA CAB — TELA EXISTENTE A AGOTAR + COMPRA REFUERZO", title)
+    ws.write(row, 0, "SHORT PLAYA CAB — TELA EXISTENTE A AGOTAR (100%)", title)
     row += 1
-    ws.write(row, 0, f"Consumo ficha técnica: {FABRIC_M} m/pieza · SS tela +{int(TELA_SS*100)}% en compra nueva", note)
+    ws.write(row, 0, f"Consumo ficha técnica: {FABRIC_M} m/pieza · Fuente: INVENTARIO TELA SHORT PLAYA", note)
     row += 2
     ws.write_row(
         row, 0,
@@ -517,19 +520,19 @@ def export_excel(rango: dict, path: Path) -> None:
     for cr in rango["color_rows"]:
         mts_min = cr["min"] * FABRIC_M
         mts_max = cr["max"] * FABRIC_M
-        nota = ""
-        if cr["strategy"] == "agotar_tela":
-            nota = "Agotar existencia de tela"
-            if cr["color"] == "Cereza":
-                nota += " · Tela ROJO"
-        else:
-            nota = f"Compra/refuerzo ×{OTHER_BOOST} · cobertura {TARGET_COB_BOOST}m"
+        nota = "Agotar existencia de tela"
+        if cr["color"] == "Cereza":
+            nota += " · Tela ROJO"
+        elif cr["color"] == "Marron":
+            nota += " · Tela HABANO"
+        elif cr["color"] == "Azul Pizarra":
+            nota += " · Tela AZUL PIZZARRA"
         ws.write_row(
             row, 0,
             [
                 cr.get("tela_fabric") or "—",
                 f"{cr['modelo']} · {cr['color']}",
-                "AGOTAR" if cr["strategy"] == "agotar_tela" else "REF ↑",
+                "AGOTAR",
                 cr.get("tela_m") or "",
                 cr["min"], cr["max"],
                 round(mts_min, 2), round(mts_max, 2),
@@ -543,11 +546,12 @@ def export_excel(rango: dict, path: Path) -> None:
     row += 3
     ws.write(row, 0, "Metros existentes configurados (agotar):", bold)
     row += 1
-    for tela_name, meters in rango["tela_meters"].items():
-        if tela_name.startswith("_"):
+    for tela_name in TELA_ORDER:
+        meters = rango["tela_meters"].get(tela_name, 0)
+        if meters <= 0:
             continue
-        prod = TELA_AGOTAR.get(tela_name, ("", ""))[1]
-        ws.write_row(row, 0, [tela_name, prod, meters, int(math.floor(meters / FABRIC_M)) if meters else 0])
+        prod = TELA_TO_PRODUCT.get(tela_name, ("", ""))[1]
+        ws.write_row(row, 0, [tela_name, prod, round(meters, 2), int(math.floor(meters / FABRIC_M))])
         row += 1
 
     wb.close()
@@ -561,27 +565,26 @@ def main():
     parser.add_argument("--tela-json", default=str(TELA_JSON))
     args = parser.parse_args()
 
-    data = load_data()
-    tela_meters = load_tela_meters(
-        Path(args.tela) if args.tela else None,
-        Path(args.tela_json) if args.tela_json else None,
-    )
+    tela_path = Path(args.tela) if args.tela else DEFAULT_TELA_XLSX
+    if not tela_path.exists():
+        tela_path = None
 
-    missing = [k for k in TELA_AGOTAR if tela_meters.get(k, 0) <= 0]
+    data = load_data()
+    tela_meters = load_tela_meters(tela_path, Path(args.tela_json) if args.tela_json else None)
+
+    missing = [k for k in TELA_TO_PRODUCT if tela_meters.get(k, 0) <= 0]
     if missing:
         print("⚠ Sin metros de tela para:", ", ".join(missing), file=sys.stderr)
-        print("  Edita scripts/short_playa_tela_metros.json o pasa --tela", file=sys.stderr)
 
     rango = build_rango(data, tela_meters)
     export_excel(rango, Path(args.out))
 
+    total_m = sum(tela_meters.values())
     print(f"✓ {args.out}")
-    print(f"  Rango: {rango['total_min']} – {rango['total_max']} und")
-    print(f"  Colores: {len(rango['color_rows'])}")
-    agotar = [cr for cr in rango["color_rows"] if cr["strategy"] == "agotar_tela"]
-    ref = [cr for cr in rango["color_rows"] if cr["strategy"] == "reforzado"]
-    print(f"  Agotar tela: {sum(c['min'] for c in agotar)} und ({len(agotar)} colores)")
-    print(f"  Reforzados: {sum(c['min'] for c in ref)} und ({len(ref)} colores)")
+    print(f"  Rango: {rango['total_min']} – {rango['total_max']} und · {total_m:.2f} m tela")
+    print(f"  Colores liso: {len(rango['color_rows'])} (sin sublimado)")
+    for cr in rango["color_rows"]:
+        print(f"    {cr['tela_fabric']} → {cr['color']}: {cr['min']} und ({cr['tela_m']:.2f} m)")
 
 
 if __name__ == "__main__":
