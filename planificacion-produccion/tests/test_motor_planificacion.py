@@ -2994,6 +2994,13 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertEqual(d["version"], "5.9.28")
         lineas = {c["linea"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
+        self.assertIn("modelosSinPlanificar", d)
+        sin_plan = {m["modelo"] for m in d["modelosSinPlanificar"]}
+        self.assertIn("BASIC LINE CROP TEE DAMA", sin_plan)
+        self.assertIn("MOTION LOOP CLASICA CAB", sin_plan)
+        self.assertNotIn("COTTON KIDS", sin_plan)
+        crop = next(m for m in d["modelosSinPlanificar"] if m["modelo"] == "BASIC LINE CROP TEE DAMA")
+        self.assertGreater(crop["faltante"], 0)
 
 
 if __name__ == "__main__":
