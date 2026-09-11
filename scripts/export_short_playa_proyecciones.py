@@ -86,7 +86,13 @@ SMALL_BATCH_TALLA_PCT: dict[str, float] = {
 }
 
 # Distribución tienda — LA VELA playa (und totales mínimo)
-VELA_TOTAL_MIN = 350
+VELA_TOTAL_MIN = 400
+
+# Plan producción LA VELA (lote prioritario taller → playa)
+VELA_PRODUCTION_PLAN_QTY = 100
+VELA_PRODUCTION_COLORS = frozenset({
+    "Verde Pino", "Azul Pizarra", "Azul Verdoso", "Marron", "Cereza",
+})
 
 DEFAULT_TELA_XLSX = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/INVENTARIO_TELA_SHORT_PLAYA_d4be.xlsx"
@@ -364,15 +370,18 @@ def build_vela_production(
     data: dict,
     color_rows: list[dict],
     vela_total: int,
+    *,
+    colors: frozenset[str] | None = None,
 ) -> dict:
-    """Desglose color × talla para LA VELA."""
-    weights = vela_color_weights(data, color_rows)
+    """Desglose color × talla para LA VELA (lote prioritario)."""
+    eligible = [cr for cr in color_rows if not colors or cr["color"] in colors]
+    weights = vela_color_weights(data, eligible)
     color_totals = largest_remainder(weights, vela_total)
     curve = production_talla_curve()
     rows: list[dict] = []
     talla_totals = defaultdict(int)
 
-    for cr in color_rows:
+    for cr in eligible:
         col = cr["color"]
         ctotal = color_totals.get(col, 0)
         if ctotal <= 0:
@@ -394,8 +403,9 @@ def build_vela_production(
 
     return {
         "total": vela_total,
+        "colors": sorted(colors or {cr["color"] for cr in eligible}),
         "rows": rows,
-        "color_totals": color_totals,
+        "color_totals": {k: v for k, v in color_totals.items() if v > 0},
         "talla_totals": dict(talla_totals),
     }
 
@@ -495,15 +505,20 @@ def build_rango(data: dict, tela_meters: dict[str, float]) -> dict:
         dict(talla_totals_min), dict(talla_totals_max), total_min, total_max, data,
     )
 
-    vela_total = min(VELA_TOTAL_MIN, total_min)
-    vela_production = build_vela_production(data, color_rows, vela_total)
+    vela_distrib_total = min(VELA_TOTAL_MIN, total_min)
+    vela_production = build_vela_production(
+        data,
+        color_rows,
+        VELA_PRODUCTION_PLAN_QTY,
+        colors=VELA_PRODUCTION_COLORS,
+    )
 
     curve_pct = dict(FIXED_TALLA_PCT)
     global_curve_pct = dict(FIXED_TALLA_PCT)
 
     return {
         "months_label": ", ".join(months[-3:]),
-        "vela_total_min": vela_total,
+        "vela_total_min": vela_distrib_total,
         "vela_production": vela_production,
         "global_curve_pct": global_curve_pct,
         "small_batch_curve_pct": dict(SMALL_BATCH_TALLA_PCT),
@@ -542,7 +557,7 @@ def export_excel(rango: dict, path: Path) -> None:
     row += 1
     ws.write(
         row, 0,
-        "SHORT PLAYA CAB · S12 M25 L32 XL18 2XL13 · LA VELA 350 und · "
+        "SHORT PLAYA CAB · S12 M25 L32 XL18 2XL13 · LA VELA 400 und · plan prod. 100 und (5 colores) · "
         "Habano/Azul Verdoso/Azul Pizzarra 90% tela · ≤50 und → S10 M24 L30 XL16 2XL20",
         note,
     )
@@ -646,11 +661,17 @@ def export_excel(rango: dict, path: Path) -> None:
     ws = wb.add_worksheet("Producción LA VELA")
     row = 0
     vela = rango.get("vela_production", {})
-    ws.write(row, 0, f"SHORT PLAYA CAB — PRODUCCIÓN LA VELA ★ ({vela.get('total', VELA_TOTAL_MIN)} und)", title)
+    ws.write(
+        row, 0,
+        f"SHORT PLAYA CAB — PRODUCCIÓN LA VELA ★ ({vela.get('total', VELA_PRODUCTION_PLAN_QTY)} und prioritarias)",
+        title,
+    )
     row += 1
     ws.write(
         row, 0,
-        "Desglose color × talla para playa · prioridad por rotación y stock crítico VELA",
+        f"Distribución total tienda LA VELA: {rango.get('vela_total_min', VELA_TOTAL_MIN)} und · "
+        f"Plan producción = {VELA_PRODUCTION_PLAN_QTY} und · "
+        "Verde Pino · Azul Pizarra · Azul Verdoso · Marron · Cereza",
         note,
     )
     row += 2
