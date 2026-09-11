@@ -414,30 +414,45 @@ window.togSku=function(id, wi, mi){
   row.style.display='table-row';
 };
 
+function primerDiaCarga(c){
+  for(var i=0;i<DIAS.length;i++){
+    if(c.dias && (Number(c.dias[DIAS[i]])||0)>0) return i;
+  }
+  return 99;
+}
 function renderSeg(){
   var el=document.getElementById('sec-seg');
   var keys=weekKeys();
   var map={};
+  var seq=0;
   keys.forEach(function(k, wi){
     cargaFiltrada(k).forEach(function(c){
-      if(!map[c.modelo]) map[c.modelo]={weeks:keys.map(function(){ return []; }), tot:0};
       var l=String(c.linea).replace(/\D/g,'');
+      if(!map[c.modelo]){
+        map[c.modelo]={weeks:keys.map(function(){ return []; }), tot:0, ord:[wi, primerDiaCarga(c), parseInt(l,10)||9, seq]};
+      }
+      seq++;
       if(map[c.modelo].weeks[wi].indexOf(l)<0) map[c.modelo].weeks[wi].push(l);
       map[c.modelo].tot += Number(c.total)||0;
     });
   });
-  var mods=Object.keys(map).sort();
+  var mods=Object.keys(map).sort(function(a,b){
+    var A=map[a].ord, B=map[b].ord;
+    for(var i=0;i<A.length;i++){ if(A[i]!==B[i]) return A[i]-B[i]; }
+    return a.localeCompare(b,'es');
+  });
   var head='<th class="prod">Producto</th>'+keys.map(function(k){ return '<th>'+k.replace('Semana','S')+'<br>'+(D.fechasSemanas[k]||'')+'</th>'; }).join('');
   var body=mods.map(function(m, i){
     var cells=map[m].weeks.map(function(ls){
       if(!ls.length) return '<td></td>';
+      ls=ls.slice().sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); });
       var dots=ls.map(function(l){ return '<span class="chip '+linCls(l)+'" title="Línea '+l+'">'+l+'</span>'; }).join('');
       return '<td><div class="tl-dots">'+dots+'</div></td>';
     }).join('');
     return '<tr class="tr-exp" onclick="togSeg('+i+')"><td class="prod"><span class="chev">▸</span> '+esc(m)+'</td>'+cells+'</tr><tr id="seg-'+i+'" style="display:none"><td colspan="'+(keys.length+1)+'" class="sku-row"></td></tr>';
   }).join('');
   var legend=['1','2','3','4','5'].map(function(l){ return '<span class="chip '+linCls(l)+'">'+l+'</span> Línea '+l; }).join(' &nbsp; ');
-  el.innerHTML='<div class="card"><h3>Seguimiento de modelos y líneas</h3><p class="sub">Cada punto es la línea donde corre el modelo esa semana (como A/B en el calendario de producto). Clic en el modelo para ver SKUs.</p><div style="margin-bottom:10px;font-size:.75rem;color:var(--mu)">'+legend+'</div><div class="ctwrap"><table class="tl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div></div>';
+  el.innerHTML='<div class="card"><h3>Seguimiento de modelos y líneas</h3><p class="sub">Ordenados por el flujo del plan: primero quien arranca. Cada punto es la línea de esa semana. Clic en el modelo para ver SKUs.</p><div style="margin-bottom:10px;font-size:.75rem;color:var(--mu)">'+legend+'</div><div class="ctwrap"><table class="tl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div></div>';
   window._segMods=mods;
 }
 window.togSeg=function(i){
