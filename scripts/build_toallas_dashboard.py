@@ -10,6 +10,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "DASHBOARD TOALLAS ESTAMPADAS.html"
+SOURCE_HTML = Path("/home/ubuntu/.cursor/projects/workspace/uploads/DASHBOARD_TOALLAS_ESTAMPADAS_29d0.html")
 SALES_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/VENTAS_ACTUALIZADAS_TOALLAS_0a56.xlsx")
 INV_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/TOALLA_ESTAMPADA_INVENTARIO_ACTUAL4_e0fa.xlsx")
 TRANSIT_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Compras_Marzo_-_TOALLAS_ESTAMPADAS_e9cb.xlsx")
@@ -80,7 +81,10 @@ def load_template_parts():
     m = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
     if not m:
         raise RuntimeError("Could not find var DATA= in template")
-    return html[: m.start()], html[m.end() :], json.loads(m.group(1))
+    # Pre-Oct baseline always from original source (avoid corrupting on rebuild)
+    src = SOURCE_HTML.read_text(encoding="utf-8")
+    src_data = json.loads(re.search(r"var DATA=(\{.*?\});", src, re.DOTALL).group(1))
+    return html[: m.start()], html[m.end() :], src_data
 
 
 def build_gender_ratios(rows):
@@ -378,9 +382,10 @@ def build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, sum
 
 def build_data():
     _, _, old = load_template_parts()
-    gender_ratios = build_gender_ratios([r for r in old["raw_rows"] if r["m"] >= CUTOVER])
+    cutover_key = mes_sort_key(CUTOVER)
+    gender_ratios = build_gender_ratios([r for r in old["raw_rows"] if mes_sort_key(r["m"]) >= cutover_key])
     max_cl = max((r.get("cl", 0) for r in old["raw_rows"]), default=0) + 1
-    kept = [r for r in old["raw_rows"] if r["m"] < CUTOVER]
+    kept = [r for r in old["raw_rows"] if mes_sort_key(r["m"]) < cutover_key]
     sales = pd.read_excel(SALES_XLSX)
     new_rows, _ = rows_from_sales(sales, gender_ratios, max_cl)
     raw_rows = kept + new_rows
