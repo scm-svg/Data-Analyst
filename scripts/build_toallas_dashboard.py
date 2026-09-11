@@ -11,13 +11,17 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "Sublimada Dashboard.html"
 SOURCE_HTML = Path("/home/ubuntu/.cursor/projects/workspace/uploads/DASHBOARD_TOALLAS_ESTAMPADAS_29d0.html")
-SALES_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/VENTAS_ACTUALIZADAS_TOALLAS_0a56.xlsx")
+SALES_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/VENTAS_ACTUALIZADAS_TOALLAS_1426.xlsx")
 INV_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/TOALLA_ESTAMPADA_INVENTARIO_ACTUAL4_e0fa.xlsx")
 TRANSIT_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Compras_Marzo_-_TOALLAS_ESTAMPADAS_e9cb.xlsx")
 OUTPUT = ROOT / "Sublimada Dashboard.html"
 
 G2 = "TOALLA ESTAMPADA 2.0"
+G1 = "TOALLA ESTAMPADA"
 LEAD_TIME_MONTHS = 3.5
+NEW_DESIGN_FACTOR = 0.75
+DEC_SEASON_FLOOR = 1.80  # +80% diciembre
+CARN_SEASON_FLOOR = 1.25  # +25% carnaval / semana santa
 
 MESES_MAP = {
     "ENERO": "enero", "FEBRERO": "febrero", "MARZO": "marzo", "ABRIL": "abril",
@@ -102,8 +106,10 @@ def build_gender_ratios(rows):
 
 
 def split_qty(qty, ratios):
-    if qty <= 0:
+    if qty == 0:
         return []
+    if qty < 0:
+        return [(g, -v) for g, v in split_qty(-qty, ratios)]
     order = sorted(TIPOS, key=lambda g: ratios.get(g, 0), reverse=True)
     parts, rem = [], qty
     for i, g in enumerate(order):
@@ -122,7 +128,7 @@ def rows_from_sales(df, gender_ratios, cl_start):
         color = str(r["COLOR"]).strip()
         mes = norm_mes(r["Mes"], r["Año"])
         qty = int(r["Cant. ordenada"])
-        if qty <= 0:
+        if qty == 0:
             continue
         parts = [("Empresa", qty)] if store == "PEDIDOS" else split_qty(
             qty, gender_ratios.get((modelo, color), gender_ratios["__default__"])
@@ -213,8 +219,8 @@ def compute_season_factors(meses_order, meses_und):
     base = sum(meses_und[m] for m in other) / max(1, len(other))
     dec_v = sum(meses_und.get(m, 0) for m in dec) / max(1, len(dec)) if dec else base
     fm_v = sum(meses_und.get(m, 0) for m in feb_mar) / max(1, len(feb_mar)) if feb_mar else base
-    dec_f = round(min(2.0, max(1.25, dec_v / base)), 2) if base else 1.5
-    carn_f = round(min(1.5, max(1.1, fm_v / base)), 2) if base else 1.15
+    dec_f = round(min(2.5, max(DEC_SEASON_FLOOR, dec_v / base if base else DEC_SEASON_FLOOR)), 2)
+    carn_f = round(min(1.8, max(CARN_SEASON_FLOOR, fm_v / base if base else CARN_SEASON_FLOOR)), 2)
     return {
         "diciembre_pct": int(round((dec_f - 1) * 100)),
         "carnaval_pct": int(round((carn_f - 1) * 100)),
@@ -270,7 +276,7 @@ def build_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, 
     carn_f = season["carnaval_factor"]
     plan, prod_curve = [], []
     sm_need = {1: 0, 2: 0, 3: 0}
-    sm_stk, sm_transit, sm_v_base = 0, 0, 0
+    sm_stk, sm_transit, sm_v_base, sm_v_adj = 0, 0, 0, 0
 
     colors = sorted({r["c"] for r in raw_rows if r["o"] == G2})
     for color in colors:
@@ -280,42 +286,50 @@ def build_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, 
         avail = stk + transit
         retail = [r for r in raw_rows if r["o"] == G2 and r["c"] == color and r["m"] in base_months and r["t"] != "PEDIDOS"]
         v_base = sum(r["v"] for r in retail) / max(1, len(base_months))
-        v_adj = round(v_base * dec_f, 1)  # rotación ajustada referencia diciembre
+        v_adj = round(v_base * dec_f, 1)
+        v_carn = round(v_base * carn_f, 1)
 
-        # Hasta diciembre 2026: Oct + Nov (base) + Dic (×dec) + Barquisimeto (~18% grieta)
+        # Oct + Nov (base) + Dic (×dec) + Barquisimeto (~18% LA GRIETA)
         demand_dic = v_base * 2 + v_base * dec_f + v_base * 0.18
-        cob_dic = round(avail / v_base, 1) if v_base > 0 else 99
         cubre_dic = avail >= demand_dic
+        cob_base = round(avail / v_base, 1) if v_base > 0 else 99
+        cob_adj = round(avail / v_adj, 1) if v_adj > 0 else 99
 
-        # Compra Q1 (ene-mar 2027): llegada ~ene con lead time · incluye carnaval/SS
-        demand_q1 = v_base * carn_f + v_base * 2  # feb-mar carnaval + ene
-        buy_q1 = max(0, int(round(demand_q1 - max(0, avail - demand_dic))))
-        cob = round(avail / v_base, 1) if v_base > 0 else 99
+        # Tras diciembre: saldo disponible vs Q1 (ene base + feb-mar carnaval/SS)
+        saldo_post_dic = max(0, avail - demand_dic)
+        demand_q1 = v_base + v_carn * 2
+        buy_q1 = max(0, int(round(demand_q1 - saldo_post_dic)))
 
-        needs = {m: max(0, int(round(v_base * m - avail))) for m in (1, 2, 3)}
+        # Necesidad usando velocidad ajustada (temporada)
+        needs = {m: max(0, int(round(v_adj * m - avail))) for m in (1, 2, 3)}
         for m in (1, 2, 3):
             sm_need[m] += needs[m]
         sm_stk += stk
         sm_transit += transit
         sm_v_base += v_base
+        sm_v_adj += v_adj
 
         prod_curve.append({
             "modelo": G2, "color": color, "v_mes_base": round(v_base, 1), "v_mes": v_adj,
+            "v_mes_carnaval": v_carn,
             "stk_total": stk, "stk_transit": transit, "stk_disponible": avail,
-            "stk_pt": 0, "cobertura": min(cob, 99), "cobertura_pt": round(stk / v_base, 1) if v_base > 0 else 99,
-            "cobertura_dic": round(avail / demand_dic * 3, 1) if demand_dic > 0 else 99,
+            "cobertura_base": min(cob_base, 99), "cobertura_adj": min(cob_adj, 99),
+            "cobertura_pt": round(stk / v_base, 1) if v_base > 0 else 99,
             "demanda_dic": int(round(demand_dic)), "cubre_diciembre": cubre_dic,
+            "saldo_post_dic": int(round(saldo_post_dic)),
+            "demanda_q1": int(round(demand_q1)),
             "need_1m": needs[1], "need_2m": needs[2], "need_3m": needs[3], "comprar": buy_q1,
         })
         plan.append({
             "modelo": G2, "color": color, "v_mes_base": round(v_base, 1), "v_mes": v_adj,
-            "stk": stk, "transit": transit, "disponible": avail, "cobertura": cob,
+            "stk": stk, "transit": transit, "disponible": avail,
+            "cobertura_base": cob_base, "cobertura_adj": cob_adj,
             "demanda_dic": int(round(demand_dic)), "cubre_diciembre": cubre_dic, "comprar": buy_q1,
         })
 
     summary = {
         G2: {
-            "v_mes_base": round(sm_v_base, 1), "v_mes": round(sm_v_base * dec_f, 1),
+            "v_mes_base": round(sm_v_base, 1), "v_mes": round(sm_v_adj, 1),
             "stk_total": sm_stk, "stk_transit": sm_transit, "stk_disponible": sm_stk + sm_transit,
             "need_1m": sm_need[1], "need_2m": sm_need[2], "need_3m": sm_need[3],
             "comprar_total": sum(p["comprar"] for p in plan),
@@ -325,6 +339,75 @@ def build_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, 
     }
     plan.sort(key=lambda x: x["comprar"], reverse=True)
     return plan, prod_curve, summary, base_months
+
+
+def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, rec_lugares, rec_prints):
+    """Compra inicial 3.0: factor diseño nuevo + legacy 1.0/2.0 + lead time."""
+    closed = meses_order[:-1] if len(meses_order) > 1 else meses_order
+    base_months = closed[-3:] if len(closed) >= 3 else closed
+    dec_f = season["diciembre_factor"]
+    proposals = []
+
+    def cat_benchmark(tipo):
+        by_c = defaultdict(int)
+        for r in raw_rows:
+            if r["o"] != G2 or r["m"] not in base_months or r["t"] == "PEDIDOS":
+                continue
+            c = r["c"]
+            t = "lugar" if c in LUGARES else "print" if c in PRINTS else "otro"
+            if t == tipo:
+                by_c[c] += r["v"]
+        if not by_c:
+            return 0.0
+        top = sorted(by_c.values(), reverse=True)[:3]
+        return sum(top) / max(1, len(top)) / max(1, len(base_months))
+
+    bench = {"lugar": cat_benchmark("lugar"), "print": cat_benchmark("print")}
+
+    for color in rec_lugares + rec_prints:
+        tipo = "lugar" if color in LUGARES else "print"
+        v_bench = bench[tipo]
+        v_new = round(v_bench * NEW_DESIGN_FACTOR, 1)
+
+        legacy = sum(stock.get(f"{m}/{color}", 0) for m in MODELOS)
+        legacy += transit_by_color.get(color, 0)
+
+        retail_20 = [r for r in raw_rows if r["o"] == G2 and r["c"] == color and r["m"] in base_months and r["t"] != "PEDIDOS"]
+        v_legacy = sum(r["v"] for r in retail_20) / max(1, len(base_months)) if retail_20 else 0
+
+        # Llegada ~ene 2027: cubrir lead time + 4m operación + 1er diciembre al ritmo nuevo
+        months_horizon = int(round(LEAD_TIME_MONTHS)) + 4
+        demand_gross = v_new * months_horizon + v_new * dec_f
+
+        legacy_offset = min(legacy, v_legacy * months_horizon) if v_legacy > 0 else legacy * 0.6
+        comprar_raw = max(0, demand_gross - legacy_offset)
+        comprar = int(round(comprar_raw / 50) * 50) if comprar_raw >= 25 else int(round(comprar_raw))
+
+        proposals.append({
+            "color": color,
+            "tipo": tipo,
+            "benchmark_mes": round(v_bench, 1),
+            "v_nuevo_mes": v_new,
+            "legacy_stock": legacy,
+            "legacy_v_mes": round(v_legacy, 1),
+            "legacy_cob_meses": round(legacy / v_legacy, 1) if v_legacy > 0 else (99 if legacy else 0),
+            "demanda_inicial": int(round(demand_gross)),
+            "descuento_legacy": int(round(legacy_offset)),
+            "comprar": comprar,
+        })
+
+    total = sum(p["comprar"] for p in proposals)
+    return {
+        "designs": proposals,
+        "total_comprar": total,
+        "new_design_factor": NEW_DESIGN_FACTOR,
+        "lead_time_meses": LEAD_TIME_MONTHS,
+        "nota_metodo": (
+            f"Benchmark top {('lugares' if True else '')}/prints 2.0 × {int(NEW_DESIGN_FACTOR*100)}% factor diseño nuevo. "
+            f"Descuenta inventario legacy 1.0+2.0+tránsito del mismo color. "
+            f"Horizonte: lead time ({LEAD_TIME_MONTHS}m) + 4m operación + 1er diciembre (×{dec_f})."
+        ),
+    }
 
 
 def build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, summary_prod):
@@ -403,6 +486,16 @@ def build_data():
         raw_rows, meses_order, inv["stock"], transit_by_color, season
     )
     brief = build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, summary_prod)
+    plan_30 = build_30_purchase_plan(
+        raw_rows, meses_order, inv["stock"], transit_by_color, season,
+        brief["recomendacion_lugares"], brief["recomendacion_prints"],
+    )
+    brief["plan_30"] = plan_30
+    detalle_30 = ", ".join(f"{p['color']} {p['comprar']}" for p in plan_30["designs"])
+    brief["conclusion_30"] = (
+        f"Compra inicial 3.0 sugerida: {plan_30['total_comprar']:,} und ({detalle_30}). "
+        f"Factor diseño nuevo {int(NEW_DESIGN_FACTOR * 100)}% · descuenta stock legacy 1.0+2.0."
+    )
 
     tipo_stats = {t: {"und": sum(r["v"] for r in raw_rows if r["g"] == t), "cli": len({r["cl"] for r in raw_rows if r["g"] == t})} for t in TIPOS}
     all_stores = sorted({r["t"] for r in raw_rows if r["t"] != "PEDIDOS"})
@@ -453,6 +546,7 @@ def build_data():
             "TOLON": {"mult": 1.35, "label": "+35% histórico"},
         },
         "analysis_brief": brief,
+        "plan_30": plan_30,
         "date_range": dr,
         "decisiones_modelo": G2,
     }
@@ -516,6 +610,7 @@ DECISIONES_HTML = """
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
   <div class="card g1" id="decPropuesta4"></div>
+  <div class="card g1" id="decPlan30" style="border-color:rgba(168,85,247,.35);background:rgba(168,85,247,.04)"></div>
 </div>
 """
 
@@ -651,18 +746,21 @@ function rDecisiones(){
   var pgEl=document.getElementById('propGrid');
   if(pgEl){
     var rows=DATA.prod_curve.filter(function(r){return r.modelo===DEC_MOD;}).sort(function(a,b){return b.v_mes-a.v_mes;});
-    var cob=smry.v_mes>0?((smry.stk_disponible||0)/smry.v_mes).toFixed(1):0;
+    var cob=lf>0?((smry.stk_disponible||0)/lf).toFixed(1):0;
     var need=meses===1?smry.need_1m:meses===2?smry.need_2m:smry.need_3m;
     var html='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
-      '<span style="font-size:.75rem;color:var(--mu2)">Cobertura disponible (PT+tránsito): <strong style="color:var(--ac)">'+cob+' meses</strong></span>'+
-      '<span style="font-size:.75rem;color:var(--mu2)">Comprar '+meses+'m: <strong style="color:'+(need>0?'#f59e0b':'#10b981')+'">'+need+' und</strong></span></div>';
+      '<span style="font-size:.75rem;color:var(--mu2)">Cobertura @ vel. dic (PT+tránsito): <strong style="color:var(--ac)">'+cob+' meses</strong></span>'+
+      '<span style="font-size:.75rem;color:var(--mu2)">Comprar '+meses+'m (vel. ajustada): <strong style="color:'+(need>0?'#f59e0b':'#10b981')+'">'+need+' und</strong></span></div>'+
+      '<div style="font-size:.65rem;color:var(--mu2);margin-bottom:8px">Cobertura dic = Oct+Nov (base) + Dic (×'+(s.diciembre_factor||1.8)+') + BQTO 18%. Compra Q1 = saldo post-dic vs ene + feb-mar carnaval (×'+(s.carnaval_factor||1.25)+').</div>';
     html+=rows.map(function(r){
-      var buy=r.comprar||0,tc=r.cobertura<1?'#ef4444':r.cobertura<2?'#f59e0b':r.cobertura<3?'#3b82f6':'#10b981';
+      var buy=r.comprar||0;
+      var cobB=r.cobertura_base||0,cobA=r.cobertura_adj||0;
+      var tc=cobA<1?'#ef4444':cobA<2?'#f59e0b':cobA<3?'#3b82f6':'#10b981';
       var dicOk=r.cubre_diciembre;
       return '<div style="display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;padding:6px 10px;background:rgba(0,0,0,.12);border-radius:8px;margin-bottom:4px">'+
         '<span><span class="chip" style="background:'+cn(r.color)+'"></span><strong>'+r.color+'</strong></span>'+
-        '<span style="font-size:.66rem;color:var(--mu2)">'+r.v_mes_base.toFixed(0)+'/mes base · PT '+r.stk_total+' · 🚢 '+r.stk_transit+' · disp. '+r.stk_disponible+
-        ' · Dic: '+(r.demanda_dic||0)+' und '+(dicOk?'<span style="color:#10b981">✓</span>':'<span style="color:#ef4444">✗</span>')+'</span>'+
+        '<span style="font-size:.66rem;color:var(--mu2)">'+r.v_mes_base.toFixed(0)+'/mes base · '+r.v_mes.toFixed(0)+'/mes dic · PT '+r.stk_total+' · 🚢 '+r.stk_transit+' · disp. '+r.stk_disponible+
+        ' · Cob: '+cobB+'m base / <strong style="color:'+tc+'">'+cobA+'m dic</strong> · Nec dic: '+(r.demanda_dic||0)+' '+(dicOk?'<span style="color:#10b981">✓</span>':'<span style="color:#ef4444">✗ falta '+(Math.max(0,(r.demanda_dic||0)-r.stk_disponible))+'</span>')+'</span>'+
         (buy>0?'<span style="background:rgba(245,158,11,.15);color:#f59e0b;border-radius:5px;padding:2px 8px;font-size:.65rem;font-weight:700">Comprar Q1 +'+buy+'</span>':'<span style="color:#10b981;font-size:.65rem">'+(dicOk?'✓ Dic OK':'—')+'</span>')+
         '</div>';
     }).join('');
@@ -695,6 +793,27 @@ function rDecisiones(){
       lug.map(function(c){var p=(DATA.purchase_plan||[]).find(function(x){return x.color===c;});var st=p?(p.cubre_diciembre?'✓ Cubre dic':'⚠ Falta dic · disp. '+p.disponible+'/nec. '+p.demanda_dic):'—';return '<div style="font-size:.72rem;padding:3px 0">'+c+' — '+st+(p&&p.comprar>0?' · Q1 +'+p.comprar:'')+'</div>';}).join('')+'</div>'+
       '<div style="background:rgba(171,123,250,.08);border-radius:10px;padding:12px;border:1px solid rgba(171,123,250,.2)"><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px">🖼️ Prints (top retail reciente)</div>'+
       pr.map(function(c){var p=(DATA.purchase_plan||[]).find(function(x){return x.color===c;});var st=p?(p.cubre_diciembre?'✓ Cubre dic':'⚠ Falta dic · disp. '+p.disponible+'/nec. '+p.demanda_dic):'—';return '<div style="font-size:.72rem;padding:3px 0">'+c+' — '+st+(p&&p.comprar>0?' · Q1 +'+p.comprar:'')+'</div>';}).join('')+'</div></div>';
+  }
+
+  var p30=document.getElementById('decPlan30');
+  if(p30){
+    var plan30=(DATA.plan_30||brief.plan_30||{});
+    var ds=plan30.designs||[];
+    if(ds.length){
+      p30.innerHTML='<h3 style="color:#a855f7">🆕 Compra inicial Colección 3.0</h3>'+
+        '<div class="sub">'+((plan30.nota_metodo)||'')+'</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+
+        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Total sugerido: <strong>'+(plan30.total_comprar||0).toLocaleString()+' und</strong></span>'+
+        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Factor diseño nuevo: '+Math.round((plan30.new_design_factor||0.75)*100)+'%</span>'+
+        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Lead time: '+(plan30.lead_time_meses||3.5)+'m</span></div>'+
+        '<table class="ct"><thead><tr><th>Diseño</th><th>Tipo</th><th>Bench 2.0</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda bruta</th><th>Desc. legacy</th><th>Comprar</th></tr></thead><tbody>'+
+        ds.map(function(d){
+          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+'</td><td>'+d.tipo+'</td><td>'+d.benchmark_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
+            '<td>'+d.legacy_stock+' und ('+d.legacy_cob_meses+'m)</td><td>'+d.demanda_inicial+'</td><td>-'+d.descuento_legacy+'</td>'+
+            '<td class="rn" style="color:#a855f7">'+d.comprar+'</td></tr>';
+        }).join('')+'</tbody></table>'+
+        (brief.conclusion_30?'<p style="margin-top:10px;font-size:.72rem;color:var(--mu);padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76">'+brief.conclusion_30+'</p>':'');
+    }
   }
 }
 """
