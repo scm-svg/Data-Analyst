@@ -2816,5 +2816,47 @@ class TestConteoSemanal(unittest.TestCase):
         self.assertEqual(filas_proyeccion(info), ["OK"])
 
 
+def semanas_de_acum(vals):
+    prev = 0
+    out = []
+    for v in vals:
+        if v in (None, "", "--"):
+            x = 0
+        else:
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                x = 0
+        if x > 0:
+            out.append(max(0.0, x - prev))
+            prev = x
+        else:
+            out.append(0.0)
+    return out
+
+
+class TestDashboardInfo(unittest.TestCase):
+    def test_acum_a_cantidad_semanal(self):
+        self.assertEqual(semanas_de_acum([105, 480, "--", "--"]), [105, 375, 0, 0])
+        self.assertEqual(semanas_de_acum(["--", 114, 192]), [0, 114, 78])
+
+    def test_payload_json_tiene_pestanias(self):
+        import json, os
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertIn("semanas", d)
+        self.assertIn("proySku", d)
+        self.assertIn("pendientes", d)
+        self.assertIn("almacenModelo", d)
+        self.assertIn("supuestos", d)
+        self.assertEqual(d["supuestos"]["leadTimeAlmacenDias"], 4)
+        self.assertEqual(d["supuestos"]["apoyoL1Fraccion"], 0.5)
+        self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 1"]["carga"]), 0)
+        cotton = [s for s in d["proySku"] if s["modelo"] == "COTTON KIDS"]
+        self.assertTrue(cotton)
+        self.assertEqual(len(cotton[0]["weeks"]), 10)
+
+
 if __name__ == "__main__":
     unittest.main()

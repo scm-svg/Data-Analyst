@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.25 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.26 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - DASHBOARD DE INFORMACIÓN: calendario de producción (semana/día/
+ *     línea), drill-down semana→modelo→SKU, seguimiento de líneas
+ *     (puntos por semana), pendientes, pestaña de almacén y supuestos
+ *     (cap por modelo, lead time 4 días, apoyo 50% L1). Menú
+ *     📊 Dashboard de información. doGet sirve el mismo HTML.
  *   - META = COLUMNA FALTANTE: Proyeccion y el plan usan el valor de
  *     Faltante en Por Hacer, no Cantidad Solicitada − Cantida Producida.
  *     RIO CAB 1871 (no 1834) y SHORT SPORT R1 CAB+DAMA 202 (no 195).
@@ -114,7 +119,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.25";
+var VERSION_SISTEMA = "5.9.26";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -159,6 +164,7 @@ function onOpen() {
     .addItem("1️⃣ Actualizar MOs", "actualizarMOs")
     .addItem("2️⃣ Actualizar Priorización", "actualizarModelosPriorizacion")
     .addItem("3️⃣ Generar Planificación", "generarPlanificacionSemanal")
+    .addItem("📊 Dashboard de información", "abrirDashboardInformacion")
     .addSeparator()
     .addItem("🔄 Sincronizar Producción", "sincronizarProduccionExterna")
     .addSeparator()
@@ -195,8 +201,15 @@ function onOpen() {
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile("Dashboard")
-    .setTitle("Dashboard Maestro — Planificación de Producción")
+    .setTitle("Dashboard de información — Planificación")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function abrirDashboardInformacion() {
+  var html = HtmlService.createHtmlOutputFromFile("Dashboard")
+    .setWidth(1400)
+    .setHeight(900);
+  SpreadsheetApp.getUi().showModalDialog(html, "Dashboard de información");
 }
 
 // =====================================================================
@@ -4134,10 +4147,162 @@ function guardarHistorialProduccionDiario() {
     "\n\nSe conservan los últimos 14 cortes.");
 }
 
+function numCeldaDash_(v) {
+  if (v === "" || v === "--" || v === null || v === undefined) return 0;
+  if (Object.prototype.toString.call(v) === "[object Date]") return 0;
+  var n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
+function idxColSemDash_(hArr, n) {
+  var re = new RegExp("sem\\s*" + n + "(?!\\d)");
+  for (var i = 0; i < hArr.length; i++) {
+    if (re.test(String(hArr[i]))) return i;
+  }
+  return -1;
+}
+  var prev = 0, out = [];
+  for (var i = 0; i < vals.length; i++) {
+    var x = numCeldaDash_(vals[i]);
+    if (x > 0) {
+      out.push(Math.max(0, x - prev));
+      prev = x;
+    } else {
+      out.push(0);
+    }
+  }
+  return out;
+}
+
+function fmtFechaDash_(v, tz) {
+  if (!v && v !== 0) return "";
+  if (Object.prototype.toString.call(v) === "[object Date]") {
+    return Utilities.formatDate(v, tz || Session.getScriptTimeZone(), "dd/MM/yyyy");
+  }
+  var s = String(v).trim();
+  return (s === "--" || s === "None") ? "" : s;
+}
+
+function supuestosDashboard_(capsModelo) {
+  return {
+    semanas: SEMANAS_DEFAULT,
+    diasLaborales: DIAS_LABORALES,
+    leadTimeAlmacenDias: DIAS_ENTRADA_ALMACEN,
+    apoyoL1Fraccion: FRACCION_APOYO_L1,
+    remanenteCortoL2Dias: DIAS_REMANENTE_CORTO_L2,
+    maxModelosLinea5: MAX_MODELOS_LINEA5,
+    capFallback: { "1": 130, "2": 130, "3": 130, "4": 130, "5": 40 },
+    capsModelo: capsModelo || {},
+    notas: [
+      "La planificación se puede regenerar (menú Producción → Generar Planificación) si hay consideraciones mayores: paros, cambio de mix, MOs nuevas o ajustes de prioridad.",
+      "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2; el ocupante nativo de L1 se queda con el otro 50%.",
+      "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
+      "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
+      "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo."
+    ]
+  };
+}
+
+function leerPendienteDashboard_(ss) {
+  var sh = ss.getSheetByName("Pendiente");
+  var out = [];
+  if (!sh) return out;
+  var data = sh.getDataRange().getValues();
+  var det = encontrarFilaEncabezado_(data, ["sku"], 8);
+  if (det.fila === -1) return out;
+  var h = det.celdas;
+  var iMo = h.indexOf("mo"), iSku = h.indexOf("sku");
+  var iProd = h.findIndex(function (x) { return x.indexOf("producto") !== -1 || x.indexOf("modelo") !== -1; });
+  var iCant = h.findIndex(function (x) { return x.indexOf("pendiente") !== -1 || x.indexOf("cant") !== -1; });
+  var iPara = h.findIndex(function (x) { return x.indexOf("programado") !== -1; });
+  for (var i = det.fila + 1; i < data.length; i++) {
+    var sku = iSku !== -1 ? String(data[i][iSku] || "").trim() : "";
+    var mo = iMo !== -1 ? String(data[i][iMo] || "").trim() : "";
+    if (!sku && !mo) continue;
+    out.push({
+      mo: mo,
+      sku: sku,
+      producto: iProd !== -1 ? String(data[i][iProd] || "").trim() : "",
+      cant: iCant !== -1 ? numCeldaDash_(data[i][iCant]) : 0,
+      para: iPara !== -1 ? String(data[i][iPara] || "").trim() : ""
+    });
+  }
+  return out;
+}
+
+function leerAlmacenDashboard_(ss) {
+  var tz = ss.getSpreadsheetTimeZone();
+  var modelo = [], sku = [];
+  var hm = ss.getSheetByName("Entrada de Almacen Modelo");
+  if (hm) {
+    var dm = hm.getDataRange().getValues();
+    var det = encontrarFilaEncabezado_(dm, ["modelo"], 8);
+    if (det.fila !== -1) {
+      var h = det.celdas;
+      var iMos = h.indexOf("mos"), iMod = h.indexOf("modelo");
+      var iCant = h.findIndex(function (x) { return x.indexOf("cantidad") !== -1; });
+      var iSal = h.findIndex(function (x) { return x.indexOf("salida") !== -1; });
+      var iEnt = h.findIndex(function (x) { return x.indexOf("entrada") !== -1; });
+      var iEsp = h.findIndex(function (x) { return x.indexOf("esperada") !== -1; });
+      var iRec = h.findIndex(function (x) { return x.indexOf("recepcionado") !== -1; });
+      var iFal = h.findIndex(function (x) { return x.indexOf("faltante") !== -1; });
+      for (var i = det.fila + 1; i < dm.length; i++) {
+        var m = iMod !== -1 ? String(dm[i][iMod] || "").trim() : "";
+        if (!m) continue;
+        modelo.push({
+          mos: iMos !== -1 ? numCeldaDash_(dm[i][iMos]) : 0,
+          modelo: m,
+          cantidad: iCant !== -1 ? numCeldaDash_(dm[i][iCant]) : 0,
+          salidaCostura: iSal !== -1 ? fmtFechaDash_(dm[i][iSal], tz) : "",
+          entradaAlmacen: iEnt !== -1 ? fmtFechaDash_(dm[i][iEnt], tz) : "",
+          fechaEsperada: iEsp !== -1 ? fmtFechaDash_(dm[i][iEsp], tz) : "",
+          recepcionado: iRec !== -1 ? numCeldaDash_(dm[i][iRec]) : 0,
+          faltantes: iFal !== -1 ? numCeldaDash_(dm[i][iFal]) : 0
+        });
+      }
+    }
+  }
+  var hs = ss.getSheetByName("Entrada de Almacen - Skus");
+  if (hs) {
+    var ds = hs.getDataRange().getValues();
+    var detS = encontrarFilaEncabezado_(ds, ["sku"], 8);
+    if (detS.fila !== -1) {
+      var h2 = detS.celdas;
+      var iMo = h2.indexOf("mo"), iSku = h2.indexOf("sku");
+      var iProd = h2.findIndex(function (x) { return x.indexOf("producto") !== -1; });
+      var iCantS = h2.findIndex(function (x) { return x.indexOf("cantidad") !== -1; });
+      var iSalS = h2.findIndex(function (x) { return x.indexOf("salida") !== -1; });
+      var iEntS = h2.findIndex(function (x) { return x.indexOf("entrada") !== -1; });
+      var iRecS = h2.findIndex(function (x) { return x.indexOf("recepcionado") !== -1; });
+      var iFalS = h2.findIndex(function (x) { return x.indexOf("faltante") !== -1; });
+      for (var j = detS.fila + 1; j < ds.length; j++) {
+        var sk = iSku !== -1 ? String(ds[j][iSku] || "").trim() : "";
+        if (!sk) continue;
+        var prod = iProd !== -1 ? String(ds[j][iProd] || "").trim() : "";
+        var modeloSku = prod.indexOf(" - ") !== -1 ? prod.split(" - ")[0] : prod.split(" ")[0];
+        sku.push({
+          mo: iMo !== -1 ? String(ds[j][iMo] || "").trim() : "",
+          sku: sk,
+          producto: prod,
+          modelo: modeloSku,
+          cantidad: iCantS !== -1 ? numCeldaDash_(ds[j][iCantS]) : 0,
+          salidaCostura: iSalS !== -1 ? fmtFechaDash_(ds[j][iSalS], tz) : "",
+          entradaAlmacen: iEntS !== -1 ? fmtFechaDash_(ds[j][iEntS], tz) : "",
+          recepcionado: iRecS !== -1 ? numCeldaDash_(ds[j][iRecS]) : 0,
+          faltantes: iFalS !== -1 ? numCeldaDash_(ds[j][iFalS]) : 0
+        });
+      }
+    }
+  }
+  return { modelo: modelo, sku: sku };
+}
+
 function obtenerDatosDashboardCompleto() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var resp = {
-    backlog: [], semanas: {}, proyModelo: [], proySku: [], fechasSemanas: {}, skuDiarioS1: {},
+    backlog: [], semanas: {}, proyModelo: [], proySku: [], fechasSemanas: {}, fechasDias: {},
+    skuDiarioS1: {}, pendientes: [], almacenModelo: [], almacenSku: [],
+    supuestos: {},
     opcionesFiltro: { modelos: [], skus: [], generos: [], colores: [], tallas: [], prioridades: [], lineas: [] }
   };
 
@@ -4253,11 +4418,13 @@ function obtenerDatosDashboardCompleto() {
 
       var cantSol = iCant !== -1 ? (Number(dph[i][iCant]) || 0) : 0;
       var prodQty = iProdQty !== -1 ? (Number(dph[i][iProdQty]) || 0) : 0;
-      var faltanteFinal = 0;
-
-      if (iProdQty !== -1) faltanteFinal = Math.max(0, cantSol - prodQty);
-      else if (iFalt !== -1 && dph[i][iFalt] !== "") faltanteFinal = Number(dph[i][iFalt]) || 0;
-      else faltanteFinal = cantSol;
+      var faltanteFinal = faltanteEfectivo_(
+        cantSol,
+        prodQty,
+        iFalt !== -1 ? dph[i][iFalt] : "",
+        iProdQty !== -1,
+        iFalt !== -1 && dph[i][iFalt] !== ""
+      );
 
       resp.backlog.push({
         sku: s, modelo: m, detalle: arrDetalle.join("-"), mo: iMo !== -1 ? String(dph[i][iMo]) : "",
@@ -4335,6 +4502,8 @@ function obtenerDatosDashboardCompleto() {
     if (rCarga !== -1) {
       var rowStr = detHeadCarga.celdas;
       colLin = rowStr.indexOf("linea"); colModCarga = rowStr.indexOf("modelo");
+      var colMos = rowStr.indexOf("mos");
+      var colSol = rowStr.findIndex(function (x) { return x.indexOf("solicitada") !== -1; });
       colTotSku = rowStr.findIndex(function (x) { return (x.indexOf("total semana (sku)") !== -1) || (x.indexOf("total semana") !== -1 && x.indexOf("linea") === -1); });
       if (colTotSku === -1) colTotSku = colModCarga + 8;
       colsDias.lunes = rowStr.findIndex(function (x) { return x.indexOf("lunes") !== -1; });
@@ -4342,6 +4511,15 @@ function obtenerDatosDashboardCompleto() {
       colsDias.miercoles = rowStr.findIndex(function (x) { return x.indexOf("miercoles") !== -1 || x.indexOf("miércoles") !== -1; });
       colsDias.jueves = rowStr.findIndex(function (x) { return x.indexOf("jueves") !== -1; });
       colsDias.viernes = rowStr.findIndex(function (x) { return x.indexOf("viernes") !== -1; });
+      var fechasD = [];
+      if (data.length >= 2) {
+        var rowFechas = data[1];
+        [colsDias.lunes, colsDias.martes, colsDias.miercoles, colsDias.jueves, colsDias.viernes].forEach(function (ci) {
+          fechasD.push(ci !== -1 ? fmtFechaDash_(rowFechas[ci], ss.getSpreadsheetTimeZone()) : "");
+        });
+      }
+      resp.fechasDias[semanaKey] = fechasD;
+      if (fechasD[0]) resp.fechasSemanas[semanaKey] = String(fechasD[0]).substring(0, 5);
     }
 
     if (rCarga !== -1) {
@@ -4353,7 +4531,11 @@ function obtenerDatosDashboardCompleto() {
         var modCarga = String(data[i][colModCarga]).trim(), totSku = Number(data[i][colTotSku]) || 0;
         if (currLin !== "" && modCarga !== "" && totSku > 0) {
           resp.semanas[semanaKey].carga.push({
-            linea: "Línea " + currLin, modelo: modCarga, total: totSku,
+            linea: String(currLin).replace(/[^0-9]/g, "") || currLin,
+            modelo: modCarga,
+            mos: (typeof colMos !== "undefined" && colMos !== -1) ? numCeldaDash_(data[i][colMos]) : 0,
+            solicitada: (typeof colSol !== "undefined" && colSol !== -1) ? numCeldaDash_(data[i][colSol]) : 0,
+            total: totSku,
             dias: {
               lunes: colsDias.lunes !== -1 ? (Number(data[i][colsDias.lunes]) || 0) : 0,
               martes: colsDias.martes !== -1 ? (Number(data[i][colsDias.martes]) || 0) : 0,
@@ -4405,22 +4587,26 @@ function obtenerDatosDashboardCompleto() {
       var iModM = hArrM.indexOf("modelo");
       var iFecM = hArrM.indexOf("fecha objetivo") !== -1 ? hArrM.indexOf("fecha objetivo") : hArrM.findIndex(function (x) { return x.indexOf("fecha") !== -1; });
       var iMetaM = hArrM.findIndex(function (x) { return x.indexOf("meta") !== -1 || x.indexOf("faltante") !== -1; });
-      var iS1M = hArrM.findIndex(function (x) { return x.indexOf("sem 1") !== -1; });
-      var iS2M = hArrM.findIndex(function (x) { return x.indexOf("sem 2") !== -1; });
-      var iS3M = hArrM.findIndex(function (x) { return x.indexOf("sem 3") !== -1; });
-      var iS4M = hArrM.findIndex(function (x) { return x.indexOf("sem 4") !== -1; });
-      var iS5M = hArrM.findIndex(function (x) { return x.indexOf("sem 5") !== -1; });
+      var iIdxSemM = [];
+      for (var wM = 1; wM <= 10; wM++) iIdxSemM.push(idxColSemDash_(hArrM, wM));
+      var iSinM = hArrM.findIndex(function (x) { return x.indexOf("sin programar") !== -1; });
+      var iTermM = hArrM.findIndex(function (x) { return x.indexOf("término") !== -1 || x.indexOf("termino") !== -1; });
       var iEstM = hArrM.findIndex(function (x) { return x.indexOf("estado") !== -1; });
 
       for (var im = rHeadM + 1; im < dpm.length; im++) {
         var mVal = iModM !== -1 ? String(dpm[im][iModM]).trim() : "";
         if (!mVal || mVal.toUpperCase().indexOf("TOTAL") !== -1) continue;
+        var acumM = iIdxSemM.map(function (ix) { return ix !== -1 ? dpm[im][ix] : 0; });
+        var weeksM = semanasDeAcum_(acumM);
         resp.proyModelo.push({
-          modelo: mVal, fecha: iFecM !== -1 ? (dpm[im][iFecM] instanceof Date ? dpm[im][iFecM].getTime() : dpm[im][iFecM]) : "",
+          modelo: mVal,
+          fecha: iFecM !== -1 ? fmtFechaDash_(dpm[im][iFecM], ss.getSpreadsheetTimeZone()) : "",
           meta: iMetaM !== -1 ? (Number(dpm[im][iMetaM]) || 0) : 0,
-          s1: iS1M !== -1 ? dpm[im][iS1M] : 0, s2: iS2M !== -1 ? dpm[im][iS2M] : 0,
-          s3: iS3M !== -1 ? dpm[im][iS3M] : 0, s4: iS4M !== -1 ? dpm[im][iS4M] : 0, s5: iS5M !== -1 ? dpm[im][iS5M] : 0,
-          estado: iEstM !== -1 ? String(dpm[im][iEstM]) : "",
+          weeks: weeksM,
+          s1: weeksM[0] || 0, s2: weeksM[1] || 0, s3: weeksM[2] || 0, s4: weeksM[3] || 0, s5: weeksM[4] || 0,
+          sin: iSinM !== -1 ? numCeldaDash_(dpm[im][iSinM]) : 0,
+          termino: iTermM !== -1 ? fmtFechaDash_(dpm[im][iTermM], ss.getSpreadsheetTimeZone()) : "",
+          estado: iEstM !== -1 ? String(dpm[im][iEstM] || "") : "",
           acumulado: true
         });
       }
@@ -4437,11 +4623,10 @@ function obtenerDatosDashboardCompleto() {
       var iModS = hArrS.indexOf("modelo");
       var iDetS = hArrS.indexOf("detalle del producto") !== -1 ? hArrS.indexOf("detalle del producto") : hArrS.findIndex(function (x) { return x.indexOf("detalle") !== -1; });
       var iMetaS = hArrS.findIndex(function (x) { return x.indexOf("meta") !== -1 || x.indexOf("faltante") !== -1; });
-      var iS1S = hArrS.findIndex(function (x) { return x.indexOf("sem 1") !== -1; });
-      var iS2S = hArrS.findIndex(function (x) { return x.indexOf("sem 2") !== -1; });
-      var iS3S = hArrS.findIndex(function (x) { return x.indexOf("sem 3") !== -1; });
-      var iS4S = hArrS.findIndex(function (x) { return x.indexOf("sem 4") !== -1; });
-      var iS5S = hArrS.findIndex(function (x) { return x.indexOf("sem 5") !== -1; });
+      var iIdxSemS = [];
+      for (var wS = 1; wS <= 10; wS++) iIdxSemS.push(idxColSemDash_(hArrS, wS));
+      var iSinS = hArrS.findIndex(function (x) { return x.indexOf("sin programar") !== -1; });
+      var iTermS = hArrS.findIndex(function (x) { return x.indexOf("término") !== -1 || x.indexOf("termino") !== -1; });
       var iEstS = hArrS.findIndex(function (x) { return x.indexOf("estado") !== -1; });
       var iGenS = hArrS.indexOf("genero"), iColS = hArrS.indexOf("color"), iTalS = hArrS.indexOf("talla");
       var iLinS = hArrS.indexOf("linea"), iCapS = hArrS.findIndex(function (x) { return x.indexOf("cap produccion") !== -1; });
@@ -4454,24 +4639,38 @@ function obtenerDatosDashboardCompleto() {
         var modVal = (iModS !== -1 && String(dps[is][iModS]).trim() !== "")
           ? String(dps[is][iModS]).trim()
           : (skuToModelo[skuVal] || detVal.split(" ")[0]);
+        var acumS = iIdxSemS.map(function (ix) { return ix !== -1 ? dps[is][ix] : 0; });
+        var weeksS = semanasDeAcum_(acumS);
 
         resp.proySku.push({
           sku: skuVal, detalle: detVal, modelo: modVal,
           meta: iMetaS !== -1 ? (Number(dps[is][iMetaS]) || 0) : 0,
-          s1: iS1S !== -1 ? dps[is][iS1S] : 0, s2: iS2S !== -1 ? dps[is][iS2S] : 0,
-          s3: iS3S !== -1 ? dps[is][iS3S] : 0, s4: iS4S !== -1 ? dps[is][iS4S] : 0, s5: iS5S !== -1 ? dps[is][iS5S] : 0,
-          estado: iEstS !== -1 ? String(dps[is][iEstS]) : "",
-          genero: iGenS !== -1 ? String(dps[is][iGenS]) : "",
-          color: iColS !== -1 ? String(dps[is][iColS]) : "",
-          talla: iTalS !== -1 ? String(dps[is][iTalS]) : "",
-          linea: iLinS !== -1 ? String(dps[is][iLinS]) : "",
+          weeks: weeksS,
+          s1: weeksS[0] || 0, s2: weeksS[1] || 0, s3: weeksS[2] || 0, s4: weeksS[3] || 0, s5: weeksS[4] || 0,
+          sin: iSinS !== -1 ? numCeldaDash_(dps[is][iSinS]) : 0,
+          termino: iTermS !== -1 ? fmtFechaDash_(dps[is][iTermS], ss.getSpreadsheetTimeZone()) : "",
+          estado: iEstS !== -1 ? String(dps[is][iEstS] || "") : "",
+          genero: iGenS !== -1 ? String(dps[is][iGenS] || "") : "",
+          color: iColS !== -1 ? String(dps[is][iColS] || "") : "",
+          talla: iTalS !== -1 ? String(dps[is][iTalS] || "") : "",
+          linea: iLinS !== -1 ? String(dps[is][iLinS] || "") : "",
           cap: iCapS !== -1 ? (Number(dps[is][iCapS]) || 0) : 0,
-          tipo: iTipoS !== -1 ? String(dps[is][iTipoS]) : "",
+          tipo: iTipoS !== -1 ? String(dps[is][iTipoS] || "") : "",
           acumulado: true
         });
       }
     }
   }
+
+  resp.pendientes = leerPendienteDashboard_(ss);
+  var alm = leerAlmacenDashboard_(ss);
+  resp.almacenModelo = alm.modelo;
+  resp.almacenSku = alm.sku;
+  var capsModelo = {};
+  resp.proySku.forEach(function (s) {
+    if (s.modelo && s.cap) capsModelo[s.modelo] = s.cap;
+  });
+  resp.supuestos = supuestosDashboard_(capsModelo);
 
   return JSON.stringify({ success: true, data: resp, version: VERSION_SISTEMA });
 }
