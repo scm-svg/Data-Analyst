@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build / update DASHBOARD TOALLAS ESTAMPADAS.html from sales, inventory and transit Excel files."""
+"""Build / update Sublimada Dashboard.html from sales, inventory and transit Excel files."""
 
 import json
 import re
@@ -9,12 +9,12 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "DASHBOARD TOALLAS ESTAMPADAS.html"
+TEMPLATE = ROOT / "Sublimada Dashboard.html"
 SOURCE_HTML = Path("/home/ubuntu/.cursor/projects/workspace/uploads/DASHBOARD_TOALLAS_ESTAMPADAS_29d0.html")
 SALES_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/VENTAS_ACTUALIZADAS_TOALLAS_0a56.xlsx")
 INV_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/TOALLA_ESTAMPADA_INVENTARIO_ACTUAL4_e0fa.xlsx")
 TRANSIT_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Compras_Marzo_-_TOALLAS_ESTAMPADAS_e9cb.xlsx")
-OUTPUT = ROOT / "DASHBOARD TOALLAS ESTAMPADAS.html"
+OUTPUT = ROOT / "Sublimada Dashboard.html"
 
 G2 = "TOALLA ESTAMPADA 2.0"
 LEAD_TIME_MONTHS = 3.5
@@ -703,6 +703,19 @@ function rDecisiones(){
 def patch_html(before: str, after: str, data: dict) -> str:
     dr = data["date_range"]
 
+    before = re.sub(
+        r"<title>[^<]*</title>",
+        "<title>Sublimada Dashboard · Toallas Estampadas</title>",
+        before,
+        count=1,
+    )
+    before = re.sub(
+        r"<h1>[^<]*<em id=\"titleModelo\">",
+        '<h1>Sublimada Dashboard · <em id="titleModelo">',
+        before,
+        count=1,
+    )
+
     if ".inv-summary" not in before:
         before = before.replace("@media print{", INV_CSS + "\n@media print{")
 
@@ -723,8 +736,8 @@ def patch_html(before: str, after: str, data: dict) -> str:
             before = before.replace('<div class="sec" id="sec-decisiones">', INVENTARIO_HTML + '\n<div class="sec" id="sec-decisiones">')
 
     before = re.sub(
-        r'<div class="footer">Toallas Estampadas · Dashboard de Ventas con Género del Cliente · [^<]+</div>',
-        f'<div class="footer">Toallas Estampadas · Dashboard de Ventas con Género del Cliente · {dr} · Somos Cuadro</div>',
+        r'<div class="footer">(?:Sublimada Dashboard · )?Toallas Estampadas(?: · Dashboard de Ventas con Género del Cliente)? · [^<]+</div>',
+        f'<div class="footer">Sublimada Dashboard · Toallas Estampadas · {dr} · Somos Cuadro</div>',
         before,
     )
     before = re.sub(
@@ -747,24 +760,36 @@ def patch_html(before: str, after: str, data: dict) -> str:
     )
 
     # KPI header: add transit
-    after = after.replace(
-        "'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'+gStk.toLocaleString()+'</div><div class=\"kl\">Stock</div><div class=\"ksub\">actualizado</div></div>'+",
+    after = re.sub(
+        r"'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'\+gStk\.toLocaleString\(\)\+'</div><div class=\"kl\">Stock(?: PT)?</div><div class=\"ksub\">[^<]*</div></div>'\+",
         "'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'+gStk.toLocaleString()+'</div><div class=\"kl\">Stock PT</div><div class=\"ksub\">actualizado</div></div>'+\n    '<div class=\"kpib\"><div class=\"kv\" style=\"color:#a855f7\">'+(DATA.transit_total||0).toLocaleString()+'</div><div class=\"kl\">En Tránsito</div><div class=\"ksub\">Mar '+((DATA.transit_eta||'').slice(5,7)||'')+'</div></div>'+",
+        after,
+        count=1,
     )
 
     # Alerts
     last_m = data["meses_order"][-1].replace("-", " ").title()
-    after = re.sub(
-        r"alerts\.push\(\{type:'info',text:'📅 [^']+'\}\);",
-        f"alerts.push({{type:'info',text:'📅 {last_m} con datos parciales'}});",
-        after,
-        count=1,
-    )
-    if "transito" not in after[after.find("function renderAlertas"):after.find("function rResumen")]:
-        after = after.replace(
-            "alerts.push({type:'info',text:'📦 Stock Taller:",
-            "alerts.push({type:'info',text:'🚢 En tránsito: '+(DATA.transit_total||0).toLocaleString()+' und 2.0 · ETA '+(DATA.transit_eta||'—')});\n  alerts.push({type:'info',text:'📦 Stock Taller:",
+    ra_start = after.find("function renderAlertas()")
+    ra_end = after.find("function rResumen", ra_start)
+    if ra_start != -1 and ra_end != -1:
+        ra = after[ra_start:ra_end]
+        ra = re.sub(
+            r"\n  alerts\.push\(\{type:'info',text:'🚢 En tránsito:.*?\}\);",
+            "",
+            ra,
         )
+        if "transit_total" not in ra:
+            ra = ra.replace(
+                "alerts.push({type:'info',text:'📦 Stock Taller:",
+                "alerts.push({type:'info',text:'🚢 En tránsito: '+(DATA.transit_total||0).toLocaleString()+' und 2.0 · ETA '+(DATA.transit_eta||'—')});\n  alerts.push({type:'info',text:'📦 Stock Taller:",
+            )
+        ra = re.sub(
+            r"alerts\.push\(\{type:'info',text:'📅 [^']+'\}\);",
+            f"alerts.push({{type:'info',text:'📅 {last_m} con datos parciales'}});",
+            ra,
+            count=1,
+        )
+        after = after[:ra_start] + ra + after[ra_end:]
 
     # Replace old decisiones JS block
     after = re.sub(r"// ── DECISIONES ──.*?/\* ── EXPORT / FULLSCREEN ── \*/", EXTRA_JS + "\n/* ── EXPORT / FULLSCREEN ── */", after, flags=re.DOTALL)
