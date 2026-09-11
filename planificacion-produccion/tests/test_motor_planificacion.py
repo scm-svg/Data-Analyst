@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.22 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.25 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -12,6 +12,8 @@ BANDA_URGENTE = 2
 BANDA_RESTO = 3
 DIAS_LABORALES = 5
 DIAS_ENTRADA_ALMACEN = 4
+FRACCION_APOYO_L1 = 0.5
+DIAS_REMANENTE_CORTO_L2 = 2
 MAX_MODELOS_LINEA5 = 2
 MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
 LOTE_RUEDA_LINEA5 = 5
@@ -95,6 +97,24 @@ def genero_de(t):
     if len(parts) >= 2 and es_token_genero(parts[-1]):
         return parts[-1]
     return g or ""
+
+
+def parsear_semana_apoyo(txt, max_sem):
+    s = str("" if txt is None else txt).strip()
+    m = re.search(r"(\d+)", s)
+    if not m:
+        return 0
+    n = int(m.group(1))
+    if 1 <= n <= max_sem:
+        return n
+    return 0
+
+
+def apoyo_l1_activo_en_dia(apoyo, d):
+    if not apoyo or not apoyo.get("activo"):
+        return False
+    sem = (int(d) // DIAS_LABORALES) + 1
+    return sem >= int(apoyo.get("desde_semana") or 0)
 
 
 def cap_de_tarea(t, lin, caps_lineas):
@@ -352,21 +372,171 @@ def banda_de(t):
     return BANDA_RESTO
 
 
-def faltante_de_fila(solicitada, producida=0, faltante=None):
-    if producida is None:
-        producida = 0
+def faltante_efectivo(solicitada, producida=0, faltante_celda="", hay_prod_col=True, hay_falt_celda=False):
+    """Espejo de faltanteEfectivo_: la columna Faltante es la meta; sol-prod solo si está vacía."""
     sol = float(solicitada or 0)
     prod = float(producida or 0)
-    if prod or solicitada is not None:
-        calc = max(0.0, sol - prod)
-        if faltante is None or faltante == "":
-            return calc
-    if faltante not in (None, ""):
+    falt_n = float("nan")
+    if hay_falt_celda and faltante_celda not in (None, ""):
         try:
-            return float(faltante)
+            falt_n = float(faltante_celda)
         except (TypeError, ValueError):
-            return calc if "calc" in dir() else 0.0
-    return max(0.0, sol - prod)
+            falt_n = float("nan")
+    elif hay_falt_celda:
+        hay_falt_celda = False
+    if hay_falt_celda and falt_n == falt_n:
+        return max(0.0, falt_n)
+    if hay_prod_col:
+        return max(0.0, sol - prod)
+    return max(0.0, sol)
+
+
+def faltante_de_fila(solicitada, producida=0, faltante=None):
+    hay_falt = faltante not in (None, "")
+    return faltante_efectivo(solicitada, producida, faltante if hay_falt else "", True, hay_falt)
+
+
+def clave_mo(t):
+    mo = norm(t.get("mo")).upper()
+    tipo = "E" if t.get("esEspecial") else "R"
+    if mo:
+        return mo + "||" + tipo
+    return "SKU:" + norm(t.get("sku")).upper() + "||" + tipo
+
+
+def mos_de_tarea(t):
+    mo = t.get("mo")
+    if mo is None or mo == "":
+        return []
+    return [m.strip() for m in str(mo).split(",") if m.strip()]
+
+
+def asegurar_buckets_semana(obj, n_sem):
+    obj.setdefault("mosPorSemana", [])
+    obj.setdefault("solicitadaPorSemana", [])
+    obj.setdefault("clavesSemana", [])
+    while len(obj["mosPorSemana"]) < n_sem:
+        obj["mosPorSemana"].append(set())
+        obj["solicitadaPorSemana"].append(0)
+        obj["clavesSemana"].append({})
+    return obj
+
+
+def registrar_tarea_en_semana(obj, w, t, n_sem):
+    if w < 0 or w >= n_sem or not t or not (t.get("cantidad") or 0) > 0:
+        return
+    asegurar_buckets_semana(obj, n_sem)
+    for m in mos_de_tarea(t):
+        obj["mosPorSemana"][w].add(m)
+    k = clave_mo(t)
+    if not obj["clavesSemana"][w].get(k):
+        obj["clavesSemana"][w][k] = True
+        obj["solicitadaPorSemana"][w] += t["cantidad"]
+
+
+def agregar_conteo_semanal(tareas, n_sem=10, dias_lab=5):
+    """Espejo de la agregación post-plan: MOs y solicitada por semana, Línea solo sem 1."""
+    info_modelo = {}
+    mapa_global = {}
+    consol_linea = {str(i): {} for i in range(1, 6)}
+    for t in tareas:
+        modelo = t.get("modelo")
+        if modelo not in info_modelo:
+            info_modelo[modelo] = {
+                "solicitada": 0,
+                "porSemana": [0] * n_sem,
+                "mos": set(),
+            }
+            asegurar_buckets_semana(info_modelo[modelo], n_sem)
+        im = info_modelo[modelo]
+        im["solicitada"] += t.get("cantidad") or 0
+        for m in mos_de_tarea(t):
+            im["mos"].add(m)
+        plan = t.get("plan") or {}
+        for lin, arr in plan.items():
+            total_linea = sum(arr or [])
+            if total_linea <= 0:
+                continue
+            sem1 = sum((arr or [])[:dias_lab])
+            if sem1 > 0:
+                k_lin = "%s_%s_%s" % (t.get("sku"), t.get("mo"), "E" if t.get("esEspecial") else "R")
+                if k_lin not in consol_linea[str(lin)]:
+                    consol_linea[str(lin)][k_lin] = {
+                        "mo": t.get("mo"),
+                        "sku": t.get("sku"),
+                        "solicitada": t.get("cantidad") or 0,
+                        "sem1Linea": 0,
+                        "totalLinea": 0,
+                    }
+                cl = consol_linea[str(lin)][k_lin]
+                cl["sem1Linea"] += sem1
+                cl["totalLinea"] += total_linea
+            clave = str(lin) + "_" + str(modelo)
+            if clave not in mapa_global:
+                mapa_global[clave] = {
+                    "linea": str(lin),
+                    "modelo": modelo,
+                    "solicitada": 0,
+                    "dias": [0] * (n_sem * dias_lab),
+                    "mos": set(),
+                }
+                asegurar_buckets_semana(mapa_global[clave], n_sem)
+            mg = mapa_global[clave]
+            mg["solicitada"] += total_linea
+            for d, v in enumerate(arr or []):
+                if d < len(mg["dias"]):
+                    mg["dias"][d] += v
+                w = d // dias_lab
+                if w < n_sem:
+                    im["porSemana"][w] += v
+                if v > 0 and w < n_sem:
+                    registrar_tarea_en_semana(mg, w, t, n_sem)
+                    registrar_tarea_en_semana(im, w, t, n_sem)
+                    for m in mos_de_tarea(t):
+                        mg["mos"].add(m)
+    return info_modelo, mapa_global, consol_linea
+
+
+def filas_tablero_semana(mapa_global, ws, dias_lab=5):
+    filas = []
+    for reg in mapa_global.values():
+        ini = ws * dias_lab
+        vals = (reg.get("dias") or [])[ini:ini + dias_lab]
+        plan = sum(vals)
+        if plan <= 0:
+            continue
+        mos = len(reg["mosPorSemana"][ws]) if ws < len(reg.get("mosPorSemana") or []) else 0
+        sol = reg["solicitadaPorSemana"][ws] if ws < len(reg.get("solicitadaPorSemana") or []) else 0
+        filas.append({
+            "linea": reg["linea"],
+            "modelo": reg["modelo"],
+            "mos": mos,
+            "solicitada": sol,
+            "plan": plan,
+        })
+    return filas
+
+
+def filas_resumen_semana(info_modelo, ws):
+    filas = []
+    for modelo, im in info_modelo.items():
+        plan = im["porSemana"][ws] if ws < len(im.get("porSemana") or []) else 0
+        if plan <= 0:
+            continue
+        mos = len(im["mosPorSemana"][ws]) if ws < len(im.get("mosPorSemana") or []) else 0
+        meta = im["solicitadaPorSemana"][ws] if ws < len(im.get("solicitadaPorSemana") or []) else 0
+        if meta <= 0:
+            meta = plan
+        filas.append({"modelo": modelo, "mos": mos, "meta": meta, "plan": plan})
+    return filas
+
+
+def filas_linea_semana1(consol_linea, lin):
+    return [r for r in consol_linea[str(lin)].values() if r.get("sem1Linea", 0) > 0]
+
+
+def filas_proyeccion(info, clave_solicitada="solicitada"):
+    return [k for k, v in info.items() if (v.get(clave_solicitada) or 0) > 0]
 
 
 def modelos_con_faltante(filas):
@@ -579,11 +749,12 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None):
-    """Motor v5.9.22: Día de inicio reclama L1-4 si el modelo tiene mejor prioridad."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
+    """Motor v5.9.25: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
+    apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     for t in tareas:
@@ -1087,6 +1258,61 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if debe_ceder_al_lote_familia(m, overflow):
                 break
 
+    def remanente_corto_linea2(m):
+        if not m:
+            return False
+        rest = restante_modelo(m)
+        if rest <= 0:
+            return False
+        cap = cap_modelo(m, "2")
+        if cap <= 0:
+            return False
+        return rest < DIAS_REMANENTE_CORTO_L2 * cap
+
+    def producir_lote_apoyo_l1(m, d):
+        lin = "1"
+        for t in m["tareas"]:
+            if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
+                continue
+            if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
+                continue
+            avail = FRACCION_APOYO_L1 - carga[lin][d]
+            if avail <= 0.001:
+                return 0
+            cap_lin = cap_de_tarea(t, lin, caps_lineas)
+            piezas = min(t["restante"], math.floor(avail * cap_lin + 1e-9))
+            if piezas <= 0:
+                continue
+            t["plan"][lin][d] += piezas
+            carga[lin][d] += piezas / cap_lin
+            t["restante"] -= piezas
+            t["planificada"] += piezas
+            return piezas
+        return 0
+
+    def modelo_apoyo_linea2(d):
+        if not apoyo_l1_activo_en_dia(apoyo_l1, d):
+            return None
+        noms = ocupante.get("2") or []
+        if not noms:
+            return None
+        m = modelos.get(noms[0])
+        if not m or restante_modelo(m) <= 0:
+            return None
+        if m["nombre"] in (ocupante.get("1") or []):
+            return None
+        return m
+
+    def producir_apoyo_l1_dia(d):
+        m = modelo_apoyo_linea2(d)
+        if not m:
+            return
+        guard = 0
+        while carga["1"][d] < FRACCION_APOYO_L1 - 0.001 and restante_modelo(m) > 0 and guard < 40:
+            guard += 1
+            if producir_lote_apoyo_l1(m, d) <= 0:
+                break
+
     def producir_rueda_linea5(noms, d, overflow):
         lin = "5"
         i = 0
@@ -1169,6 +1395,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
                 and not (tuvo_minima(modelos[nom]) and restante_minima(modelos[nom]) <= 0)
                 and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
+                and not (str(lin) == "2" and remanente_corto_linea2(modelos[nom]) and restante_modelo(modelos[nom]) <= 0)
             ]
             if carga[lin][d] <= before + 1e-6:
                 for nom in list(ocupante[lin]):
@@ -1203,6 +1430,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 t["lineaFija"] = cands[0]
                 linea_por_mo[t.get("mo") or t["sku"]] = cands[0]
                 load[cands[0]] += 0.01
+        producir_apoyo_l1_dia(d)
         for lin in list(ocupante):
             producir_linea_dia(lin, d)
     return tareas
@@ -2365,6 +2593,269 @@ class TestSecuenciaFlag(unittest.TestCase):
         self.assertTrue(secuencia_no_de_modelo({"rio kids": "NO"}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({"RIO KIDS": ""}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({}, "RIO KIDS"))
+
+
+class TestApoyoLinea1(unittest.TestCase):
+    def _t(self, sku, modelo, lineas, cant, **kw):
+        d = {
+            "sku": sku, "modelo": modelo, "mo": "MO-" + sku,
+            "cantidad": cant, "cap": 130, "lineas": list(lineas),
+            "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": cant,
+        }
+        d.update(kw)
+        return d
+
+    def _por(self, out, lin, d):
+        por = defaultdict(int)
+        for t in out:
+            por[t["modelo"]] += t["plan"][lin][d]
+        return dict((k, v) for k, v in por.items() if v > 0)
+
+    def test_parsear_semana_apoyo(self):
+        self.assertEqual(parsear_semana_apoyo("3", 10), 3)
+        self.assertEqual(parsear_semana_apoyo("semana 2", 10), 2)
+        self.assertEqual(parsear_semana_apoyo("Semana 10", 10), 10)
+        self.assertEqual(parsear_semana_apoyo("0", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("11", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("", 10), 0)
+        self.assertEqual(parsear_semana_apoyo("abc", 10), 0)
+
+    def test_apoyo_l1_activo_desde_semana(self):
+        apoyo = {"activo": True, "desde_semana": 2}
+        self.assertFalse(apoyo_l1_activo_en_dia(apoyo, 4))
+        self.assertTrue(apoyo_l1_activo_en_dia(apoyo, 5))
+        self.assertFalse(apoyo_l1_activo_en_dia({"activo": False, "desde_semana": 1}, 0))
+
+    def test_sin_apoyo_modelo_l2_no_sale_en_l1(self):
+        """Sin confirmar el apoyo, un modelo solo de L2 no produce en L1."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 650, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 650, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(self._por(out, "2", 0), {"MODELO L2": 130})
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
+
+    def test_apoyo_l1_50_comparte_con_nativo(self):
+        """Con apoyo, L2 produce 65 en L1 y el nativo de L1 se queda con 65."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 2000, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 2000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        d0_2 = self._por(out, "2", 0)
+        self.assertEqual(d0_2, {"MODELO L2": 130})
+        self.assertEqual(d0_1.get("MODELO L2"), 65, d0_1)
+        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
+        self.assertEqual(sum(d0_1.values()), 130)
+
+    def test_apoyo_l1_desde_semana_2_no_toca_semana_1(self):
+        """El 50% de L1 solo arranca en la semana pedida."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 3000, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 3000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=10, apoyo_l1={"activo": True, "desde_semana": 2})
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
+        d5_1 = self._por(out, "1", 5)
+        self.assertEqual(d5_1.get("MODELO L2"), 65, d5_1)
+        self.assertEqual(d5_1.get("NATIVO L1"), 65, d5_1)
+
+    def test_apoyo_l1_aunque_el_modelo_no_liste_linea1(self):
+        """El apoyo no exige que L2 liste la línea 1 en Por Hacer."""
+        tareas = [
+            self._t("L2", "SOLO L2", ["2"], 800, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        self.assertEqual(self._por(out, "2", 0), {"SOLO L2": 130})
+        self.assertEqual(self._por(out, "1", 0), {"SOLO L2": 65})
+
+    def test_remanente_corto_l2_pasa_al_siguiente_con_apoyo(self):
+        """Menos de 2 días en L2: el apoyo cierra el lote y el siguiente entra el mismo día."""
+        tareas = [
+            self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
+            self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
+            self._t("C", "NATIVO L1", ["1"], 2000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        d0_2 = self._por(out, "2", 0)
+        self.assertEqual(d0_1.get("CIERRE L2"), 65, d0_1)
+        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
+        self.assertEqual(d0_2.get("CIERRE L2"), 85, d0_2)
+        self.assertEqual(d0_2.get("SIGUIENTE L2"), 45, d0_2)
+        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "CIERRE L2"), 150)
+
+    def test_remanente_corto_l2_sin_apoyo_cede_al_cerrar(self):
+        """Sin apoyo, un remanente de menos de 2 días cierra y L2 pasa al siguiente."""
+        tareas = [
+            self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
+            self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        d0 = self._por(out, "2", 0)
+        d1 = self._por(out, "2", 1)
+        self.assertEqual(d0, {"CIERRE L2": 130})
+        self.assertEqual(d1.get("CIERRE L2"), 20, d1)
+        self.assertEqual(d1.get("SIGUIENTE L2"), 110, d1)
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "CIERRE L2"), 0)
+
+    def test_apoyo_no_duplica_si_l2_ya_ocupa_l1(self):
+        """Si el modelo de L2 ya corre en L1 (Urgente 1/2), L1 sigue al 100%, no a 50%+50%."""
+        tareas = [
+            self._t("U1", "URGENTE DOS", ["1", "2"], 1000, prioridadNum=1, mo="MO-U1"),
+            self._t("U2", "URGENTE DOS", ["1", "2"], 1000, prioridadNum=1, mo="MO-U2"),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        self.assertEqual(self._por(out, "1", 0), {"URGENTE DOS": 130})
+        self.assertEqual(self._por(out, "2", 0), {"URGENTE DOS": 130})
+
+
+class TestConteoSemanal(unittest.TestCase):
+    def _tarea(self, sku, modelo, mo, cant, plan, **kw):
+        t = {
+            "sku": sku, "modelo": modelo, "mo": mo, "cantidad": cant,
+            "esEspecial": False, "plan": plan,
+        }
+        t.update(kw)
+        return t
+
+    def test_faltante_columna_es_la_meta(self):
+        """La columna Faltante manda; sol-prod solo si Faltante está vacío."""
+        self.assertEqual(faltante_de_fila(30, 0, 0), 0)
+        self.assertEqual(faltante_de_fila(100, 20, 0), 0)
+        self.assertEqual(faltante_efectivo(100, 20, 0, True, True), 0)
+        self.assertEqual(faltante_de_fila(100, 20, ""), 80)
+        self.assertEqual(faltante_de_fila(100, 20, 15), 15)
+        self.assertEqual(faltante_efectivo(100, 0, 40, False, True), 40)
+        # Excel (12) RIO CAB MO=01513: Faltante 80, no sol-prod 43
+        self.assertEqual(faltante_de_fila(80, 37, 80), 80)
+        # Excel (12) SHORT SPORT R1 DAMA MO=00746: Faltante 80, no 73
+        self.assertEqual(faltante_de_fila(80, 7, 80), 80)
+        # Excel (12) SHORT SPORT R1 DAMA MO=00742: ya cubrió sol, Faltante 3
+        self.assertEqual(faltante_de_fila(25, 25, 3), 3)
+
+    def test_excel12_rio_cab_y_short_r1_meta_proyeccion(self):
+        """RIO CAB 1871 y SHORT SPORT R1 CAB+DAMA 202, no 1834 / 195."""
+        self.assertEqual(faltante_de_fila(80, 37, 80), 80)
+        r1 = [
+            (22, 0, 0), (47, 25, 0), (47, 47, 0), (47, 0, 47), (25, 25, 3), (80, 7, 80), (37, 37, 0),
+            (37, 37, 0), (25, 26, 0), (47, 22, 25), (47, 0, 47), (47, 25, 0), (22, 25, 0),
+        ]
+        dama = sum(faltante_de_fila(*r) for r in r1[:7])
+        cab = sum(faltante_de_fila(*r) for r in r1[7:])
+        self.assertEqual(dama, 130)
+        self.assertEqual(cab, 72)
+        self.assertEqual(dama + cab, 202)
+        self.assertEqual(sum(max(0, s - p) for s, p, _ in r1), 258)
+
+    def test_tablero_no_repite_mos_de_otras_semanas(self):
+        """COTTON-style: 16 MOs / 480 en el horizonte no deben salir en Semana 1."""
+        plan_s1 = {"2": [100, 0, 0, 0, 0] + [0] * 5}
+        plan_s2 = {"2": [0, 0, 0, 0, 0, 30, 0, 0, 0, 0]}
+        tareas = [
+            self._tarea("C1", "COTTON KIDS", "MO-01", 100, plan_s1),
+        ]
+        for i in range(2, 17):
+            tareas.append(self._tarea(
+                "C%02d" % i, "COTTON KIDS", "MO-%02d" % i, 25, plan_s2,
+            ))
+        info, mapa, consol = agregar_conteo_semanal(tareas, n_sem=2)
+        tab1 = filas_tablero_semana(mapa, 0)
+        tab2 = filas_tablero_semana(mapa, 1)
+        self.assertEqual(len(tab1), 1)
+        self.assertEqual(tab1[0]["mos"], 1)
+        self.assertEqual(tab1[0]["solicitada"], 100)
+        self.assertEqual(tab1[0]["plan"], 100)
+        self.assertEqual(tab2[0]["mos"], 15)
+        self.assertEqual(tab2[0]["solicitada"], 375)
+        res1 = filas_resumen_semana(info, 0)
+        res2 = filas_resumen_semana(info, 1)
+        self.assertEqual(res1[0]["mos"], 1)
+        self.assertEqual(res1[0]["meta"], 100)
+        self.assertEqual(res2[0]["mos"], 15)
+        self.assertEqual(info["COTTON KIDS"]["solicitada"], 475)
+        self.assertEqual(len(info["COTTON KIDS"]["mos"]), 16)
+
+    def test_resumen_omite_modelo_con_cero_en_la_semana(self):
+        tareas = [
+            self._tarea("A1", "ACTIVO", "MO-A", 50, {"1": [50, 0, 0, 0, 0, 0, 0, 0, 0, 0]}),
+            self._tarea("B1", "FUTURO", "MO-B", 1200, {"4": [0, 0, 0, 0, 0, 80, 80, 80, 80, 80]}),
+        ]
+        info, mapa, _ = agregar_conteo_semanal(tareas, n_sem=2)
+        res1 = {r["modelo"]: r for r in filas_resumen_semana(info, 0)}
+        self.assertIn("ACTIVO", res1)
+        self.assertNotIn("FUTURO", res1)
+        tab1 = {r["modelo"]: r for r in filas_tablero_semana(mapa, 0)}
+        self.assertIn("ACTIVO", tab1)
+        self.assertNotIn("FUTURO", tab1)
+        self.assertEqual(sum(r["mos"] for r in res1.values()), 1)
+
+    def test_linea_omite_mo_solo_de_semanas_futuras(self):
+        tareas = [
+            self._tarea("N1", "AHORA", "MO-N", 80, {"4": [80, 0, 0, 0, 0, 0, 0, 0, 0, 0]}),
+            self._tarea("C1", "CARRERA", "MO-C", 1200, {"4": [0, 0, 0, 0, 0] + [80] * 5}),
+        ]
+        _, _, consol = agregar_conteo_semanal(tareas, n_sem=2)
+        filas = filas_linea_semana1(consol, 4)
+        mos = {f["mo"] for f in filas}
+        self.assertIn("MO-N", mos)
+        self.assertNotIn("MO-C", mos)
+        ahora = [f for f in filas if f["mo"] == "MO-N"][0]
+        self.assertEqual(ahora["solicitada"], 80)
+
+    def test_proyeccion_omite_faltante_cero(self):
+        info = {
+            "OK": {"solicitada": 30, "porSemana": [10, 20]},
+            "CERO": {"solicitada": 0, "porSemana": [0, 0]},
+        }
+        self.assertEqual(filas_proyeccion(info), ["OK"])
+
+
+def semanas_de_acum(vals):
+    prev = 0
+    out = []
+    for v in vals:
+        if v in (None, "", "--"):
+            x = 0
+        else:
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                x = 0
+        if x > 0:
+            out.append(max(0.0, x - prev))
+            prev = x
+        else:
+            out.append(0.0)
+    return out
+
+
+class TestDashboardInfo(unittest.TestCase):
+    def test_acum_a_cantidad_semanal(self):
+        self.assertEqual(semanas_de_acum([105, 480, "--", "--"]), [105, 375, 0, 0])
+        self.assertEqual(semanas_de_acum(["--", 114, 192]), [0, 114, 78])
+
+    def test_payload_json_tiene_pestanias(self):
+        import json, os
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertIn("semanas", d)
+        self.assertIn("proySku", d)
+        self.assertIn("pendientes", d)
+        self.assertIn("almacenModelo", d)
+        self.assertIn("supuestos", d)
+        self.assertEqual(d["supuestos"]["leadTimeAlmacenDias"], 4)
+        self.assertEqual(d["supuestos"]["apoyoL1Fraccion"], 0.5)
+        self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 1"]["carga"]), 0)
+        cotton = [s for s in d["proySku"] if s["modelo"] == "COTTON KIDS"]
+        self.assertTrue(cotton)
+        self.assertEqual(len(cotton[0]["weeks"]), 10)
 
 
 if __name__ == "__main__":
