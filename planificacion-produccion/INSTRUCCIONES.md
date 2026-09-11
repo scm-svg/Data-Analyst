@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.24 — códigos listos para pegar
+# Planificación de Producción v5.9.25 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -8,7 +8,7 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`.
 3. Guarda el proyecto. Recarga la hoja. Corre **2️⃣ Actualizar Priorización** si hace falta crear/verificar `Priorizacion - SKUs`, y luego **3️⃣ Generar Planificación**.
 
-Esta versión parte del motor bueno **5.9.15**. En 5.9.24, cada pestaña semanal (y el resumen ejecutivo) cuenta **solo las MOs y el faltante de esa semana**: ya no se copian las 365 MOs ni el pedido completo en Semana 1–10. Si **Faltante = 0**, esa MO no entra al plan. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**, y desde qué semana. Ese modelo produce también en L1 a media capacidad (cumple más rápido). Si en L2 quedan **menos de 2 días**, la línea pasa al siguiente programado.
+Esta versión parte del motor bueno **5.9.15**. En 5.9.25, la **Meta (Faltante)** de Proyeccion es la columna **Faltante** de Por Hacer (RIO CAB 1871, SHORT SPORT R1 202), no `Cantidad Solicitada − Cantida Producida`. Si Faltante está vacío, se usa sol−prod; si es 0, la MO no entra. En 5.9.24, cada pestaña semanal cuenta **solo las MOs y el faltante de esa semana**. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**, y desde qué semana. Ese modelo produce también en L1 a media capacidad (cumple más rápido). Si en L2 quedan **menos de 2 días**, la línea pasa al siguiente programado.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -31,9 +31,10 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.24 (base 5.9.15 + Secuencia=No)
+## Motor v5.9.25 (base 5.9.15 + Secuencia=No)
 
-- **Conteo por semana (MOs y cantidades):** en `Planificacion` / `Semana 2`–`Semana 10` las columnas **MOs** y **Solicitada** son de esa semana (MOs con producción > 0). El resumen ejecutivo solo lista modelos que fabrican esa semana. Las pestañas `Linea 1`–`Linea 5` omiten MOs que solo salen en semanas futuras. `Proyeccion` / `Proyeccion - SKUS` omiten filas con faltante 0. Si la columna **Faltante** dice 0, la MO no entra aunque `Cantidad Solicitada − Cantida Producida` sea positivo.
+- **Meta = columna Faltante:** `Proyeccion` y el backlog usan el número de **Faltante** en `Por Hacer`. No se recorta a `Cantidad Solicitada − Cantida Producida` (eso dejaba RIO CAB en 1834 en vez de 1871, y SHORT SPORT R1 CAB+DAMA en 195 en vez de 202). Si Faltante está vacío, sí se usa sol−prod. Si Faltante es 0, la MO no entra.
+- **Conteo por semana (MOs y cantidades):** en `Planificacion` / `Semana 2`–`Semana 10` las columnas **MOs** y **Solicitada** son de esa semana (MOs con producción > 0). El resumen ejecutivo solo lista modelos que fabrican esa semana. Las pestañas `Linea 1`–`Linea 5` omiten MOs que solo salen en semanas futuras. `Proyeccion` / `Proyeccion - SKUS` omiten filas con faltante 0.
 - **Apoyo L1 50% al modelo de L2:** al pulsar **Generar Planificación** el sistema pregunta si quieres disponer del 50% de la Línea 1. Si aceptas, pide la semana de inicio (1 = actual). Desde esa semana, el modelo que está corriendo en L2 también produce en L1 a la **mitad** de su `Cap Produccion por Dia` (p. ej. 65 si la cap es 130). El ocupante nativo de L1 se queda con el otro 50%. No hace falta que L2 liste la línea 1 en Por Hacer. La MO sigue anclada a L2; L1 es solo apoyo. Si ese modelo ya ocupa L1 (Urgente con 1 y 2), no se duplica.
 - **Remanente corto en L2:** si al modelo de L2 le quedan **menos de 2 días** de producción, termina (el apoyo L1 acelera el cierre) y L2 pasa al **siguiente programado**. No se queda ocupando la línea por un lote chico.
 - **Día de inicio reclama L1-4:** si MAR KIDS (Urgente) y RIO CAB (Media) comparten línea, RIO corre hasta el Día de inicio de MAR; ese día MAR entra y RIO cede. Vale para Especial, mínima, Urgente o mejor fecha/prioridad. **L5** no echa a nadie (sigue en paralelo).

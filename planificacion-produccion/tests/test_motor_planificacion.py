@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.24 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.25 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -373,7 +373,7 @@ def banda_de(t):
 
 
 def faltante_efectivo(solicitada, producida=0, faltante_celda="", hay_prod_col=True, hay_falt_celda=False):
-    """Espejo de faltanteEfectivo_: Faltante=0 gana aunque sol-prod > 0."""
+    """Espejo de faltanteEfectivo_: la columna Faltante es la meta; sol-prod solo si está vacía."""
     sol = float(solicitada or 0)
     prod = float(producida or 0)
     falt_n = float("nan")
@@ -384,14 +384,8 @@ def faltante_efectivo(solicitada, producida=0, faltante_celda="", hay_prod_col=T
             falt_n = float("nan")
     elif hay_falt_celda:
         hay_falt_celda = False
-    if hay_falt_celda and falt_n == falt_n and falt_n <= 0:
-        return 0.0
-    if hay_prod_col:
-        por_prod = max(0.0, sol - prod)
-        if por_prod > 0:
-            return por_prod
-    if hay_falt_celda and falt_n == falt_n and falt_n > 0:
-        return falt_n
+    if hay_falt_celda and falt_n == falt_n:
+        return max(0.0, falt_n)
     if hay_prod_col:
         return max(0.0, sol - prod)
     return max(0.0, sol)
@@ -756,7 +750,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.24: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
+    """Motor v5.9.25: apoyo L1 50% al modelo de L2 y remanente corto cede L2."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -2730,13 +2724,34 @@ class TestConteoSemanal(unittest.TestCase):
         t.update(kw)
         return t
 
-    def test_faltante_cero_gana_aunque_sol_menos_prod_sea_positivo(self):
+    def test_faltante_columna_es_la_meta(self):
+        """La columna Faltante manda; sol-prod solo si Faltante está vacío."""
         self.assertEqual(faltante_de_fila(30, 0, 0), 0)
         self.assertEqual(faltante_de_fila(100, 20, 0), 0)
         self.assertEqual(faltante_efectivo(100, 20, 0, True, True), 0)
         self.assertEqual(faltante_de_fila(100, 20, ""), 80)
-        self.assertEqual(faltante_de_fila(100, 20, 15), 80)
+        self.assertEqual(faltante_de_fila(100, 20, 15), 15)
         self.assertEqual(faltante_efectivo(100, 0, 40, False, True), 40)
+        # Excel (12) RIO CAB MO=01513: Faltante 80, no sol-prod 43
+        self.assertEqual(faltante_de_fila(80, 37, 80), 80)
+        # Excel (12) SHORT SPORT R1 DAMA MO=00746: Faltante 80, no 73
+        self.assertEqual(faltante_de_fila(80, 7, 80), 80)
+        # Excel (12) SHORT SPORT R1 DAMA MO=00742: ya cubrió sol, Faltante 3
+        self.assertEqual(faltante_de_fila(25, 25, 3), 3)
+
+    def test_excel12_rio_cab_y_short_r1_meta_proyeccion(self):
+        """RIO CAB 1871 y SHORT SPORT R1 CAB+DAMA 202, no 1834 / 195."""
+        self.assertEqual(faltante_de_fila(80, 37, 80), 80)
+        r1 = [
+            (22, 0, 0), (47, 25, 0), (47, 47, 0), (47, 0, 47), (25, 25, 3), (80, 7, 80), (37, 37, 0),
+            (37, 37, 0), (25, 26, 0), (47, 22, 25), (47, 0, 47), (47, 25, 0), (22, 25, 0),
+        ]
+        dama = sum(faltante_de_fila(*r) for r in r1[:7])
+        cab = sum(faltante_de_fila(*r) for r in r1[7:])
+        self.assertEqual(dama, 130)
+        self.assertEqual(cab, 72)
+        self.assertEqual(dama + cab, 202)
+        self.assertEqual(sum(max(0, s - p) for s, p, _ in r1), 258)
 
     def test_tablero_no_repite_mos_de_otras_semanas(self):
         """COTTON-style: 16 MOs / 480 en el horizonte no deben salir en Semana 1."""

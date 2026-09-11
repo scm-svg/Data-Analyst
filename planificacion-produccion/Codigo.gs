@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.24 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.25 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - META = COLUMNA FALTANTE: Proyeccion y el plan usan el valor de
+ *     Faltante en Por Hacer, no Cantidad Solicitada − Cantida Producida.
+ *     RIO CAB 1871 (no 1834) y SHORT SPORT R1 CAB+DAMA 202 (no 195).
+ *     Si Faltante está vacío, se usa sol−prod. Si Faltante es 0, la MO
+ *     no entra.
  *   - CONTEO POR SEMANA (MOs Y CANTIDADES): cada pestaña semanal, el
  *     resumen ejecutivo y las pestañas de Línea solo cuentan las MOs
  *     y el faltante de esa semana. Ya no se repiten las 365 MOs ni
@@ -109,7 +114,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.24";
+var VERSION_SISTEMA = "5.9.25";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -551,12 +556,7 @@ function faltanteEfectivo_(solicitada, producida, faltanteCelda, hayProdCol, hay
   var sol = Number(solicitada) || 0;
   var prod = Number(producida) || 0;
   var faltN = hayFaltCelda ? Number(faltanteCelda) : NaN;
-  if (hayFaltCelda && !isNaN(faltN) && faltN <= 0) return 0;
-  if (hayProdCol) {
-    var porProd = Math.max(0, sol - prod);
-    if (porProd > 0) return porProd;
-  }
-  if (hayFaltCelda && !isNaN(faltN) && faltN > 0) return faltN;
+  if (hayFaltCelda && !isNaN(faltN)) return Math.max(0, faltN);
   if (hayProdCol) return Math.max(0, sol - prod);
   return Math.max(0, sol);
 }
