@@ -49,9 +49,9 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .daycell b{display:block;font-size:.62rem;color:var(--mu);margin-bottom:4px}
 .pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem}
 .tl{width:100%;border-collapse:separate;border-spacing:0}
-.tl th,.tl td{padding:8px 6px;border-bottom:1px solid var(--brd);text-align:center}
-.tl th{font-size:.62rem;color:var(--mu);text-transform:uppercase;position:sticky;top:0;background:var(--surf)}
-.tl td.prod{text-align:left;font-weight:700;font-family:var(--fh);font-size:.78rem;white-space:nowrap;position:sticky;left:0;background:var(--surf)}
+.tl th,.tl td{padding:8px 6px;border-bottom:1px solid var(--brd);text-align:center;min-width:70px}
+.tl th{font-size:.62rem;color:var(--mu);text-transform:uppercase;position:sticky;top:0;background:var(--surf);z-index:2}
+.tl td.prod{text-align:left;font-weight:700;font-family:var(--fh);font-size:.74rem;white-space:nowrap;position:sticky;left:0;background:var(--surf);max-width:240px;overflow:hidden;text-overflow:ellipsis;min-width:200px;z-index:1}
 .tl-dots{display:flex;justify-content:center;gap:3px;flex-wrap:wrap}
 .note{background:var(--s2);border-left:3px solid var(--ac);padding:10px 12px;border-radius:8px;font-size:.78rem;color:var(--mu);margin-bottom:8px}
 .badge{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:999px}
@@ -59,8 +59,9 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .b-bad{background:rgba(239,68,68,.2);color:var(--rd)}
 .b-mut{background:var(--s3);color:var(--mu)}
 .expand{cursor:pointer;user-select:none}
-.expand:before{content:'▸ ';color:var(--ac)}
-.expand.open:before{content:'▾ '}
+.note.expand:before{content:'▸ ';color:var(--ac)}
+.note.expand.open:before{content:'▾ '}
+.tr-exp .chev{color:var(--ac);display:inline-block;width:14px}
 .sku-row td{background:var(--s2);font-size:.72rem}
 .cal-grid{display:grid;grid-template-columns:90px repeat(5,1fr);gap:6px}
 .err{color:var(--rd);padding:20px}
@@ -253,7 +254,7 @@ function renderSalida(){
     html+='<table class="ct"><thead><tr><th></th><th>Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th></tr></thead><tbody>';
     carga.forEach(function(c, mi){
       var id='w'+wi+'m'+mi;
-      html+='<tr class="expand" onclick="togSku(\''+id+'\','+wi+','+mi+')"><td></td><td>'+esc(c.modelo)+'</td><td><span class="chip '+linCls(c.linea)+'">'+String(c.linea).replace(/\D/g,'')+'</span></td><td class="num">'+fmtN(c.mos)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
+      html+='<tr class="tr-exp" onclick="togSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td><td>'+esc(c.modelo)+'</td><td><span class="chip '+linCls(c.linea)+'">'+String(c.linea).replace(/\D/g,'')+'</span></td><td class="num">'+fmtN(c.mos)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
       html+='<tr id="'+id+'" class="sku-row" style="display:none"><td colspan="6">Cargando SKUs…</td></tr>';
     });
     html+='</tbody></table></div>';
@@ -302,7 +303,7 @@ function renderSeg(){
       var dots=ls.map(function(l){ return '<span class="chip '+linCls(l)+'" title="Línea '+l+'">'+l+'</span>'; }).join('');
       return '<td><div class="tl-dots">'+dots+'</div></td>';
     }).join('');
-    return '<tr class="expand" onclick="togSeg('+i+')"><td class="prod">'+esc(m)+'</td>'+cells+'</tr><tr id="seg-'+i+'" style="display:none"><td colspan="'+(keys.length+1)+'" class="sku-row"></td></tr>';
+    return '<tr class="tr-exp" onclick="togSeg('+i+')"><td class="prod"><span class="chev">▸</span> '+esc(m)+'</td>'+cells+'</tr><tr id="seg-'+i+'" style="display:none"><td colspan="'+(keys.length+1)+'" class="sku-row"></td></tr>';
   }).join('');
   var legend=['1','2','3','4','5'].map(function(l){ return '<span class="chip '+linCls(l)+'">'+l+'</span> Línea '+l; }).join(' &nbsp; ');
   el.innerHTML='<div class="card"><h3>Seguimiento de modelos y líneas</h3><p class="sub">Cada punto es la línea donde corre el modelo esa semana (como A/B en el calendario de producto). Clic en el modelo para ver SKUs.</p><div style="margin-bottom:10px;font-size:.75rem;color:var(--mu)">'+legend+'</div><div class="ctwrap"><table class="tl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div></div>';
@@ -360,7 +361,7 @@ function renderAlm(){
   var html='<div class="card"><h3>Entrada de almacén</h3><p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Clic en el modelo para ver SKUs.</p>';
   html+='<div class="ctwrap"><table class="ct"><thead><tr><th></th><th>Modelo</th><th>MOs</th><th>Cantidad</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
   mods.forEach(function(m,i){
-    html+='<tr class="expand" onclick="togAlm('+i+')"><td></td><td>'+esc(m.modelo)+'</td><td class="num">'+fmtN(m.mos)+'</td><td class="num">'+fmtN(m.cantidad)+'</td><td>'+esc(m.salidaCostura)+'</td><td>'+esc(m.entradaAlmacen)+'</td></tr>';
+    html+='<tr class="tr-exp" onclick="togAlm('+i+')"><td><span class="chev">▸</span></td><td>'+esc(m.modelo)+'</td><td class="num">'+fmtN(m.mos)+'</td><td class="num">'+fmtN(m.cantidad)+'</td><td>'+esc(m.salidaCostura)+'</td><td>'+esc(m.entradaAlmacen)+'</td></tr>';
     html+='<tr id="alm-'+i+'" style="display:none"><td colspan="6" class="sku-row"></td></tr>';
   });
   html+='</tbody></table></div></div>';
@@ -422,8 +423,16 @@ document.querySelectorAll('.tab').forEach(function(b){
     document.querySelectorAll('.sec').forEach(function(x){ x.classList.remove('active'); });
     b.classList.add('active');
     document.getElementById(b.getAttribute('data-tab')).classList.add('active');
+    try { history.replaceState(null,'','#'+b.getAttribute('data-tab')); } catch(e) {}
   });
 });
+(function(){
+  var h=(location.hash||'').replace('#','');
+  if(h){
+    var b=document.querySelector('.tab[data-tab="'+h+'"]');
+    if(b) b.click();
+  }
+})();
 boot();
 </script>
 </body>
