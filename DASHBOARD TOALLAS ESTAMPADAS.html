@@ -155,8 +155,8 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
 .inv-row .ih{display:flex;align-items:center;gap:10px;padding:13px 15px;cursor:pointer}
 .badge-new{background:rgba(249,115,22,.15);color:#f97316;border:1px solid #f9731633;border-radius:6px;padding:1px 7px;font-size:.62rem;font-weight:800}
 .dnm{border-bottom:1px dotted rgba(165,180,252,.55);cursor:help}
-#dTip{position:fixed;z-index:12000;display:none;pointer-events:none;background:var(--surf);border:1px solid var(--brd);border-radius:14px;padding:8px;box-shadow:0 16px 48px rgba(0,0,0,.5);width:196px}
-#dTip img{width:180px;height:180px;object-fit:cover;border-radius:8px;display:block;background:var(--s2)}
+#dTip{position:fixed;z-index:12000;display:none;pointer-events:none;background:var(--surf);border:1px solid var(--brd);border-radius:14px;padding:8px;box-shadow:0 16px 48px rgba(0,0,0,.5);width:168px}
+#dTip img{width:152px;height:228px;object-fit:contain;border-radius:8px;display:block;background:#12131a}
 #dTip b{display:block;margin-top:6px;font-size:.72rem;text-align:center;font-family:var(--fh)}
 @media print{body{background:#fff!important;color:#111!important}.hdr,.mbar,.fbar,.ebar,.tabs,.footer,.fbtn,.factive,#periodBtns,.ebar button,#alertBar,.theme-btn,.expand-btn,#dTip{display:none!important}.sec{display:block!important;page-break-inside:avoid}.card{background:#fff!important;border:1px solid #ddd!important;color:#111!important;page-break-inside:avoid}}
 </style>
@@ -405,8 +405,8 @@ function showDTip(name,x,y,src){
   tip.dataset.src=src||'dom';
   tip.style.display='block';
   var left=x+18, top=y+18;
-  if(left+210>innerWidth) left=Math.max(8,x-210);
-  if(top+230>innerHeight) top=Math.max(8,y-230);
+  if(left+180>innerWidth) left=Math.max(8,x-180);
+  if(top+280>innerHeight) top=Math.max(8,y-280);
   tip.style.left=left+'px';
   tip.style.top=top+'px';
 }
