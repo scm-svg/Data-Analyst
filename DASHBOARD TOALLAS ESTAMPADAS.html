@@ -324,6 +324,7 @@ var DATA={"raw_rows":[{"t":"SAMBIL CHACAO","g":"Dama","c":"Canaima","m":"mayo-20
   DATA.total=DATA.raw_rows.reduce(function(s,r){return s+(r.v||0);},0);
   DATA.gen1_count=DATA.designs.filter(function(d){return !d.g2;}).length;
   DATA.gen2_count=DATA.designs.filter(function(d){return d.g2;}).length;
+  DATA.carnival_factor=1.2;
 })();
 var _modelo='',_per='all',_theme='dark',_lan='all';
 var CI={};
@@ -363,7 +364,7 @@ function applyBarqToPlan(){
   if(NEW_STORE_CAPS&&NEW_STORE_CAPS.BARQUISIMETO) NEW_STORE_CAPS.BARQUISIMETO.label=barqNote()+' · tienda nueva';
 }
 function factorLine(){
-  return '🎄 Dic ×'+fmtMult(DATA.high_season_month_factor||2)+' · 🎭 Carnaval/SS ×'+fmtMult(DATA.carnival_factor||1.1)+' · Vela '+fmtMult(velaMult())+'× Grieta · Web 1× Chacao · Barquisimeto '+barqNote()+' · Tolón +'+Math.round((tolonMult()-1)*100)+'%';
+  return '🎄 Dic ×'+fmtMult(DATA.high_season_month_factor||2)+' · 🎭 Carnaval ×'+fmtMult(carnFactor())+' · SS ×'+fmtMult(ssFactor())+' · Vela '+fmtMult(velaMult())+'× Grieta · Web 1× Chacao · Barquisimeto '+barqNote()+' · Tolón +'+Math.round((tolonMult()-1)*100)+'%';
 }
 function storeMatch(t, sel){if(!sel) return true; if(sel==='PEDIDOS_CORP') return isCorpStore(t); return t===sel;}
 
@@ -778,12 +779,14 @@ function transitDate(){return parseD(DATA.transit_arrival||'2026-10-27');}
 function transitWhen(){return 'mediados de octubre';}
 function poDate(){return addMonths(asOf(), DATA.lead_months_buy||4);}
 function ssEnd(){return new Date(2027,3,30);}
+function col30Arrival(){return parseD(DATA.col30_arrival||'2027-06-01');}
+function col30Cap(){return parseD(DATA.col30_cap||'2027-09-30');}
 function dim(y,m){return new Date(y,m+1,0).getDate();}
 function seasonFactor(dt){
   var y=dt.getFullYear(), m=dt.getMonth();
   if(m===11) return DATA.high_season_month_factor||2;
-  if(y>=2027 && m===1) return DATA.carnival_factor||1.1;
-  if(y>=2027 && m===3) return DATA.ss_factor||1.1;
+  if(y>=2027 && m===1) return carnFactor();
+  if(y>=2027 && m===3) return ssFactor();
   return 1;
 }
 function seasonName(dt){
@@ -922,7 +925,8 @@ function rInventario(){
 
 /* ── DECISIONES (curva de compra 2.0) ── */
 function dicFactor(){return DATA.high_season_month_factor||2;}
-function carnFactor(){return DATA.carnival_factor||1.1;}
+function carnFactor(){return DATA.carnival_factor||1.2;}
+function ssFactor(){return DATA.ss_factor||1.1;}
 function cobTxt(n){
   if(!(n>0)||!isFinite(n)) return '—';
   if(n>=90) return '99 meses';
@@ -1096,7 +1100,7 @@ function buildFirstBuy(){
   var ndf=DATA.new_design_factor||0.5;
   var taller=DATA.first_buy_taller_pct||0.15;
   var openM=DATA.first_buy_open_months||1;
-  var arrival=poDate(), cap=ssEnd();
+  var arrival=col30Arrival(), cap=col30Cap();
   var plan=firstBuyPlan();
   var mix=analogMix();
   var rows=plan.map(function(p){
@@ -1142,18 +1146,19 @@ function rCant40(){
   var fb=buildFirstBuy();
   var stores=fb.rows.length;
   var newStores=fb.rows.filter(function(r){return r.isNew;}).length;
-  var leftFeb=leftoverOldAt(parseD('2027-02-01'));
-  var leftApr=leftoverOldAt(parseD('2027-04-01'));
+  var leftMar=leftoverOldAt(parseD('2027-03-01'));
+  var leftJun=leftoverOldAt(parseD('2027-06-01'));
   document.getElementById('q4Kpis').innerHTML=
     '<div class="tkpi"><div class="tv" style="color:#c4b5fd">'+fb.po.toLocaleString()+'</div><div class="tl">Sugerencia de compra</div><div class="ts">4 diseños · 80×160</div></div>'
     +'<div class="tkpi"><div class="tv">'+stores+'</div><div class="tl">Tiendas</div><div class="ts">8 actuales + '+newStores+' aperturas</div></div>'
     +'<div class="tkpi"><div class="tv">'+Math.round(fb.taller*100)+'%</div><div class="tl">Reserva taller</div><div class="ts">'+fb.poTaller.toLocaleString()+' und</div></div>'
-    +'<div class="tkpi"><div class="tv" style="color:#67e8f9;font-size:1rem">nov–dic 26</div><div class="tl">Fecha sugerida de compra</div><div class="ts">llegada feb–abr 27</div></div>';
+    +'<div class="tkpi"><div class="tv" style="color:#67e8f9;font-size:1rem">feb–mar 27</div><div class="tl">Primera compra 2027</div><div class="ts">llegada may–jul 27</div></div>';
 
   document.getElementById('q4Method').innerHTML=
     '<div class="fact-row">'
     +'<span>🎄 Dic ×'+fmtMult(DATA.high_season_month_factor||2)+'</span>'
-    +'<span>🎭 Carnaval/SS ×'+fmtMult(DATA.carnival_factor||1.1)+'</span>'
+    +'<span>🎭 Carnaval ×'+fmtMult(carnFactor())+'</span>'
+    +'<span>SS ×'+fmtMult(ssFactor())+'</span>'
     +'<span>Vela '+fmtMult(velaMult())+'× Grieta</span>'
     +'<span>Web 1× Chacao</span>'
     +'<span>Barquisimeto '+barqNote()+'</span>'
@@ -1163,7 +1168,7 @@ function rCant40(){
     +'<span>Taller '+Math.round(fb.taller*100)+'%</span>'
     +'</div>'
     +'<div style="margin-top:8px;font-size:.68rem;color:var(--mu2)">El 3.0 entra en las 11 tiendas por peso (mix 6 meses + refuerzos + aperturas). El stock 1.0/2.0 no sustituye facings nuevos.</div>'
-    +'<div style="margin-top:8px;font-size:.72rem;color:var(--tx)">Pedir entre <b>noviembre y diciembre 2026</b> (lead 3–4 meses → llegada <b>febrero–abril 2027</b>). Noviembre apunta a Carnaval; diciembre, a Semana Santa. Dic-26 ya queda cubierto con 2.0 + tránsito. A la llegada en febrero quedarían ~'+leftFeb.toLocaleString()+' und de 1.0/2.0 en piso; a inicios de abril ~'+leftApr.toLocaleString()+'.</div>';
+    +'<div style="margin-top:8px;font-size:.72rem;color:var(--tx)">La primera compra internacional de 2027 cae en <b>febrero–marzo</b>: ahí conviene pedir el 3.0. Dic-26 y Carnaval-27 los cubre 2.0 + tránsito (a inicios de marzo quedarían ~'+leftMar.toLocaleString()+' und viejas en piso). Con lead 3–4 meses el 3.0 llega <b>mayo–julio</b>, en temporada baja, con ~'+leftJun.toLocaleString()+' und de 1.0/2.0 aún en piso. Se dimensiona junio–septiembre, hasta la siguiente compra de alta.</div>';
 
   var tipoLbl={lugares:'lugar',estampados:'estampado'};
   var h='<table class="q4-sug"><thead><tr><th>#</th><th>Diseño</th><th>Análogo 2.0</th><th class="num">Und</th></tr></thead><tbody>';
