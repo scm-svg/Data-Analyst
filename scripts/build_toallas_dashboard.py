@@ -4,6 +4,7 @@
 import json
 import re
 from collections import Counter, defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +25,14 @@ DEC_SEASON_FLOOR = 1.80  # +80% diciembre
 CARN_SEASON_FLOOR = 1.25  # +25% carnaval / semana santa
 REF_LUGARES_30 = ["Roraima", "Avila", "Margarita", "Canaima", "Morrocoy"]
 REF_PRINTS_30 = ["Bitacora", "Waves", "Caribe"]
+LAUNCH_30_ANALOGS = [
+    ("Diseño 1 (lugar)", "Morrocoy"),
+    ("Diseño 2 (lugar)", "Margarita"),
+    ("Diseño 3 (estampado)", "Waves"),
+    ("Diseño 4 (estampado)", "Caribe"),
+]
+TALLER_RESERVE_PCT = 0.12
+INV_EXCLUDE_COLORS = {"Horizonte", "Amazonas"}
 NEW_STORES_H1 = ["BARQUISIMETO", "APERTURA H1-2"]
 NEW_STORE_CAPS_H1 = {
     "BARQUISIMETO": {"base": "LA GRIETA", "mult": 1, "label": "1× LA GRIETA · apertura H1"},
@@ -100,10 +109,36 @@ def load_template_parts():
     m = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
     if not m:
         raise RuntimeError("Could not find var DATA= in template")
-    # Pre-Oct baseline always from original source (avoid corrupting on rebuild)
     src = SOURCE_HTML.read_text(encoding="utf-8")
-    src_data = json.loads(re.search(r"var DATA=(\{.*?\});", src, re.DOTALL).group(1))
-    return html[: m.start()], html[m.end() :], src_data
+    src_m = re.search(r"var DATA=(\{.*?\});", src, re.DOTALL)
+    if not src_m:
+        raise RuntimeError("Could not find var DATA= in source template")
+    src_data = json.loads(src_m.group(1))
+    # Always rebuild JS from clean source (avoids duplicate rInventario / transit KPI on re-run)
+    return html[: m.start()], src[src_m.end() :], src_data
+
+
+def sanitize_js_tail(after: str) -> str:
+    """Strip any previously injected inventario/decisiones blocks before re-patching."""
+    after = re.sub(
+        r"\n+(?:var INV_SKIP=\{Horizonte:1,Amazonas:1\};\s*)?function rInventario\(\)\{.*?(?=// ── DECISIONES|/\* ── EXPORT / FULLSCREEN ── \*/)",
+        "\n",
+        after,
+        flags=re.DOTALL,
+    )
+    after = re.sub(
+        r"// ── DECISIONES.*?function rColeccion30\(\)\{.*?\n\}\n",
+        "",
+        after,
+        flags=re.DOTALL,
+    )
+    after = re.sub(
+        r"(\'<div class=\"kpib\"><div class=\"kv\" style=\"color:#a855f7\">\'\+\(DATA\.transit_total\|\|0\)\.toLocaleString\(\)\+\'</div><div class=\"kl\">En Tránsito</div><div class=\"ksub\">.*?</div></div>\'\+\s*)+",
+        "",
+        after,
+        flags=re.DOTALL,
+    )
+    return after
 
 
 def build_gender_ratios(rows):
@@ -193,7 +228,7 @@ def build_inventory(transit_by_color):
         modelo = str(r["MODELO"]).strip()
         color = str(r["COLOR"]).strip()
         qty = int(r["Cantidad en inventario"])
-        if qty <= 0:
+        if qty <= 0 or color in INV_EXCLUDE_COLORS:
             continue
         key = f"{modelo}/{color}"
         stock[key] += qty
@@ -483,7 +518,29 @@ def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, seaso
     med_lugar_d = _distribute_purchase(med_lugar, shares)
     med_print_d = _distribute_purchase(med_print, shares)
 
+    by_color = {p["color"]: p for p in proposals}
+    launch_rows = []
+    total_tiendas = 0
+    for slot, analog in LAUNCH_30_ANALOGS:
+        p = by_color.get(analog, {})
+        und = p.get("comprar_bruta", 0)
+        total_tiendas += und
+        launch_rows.append({"slot": slot, "analogo": analog, "und": und, "v_ref": p.get("v_ref_mes", 0)})
+    for r in launch_rows:
+        r["pct"] = round(r["und"] / total_tiendas * 100) if total_tiendas else 0
+    total_taller = int(round(total_tiendas * TALLER_RESERVE_PCT))
+    total_compra = total_tiendas + total_taller
+    llegada = (date(2026, 9, 12) + timedelta(days=int(LEAD_TIME_MONTHS * 30))).isoformat()
+
     return {
+        "launch_table": launch_rows,
+        "total_tiendas": total_tiendas,
+        "total_taller": total_taller,
+        "total_compra": total_compra,
+        "llegada": llegada,
+        "puertas_actuales": len(all_stores),
+        "puertas_nuevas": len(NEW_STORES_H1),
+        "puertas_total": len(all_stores) + len(NEW_STORES_H1),
         "designs": proposals,
         "total_comprar": sum(p["comprar_bruta"] for p in proposals),
         "total_comprar_neta": sum(p["comprar"] for p in proposals),
@@ -696,13 +753,16 @@ DECISIONES_HTML = """
     <div class="sub"><span style="color:#f97316">VELA 2× GRIETA · WEB ≈ CHACAO · TOLON +35% · BARQUISIMETO 1× GRIETA</span></div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
+</div>
+<div class="sec" id="sec-coleccion30">
   <div class="card g1" id="decPlan30" style="border-color:rgba(168,85,247,.35);background:rgba(168,85,247,.04)"></div>
 </div>
 """
 
 EXTRA_JS = r"""
+var INV_SKIP={Horizonte:1,Amazonas:1};
 function rInventario(){
-  var inv=DATA.inv_rows||[];
+  var inv=(DATA.inv_rows||[]).filter(function(r){return !INV_SKIP[r.color];});
   if(!inv.length){document.getElementById('invSummary').innerHTML='<div class="nodata" style="grid-column:1/-1">Sin inventario</div>';document.getElementById('invLocGrid').innerHTML='';return;}
   var tot=0,taller=0,transito=DATA.transit_total||0,tiendas=0;
   var byLoc={};
@@ -727,23 +787,20 @@ function rInventario(){
     if(a==='TALLER')return 1;if(b==='TALLER')return-1;
     return byLoc[b].total-byLoc[a].total;
   });
-  var salesMap={};
-  fr().forEach(function(r){var k=r.o+'/'+r.c;salesMap[k]=(salesMap[k]||0)+r.v;});
   var h='';
   locs.forEach(function(loc){
     var ld=byLoc[loc],isTrans=loc==='EN TRÁNSITO',isTaller=loc==='TALLER';
     var keys=Object.keys(ld.rows).sort(function(a,b){return ld.rows[b].qty-ld.rows[a].qty;});
     h+='<div class="inv-loc-card'+(isTrans?' transito':'')+'">'+
       '<div class="inv-loc-hdr"><div><h4>'+(isTrans?'🚢 ':isTaller?'🏭 ':'🏬 ')+loc+'</h4>'+
-      '<div class="sub2">'+(isTrans?'Compra marzo · llegada estimada '+(DATA.transit_eta||''):'Stock físico · ventas del período filtrado')+'</div></div>'+
+      '<div class="sub2">'+(isTrans?'Compra marzo · ETA '+(DATA.transit_eta||''):'Stock físico')+'</div></div>'+
       '<div class="inv-loc-tot" style="'+(isTrans?'color:#a855f7':isTaller?'color:#f97316':'')+'">'+ld.total+' und</div></div>'+
-      '<table class="ct"><thead><tr><th>Diseño</th><th>Colección</th><th>Cant.</th><th>Ventas filt.</th></tr></thead><tbody>';
+      '<table class="ct"><thead><tr><th>Diseño</th><th>Colección</th><th>Cant.</th></tr></thead><tbody>';
     keys.forEach(function(k){
-      var rd=ld.rows[k],sv=salesMap[k]||0;
+      var rd=ld.rows[k];
       h+='<tr><td><span class="chip" style="background:'+cn(rd.color)+'"></span>'+rd.color+'</td>'+
         '<td style="font-size:.68rem;color:var(--mu)">'+(rd.modelo==='TOALLA ESTAMPADA 2.0'?'2.0':'1.0')+'</td>'+
-        '<td><span class="qty-pill'+(isTrans?' transito':'')+'">'+rd.qty+'</span></td>'+
-        '<td style="font-size:.68rem;color:var(--mu)">'+sv+' und</td></tr>';
+        '<td><span class="qty-pill'+(isTrans?' transito':'')+'">'+rd.qty+'</span></td></tr>';
     });
     h+='</tbody></table></div>';
   });
@@ -868,51 +925,42 @@ function rDecisiones(){
     reEl.innerHTML=h+'</tbody></table>';
   }
 
+}
+
+function rColeccion30(){
   var p30=document.getElementById('decPlan30');
-  if(p30){
-    var plan30=(DATA.plan_30||brief.plan_30||{});
-    var ds=plan30.designs||[];
-    if(ds.length){
-      var lug=ds.filter(function(d){return d.tipo==='lugar';});
-      var prt=ds.filter(function(d){return d.tipo==='print';});
-      var rl=plan30.resumen_lugares||{},rp=plan30.resumen_prints||{};
-      function tbl30(arr){
-        return '<table class="ct"><thead><tr><th>Referencia</th><th>Hist. total</th><th>Vel. ref</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda</th><th>Compra</th></tr></thead><tbody>'+
-        arr.map(function(d){
-          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+
-            '<div style="font-size:.58rem;color:var(--mu2)">'+d.meses_activos+'m · desde '+d.historial_desde+'</div></td>'+
-            '<td>'+(d.total_historico||0)+'</td><td>'+d.v_ref_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
-            '<td>'+d.legacy_stock+' ('+d.legacy_cob_meses+'m)</td><td>'+d.demanda_inicial+'</td>'+
-            '<td class="rn" style="color:#a855f7">'+(d.comprar_bruta||0)+'</td></tr>';
-        }).join('')+'</tbody></table>';
-      }
-      function tblDist(dist,total,label){
-        if(!dist)return'';
-        var stores=Object.keys(dist).sort(function(a,b){return(dist[b]||0)-(dist[a]||0);});
-        var meta=plan30.store_shares||{};
-        return '<div style="margin-top:8px"><div style="font-weight:700;font-size:.72rem;color:var(--mu);margin-bottom:4px">'+label+' ('+total+' und)</div>'+
-          '<table class="ct"><thead><tr><th>Tienda</th><th>Peso</th><th>Und</th><th>Notas</th></tr></thead><tbody>'+
-          stores.map(function(s){
-            if(!dist[s]&&!(meta[s]&&meta[s].is_new))return'';
-            var m=meta[s]||{};
-            return '<tr><td>'+(m.is_new?'🆕 ':'')+s+'</td><td>'+(m.pct||0)+'%</td><td class="rn">'+dist[s]+'</td>'+
-              '<td style="font-size:.62rem;color:var(--mu2)">'+(m.note||'')+'</td></tr>';
-          }).join('')+'</tbody></table></div>';
-      }
-      p30.innerHTML='<h3 style="color:#a855f7">🆕 Primera compra Colección 3.0</h3>'+
-        '<div class="sub">'+((plan30.nota_metodo)||'')+'</div>'+
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+
-        '<span style="font-size:.75rem;background:rgba(247,91,138,.12);padding:4px 10px;border-radius:8px">🗺️ Lugar nuevo: <strong>~'+rl.comprar_mediana+' und</strong></span>'+
-        '<span style="font-size:.75rem;background:rgba(171,123,250,.12);padding:4px 10px;border-radius:8px">🖼️ Print nuevo: <strong>~'+rp.comprar_mediana+' und</strong></span>'+
-        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">'+plan30.n_tiendas+' tiendas · '+((plan30.historial_label)||'')+'</span></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">'+
-        '<div><div style="font-weight:700;color:#f75b8a;margin-bottom:6px;font-size:.78rem">🗺️ Lugares · Roraima, Avila, Margarita, Canaima, Morrocoy</div>'+tbl30(lug)+
-        tblDist(rl.distribucion_mediana,rl.comprar_mediana,'Distribución mediana lugar')+'</div>'+
-        '<div><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px;font-size:.78rem">🖼️ Prints · Bitácora, Waves, Caribe</div>'+tbl30(prt)+
-        tblDist(rp.distribucion_mediana,rp.comprar_mediana,'Distribución mediana print')+'</div></div>'+
-        (brief.conclusion_30?'<p style="margin-top:10px;font-size:.72rem;color:var(--mu);padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76">'+brief.conclusion_30+'</p>':'');
-    }
-  }
+  if(!p30)return;
+  var plan30=DATA.plan_30||{},s=DATA.season_factors||{},lt=plan30.lead_time_meses||3.5;
+  var rows=plan30.launch_table||[];
+  if(!rows.length){p30.innerHTML='<div class="nodata">Sin datos 3.0</div>';return;}
+  var pills=[
+    '🎄 Dic ×'+(s.diciembre_factor||1.8),
+    '🎭 Carnaval/SS ×'+(s.carnaval_factor||1.25),
+    'Vela 2× Grieta','Web ≈ Chacao','Barquisimeto 1× Grieta','Tolón +35%',
+    '+ '+plan30.puertas_nuevas+' tiendas H1','Factor nuevo '+Math.round((plan30.new_design_factor||0.75)*100)+'%',
+    'Taller '+Math.round((plan30.total_taller/(plan30.total_compra||1))*100)+'%'
+  ];
+  p30.innerHTML=
+    '<h3 style="color:#a855f7;margin-bottom:4px">Colección 3.0</h3>'+
+    '<div class="sub" style="margin-bottom:12px">Primera compra · historial completo ('+(plan30.historial_label||'')+') · '+plan30.puertas_total+' puertas por peso</div>'+
+    '<div class="tkpis" style="margin-bottom:14px">'+
+    '<div class="tkpi"><div class="tv" style="color:#a855f7">'+(plan30.total_compra||0).toLocaleString()+'</div><div class="tl">Sugerencia de compra</div><div class="ts">4 diseños · 80×160</div></div>'+
+    '<div class="tkpi"><div class="tv" style="color:#00bcd4">'+(plan30.puertas_total||0)+'</div><div class="tl">Puertas</div><div class="ts">'+(plan30.puertas_actuales||0)+' actuales + '+(plan30.puertas_nuevas||0)+' aperturas</div></div>'+
+    '<div class="tkpi"><div class="tv" style="color:#14b8a6">'+(plan30.llegada||'—')+'</div><div class="tl">Llegada</div><div class="ts">lead '+lt+' meses</div></div>'+
+    '<div class="tkpi"><div class="tv" style="color:#f97316">'+(plan30.total_taller||0)+'</div><div class="tl">Taller</div><div class="ts">12% de reserva</div></div></div>'+
+    '<div style="background:rgba(0,0,0,.15);border-radius:10px;padding:10px 12px;margin-bottom:14px">'+
+    '<div style="font-size:.68rem;font-weight:700;color:var(--mu);margin-bottom:6px">Factores</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">'+pills.map(function(p){return '<span style="font-size:.65rem;background:var(--s2);border:1px solid var(--brd);border-radius:999px;padding:3px 10px;color:var(--mu)">'+p+'</span>';}).join('')+'</div>'+
+    '<p style="font-size:.62rem;color:var(--mu2);margin-top:8px;line-height:1.5">'+(plan30.nota_metodo||'')+'</p></div>'+
+    '<h3 style="font-size:.85rem;margin-bottom:4px">Sugerencia de compra 3.0</h3>'+
+    '<div class="sub" style="margin-bottom:10px">4 diseños · en las '+plan30.puertas_total+' puertas por peso + '+(plan30.total_taller||0)+' taller</div>'+
+    '<table class="ct"><thead><tr><th>#</th><th>Diseño</th><th>Análogo 2.0</th><th>Und</th></tr></thead><tbody>'+
+    rows.map(function(r,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+r.slot+'</td><td><span class="chip" style="background:'+cn(r.analogo)+'"></span>'+r.analogo+' · '+r.pct+'%</td><td class="rn" style="color:#a855f7">'+r.und+'</td></tr>';
+    }).join('')+
+    '<tr style="background:rgba(168,85,247,.08)"><td colspan="2"><strong>Total primera compra</strong></td>'+
+    '<td style="font-size:.68rem;color:var(--mu)">'+(plan30.total_tiendas||0)+' a tiendas + '+(plan30.total_taller||0)+' taller</td>'+
+    '<td class="rn" style="color:#a855f7;font-size:1rem">'+(plan30.total_compra||0)+'</td></tr></tbody></table>';
 }
 """
 
@@ -948,10 +996,25 @@ def patch_html(before: str, after: str, data: dict) -> str:
             '</div>\n\n' + INVENTARIO_HTML + '\n' + DECISIONES_HTML + '\n</div>\n<div class="footer">Toallas Estampadas',
         )
     else:
-        before = re.sub(r'<div class="sec" id="sec-decisiones">.*?(?=</div>\n<div class="footer">)', DECISIONES_HTML + "\n", before, flags=re.DOTALL)
+        before = re.sub(
+            r'<div class="sec" id="sec-decisiones">.*?(?=<div class="sec" id="sec-coleccion30">|</div>\n<div class="footer">)',
+            DECISIONES_HTML.split('<div class="sec" id="sec-coleccion30">')[0] + "\n",
+            before,
+            flags=re.DOTALL,
+        )
+        if 'id="sec-coleccion30"' not in before:
+            before = before.replace(
+                '<div class="footer">',
+                '<div class="sec" id="sec-coleccion30">\n  <div class="card g1" id="decPlan30" style="border-color:rgba(168,85,247,.35);background:rgba(168,85,247,.04)"></div>\n</div>\n<div class="footer">',
+            )
         before = re.sub(r'\s*<div class="card g1" id="decPropuesta4"></div>\s*', '\n', before)
         if "sec-inventario" not in before:
             before = before.replace('<div class="sec" id="sec-decisiones">', INVENTARIO_HTML + '\n<div class="sec" id="sec-decisiones">')
+        if "st('coleccion30')" not in before:
+            before = before.replace(
+                '<button class="tab" onclick="st(\'decisiones\')">💡 Decisiones</button>',
+                '<button class="tab" onclick="st(\'decisiones\')">💡 Decisiones</button>\n  <button class="tab" onclick="st(\'coleccion30\')">🆕 Colección 3.0</button>',
+            )
 
     before = re.sub(
         r'<div class="footer">(?:Sublimada Dashboard · )?Toallas Estampadas(?: · Dashboard de Ventas con Género del Cliente)? · [^<]+</div>',
@@ -965,56 +1028,42 @@ def patch_html(before: str, after: str, data: dict) -> str:
         count=1,
     )
 
+    after = sanitize_js_tail(after)
+
     after = re.sub(
         r"var TABS=\[[^\]]+\];",
-        "var TABS=['resumen','colores','tiendas','lanzamientos','cliente','inventario','decisiones'];",
+        "var TABS=['resumen','colores','tiendas','lanzamientos','cliente','inventario','decisiones','coleccion30'];",
         after,
     )
     after = re.sub(
         r"else if\(n==='cliente'\)rCliente\(\);.*?setTimeout\(addExpandBtns,120\);\}",
-        "else if(n==='cliente')rCliente();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();\n  setTimeout(addExpandBtns,120);}",
+        "else if(n==='cliente')rCliente();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();else if(n==='coleccion30')rColeccion30();\n  setTimeout(addExpandBtns,120);}",
         after,
         flags=re.DOTALL,
     )
 
-    # KPI header: add transit
+    # Single En Tránsito KPI after Stock PT (header — no duplicates)
     after = re.sub(
-        r"'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'\+gStk\.toLocaleString\(\)\+'</div><div class=\"kl\">Stock(?: PT)?</div><div class=\"ksub\">[^<]*</div></div>'\+",
-        "'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'+gStk.toLocaleString()+'</div><div class=\"kl\">Stock PT</div><div class=\"ksub\">actualizado</div></div>'+\n    '<div class=\"kpib\"><div class=\"kv\" style=\"color:#a855f7\">'+(DATA.transit_total||0).toLocaleString()+'</div><div class=\"kl\">En Tránsito</div><div class=\"ksub\">Mar '+((DATA.transit_eta||'').slice(5,7)||'')+'</div></div>'+",
+        r"'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'\+gStk\.toLocaleString\(\)\+'</div><div class=\"kl\">Stock(?: PT)?</div><div class=\"ksub\">[^']*</div></div>'\+",
+        "'<div class=\"kpib\"><div class=\"kv\" style=\"color:#ffc107\">'+gStk.toLocaleString()+'</div><div class=\"kl\">Stock PT</div><div class=\"ksub\">actualizado</div></div>'+\n    '<div class=\"kpib\"><div class=\"kv\" style=\"color:#a855f7\">'+(DATA.transit_total||0).toLocaleString()+'</div><div class=\"kl\">En Tránsito</div><div class=\"ksub\">ETA '+((DATA.transit_eta||'').slice(0,10))+'</div></div>'+",
         after,
         count=1,
     )
 
-    # Alerts
-    last_m = data["meses_order"][-1].replace("-", " ").title()
-    ra_start = after.find("function renderAlertas()")
-    ra_end = after.find("function rResumen", ra_start)
-    if ra_start != -1 and ra_end != -1:
-        ra = after[ra_start:ra_end]
-        ra = re.sub(
-            r"\n  alerts\.push\(\{type:'info',text:'🚢 En tránsito:.*?\}\);",
-            "",
-            ra,
-        )
-        if "transit_total" not in ra:
-            ra = ra.replace(
-                "alerts.push({type:'info',text:'📦 Stock Taller:",
-                "alerts.push({type:'info',text:'🚢 En tránsito: '+(DATA.transit_total||0).toLocaleString()+' und 2.0 · ETA '+(DATA.transit_eta||'—')});\n  alerts.push({type:'info',text:'📦 Stock Taller:",
-            )
-        ra = re.sub(
-            r"alerts\.push\(\{type:'info',text:'📅 [^']+'\}\);",
-            f"alerts.push({{type:'info',text:'📅 {last_m} con datos parciales'}});",
-            ra,
-            count=1,
-        )
-        after = after[:ra_start] + ra + after[ra_end:]
-
-    # Replace old decisiones JS block (match any variant of the header comment)
+    # Disable alert bar (transit/gender/corp badges removed from header)
     after = re.sub(
-        r"// ── DECISIONES.*?/\* ── EXPORT / FULLSCREEN ── \*/",
-        EXTRA_JS + "\n/* ── EXPORT / FULLSCREEN ── */",
+        r"function renderAlertas\(\)\{.*?(?=/\* ── RESUMEN ── \*/)",
+        "function renderAlertas(){var el=document.getElementById('alertBar');if(el){el.style.display='none';el.innerHTML='';}}\n\n",
         after,
         flags=re.DOTALL,
+    )
+
+    # Inject inventario + decisiones + colección 3.0 before export helpers
+    after = re.sub(
+        r"/\* ── EXPORT / FULLSCREEN ── \*/",
+        EXTRA_JS + "\n/* ── EXPORT / FULLSCREEN ── */",
+        after,
+        count=1,
     )
 
     return before + "var DATA=" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";" + after
