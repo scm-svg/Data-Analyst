@@ -207,7 +207,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="tkpis" id="tKpis"></div>
   <div class="g2">
     <div class="card"><h3>🏆 Ranking por Tienda</h3><div class="sub">Volumen, participación y top diseños</div><div id="tiendaRanking"></div></div>
-    <div class="card"><h3>Género del Cliente por Tienda</h3><div class="sub">Mezcla Dama / Caballero / Empresa (%)</div><div class="cw t"><canvas id="cGenTienda"></canvas></div></div>
+    <div class="card"><h3>Género del Cliente por Tienda</h3><div class="sub">Mezcla Dama / Caballero / Corporativo (%)</div><div class="cw t"><canvas id="cGenTienda"></canvas></div></div>
   </div>
   <div class="g1 card"><h3>Diseño × Tienda</h3><div class="sub">Heatmap de volumen por diseño y tienda</div><div class="hmw" style="margin-top:4px" id="tiendaColorHM"></div></div>
 </div>
@@ -547,7 +547,7 @@ function rTiendas(){
        '<td style="font-size:.7rem"><span style="color:'+TCOLOR.Dama+'">'+gd+'</span> / <span style="color:'+TCOLOR.Caballero+'">'+gc+'</span></td></tr>';});
   document.getElementById('tiendaRanking').innerHTML=rh+'</tbody></table>';
   mc('cGenTienda','bar',{labels:tiendas.map(storeDisp),datasets:TIPOS.map(function(t){
-    return{label:(TICO[t]||'')+' '+t,data:tiendas.map(function(s){return (m2tg[s]&&m2tg[s][t])||0;}),backgroundColor:tcol(t)+'cc',borderColor:tcol(t),borderWidth:1,borderRadius:4};})},
+    return{label:(TICO[t]||'')+' '+tipoLabel(t),data:tiendas.map(function(s){return (m2tg[s]&&m2tg[s][t])||0;}),backgroundColor:tcol(t)+'cc',borderColor:tcol(t),borderWidth:1,borderRadius:4};})},
     Object.assign(bo(),{plugins:{legend:{display:true,labels:{color:txCol(),font:{family:'DM Sans',size:10},boxWidth:10}},datalabels:{display:false},tooltip:{callbacks:{label:function(c){return' '+c.dataset.label+': '+c.raw+' und';}}}},
       scales:{x:{grid:{color:grid()},ticks:{color:txCol(),font:{size:9},maxRotation:35}},y:{grid:{color:grid()},ticks:{color:txCol(),font:{size:10}},beginAtZero:true}}}));
   document.getElementById('tiendaColorHM').innerHTML=heatmap(rows,'c','t',ag(rows,'c').slice(0,18).map(function(x){return x.k;}),tiendas);
