@@ -24,6 +24,19 @@ DEC_SEASON_FLOOR = 1.80  # +80% diciembre
 CARN_SEASON_FLOOR = 1.25  # +25% carnaval / semana santa
 REF_LUGARES_30 = ["Roraima", "Avila", "Margarita", "Canaima", "Morrocoy"]
 REF_PRINTS_30 = ["Bitacora", "Waves", "Caribe"]
+NEW_STORES_H1 = ["BARQUISIMETO", "APERTURA H1-2"]
+NEW_STORE_CAPS_H1 = {
+    "BARQUISIMETO": {"base": "LA GRIETA", "mult": 1, "label": "1× LA GRIETA · apertura H1"},
+    "APERTURA H1-2": {"base": "SAMBIL CHACAO", "mult": 1, "label": "1× SAMBIL CHACAO · 2ª tienda H1"},
+}
+STORE_WEIGHTS_CFG = {
+    "LA VELA": {"base": "LA GRIETA", "mult": 2, "label": "2× LA GRIETA"},
+    "WEB": {"base": "SAMBIL CHACAO", "mult": 1, "label": "≈ SAMBIL CHACAO (refuerzo web)"},
+    "TOLON": {"mult": 1.35, "label": "+35% histórico"},
+}
+MIN_UNITS_PER_STORE = 8
+LAUNCH_COVERAGE_MONTHS = 5
+HIST_RECENT_WEIGHT = 0.65
 
 MESES_MAP = {
     "ENERO": "enero", "FEBRERO": "febrero", "MARZO": "marzo", "ABRIL": "abril",
@@ -343,52 +356,118 @@ def build_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, 
     return plan, prod_curve, summary, base_months
 
 
-def _ref_velocity(raw_rows, base_months, color):
-    """Velocidad retail de referencia (colecciones 1.0 + 2.0)."""
-    retail = [r for r in raw_rows if r["c"] == color and r["m"] in base_months and r["t"] != "PEDIDOS"]
-    return sum(r["v"] for r in retail) / max(1, len(base_months))
-
-
 def _round_qty(qty):
     return int(round(qty / 50) * 50) if qty >= 25 else int(round(qty))
 
 
-def _launch_qty(v_ref, legacy, v_legacy, season):
-    """Primera compra 3.0 calibrada a diseño de referencia."""
-    dec_f = season["diciembre_factor"]
+def _historical_velocity(raw_rows, meses_order, color, es_parcial=True):
+    """Velocidad ponderada: historial completo 1.0+2.0 + peso en meses recientes."""
+    retail = [r for r in raw_rows if r["c"] == color and r["t"] != "PEDIDOS"]
+    if not retail:
+        return 0.0, 0, 0, []
+    active = sorted({r["m"] for r in retail}, key=mes_sort_key)
+    total = sum(r["v"] for r in retail)
+    v_full = total / max(1, len(active))
+    closed = active[:-1] if es_parcial and len(active) > 1 else active
+    recent = closed[-3:] if len(closed) >= 3 else closed
+    v_recent = sum(r["v"] for r in retail if r["m"] in recent) / max(1, len(recent)) if recent else v_full
+    v_ref = (1 - HIST_RECENT_WEIGHT) * v_full + HIST_RECENT_WEIGHT * v_recent
+    return round(v_ref, 1), total, len(active), active
+
+
+def _compute_launch_shares(raw_rows, all_stores, new_stores, store_weights, new_store_caps):
+    """Peso proyectado por tienda: historial completo + ajustes + tiendas nuevas H1."""
+    retail = [r for r in raw_rows if r["t"] != "PEDIDOS" and r["o"] in MODELOS]
+    hist = Counter(r["t"] for r in retail)
+    tot = sum(hist.values())
+    shares = {}
+    for s in all_stores:
+        sh = hist.get(s, 0) / tot if tot else 0
+        w = store_weights.get(s)
+        if w and w.get("base"):
+            sh = (hist.get(w["base"], 0) / tot if tot else 0) * w.get("mult", 1)
+        elif w and w.get("mult"):
+            sh = sh * w["mult"]
+        shares[s] = sh
+    for ns in new_stores:
+        cap = new_store_caps.get(ns, {})
+        base = cap.get("base", "LA GRIETA")
+        shares[ns] = (hist.get(base, 0) / tot if tot else 0) * cap.get("mult", 1)
+    sm = sum(shares.values())
+    if sm > 0:
+        shares = {k: round(v / sm, 4) for k, v in shares.items()}
+    store_meta = {}
+    for s, sh in shares.items():
+        note = store_weights.get(s, {}).get("label") or new_store_caps.get(s, {}).get("label", "")
+        store_meta[s] = {"share": sh, "pct": round(sh * 100, 1), "note": note, "is_new": s in new_stores}
+    return shares, store_meta, tot
+
+
+def _distribute_purchase(total, shares, min_per_store=MIN_UNITS_PER_STORE):
+    """Distribuye compra por peso de tienda con mínimo por sucursal activa."""
+    if total <= 0:
+        return {s: 0 for s in shares}
+    active = [s for s in shares if shares[s] >= 0.003 or s in NEW_STORES_H1]
+    if not active:
+        return {s: 0 for s in shares}
+    alloc = {s: 0 for s in shares}
+    for s in active:
+        alloc[s] = max(min_per_store, int(round(total * shares[s])))
+    while sum(alloc.values()) > total:
+        candidates = [s for s in active if alloc[s] > min_per_store]
+        if not candidates:
+            break
+        alloc[max(candidates, key=lambda x: alloc[x])] -= 1
+    while sum(alloc.values()) < total:
+        alloc[max(active, key=lambda x: shares[x])] += 1
+    return alloc
+
+
+def _launch_demand(v_ref, season):
+    """Demanda bruta hasta próximo reorder: lead time + cobertura + carnaval/SS + buffer."""
     v_new = v_ref * NEW_DESIGN_FACTOR
-    months_horizon = int(round(LEAD_TIME_MONTHS)) + 4
-    demand_gross = v_new * months_horizon + v_new * dec_f
-    legacy_offset = min(legacy, v_legacy * months_horizon) if v_legacy > 0 else legacy * 0.5
-    comprar_bruta = _round_qty(max(0, demand_gross))
-    comprar_neta = _round_qty(max(0, demand_gross - legacy_offset))
-    return {
-        "v_ref_mes": round(v_ref, 1),
-        "v_nuevo_mes": round(v_new, 1),
-        "legacy_stock": legacy,
-        "legacy_v_mes": round(v_legacy, 1),
-        "legacy_cob_meses": round(legacy / v_legacy, 1) if v_legacy > 0 else (99 if legacy else 0),
-        "demanda_inicial": int(round(demand_gross)),
-        "descuento_legacy": int(round(legacy_offset)),
-        "comprar_bruta": comprar_bruta,
-        "comprar": comprar_neta,
-    }
+    carn_f = season["carnaval_factor"]
+    months = int(round(LEAD_TIME_MONTHS)) + LAUNCH_COVERAGE_MONTHS
+    carn_extra = v_new * max(0, carn_f - 1) * 2
+    buffer = v_new * 0.15
+    demand = v_new * months + carn_extra + buffer
+    return round(v_new, 1), int(round(demand))
 
 
-def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season):
-    """Compra inicial 3.0 basada en diseños de referencia (1.0+2.0)."""
-    closed = meses_order[:-1] if len(meses_order) > 1 else meses_order
-    base_months = closed[-3:] if len(closed) >= 3 else closed
-    dec_f = season["diciembre_factor"]
+def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, all_stores):
+    """Primera compra 3.0: historial completo, distribución por tienda, 2 aperturas H1."""
+    shares, store_meta, hist_total = _compute_launch_shares(
+        raw_rows, all_stores, NEW_STORES_H1, STORE_WEIGHTS_CFG, NEW_STORE_CAPS_H1,
+    )
+    dr = f"{meses_order[0].split('-')[0].capitalize()} {meses_order[0].split('-')[1]} — {meses_order[-1].split('-')[0].capitalize()} {meses_order[-1].split('-')[1]}"
     proposals = []
 
     def build_ref(color, tipo):
-        legacy = sum(stock.get(f"{m}/{color}", 0) for m in MODELOS)
-        legacy += transit_by_color.get(color, 0)
-        v_ref = _ref_velocity(raw_rows, base_months, color)
-        v_legacy = _ref_velocity(raw_rows, base_months, color)  # ventas actuales del color
-        calc = _launch_qty(v_ref, legacy, v_legacy, season)
-        proposals.append({"color": color, "tipo": tipo, **calc})
+        legacy = sum(stock.get(f"{m}/{color}", 0) for m in MODELOS) + transit_by_color.get(color, 0)
+        v_ref, total_hist, meses_act, active = _historical_velocity(raw_rows, meses_order, color)
+        v_legacy, _, _, _ = _historical_velocity(raw_rows, meses_order, color)
+        v_new, demand_gross = _launch_demand(v_ref, season)
+        legacy_offset = min(legacy, v_legacy * (int(round(LEAD_TIME_MONTHS)) + LAUNCH_COVERAGE_MONTHS)) if v_legacy > 0 else legacy * 0.5
+        comprar_bruta = _round_qty(max(0, demand_gross))
+        comprar_neta = _round_qty(max(0, demand_gross - legacy_offset))
+        distrib = _distribute_purchase(comprar_bruta, shares)
+        proposals.append({
+            "color": color,
+            "tipo": tipo,
+            "v_ref_mes": v_ref,
+            "v_nuevo_mes": v_new,
+            "total_historico": total_hist,
+            "meses_activos": meses_act,
+            "historial_desde": active[0].replace("-", " ").title() if active else "—",
+            "legacy_stock": legacy,
+            "legacy_v_mes": v_legacy,
+            "legacy_cob_meses": round(legacy / v_legacy, 1) if v_legacy > 0 else (99 if legacy else 0),
+            "demanda_inicial": demand_gross,
+            "descuento_legacy": int(round(legacy_offset)),
+            "comprar_bruta": comprar_bruta,
+            "comprar": comprar_neta,
+            "distribucion": distrib,
+        })
 
     for c in REF_LUGARES_30:
         build_ref(c, "lugar")
@@ -401,6 +480,8 @@ def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, seaso
     avg_print = sum(p["v_ref_mes"] for p in prints) / max(1, len(prints))
     med_lugar = sorted(p["comprar_bruta"] for p in lugares)[len(lugares) // 2] if lugares else 0
     med_print = sorted(p["comprar_bruta"] for p in prints)[len(prints) // 2] if prints else 0
+    med_lugar_d = _distribute_purchase(med_lugar, shares)
+    med_print_d = _distribute_purchase(med_print, shares)
 
     return {
         "designs": proposals,
@@ -408,23 +489,29 @@ def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, seaso
         "total_comprar_neta": sum(p["comprar"] for p in proposals),
         "new_design_factor": NEW_DESIGN_FACTOR,
         "lead_time_meses": LEAD_TIME_MONTHS,
-        "base_months_label": ", ".join(m.replace("-", " ").title() for m in base_months),
+        "historial_label": dr,
+        "store_shares": store_meta,
+        "n_tiendas": len([s for s in shares if shares[s] > 0.003]) + len(NEW_STORES_H1),
         "resumen_lugares": {
             "avg_v_mes": round(avg_lugar, 1),
             "v_nuevo_mes": round(avg_lugar * NEW_DESIGN_FACTOR, 1),
             "comprar_mediana": med_lugar,
             "comprar_promedio": _round_qty(sum(p["comprar_bruta"] for p in lugares) / max(1, len(lugares))),
+            "distribucion_mediana": med_lugar_d,
         },
         "resumen_prints": {
             "avg_v_mes": round(avg_print, 1),
             "v_nuevo_mes": round(avg_print * NEW_DESIGN_FACTOR, 1),
             "comprar_mediana": med_print,
             "comprar_promedio": _round_qty(sum(p["comprar_bruta"] for p in prints) / max(1, len(prints))),
+            "distribucion_mediana": med_print_d,
         },
         "nota_metodo": (
-            f"Referencia ventas 1.0+2.0 ({', '.join(m.replace('-', ' ').title() for m in base_months)}). "
-            f"× {int(NEW_DESIGN_FACTOR * 100)}% factor diseño nuevo · lead time {LEAD_TIME_MONTHS}m + 4m operación + 1er dic (×{dec_f}). "
-            f"Descuenta stock legacy 1.0+2.0+tránsito del mismo color."
+            f"Historial completo 1.0+2.0 ({dr}): vel. = {int((1-HIST_RECENT_WEIGHT)*100)}% promedio histórico + "
+            f"{int(HIST_RECENT_WEIGHT*100)}% últimos 3 meses cerrados. × {int(NEW_DESIGN_FACTOR*100)}% factor diseño nuevo. "
+            f"Demanda: lead time {LEAD_TIME_MONTHS}m + {LAUNCH_COVERAGE_MONTHS}m cobertura + carnaval/SS (×{season['carnaval_factor']}) + 15% buffer. "
+            f"Distribución: peso histórico por tienda + VELA 2×GRIETA · WEB≈CHACAO · TOLON +35% · "
+            f"{len(NEW_STORES_H1)} tiendas nuevas H1 ({', '.join(NEW_STORES_H1)}). Mín {MIN_UNITS_PER_STORE} und/tienda."
         ),
     }
 
@@ -434,25 +521,15 @@ def build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, sum
     last2 = closed[-2:]
     recent = [r for r in raw_rows if r["o"] == G2 and r["m"] in last2 and r["t"] != "PEDIDOS"]
     by_c = Counter(r["c"] for r in recent)
-    lugares = [(c, v) for c, v in by_c.most_common() if c in LUGARES]
-    prints = [(c, v) for c, v in by_c.most_common() if c in PRINTS]
-    rec_lugares = [c for c, _ in lugares[:2]]
-    rec_prints = [c for c, _ in prints[:2]]
 
     buy_total = sum(p["comprar"] for p in plan)
-    cubre_dic = [p for p in plan if p["cubre_diciembre"]]
     no_cubre_dic = [p for p in plan if not p["cubre_diciembre"]]
-    prop4 = rec_lugares + rec_prints
-    prop4_status = {p["color"]: "✓ cubre dic" if p["cubre_diciembre"] else f'⚠ faltan ~{p["demanda_dic"] - p["disponible"]} und' for p in plan if p["color"] in prop4}
-
     smry = summary_prod.get(G2, {})
-    if smry.get("cubre_diciembre_all") and all(prop4_status.get(c, "").startswith("✓") for c in prop4):
+    if smry.get("cubre_diciembre_all"):
         conclusion = (
-            f"Los 4 diseños propuestos ({' / '.join(prop4)}) quedan cubiertos hasta diciembre "
-            f"con PT + tránsito ({transit_total:,} und). Lead time {LEAD_TIME_MONTHS}m impide "
-            f"compra nueva para dic-2026; pedido hoy llega ~ene-2027. "
+            f"Colección 2.0 cubre diciembre con PT + tránsito ({transit_total:,} und). "
+            f"Lead time {LEAD_TIME_MONTHS}m — pedido hoy llega ~ene-2027. "
             + (f"Compra Q1 sugerida: {buy_total} und para carnaval/SS." if buy_total else "Sin compra Q1 urgente.")
-            + " Para 3.0 definir SKUs nuevos aparte."
         )
     elif no_cubre_dic:
         conclusion = (
@@ -465,18 +542,14 @@ def build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, sum
         conclusion = f"Revisar cobertura por diseño. Compra Q1 sugerida: {buy_total} und."
 
     return {
-        "contexto": "Reevaluación Toallas Sublimadas 3.0 · tránsito + Barquisimeto + temporada alta + escenario C/E",
-        "propuesta_julio": "4 diseños para diciembre: 2 lugares + 2 estampados (prints)",
-        "recomendacion_lugares": rec_lugares,
-        "recomendacion_prints": rec_prints,
-        "propuesta4_status": prop4_status,
+        "contexto": "Reevaluación Toallas Sublimadas 3.0 · tránsito + 2 tiendas H1 + temporada alta",
         "escenario_reciente": f"Últimos 2 meses cerrados ({', '.join(m.replace('-', ' ').title() for m in last2)}): {sum(by_c.values())} und retail 2.0 (sin corporativo)",
         "transito_total": transit_total,
         "lead_time_meses": LEAD_TIME_MONTHS,
         "temporada_diciembre_pct": season["diciembre_pct"],
         "temporada_carnaval_pct": season["carnaval_pct"],
         "comprar_total_sugerido": buy_total,
-        "cubre_diciembre_count": len(cubre_dic),
+        "cubre_diciembre_count": len([p for p in plan if p["cubre_diciembre"]]),
         "disenos_comprar_q1": [{"color": p["color"], "und": p["comprar"]} for p in plan if p["comprar"] > 0],
         "conclusion": conclusion,
     }
@@ -505,19 +578,18 @@ def build_data():
         raw_rows, meses_order, inv["stock"], transit_by_color, season
     )
     brief = build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, summary_prod)
-    plan_30 = build_30_purchase_plan(raw_rows, meses_order, inv["stock"], transit_by_color, season)
+    all_stores = sorted({r["t"] for r in raw_rows if r["t"] != "PEDIDOS"})
+    plan_30 = build_30_purchase_plan(raw_rows, meses_order, inv["stock"], transit_by_color, season, all_stores)
     brief["plan_30"] = plan_30
     rl, rp = plan_30["resumen_lugares"], plan_30["resumen_prints"]
     brief["conclusion_30"] = (
-        f"Primera compra 3.0 (diseño nuevo, sin legacy): "
-        f"lugares ~{rl['comprar_mediana']} und/diseño · prints ~{rp['comprar_mediana']} und/diseño. "
-        f"Refs lugares ({', '.join(REF_LUGARES_30)}): vel. prom {rl['avg_v_mes']}/mes → {rl['v_nuevo_mes']}/mes nuevo. "
-        f"Refs prints ({', '.join(REF_PRINTS_30)}): {rp['avg_v_mes']}/mes → {rp['v_nuevo_mes']}/mes. "
-        f"Si reutiliza nombre, ver columna 'Compra neta' (descuenta stock 1.0+2.0)."
+        f"Primera compra 3.0 (diseño nuevo): lugares ~{rl['comprar_mediana']} und · prints ~{rp['comprar_mediana']} und. "
+        f"Basado en historial completo ({plan_30['historial_label']}), distribuido en {plan_30['n_tiendas']} tiendas "
+        f"(incl. {', '.join(NEW_STORES_H1)}). Vel. ref lugares {rl['avg_v_mes']}/mes → {rl['v_nuevo_mes']}/mes · "
+        f"prints {rp['avg_v_mes']}/mes → {rp['v_nuevo_mes']}/mes."
     )
 
     tipo_stats = {t: {"und": sum(r["v"] for r in raw_rows if r["g"] == t), "cli": len({r["cl"] for r in raw_rows if r["g"] == t})} for t in TIPOS}
-    all_stores = sorted({r["t"] for r in raw_rows if r["t"] != "PEDIDOS"})
     total = sum(r["v"] for r in raw_rows)
     corp = sum(r["v"] for r in raw_rows if r["t"] == "PEDIDOS")
     dr = f"{meses_order[0].split('-')[0].capitalize()} {meses_order[0].split('-')[1]} — {meses_order[-1].split('-')[0].capitalize()} {meses_order[-1].split('-')[1]}"
@@ -557,13 +629,9 @@ def build_data():
         "velocity_months_count": len(vel_months),
         "velocity_months_label": ", ".join(m.replace("-", " ").title() for m in vel_months),
         "lead_time_months": LEAD_TIME_MONTHS,
-        "new_stores": ["BARQUISIMETO"],
-        "new_store_caps": {"BARQUISIMETO": {"base": "LA GRIETA", "mult": 1, "label": "1× LA GRIETA"}},
-        "store_weights": {
-            "LA VELA": {"base": "LA GRIETA", "mult": 2, "label": "2× LA GRIETA"},
-            "WEB": {"base": "SAMBIL CHACAO", "mult": 1, "label": "≈ SAMBIL CHACAO (refuerzo web)"},
-            "TOLON": {"mult": 1.35, "label": "+35% histórico"},
-        },
+        "new_stores": NEW_STORES_H1,
+        "new_store_caps": NEW_STORE_CAPS_H1,
+        "store_weights": STORE_WEIGHTS_CFG,
         "analysis_brief": brief,
         "plan_30": plan_30,
         "date_range": dr,
@@ -628,7 +696,6 @@ DECISIONES_HTML = """
     <div class="sub"><span style="color:#f97316">VELA 2× GRIETA · WEB ≈ CHACAO · TOLON +35% · BARQUISIMETO 1× GRIETA</span></div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
-  <div class="card g1" id="decPropuesta4"></div>
   <div class="card g1" id="decPlan30" style="border-color:rgba(168,85,247,.35);background:rgba(168,85,247,.04)"></div>
 </div>
 """
@@ -745,10 +812,8 @@ function rDecisiones(){
 
   var briefEl=document.getElementById('decBrief');
   if(briefEl&&brief.conclusion){
-    briefEl.innerHTML='<p><strong>Propuesta julio:</strong> '+brief.propuesta_julio+'</p>'+
-      '<p><strong>Recomendación data-driven:</strong> Lugares → <em>'+(brief.recomendacion_lugares||[]).join(', ')+'</em> · Prints → <em>'+(brief.recomendacion_prints||[]).join(', ')+'</em></p>'+
-      '<p>'+brief.escenario_reciente+' · Tránsito: '+(brief.transito_total||0).toLocaleString()+' und</p>'+
-      '<p style="margin-top:8px;padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76"><strong>Conclusión:</strong> '+brief.conclusion+'</p>';
+    briefEl.innerHTML='<p>'+brief.escenario_reciente+' · Tránsito: '+(brief.transito_total||0).toLocaleString()+' und</p>'+
+      '<p style="margin-top:8px;padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76"><strong>Colección 2.0:</strong> '+brief.conclusion+'</p>';
   }
 
   var plan=DATA.purchase_plan||[],smry=DATA.summary_prod[DEC_MOD]||{};
@@ -803,17 +868,6 @@ function rDecisiones(){
     reEl.innerHTML=h+'</tbody></table>';
   }
 
-  var p4=document.getElementById('decPropuesta4');
-  if(p4&&brief.recomendacion_lugares){
-    var lug=brief.recomendacion_lugares||[],pr=brief.recomendacion_prints||[];
-    p4.innerHTML='<h3>🎯 Propuesta 4 diseños · justificación con data</h3><div class="sub">Decisión julio: 2 lugares + 2 prints para diciembre / base 3.0</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">'+
-      '<div style="background:rgba(247,91,138,.08);border-radius:10px;padding:12px;border:1px solid rgba(247,91,138,.2)"><div style="font-weight:700;color:#f75b8a;margin-bottom:6px">🗺️ Lugares (top retail reciente)</div>'+
-      lug.map(function(c){var p=(DATA.purchase_plan||[]).find(function(x){return x.color===c;});var st=p?(p.cubre_diciembre?'✓ Cubre dic':'⚠ Falta dic · disp. '+p.disponible+'/nec. '+p.demanda_dic):'—';return '<div style="font-size:.72rem;padding:3px 0">'+c+' — '+st+(p&&p.comprar>0?' · Q1 +'+p.comprar:'')+'</div>';}).join('')+'</div>'+
-      '<div style="background:rgba(171,123,250,.08);border-radius:10px;padding:12px;border:1px solid rgba(171,123,250,.2)"><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px">🖼️ Prints (top retail reciente)</div>'+
-      pr.map(function(c){var p=(DATA.purchase_plan||[]).find(function(x){return x.color===c;});var st=p?(p.cubre_diciembre?'✓ Cubre dic':'⚠ Falta dic · disp. '+p.disponible+'/nec. '+p.demanda_dic):'—';return '<div style="font-size:.72rem;padding:3px 0">'+c+' — '+st+(p&&p.comprar>0?' · Q1 +'+p.comprar:'')+'</div>';}).join('')+'</div></div>';
-  }
-
   var p30=document.getElementById('decPlan30');
   if(p30){
     var plan30=(DATA.plan_30||brief.plan_30||{});
@@ -823,23 +877,39 @@ function rDecisiones(){
       var prt=ds.filter(function(d){return d.tipo==='print';});
       var rl=plan30.resumen_lugares||{},rp=plan30.resumen_prints||{};
       function tbl30(arr){
-        return '<table class="ct"><thead><tr><th>Referencia</th><th>Vel. ref</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda</th><th>Compra bruta</th><th>Compra neta</th></tr></thead><tbody>'+
+        return '<table class="ct"><thead><tr><th>Referencia</th><th>Hist. total</th><th>Vel. ref</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda</th><th>Compra</th></tr></thead><tbody>'+
         arr.map(function(d){
-          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+'</td><td>'+d.v_ref_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
+          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+
+            '<div style="font-size:.58rem;color:var(--mu2)">'+d.meses_activos+'m · desde '+d.historial_desde+'</div></td>'+
+            '<td>'+(d.total_historico||0)+'</td><td>'+d.v_ref_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
             '<td>'+d.legacy_stock+' ('+d.legacy_cob_meses+'m)</td><td>'+d.demanda_inicial+'</td>'+
-            '<td class="rn" style="color:#a855f7">'+(d.comprar_bruta||d.comprar)+'</td>'+
-            '<td style="font-size:.72rem;color:var(--mu)">'+(d.comprar||0)+'</td></tr>';
+            '<td class="rn" style="color:#a855f7">'+(d.comprar_bruta||0)+'</td></tr>';
         }).join('')+'</tbody></table>';
       }
-      p30.innerHTML='<h3 style="color:#a855f7">🆕 Primera compra Colección 3.0 · diseños de referencia</h3>'+
+      function tblDist(dist,total,label){
+        if(!dist)return'';
+        var stores=Object.keys(dist).sort(function(a,b){return(dist[b]||0)-(dist[a]||0);});
+        var meta=plan30.store_shares||{};
+        return '<div style="margin-top:8px"><div style="font-weight:700;font-size:.72rem;color:var(--mu);margin-bottom:4px">'+label+' ('+total+' und)</div>'+
+          '<table class="ct"><thead><tr><th>Tienda</th><th>Peso</th><th>Und</th><th>Notas</th></tr></thead><tbody>'+
+          stores.map(function(s){
+            if(!dist[s]&&!(meta[s]&&meta[s].is_new))return'';
+            var m=meta[s]||{};
+            return '<tr><td>'+(m.is_new?'🆕 ':'')+s+'</td><td>'+(m.pct||0)+'%</td><td class="rn">'+dist[s]+'</td>'+
+              '<td style="font-size:.62rem;color:var(--mu2)">'+(m.note||'')+'</td></tr>';
+          }).join('')+'</tbody></table></div>';
+      }
+      p30.innerHTML='<h3 style="color:#a855f7">🆕 Primera compra Colección 3.0</h3>'+
         '<div class="sub">'+((plan30.nota_metodo)||'')+'</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+
-        '<span style="font-size:.75rem;background:rgba(247,91,138,.12);padding:4px 10px;border-radius:8px">🗺️ Lugares: <strong>~'+rl.comprar_mediana+' und/diseño nuevo</strong> (mediana)</span>'+
-        '<span style="font-size:.75rem;background:rgba(171,123,250,.12);padding:4px 10px;border-radius:8px">🖼️ Prints: <strong>~'+rp.comprar_mediana+' und/diseño nuevo</strong> (mediana)</span>'+
-        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Factor nuevo: '+Math.round((plan30.new_design_factor||0.75)*100)+'% · Lead: '+(plan30.lead_time_meses||3.5)+'m</span></div>'+
+        '<span style="font-size:.75rem;background:rgba(247,91,138,.12);padding:4px 10px;border-radius:8px">🗺️ Lugar nuevo: <strong>~'+rl.comprar_mediana+' und</strong></span>'+
+        '<span style="font-size:.75rem;background:rgba(171,123,250,.12);padding:4px 10px;border-radius:8px">🖼️ Print nuevo: <strong>~'+rp.comprar_mediana+' und</strong></span>'+
+        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">'+plan30.n_tiendas+' tiendas · '+((plan30.historial_label)||'')+'</span></div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">'+
-        '<div><div style="font-weight:700;color:#f75b8a;margin-bottom:6px;font-size:.78rem">🗺️ Lugares · refs: Roraima, Avila, Margarita, Canaima, Morrocoy</div>'+tbl30(lug)+'</div>'+
-        '<div><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px;font-size:.78rem">🖼️ Prints · refs: Bitácora, Waves, Caribe</div>'+tbl30(prt)+'</div></div>'+
+        '<div><div style="font-weight:700;color:#f75b8a;margin-bottom:6px;font-size:.78rem">🗺️ Lugares · Roraima, Avila, Margarita, Canaima, Morrocoy</div>'+tbl30(lug)+
+        tblDist(rl.distribucion_mediana,rl.comprar_mediana,'Distribución mediana lugar')+'</div>'+
+        '<div><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px;font-size:.78rem">🖼️ Prints · Bitácora, Waves, Caribe</div>'+tbl30(prt)+
+        tblDist(rp.distribucion_mediana,rp.comprar_mediana,'Distribución mediana print')+'</div></div>'+
         (brief.conclusion_30?'<p style="margin-top:10px;font-size:.72rem;color:var(--mu);padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76">'+brief.conclusion_30+'</p>':'');
     }
   }
@@ -879,6 +949,7 @@ def patch_html(before: str, after: str, data: dict) -> str:
         )
     else:
         before = re.sub(r'<div class="sec" id="sec-decisiones">.*?(?=</div>\n<div class="footer">)', DECISIONES_HTML + "\n", before, flags=re.DOTALL)
+        before = re.sub(r'\s*<div class="card g1" id="decPropuesta4"></div>\s*', '\n', before)
         if "sec-inventario" not in before:
             before = before.replace('<div class="sec" id="sec-decisiones">', INVENTARIO_HTML + '\n<div class="sec" id="sec-decisiones">')
 
