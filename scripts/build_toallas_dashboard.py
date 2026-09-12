@@ -22,6 +22,8 @@ LEAD_TIME_MONTHS = 3.5
 NEW_DESIGN_FACTOR = 0.75
 DEC_SEASON_FLOOR = 1.80  # +80% diciembre
 CARN_SEASON_FLOOR = 1.25  # +25% carnaval / semana santa
+REF_LUGARES_30 = ["Roraima", "Avila", "Margarita", "Canaima", "Morrocoy"]
+REF_PRINTS_30 = ["Bitacora", "Waves", "Caribe"]
 
 MESES_MAP = {
     "ENERO": "enero", "FEBRERO": "febrero", "MARZO": "marzo", "ABRIL": "abril",
@@ -341,71 +343,88 @@ def build_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, 
     return plan, prod_curve, summary, base_months
 
 
-def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, rec_lugares, rec_prints):
-    """Compra inicial 3.0: factor diseño nuevo + legacy 1.0/2.0 + lead time."""
+def _ref_velocity(raw_rows, base_months, color):
+    """Velocidad retail de referencia (colecciones 1.0 + 2.0)."""
+    retail = [r for r in raw_rows if r["c"] == color and r["m"] in base_months and r["t"] != "PEDIDOS"]
+    return sum(r["v"] for r in retail) / max(1, len(base_months))
+
+
+def _round_qty(qty):
+    return int(round(qty / 50) * 50) if qty >= 25 else int(round(qty))
+
+
+def _launch_qty(v_ref, legacy, v_legacy, season):
+    """Primera compra 3.0 calibrada a diseño de referencia."""
+    dec_f = season["diciembre_factor"]
+    v_new = v_ref * NEW_DESIGN_FACTOR
+    months_horizon = int(round(LEAD_TIME_MONTHS)) + 4
+    demand_gross = v_new * months_horizon + v_new * dec_f
+    legacy_offset = min(legacy, v_legacy * months_horizon) if v_legacy > 0 else legacy * 0.5
+    comprar_bruta = _round_qty(max(0, demand_gross))
+    comprar_neta = _round_qty(max(0, demand_gross - legacy_offset))
+    return {
+        "v_ref_mes": round(v_ref, 1),
+        "v_nuevo_mes": round(v_new, 1),
+        "legacy_stock": legacy,
+        "legacy_v_mes": round(v_legacy, 1),
+        "legacy_cob_meses": round(legacy / v_legacy, 1) if v_legacy > 0 else (99 if legacy else 0),
+        "demanda_inicial": int(round(demand_gross)),
+        "descuento_legacy": int(round(legacy_offset)),
+        "comprar_bruta": comprar_bruta,
+        "comprar": comprar_neta,
+    }
+
+
+def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season):
+    """Compra inicial 3.0 basada en diseños de referencia (1.0+2.0)."""
     closed = meses_order[:-1] if len(meses_order) > 1 else meses_order
     base_months = closed[-3:] if len(closed) >= 3 else closed
     dec_f = season["diciembre_factor"]
     proposals = []
 
-    def cat_benchmark(tipo):
-        by_c = defaultdict(int)
-        for r in raw_rows:
-            if r["o"] != G2 or r["m"] not in base_months or r["t"] == "PEDIDOS":
-                continue
-            c = r["c"]
-            t = "lugar" if c in LUGARES else "print" if c in PRINTS else "otro"
-            if t == tipo:
-                by_c[c] += r["v"]
-        if not by_c:
-            return 0.0
-        top = sorted(by_c.values(), reverse=True)[:3]
-        return sum(top) / max(1, len(top)) / max(1, len(base_months))
-
-    bench = {"lugar": cat_benchmark("lugar"), "print": cat_benchmark("print")}
-
-    for color in rec_lugares + rec_prints:
-        tipo = "lugar" if color in LUGARES else "print"
-        v_bench = bench[tipo]
-        v_new = round(v_bench * NEW_DESIGN_FACTOR, 1)
-
+    def build_ref(color, tipo):
         legacy = sum(stock.get(f"{m}/{color}", 0) for m in MODELOS)
         legacy += transit_by_color.get(color, 0)
+        v_ref = _ref_velocity(raw_rows, base_months, color)
+        v_legacy = _ref_velocity(raw_rows, base_months, color)  # ventas actuales del color
+        calc = _launch_qty(v_ref, legacy, v_legacy, season)
+        proposals.append({"color": color, "tipo": tipo, **calc})
 
-        retail_20 = [r for r in raw_rows if r["o"] == G2 and r["c"] == color and r["m"] in base_months and r["t"] != "PEDIDOS"]
-        v_legacy = sum(r["v"] for r in retail_20) / max(1, len(base_months)) if retail_20 else 0
+    for c in REF_LUGARES_30:
+        build_ref(c, "lugar")
+    for c in REF_PRINTS_30:
+        build_ref(c, "print")
 
-        # Llegada ~ene 2027: cubrir lead time + 4m operación + 1er diciembre al ritmo nuevo
-        months_horizon = int(round(LEAD_TIME_MONTHS)) + 4
-        demand_gross = v_new * months_horizon + v_new * dec_f
+    lugares = [p for p in proposals if p["tipo"] == "lugar"]
+    prints = [p for p in proposals if p["tipo"] == "print"]
+    avg_lugar = sum(p["v_ref_mes"] for p in lugares) / max(1, len(lugares))
+    avg_print = sum(p["v_ref_mes"] for p in prints) / max(1, len(prints))
+    med_lugar = sorted(p["comprar_bruta"] for p in lugares)[len(lugares) // 2] if lugares else 0
+    med_print = sorted(p["comprar_bruta"] for p in prints)[len(prints) // 2] if prints else 0
 
-        legacy_offset = min(legacy, v_legacy * months_horizon) if v_legacy > 0 else legacy * 0.6
-        comprar_raw = max(0, demand_gross - legacy_offset)
-        comprar = int(round(comprar_raw / 50) * 50) if comprar_raw >= 25 else int(round(comprar_raw))
-
-        proposals.append({
-            "color": color,
-            "tipo": tipo,
-            "benchmark_mes": round(v_bench, 1),
-            "v_nuevo_mes": v_new,
-            "legacy_stock": legacy,
-            "legacy_v_mes": round(v_legacy, 1),
-            "legacy_cob_meses": round(legacy / v_legacy, 1) if v_legacy > 0 else (99 if legacy else 0),
-            "demanda_inicial": int(round(demand_gross)),
-            "descuento_legacy": int(round(legacy_offset)),
-            "comprar": comprar,
-        })
-
-    total = sum(p["comprar"] for p in proposals)
     return {
         "designs": proposals,
-        "total_comprar": total,
+        "total_comprar": sum(p["comprar_bruta"] for p in proposals),
+        "total_comprar_neta": sum(p["comprar"] for p in proposals),
         "new_design_factor": NEW_DESIGN_FACTOR,
         "lead_time_meses": LEAD_TIME_MONTHS,
+        "base_months_label": ", ".join(m.replace("-", " ").title() for m in base_months),
+        "resumen_lugares": {
+            "avg_v_mes": round(avg_lugar, 1),
+            "v_nuevo_mes": round(avg_lugar * NEW_DESIGN_FACTOR, 1),
+            "comprar_mediana": med_lugar,
+            "comprar_promedio": _round_qty(sum(p["comprar_bruta"] for p in lugares) / max(1, len(lugares))),
+        },
+        "resumen_prints": {
+            "avg_v_mes": round(avg_print, 1),
+            "v_nuevo_mes": round(avg_print * NEW_DESIGN_FACTOR, 1),
+            "comprar_mediana": med_print,
+            "comprar_promedio": _round_qty(sum(p["comprar_bruta"] for p in prints) / max(1, len(prints))),
+        },
         "nota_metodo": (
-            f"Benchmark top {('lugares' if True else '')}/prints 2.0 × {int(NEW_DESIGN_FACTOR*100)}% factor diseño nuevo. "
-            f"Descuenta inventario legacy 1.0+2.0+tránsito del mismo color. "
-            f"Horizonte: lead time ({LEAD_TIME_MONTHS}m) + 4m operación + 1er diciembre (×{dec_f})."
+            f"Referencia ventas 1.0+2.0 ({', '.join(m.replace('-', ' ').title() for m in base_months)}). "
+            f"× {int(NEW_DESIGN_FACTOR * 100)}% factor diseño nuevo · lead time {LEAD_TIME_MONTHS}m + 4m operación + 1er dic (×{dec_f}). "
+            f"Descuenta stock legacy 1.0+2.0+tránsito del mismo color."
         ),
     }
 
@@ -486,15 +505,15 @@ def build_data():
         raw_rows, meses_order, inv["stock"], transit_by_color, season
     )
     brief = build_analysis_brief(raw_rows, meses_order, plan, transit_total, season, summary_prod)
-    plan_30 = build_30_purchase_plan(
-        raw_rows, meses_order, inv["stock"], transit_by_color, season,
-        brief["recomendacion_lugares"], brief["recomendacion_prints"],
-    )
+    plan_30 = build_30_purchase_plan(raw_rows, meses_order, inv["stock"], transit_by_color, season)
     brief["plan_30"] = plan_30
-    detalle_30 = ", ".join(f"{p['color']} {p['comprar']}" for p in plan_30["designs"])
+    rl, rp = plan_30["resumen_lugares"], plan_30["resumen_prints"]
     brief["conclusion_30"] = (
-        f"Compra inicial 3.0 sugerida: {plan_30['total_comprar']:,} und ({detalle_30}). "
-        f"Factor diseño nuevo {int(NEW_DESIGN_FACTOR * 100)}% · descuenta stock legacy 1.0+2.0."
+        f"Primera compra 3.0 (diseño nuevo, sin legacy): "
+        f"lugares ~{rl['comprar_mediana']} und/diseño · prints ~{rp['comprar_mediana']} und/diseño. "
+        f"Refs lugares ({', '.join(REF_LUGARES_30)}): vel. prom {rl['avg_v_mes']}/mes → {rl['v_nuevo_mes']}/mes nuevo. "
+        f"Refs prints ({', '.join(REF_PRINTS_30)}): {rp['avg_v_mes']}/mes → {rp['v_nuevo_mes']}/mes. "
+        f"Si reutiliza nombre, ver columna 'Compra neta' (descuenta stock 1.0+2.0)."
     )
 
     tipo_stats = {t: {"und": sum(r["v"] for r in raw_rows if r["g"] == t), "cli": len({r["cl"] for r in raw_rows if r["g"] == t})} for t in TIPOS}
@@ -754,7 +773,7 @@ function rDecisiones(){
       '<div style="font-size:.65rem;color:var(--mu2);margin-bottom:8px">Cobertura dic = Oct+Nov (base) + Dic (×'+(s.diciembre_factor||1.8)+') + BQTO 18%. Compra Q1 = saldo post-dic vs ene + feb-mar carnaval (×'+(s.carnaval_factor||1.25)+').</div>';
     html+=rows.map(function(r){
       var buy=r.comprar||0;
-      var cobB=r.cobertura_base||0,cobA=r.cobertura_adj||0;
+      var cobB=r.cobertura_base||(r.cobertura||0),cobA=r.cobertura_adj||(r.cobertura||0);
       var tc=cobA<1?'#ef4444':cobA<2?'#f59e0b':cobA<3?'#3b82f6':'#10b981';
       var dicOk=r.cubre_diciembre;
       return '<div style="display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;padding:6px 10px;background:rgba(0,0,0,.12);border-radius:8px;margin-bottom:4px">'+
@@ -800,18 +819,27 @@ function rDecisiones(){
     var plan30=(DATA.plan_30||brief.plan_30||{});
     var ds=plan30.designs||[];
     if(ds.length){
-      p30.innerHTML='<h3 style="color:#a855f7">🆕 Compra inicial Colección 3.0</h3>'+
+      var lug=ds.filter(function(d){return d.tipo==='lugar';});
+      var prt=ds.filter(function(d){return d.tipo==='print';});
+      var rl=plan30.resumen_lugares||{},rp=plan30.resumen_prints||{};
+      function tbl30(arr){
+        return '<table class="ct"><thead><tr><th>Referencia</th><th>Vel. ref</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda</th><th>Compra bruta</th><th>Compra neta</th></tr></thead><tbody>'+
+        arr.map(function(d){
+          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+'</td><td>'+d.v_ref_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
+            '<td>'+d.legacy_stock+' ('+d.legacy_cob_meses+'m)</td><td>'+d.demanda_inicial+'</td>'+
+            '<td class="rn" style="color:#a855f7">'+(d.comprar_bruta||d.comprar)+'</td>'+
+            '<td style="font-size:.72rem;color:var(--mu)">'+(d.comprar||0)+'</td></tr>';
+        }).join('')+'</tbody></table>';
+      }
+      p30.innerHTML='<h3 style="color:#a855f7">🆕 Primera compra Colección 3.0 · diseños de referencia</h3>'+
         '<div class="sub">'+((plan30.nota_metodo)||'')+'</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+
-        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Total sugerido: <strong>'+(plan30.total_comprar||0).toLocaleString()+' und</strong></span>'+
-        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Factor diseño nuevo: '+Math.round((plan30.new_design_factor||0.75)*100)+'%</span>'+
-        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Lead time: '+(plan30.lead_time_meses||3.5)+'m</span></div>'+
-        '<table class="ct"><thead><tr><th>Diseño</th><th>Tipo</th><th>Bench 2.0</th><th>Vel. 3.0</th><th>Legacy</th><th>Demanda bruta</th><th>Desc. legacy</th><th>Comprar</th></tr></thead><tbody>'+
-        ds.map(function(d){
-          return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+'</td><td>'+d.tipo+'</td><td>'+d.benchmark_mes+'/mes</td><td>'+d.v_nuevo_mes+'/mes</td>'+
-            '<td>'+d.legacy_stock+' und ('+d.legacy_cob_meses+'m)</td><td>'+d.demanda_inicial+'</td><td>-'+d.descuento_legacy+'</td>'+
-            '<td class="rn" style="color:#a855f7">'+d.comprar+'</td></tr>';
-        }).join('')+'</tbody></table>'+
+        '<span style="font-size:.75rem;background:rgba(247,91,138,.12);padding:4px 10px;border-radius:8px">🗺️ Lugares: <strong>~'+rl.comprar_mediana+' und/diseño nuevo</strong> (mediana)</span>'+
+        '<span style="font-size:.75rem;background:rgba(171,123,250,.12);padding:4px 10px;border-radius:8px">🖼️ Prints: <strong>~'+rp.comprar_mediana+' und/diseño nuevo</strong> (mediana)</span>'+
+        '<span style="font-size:.75rem;background:rgba(168,85,247,.12);padding:4px 10px;border-radius:8px">Factor nuevo: '+Math.round((plan30.new_design_factor||0.75)*100)+'% · Lead: '+(plan30.lead_time_meses||3.5)+'m</span></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px">'+
+        '<div><div style="font-weight:700;color:#f75b8a;margin-bottom:6px;font-size:.78rem">🗺️ Lugares · refs: Roraima, Avila, Margarita, Canaima, Morrocoy</div>'+tbl30(lug)+'</div>'+
+        '<div><div style="font-weight:700;color:#ab7bfa;margin-bottom:6px;font-size:.78rem">🖼️ Prints · refs: Bitácora, Waves, Caribe</div>'+tbl30(prt)+'</div></div>'+
         (brief.conclusion_30?'<p style="margin-top:10px;font-size:.72rem;color:var(--mu);padding:8px 10px;background:rgba(76,175,118,.08);border-radius:8px;border-left:3px solid #4caf76">'+brief.conclusion_30+'</p>':'');
     }
   }
@@ -910,8 +938,13 @@ def patch_html(before: str, after: str, data: dict) -> str:
         )
         after = after[:ra_start] + ra + after[ra_end:]
 
-    # Replace old decisiones JS block
-    after = re.sub(r"// ── DECISIONES ──.*?/\* ── EXPORT / FULLSCREEN ── \*/", EXTRA_JS + "\n/* ── EXPORT / FULLSCREEN ── */", after, flags=re.DOTALL)
+    # Replace old decisiones JS block (match any variant of the header comment)
+    after = re.sub(
+        r"// ── DECISIONES.*?/\* ── EXPORT / FULLSCREEN ── \*/",
+        EXTRA_JS + "\n/* ── EXPORT / FULLSCREEN ── */",
+        after,
+        flags=re.DOTALL,
+    )
 
     return before + "var DATA=" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";" + after
 
