@@ -293,7 +293,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   </div>
   <div class="card g1" style="margin-bottom:14px">
     <h3>Reparto a tiendas</h3>
-    <div class="sub">Vela 1,5× Grieta · Tolón +30% · Web 1× Chacao · Barquisimeto 1× Grieta · el tránsito cuenta desde mediados de octubre</div>
+    <div class="sub">Vela 1,5× Grieta · Tolón +30% · Web 1× Chacao · Barquisimeto prom. Grieta · Chacao · Tolón · el tránsito cuenta desde mediados de octubre</div>
     <div id="reabastGrid" style="margin-top:10px"></div>
   </div>
 </div>
@@ -349,8 +349,21 @@ function tipoLabel(t){return t==='Empresa'?'Corporativo':t;}
 function velaMult(){return (DATA.vela_plan&&DATA.vela_plan.mult)||1.5;}
 function tolonMult(){return DATA.tolon_mult||1.3;}
 function fmtMult(x){return String(x).replace('.',',');}
+function barqNote(){return 'prom. Grieta · Chacao · Tolón';}
+function barqProm(vel){
+  return ((vel['LA GRIETA']||0)+(vel['SAMBIL CHACAO']||0)+(vel['TOLON']||0))/3;
+}
+function applyBarqToPlan(){
+  var p=DATA.store_plan_v; if(!p) return;
+  var raw={'LA GRIETA':p['LA GRIETA']||0,'SAMBIL CHACAO':p['SAMBIL CHACAO']||0,'TOLON':(p.TOLON||0)/(DATA.tolon_mult||1.3)};
+  p.BARQUISIMETO=barqProm(raw);
+  if(!DATA.store_plan_meta) DATA.store_plan_meta={};
+  DATA.store_plan_meta.BARQUISIMETO=barqNote()+' · tienda nueva';
+  if(DATA.new_store_caps&&DATA.new_store_caps.BARQUISIMETO) DATA.new_store_caps.BARQUISIMETO.label=barqNote()+' · tienda nueva';
+  if(NEW_STORE_CAPS&&NEW_STORE_CAPS.BARQUISIMETO) NEW_STORE_CAPS.BARQUISIMETO.label=barqNote()+' · tienda nueva';
+}
 function factorLine(){
-  return '🎄 Dic ×'+fmtMult(DATA.high_season_month_factor||2)+' · 🎭 Carnaval/SS ×'+fmtMult(DATA.carnival_factor||1.1)+' · Vela '+fmtMult(velaMult())+'× Grieta · Web 1× Chacao · Barquisimeto 1× Grieta · Tolón +'+Math.round((tolonMult()-1)*100)+'%';
+  return '🎄 Dic ×'+fmtMult(DATA.high_season_month_factor||2)+' · 🎭 Carnaval/SS ×'+fmtMult(DATA.carnival_factor||1.1)+' · Vela '+fmtMult(velaMult())+'× Grieta · Web 1× Chacao · Barquisimeto '+barqNote()+' · Tolón +'+Math.round((tolonMult()-1)*100)+'%';
 }
 function storeMatch(t, sel){if(!sel) return true; if(sel==='PEDIDOS_CORP') return isCorpStore(t); return t===sel;}
 
@@ -443,7 +456,7 @@ function bRT(el,items,colorFn){
 }
 
 function updateKPIs(){
-  var rows=fr(),total=0,ts={},cs={};rows.forEach(function(r){total+=r.v;ts[r.t]=1;cs[r.c]=1;});
+  var rows=fr(),total=0,ts={},cs={};rows.forEach(function(r){total+=r.v;ts[storeGroup(r.t)]=1;cs[r.c]=1;});
   var mA=getMesesActivos(),byM={};mA.forEach(function(m){byM[m]=0;});rows.forEach(function(r){if(r.m in byM)byM[r.m]+=r.v;});
   var vals=mA.map(function(m){return byM[m];});
   var lastV=vals[vals.length-1]||0,prevV=vals[vals.length-2]||0,varSub='vs mes anterior';
@@ -465,7 +478,7 @@ function updateKPIs(){
   }
   document.getElementById('kpiBar').innerHTML=
     '<div class="kpib"><div class="kv">'+total.toLocaleString()+'</div><div class="kl">Unidades</div></div>'+
-    '<div class="kpib"><div class="kv">'+Object.keys(ts).length+'</div><div class="kl">Tiendas</div></div>'+
+    '<div class="kpib"><div class="kv">'+Object.keys(ts).length+'</div><div class="kl">Tiendas</div><div class="ksub">vías actuales</div></div>'+
     '<div class="kpib"><div class="kv">'+Object.keys(cs).length+'</div><div class="kl">Diseños</div></div>'+
     '<div class="kpib"><div class="kv" style="color:#ffc107">'+gStk.toLocaleString()+'</div><div class="kl">Stock</div><div class="ksub">en mano</div></div>'+
     '<div class="kpib" style="border-color:#22d3ee55"><div class="kv" style="color:#22d3ee">'+trTot.toLocaleString()+'</div><div class="kl">En tránsito</div><div class="ksub">llegada mediados de octubre</div></div>'+
@@ -941,9 +954,8 @@ function rDecisiones(){
 
   document.getElementById('decMethod').innerHTML=
     'Cobertura dic = oct + nov (ritmo normal) + dic (×'+fmtMult(hs)+'), con stock PT + tránsito. '
-    +'Vela '+fmtMult(velaMult())+'× Grieta · Tolón +'+Math.round((tolonMult()-1)*100)+'% · Web 1× Chacao · Barquisimeto 1× Grieta. '
-    +'El tránsito (3.400 und, '+transitWhen()+') entra en el disponible: diciembre queda cubierto. '
-    +'Si el PT se acaba antes, hay un hueco corto hasta la llegada; no implica faltar en diciembre.';
+    +'Vela '+fmtMult(velaMult())+'× Grieta · Tolón +'+Math.round((tolonMult()-1)*100)+'% · Web 1× Chacao · Barquisimeto '+barqNote()+'. '
+    +'El tránsito (3.400 und, '+transitWhen()+') entra en el disponible: diciembre queda cubierto.';
 
   renderBuyGrid(allD);
   renderReabast();
@@ -966,7 +978,7 @@ function renderBuyGrid(allD){
       +Math.round(c.v)+'/mes base · '+Math.round(c.vDic)+'/mes dic · stock <em>'+c.pt+'</em>'
       +(c.tr?' · +<em style="color:#c4b5fd">'+c.tr+'</em>':' · +0')
       +' · disp. <em>'+c.disp+'</em> · Cob. '+cobTxt(c.cobB)+' base / <em>'+cobTxt(c.cobD)+' dic</em> · Nec. dic: '+c.needDic
-      +(c.hole&&c.left>=0?' · <span style="color:#fbbf24">Hueco PT hasta '+transitWhen()+' · el tránsito cubre diciembre</span>':'')
+      +(c.hole&&c.left>=0?' · <span style="color:#fbbf24">el tránsito cubre diciembre</span>':'')
       +(c.left<0?' · <span style="color:#ef4444">no cubre dic ni con tránsito</span>':'')
       +'</div>'
       +'<span class="curve-badge '+cls+'">'+badge+'</span>'
@@ -1062,7 +1074,7 @@ function firstBuyPlan(){
   push('LA VELA', g*velaMult(), fmtMult(velaMult())+'× LA GRIETA (refuerzo)');
   push('TOLON', (vel['TOLON']||0)*tolonMult(), '+'+Math.round((tolonMult()-1)*100)+'% su 6m');
   push('WEB', ch, '1× SAMBIL CHACAO · refuerzo canal');
-  push('BARQUISIMETO', g, '1× LA GRIETA · tienda nueva', true);
+  push('BARQUISIMETO', barqProm(vel), barqNote()+' · tienda nueva', true);
   var nH1=DATA.h1_new_stores||2;
   for(var i=0;i<nH1;i++){
     var key=i===0?'NUEVA H1 A':'NUEVA H1 B';
@@ -1130,13 +1142,13 @@ function rCant40(){
   var fb=buildFirstBuy();
   var stores=fb.rows.length;
   var newStores=fb.rows.filter(function(r){return r.isNew;}).length;
-  var leftJan=leftoverOldAt(parseD('2027-01-01'));
-  var leftMar=leftoverOldAt(parseD('2027-03-01'));
+  var leftFeb=leftoverOldAt(parseD('2027-02-01'));
+  var leftApr=leftoverOldAt(parseD('2027-04-01'));
   document.getElementById('q4Kpis').innerHTML=
     '<div class="tkpi"><div class="tv" style="color:#c4b5fd">'+fb.po.toLocaleString()+'</div><div class="tl">Sugerencia de compra</div><div class="ts">4 diseños · 80×160</div></div>'
     +'<div class="tkpi"><div class="tv">'+stores+'</div><div class="tl">Tiendas</div><div class="ts">8 actuales + '+newStores+' aperturas</div></div>'
     +'<div class="tkpi"><div class="tv">'+Math.round(fb.taller*100)+'%</div><div class="tl">Reserva taller</div><div class="ts">'+fb.poTaller.toLocaleString()+' und</div></div>'
-    +'<div class="tkpi"><div class="tv" style="color:#67e8f9;font-size:1rem">oct–nov 26</div><div class="tl">Fecha sugerida de compra</div><div class="ts">llegada feb–mar 27</div></div>';
+    +'<div class="tkpi"><div class="tv" style="color:#67e8f9;font-size:1rem">nov–dic 26</div><div class="tl">Fecha sugerida de compra</div><div class="ts">llegada feb–abr 27</div></div>';
 
   document.getElementById('q4Method').innerHTML=
     '<div class="fact-row">'
@@ -1144,14 +1156,14 @@ function rCant40(){
     +'<span>🎭 Carnaval/SS ×'+fmtMult(DATA.carnival_factor||1.1)+'</span>'
     +'<span>Vela '+fmtMult(velaMult())+'× Grieta</span>'
     +'<span>Web 1× Chacao</span>'
-    +'<span>Barquisimeto 1× Grieta</span>'
+    +'<span>Barquisimeto '+barqNote()+'</span>'
     +'<span>Tolón +'+Math.round((tolonMult()-1)*100)+'%</span>'
     +'<span>+ 2 tiendas 1S-27 (1× Grieta)</span>'
     +'<span>Factor nuevo 50%</span>'
     +'<span>Taller '+Math.round(fb.taller*100)+'%</span>'
     +'</div>'
     +'<div style="margin-top:8px;font-size:.68rem;color:var(--mu2)">El 3.0 entra en las 11 tiendas por peso (mix 6 meses + refuerzos + aperturas). El stock 1.0/2.0 no sustituye facings nuevos.</div>'
-    +'<div style="margin-top:8px;font-size:.72rem;color:var(--tx)">Pedir entre <b>mediados de octubre y mediados de noviembre 2026</b> (lead 3–4 meses → llegada <b>febrero–marzo 2027</b>, Carnaval / Semana Santa). Dic-26 ya queda cubierto con 2.0 + tránsito. Si se pide ahora, el 3.0 llega en enero con ~'+leftJan.toLocaleString()+' und de 1.0/2.0 aún en piso; a inicios de marzo quedarían ~'+leftMar.toLocaleString()+'.</div>';
+    +'<div style="margin-top:8px;font-size:.72rem;color:var(--tx)">Pedir entre <b>noviembre y diciembre 2026</b> (lead 3–4 meses → llegada <b>febrero–abril 2027</b>). Noviembre apunta a Carnaval; diciembre, a Semana Santa. Dic-26 ya queda cubierto con 2.0 + tránsito. A la llegada en febrero quedarían ~'+leftFeb.toLocaleString()+' und de 1.0/2.0 en piso; a inicios de abril ~'+leftApr.toLocaleString()+'.</div>';
 
   var tipoLbl={lugares:'lugar',estampados:'estampado'};
   var h='<table class="q4-sug"><thead><tr><th>#</th><th>Diseño</th><th>Análogo 2.0</th><th class="num">Und</th></tr></thead><tbody>';
@@ -1173,6 +1185,7 @@ document.addEventListener('click',function(e){
 
 /* ── INIT ── */
 Chart.register(ChartDataLabels);
+applyBarqToPlan();
 DATA.filtros.tiendas.forEach(function(t){
   if(t==='CORPORATIVO') return;
   var val=t==='PEDIDOS'?'PEDIDOS_CORP':t;
