@@ -903,8 +903,8 @@ function dicFactor(){return DATA.high_season_month_factor||2;}
 function carnFactor(){return DATA.carnival_factor||1.1;}
 function cobTxt(n){
   if(!(n>0)||!isFinite(n)) return '—';
-  if(n>=90) return '99 m';
-  return n.toFixed(1).replace('.',',')+' m';
+  if(n>=90) return '99 meses';
+  return n.toFixed(1).replace('.',',')+' meses';
 }
 function curveOf(d){
   var v=d.v_mes||0, hs=dicFactor(), cf=carnFactor();
@@ -931,8 +931,8 @@ function rDecisiones(){
   var cobW=vDic>0?disp/vDic:0;
   document.getElementById('decKpis').innerHTML=
     '<div class="curve-kpi">Cobertura a ritmo de diciembre (stock + tránsito): <b style="color:#67e8f9">'+cobTxt(cobW)+'</b></div>'
-    +'<div class="curve-kpi">Comprar 3 meses al ritmo de hoy: <b style="color:'+(buy3?'#fbbf24':'#34d399')+'">'+(buy3?buy3.toLocaleString()+' und':'0 und')+'</b></div>'
-    +'<div class="curve-kpi">Comprar ene–mar (si no alcanza): <b style="color:'+(buyT1?'#fbbf24':'#34d399')+'">'+(buyT1?('+'+buyT1.toLocaleString()+' und'):'0 und')+'</b></div>';
+    +'<div class="curve-kpi">Comprar 3 meses al ritmo de hoy: <b style="color:'+(buy3?'#fbbf24':'#34d399')+'">'+(buy3?buy3.toLocaleString()+' und':'ninguna')+'</b></div>'
+    +'<div class="curve-kpi">Comprar ene–mar (si no alcanza): <b style="color:'+(buyT1?'#fbbf24':'#34d399')+'">'+(buyT1?('+'+buyT1.toLocaleString()+' und'):'ninguna')+'</b></div>';
 
   document.getElementById('decMethod').innerHTML=
     'Cobertura dic = oct + nov (ritmo normal) + dic (×'+fmtMult(hs)+'). '
