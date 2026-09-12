@@ -31,7 +31,9 @@ LAUNCH_30_ANALOGS = [
     ("Diseño 3 (estampado)", "Waves"),
     ("Diseño 4 (estampado)", "Caribe"),
 ]
-TALLER_RESERVE_PCT = 0.12
+TALLER_RESERVE_PCT = 0.15
+LAUNCH_30_DEC_FACTOR = 2.0
+LAUNCH_30_TIENDAS = 10
 INV_EXCLUDE_COLORS = {"Horizonte", "Amazonas"}
 NEW_STORES_H1 = ["BARQUISIMETO", "APERTURA H1-2"]
 NEW_STORE_CAPS_H1 = {
@@ -459,29 +461,33 @@ def _distribute_purchase(total, shares, min_per_store=MIN_UNITS_PER_STORE):
 
 
 def _launch_demand(v_ref, season):
-    """Demanda bruta hasta próximo reorder: lead time + cobertura + carnaval/SS + buffer."""
+    """Demanda bruta hasta próximo reorder: lead time + cobertura + diciembre + carnaval/SS + buffer."""
     v_new = v_ref * NEW_DESIGN_FACTOR
     carn_f = season["carnaval_factor"]
+    dec_f = season.get("diciembre_factor", 1)
     months = int(round(LEAD_TIME_MONTHS)) + LAUNCH_COVERAGE_MONTHS
     carn_extra = v_new * max(0, carn_f - 1) * 2
+    dec_extra = v_new * max(0, dec_f - 1)
     buffer = v_new * 0.15
-    demand = v_new * months + carn_extra + buffer
+    demand = v_new * months + carn_extra + dec_extra + buffer
     return round(v_new, 1), int(round(demand))
 
 
 def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, season, all_stores):
     """Primera compra 3.0: historial completo, distribución por tienda, 2 aperturas H1."""
+    rows_30 = [r for r in raw_rows if r["c"] not in INV_EXCLUDE_COLORS]
+    season_30 = {**season, "diciembre_factor": LAUNCH_30_DEC_FACTOR}
     shares, store_meta, hist_total = _compute_launch_shares(
-        raw_rows, all_stores, NEW_STORES_H1, STORE_WEIGHTS_CFG, NEW_STORE_CAPS_H1,
+        rows_30, all_stores, NEW_STORES_H1, STORE_WEIGHTS_CFG, NEW_STORE_CAPS_H1,
     )
     dr = f"{meses_order[0].split('-')[0].capitalize()} {meses_order[0].split('-')[1]} — {meses_order[-1].split('-')[0].capitalize()} {meses_order[-1].split('-')[1]}"
     proposals = []
 
     def build_ref(color, tipo):
         legacy = sum(stock.get(f"{m}/{color}", 0) for m in MODELOS) + transit_by_color.get(color, 0)
-        v_ref, total_hist, meses_act, active = _historical_velocity(raw_rows, meses_order, color)
-        v_legacy, _, _, _ = _historical_velocity(raw_rows, meses_order, color)
-        v_new, demand_gross = _launch_demand(v_ref, season)
+        v_ref, total_hist, meses_act, active = _historical_velocity(rows_30, meses_order, color)
+        v_legacy, _, _, _ = _historical_velocity(rows_30, meses_order, color)
+        v_new, demand_gross = _launch_demand(v_ref, season_30)
         legacy_offset = min(legacy, v_legacy * (int(round(LEAD_TIME_MONTHS)) + LAUNCH_COVERAGE_MONTHS)) if v_legacy > 0 else legacy * 0.5
         comprar_bruta = _round_qty(max(0, demand_gross))
         comprar_neta = _round_qty(max(0, demand_gross - legacy_offset))
@@ -538,9 +544,13 @@ def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, seaso
         "total_taller": total_taller,
         "total_compra": total_compra,
         "llegada": llegada,
+        "tiendas_total": LAUNCH_30_TIENDAS,
+        "tiendas_sub": "incl canal web",
+        "diciembre_factor_30": LAUNCH_30_DEC_FACTOR,
+        "taller_pct": TALLER_RESERVE_PCT,
         "puertas_actuales": len(all_stores),
         "puertas_nuevas": len(NEW_STORES_H1),
-        "puertas_total": len(all_stores) + len(NEW_STORES_H1),
+        "puertas_total": LAUNCH_30_TIENDAS,
         "designs": proposals,
         "total_comprar": sum(p["comprar_bruta"] for p in proposals),
         "total_comprar_neta": sum(p["comprar"] for p in proposals),
@@ -564,11 +574,13 @@ def build_30_purchase_plan(raw_rows, meses_order, stock, transit_by_color, seaso
             "distribucion_mediana": med_print_d,
         },
         "nota_metodo": (
-            f"Historial completo 1.0+2.0 ({dr}): vel. = {int((1-HIST_RECENT_WEIGHT)*100)}% promedio histórico + "
+            f"Historial 1.0+2.0 sin Horizonte/Amazonas ({dr}): vel. = {int((1-HIST_RECENT_WEIGHT)*100)}% promedio histórico + "
             f"{int(HIST_RECENT_WEIGHT*100)}% últimos 3 meses cerrados. × {int(NEW_DESIGN_FACTOR*100)}% factor diseño nuevo. "
-            f"Demanda: lead time {LEAD_TIME_MONTHS}m + {LAUNCH_COVERAGE_MONTHS}m cobertura + carnaval/SS (×{season['carnaval_factor']}) + 15% buffer. "
-            f"Distribución: peso histórico por tienda + VELA 2×GRIETA · WEB≈CHACAO · TOLON +35% · "
-            f"{len(NEW_STORES_H1)} tiendas nuevas H1 ({', '.join(NEW_STORES_H1)}). Mín {MIN_UNITS_PER_STORE} und/tienda."
+            f"Demanda: lead time {LEAD_TIME_MONTHS}m + {LAUNCH_COVERAGE_MONTHS}m cobertura + diciembre (×{LAUNCH_30_DEC_FACTOR}) + "
+            f"carnaval/SS (×{season['carnaval_factor']}) + 15% buffer. "
+            f"Distribución: {LAUNCH_30_TIENDAS} tiendas (incl. WEB) por peso histórico + VELA 2×GRIETA · WEB≈CHACAO · TOLON +35% · "
+            f"{len(NEW_STORES_H1)} aperturas H1 ({', '.join(NEW_STORES_H1)}). Taller {int(TALLER_RESERVE_PCT*100)}%. "
+            f"Mín {MIN_UNITS_PER_STORE} und/tienda."
         ),
     }
 
@@ -933,27 +945,29 @@ function rColeccion30(){
   var plan30=DATA.plan_30||{},s=DATA.season_factors||{},lt=plan30.lead_time_meses||3.5;
   var rows=plan30.launch_table||[];
   if(!rows.length){p30.innerHTML='<div class="nodata">Sin datos 3.0</div>';return;}
+  var dec30=plan30.diciembre_factor_30||2,tPct=Math.round((plan30.taller_pct||0.15)*100);
+  var nTiendas=plan30.tiendas_total||10;
   var pills=[
-    '🎄 Dic ×'+(s.diciembre_factor||1.8),
+    '🎄 Dic ×'+dec30,
     '🎭 Carnaval/SS ×'+(s.carnaval_factor||1.25),
     'Vela 2× Grieta','Web ≈ Chacao','Barquisimeto 1× Grieta','Tolón +35%',
     '+ '+plan30.puertas_nuevas+' tiendas H1','Factor nuevo '+Math.round((plan30.new_design_factor||0.75)*100)+'%',
-    'Taller '+Math.round((plan30.total_taller/(plan30.total_compra||1))*100)+'%'
+    'Taller '+tPct+'%','Sin Horizonte/Amazonas'
   ];
   p30.innerHTML=
     '<h3 style="color:#a855f7;margin-bottom:4px">Colección 3.0</h3>'+
-    '<div class="sub" style="margin-bottom:12px">Primera compra · historial completo ('+(plan30.historial_label||'')+') · '+plan30.puertas_total+' puertas por peso</div>'+
+    '<div class="sub" style="margin-bottom:12px">Primera compra · historial ('+(plan30.historial_label||'')+') · '+nTiendas+' tiendas (incl canal web) por peso</div>'+
     '<div class="tkpis" style="margin-bottom:14px">'+
     '<div class="tkpi"><div class="tv" style="color:#a855f7">'+(plan30.total_compra||0).toLocaleString()+'</div><div class="tl">Sugerencia de compra</div><div class="ts">4 diseños · 80×160</div></div>'+
-    '<div class="tkpi"><div class="tv" style="color:#00bcd4">'+(plan30.puertas_total||0)+'</div><div class="tl">Puertas</div><div class="ts">'+(plan30.puertas_actuales||0)+' actuales + '+(plan30.puertas_nuevas||0)+' aperturas</div></div>'+
+    '<div class="tkpi"><div class="tv" style="color:#00bcd4">'+nTiendas+'</div><div class="tl">Tiendas</div><div class="ts">'+(plan30.tiendas_sub||'incl canal web')+'</div></div>'+
     '<div class="tkpi"><div class="tv" style="color:#14b8a6">'+(plan30.llegada||'—')+'</div><div class="tl">Llegada</div><div class="ts">lead '+lt+' meses</div></div>'+
-    '<div class="tkpi"><div class="tv" style="color:#f97316">'+(plan30.total_taller||0)+'</div><div class="tl">Taller</div><div class="ts">12% de reserva</div></div></div>'+
+    '<div class="tkpi"><div class="tv" style="color:#f97316">'+(plan30.total_taller||0)+'</div><div class="tl">Taller</div><div class="ts">'+tPct+'% de reserva</div></div></div>'+
     '<div style="background:rgba(0,0,0,.15);border-radius:10px;padding:10px 12px;margin-bottom:14px">'+
     '<div style="font-size:.68rem;font-weight:700;color:var(--mu);margin-bottom:6px">Factores</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">'+pills.map(function(p){return '<span style="font-size:.65rem;background:var(--s2);border:1px solid var(--brd);border-radius:999px;padding:3px 10px;color:var(--mu)">'+p+'</span>';}).join('')+'</div>'+
     '<p style="font-size:.62rem;color:var(--mu2);margin-top:8px;line-height:1.5">'+(plan30.nota_metodo||'')+'</p></div>'+
     '<h3 style="font-size:.85rem;margin-bottom:4px">Sugerencia de compra 3.0</h3>'+
-    '<div class="sub" style="margin-bottom:10px">4 diseños · en las '+plan30.puertas_total+' puertas por peso + '+(plan30.total_taller||0)+' taller</div>'+
+    '<div class="sub" style="margin-bottom:10px">4 diseños · en las '+nTiendas+' tiendas (incl canal web) por peso + '+(plan30.total_taller||0)+' taller</div>'+
     '<table class="ct"><thead><tr><th>#</th><th>Diseño</th><th>Análogo 2.0</th><th>Und</th></tr></thead><tbody>'+
     rows.map(function(r,i){
       return '<tr><td>'+(i+1)+'</td><td>'+r.slot+'</td><td><span class="chip" style="background:'+cn(r.analogo)+'"></span>'+r.analogo+' · '+r.pct+'%</td><td class="rn" style="color:#a855f7">'+r.und+'</td></tr>';
@@ -1040,6 +1054,14 @@ def patch_html(before: str, after: str, data: dict) -> str:
         "else if(n==='cliente')rCliente();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();else if(n==='coleccion30')rColeccion30();\n  setTimeout(addExpandBtns,120);}",
         after,
         flags=re.DOTALL,
+    )
+
+    # Remove Clientes KPI from header bar
+    after = re.sub(
+        r"'\<div class=\"kpib\"\>\<div class=\"kv\"\>'\+uniqCli\(rows\)\.toLocaleString\(\)\+'\</div\>\<div class=\"kl\"\>Clientes\</div\>\</div>'\+\n    ",
+        "",
+        after,
+        count=1,
     )
 
     # Single En Tránsito KPI after Stock PT (header — no duplicates)
