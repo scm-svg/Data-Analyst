@@ -92,12 +92,25 @@ INV_MODELO_MAP = {
     "SHORT PLAYA ESTAMPADO KIDS": ("SHORT PLAYA SUBLIMADO", "KIDS"),
 }
 
+COLORES_ACTIVOS = {
+    "SHORT PLAYA UNICOLOR": [
+        "Azul Pizarra",
+        "Azul Verdoso",
+        "Cereza",
+        "Marron",
+        "Verde Pino",
+    ],
+    "SHORT PLAYA SUBLIMADO": ["Playuela", "Sal", "Sombrero", "Tucupido"],
+}
+
 PEAK_GROUPS = {
     "diciembre": ["diciembre"],
     "enero": ["enero"],
     "carnaval": ["febrero"],
     "semana_santa": ["marzo", "abril"],
 }
+
+ENERO_PLANNING_FLOOR = 1.15
 
 LEAD_MONTHS = 3
 LAUNCH_NEW_STORE_UPTAKE = 0.93
@@ -152,6 +165,48 @@ def stock_key(modelo: str, genero: str, color: str, talla: str) -> str:
     return f"{modelo}/{genero}/{color}/{talla}"
 
 
+def is_active_color(modelo: str, color: str) -> bool:
+    return color in COLORES_ACTIVOS.get(modelo, [])
+
+
+def filter_active_rows(rows: list[dict]) -> list[dict]:
+    return [r for r in rows if is_active_color(r["modelo"], r["color"])]
+
+
+def filter_active_stock(
+    stock: dict[str, float],
+    stock_by_store: dict[str, dict[str, float]],
+) -> tuple[dict[str, float], dict[str, dict[str, float]], dict[str, float]]:
+    filtered: dict[str, float] = {}
+    filtered_by_store: dict[str, dict[str, float]] = defaultdict(dict)
+    by_modelo: dict[str, float] = defaultdict(float)
+
+    for key, qty in stock.items():
+        parts = key.split("/")
+        if len(parts) != 4:
+            continue
+        modelo, _genero, color, _talla = parts
+        if not is_active_color(modelo, color):
+            continue
+        filtered[key] = qty
+        by_modelo[modelo] += qty
+
+    for store, items in stock_by_store.items():
+        store_items = {}
+        for key, qty in items.items():
+            parts = key.split("/")
+            if len(parts) != 4:
+                continue
+            modelo, _genero, color, _talla = parts
+            if not is_active_color(modelo, color):
+                continue
+            store_items[key] = qty
+        if store_items:
+            filtered_by_store[store] = store_items
+
+    return filtered, dict(filtered_by_store), dict(by_modelo)
+
+
 def load_data(html_path: Path) -> tuple[str, dict]:
     html = html_path.read_text(encoding="utf-8")
     match = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
@@ -172,6 +227,8 @@ def parse_sales(path: Path) -> list[dict]:
             continue
         genero = str(r["GENERO"]).strip().upper()
         color = title_color(str(r["COLOR"]))
+        if not is_active_color(modelo, color):
+            continue
         talla = str(r["TALLA"]).strip()
         mes = mes_key(int(r["Año"]), str(r["Mes"]))
         qty = int(r["Cant. ordenada"])
@@ -207,6 +264,8 @@ def parse_inventory(path: Path) -> tuple[dict, dict, dict]:
             continue
         modelo, genero = mapped
         color = title_color(str(r["COLOR"]))
+        if not is_active_color(modelo, color):
+            continue
         talla = str(r["TALLA"]).strip()
         qty = max(0, float(r["Cantidad en inventario"]))
         if qty <= 0:
@@ -266,9 +325,13 @@ def compute_peak_factor(
         if vals:
             peak_factors[label] = round((sum(vals) / len(vals)) / baseline, 2)
 
-    # Floor diciembre at historical planning factor; use max peak for production safety
+    # Floor diciembre at historical planning factor; enero gets planning uplift
     if "diciembre" in peak_factors:
         peak_factors["diciembre"] = max(peak_factors["diciembre"], 1.4)
+    if "enero" in peak_factors:
+        peak_factors["enero"] = max(peak_factors["enero"], ENERO_PLANNING_FLOOR)
+    else:
+        peak_factors["enero"] = ENERO_PLANNING_FLOOR
 
     hs = max(peak_factors.values()) if peak_factors else 1.4
     hs = round(max(hs, 1.4), 2)
@@ -328,20 +391,16 @@ def build_production_plan(
         for color in colors:
             for genero in ["CAB", "KIDS"]:
                 talla_rows = []
-                talla_names = sorted(
-                    {
-                        r["talla"]
-                        for r in rows
-                        if r["modelo"] == modelo
-                        and r["genero"] == genero
-                        and r["color"] == color
-                    },
-                    key=lambda t: (0 if t.isdigit() else 1, t),
-                )
-                if not talla_names:
-                    # still include if stock exists
-                    prefix = f"{modelo}/{genero}/{color}/"
-                    talla_names = sorted({k.split("/")[-1] for k in stock if k.startswith(prefix)})
+                prefix = f"{modelo}/{genero}/{color}/"
+                talla_names = {
+                    r["talla"]
+                    for r in rows
+                    if r["modelo"] == modelo
+                    and r["genero"] == genero
+                    and r["color"] == color
+                }
+                talla_names |= {k.split("/")[-1] for k in stock if k.startswith(prefix)}
+                talla_names = sorted(talla_names, key=lambda t: (0 if t.isdigit() else 1, t))
 
                 for talla in talla_names:
                     base = sku_velocity(rows, velocity_months, modelo, genero, color, talla)
@@ -631,7 +690,8 @@ def update_filtros(rows: list[dict], data: dict) -> dict:
     filtros = data.get("filtros", {})
     filtros["tiendas"] = sorted({r["tienda"] for r in rows})
     filtros["generos"] = sorted({r["genero"] for r in rows})
-    filtros["colores"] = sorted({r["color"] for r in rows})
+    active_colors = sorted({c for cols in COLORES_ACTIVOS.values() for c in cols})
+    filtros["colores"] = active_colors
     filtros["modelos"] = sorted({r["modelo"] for r in rows})
     return filtros
 
@@ -667,12 +727,16 @@ def patch_html(html: str, data: dict, periodo: str, partial_label: str, hs_label
 
 
 def main() -> None:
-    html, data = load_data(SOURCE_HTML)
+    source = OUTPUT_HTML if OUTPUT_HTML.exists() else SOURCE_HTML
+    html, data = load_data(source)
     new_sales = parse_sales(SALES_XLSX)
     replace_months = {r["mes"] for r in new_sales}
 
-    merged_rows = merge_sales(data["raw_rows"], new_sales, replace_months)
-    stock, stock_by_store, stock_by_modelo = parse_inventory(INV_XLSX)
+    merged_rows = filter_active_rows(
+        merge_sales(filter_active_rows(data["raw_rows"]), new_sales, replace_months)
+    )
+    raw_stock, raw_sbs, _raw_by_modelo = parse_inventory(INV_XLSX)
+    stock, stock_by_store, stock_by_modelo = filter_active_stock(raw_stock, raw_sbs)
 
     meses_order = compute_meses_order(merged_rows)
     partial_month = "septiembre-2026" if "septiembre-2026" in meses_order else None
@@ -680,10 +744,15 @@ def main() -> None:
     velocity_months = pick_velocity_months(meses_order, partial_month)
     hs, peak_factors, hs_detail = compute_peak_factor(meses_und, velocity_months, meses_order)
 
-    colores_activos = data.get("colores_activos", {})
+    colores_activos = COLORES_ACTIVOS
     production_plan = build_production_plan(
         merged_rows, stock, stock_by_store, colores_activos, velocity_months, hs
     )
+    plan_stk = int(sum(p["stk"] for p in production_plan))
+    stock_total = int(sum(stock.values()))
+    stock_taller = int(sum(stock_by_store.get("TALLER", {}).values()))
+    if plan_stk != stock_total:
+        raise RuntimeError(f"Stock mismatch: plan={plan_stk} vs inventory={stock_total}")
     summary_produccion = summarize_plan(production_plan)
     summary_genero = summarize_genero(production_plan)
 
@@ -711,10 +780,12 @@ def main() -> None:
             "meses_order": meses_order,
             "meses_und": meses_und,
             "filtros": update_filtros(merged_rows, data),
+            "colores_activos": colores_activos,
+            "colores_descontinuados": [],
             "es_parcial": partial_month is not None,
             "partial_month": partial_month,
-            "stock_total": int(sum(stock.values())),
-            "stock_taller": int(sum(stock_by_store.get("TALLER", {}).values())),
+            "stock_total": stock_total,
+            "stock_taller": stock_taller,
             "total": int(sum(r["v"] for r in merged_rows)),
             "all_stores": all_stores,
             "stores_order": stores_order,
