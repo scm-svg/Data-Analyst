@@ -329,8 +329,10 @@ function filterModelButtons(){
 
 
 var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5,'3XL':6,'1':9,'2':10,'4':11,'6':12,'8':13,'10':14,'12':15,'14':16};
+var EXCLUDED_TALLAS={'3XL':1,'4XL':1};
+function tallaVisible(t){return!EXCLUDED_TALLAS[t];}
 function sortByTallaName(a,b){return(TORD[a]||99)-(TORD[b]||99);}
-function sortTallaEntries(entries){return entries.slice().sort(function(a,b){return sortByTallaName(a[0],b[0]);});}
+function sortTallaEntries(entries){return entries.slice().sort(function(a,b){return sortByTallaName(a[0],b[0]);}).filter(function(e){return tallaVisible(e[0]);});}
 function hsPeakLabel(){var p=DATA.high_season_peaks||{},parts=[];if(p.diciembre)parts.push('Dic ×'+p.diciembre);if(p.enero)parts.push('Ene ×'+p.enero);if(p.carnaval)parts.push('Carnaval ×'+p.carnaval);if(p.semana_santa)parts.push('SS ×'+p.semana_santa);return parts.length?parts.join(' · '):('×'+(DATA.high_season_factor||1.4));}
 function stockKeyParts(key){var p=key.split('/');return{modelo:p[0]||'',genero:p[1]||'',color:p[2]||'',talla:p[3]||''};}
 function stockMatchesFilters(key,f){var p=stockKeyParts(key);if(_modelo&&p.modelo!==_modelo)return false;if(f.genero&&p.genero!==f.genero)return false;if(f.color&&p.color!==f.color)return false;return true;}
@@ -427,14 +429,14 @@ function rColores(){
 }
 
 function rTallas(){
-  var rows=fr();var generos=ag(rows,'genero').map(function(x){return x.k;});
+  var rows=fr().filter(function(r){return tallaVisible(r.talla);});var generos=ag(rows,'genero').map(function(x){return x.k;});
   var grid=document.getElementById('tallasGrid');var cols=generos.length===1?'1fr':generos.length===2?'1fr 1fr':'1fr 1fr 1fr';
   grid.style.cssText='display:grid;grid-template-columns:'+cols+';gap:14px;margin-bottom:14px';
   grid.innerHTML=generos.map(function(g){return'<div class="card"><h3 style="color:'+gcol(g)+'">'+(GICO[g]||'')+' '+g+' — Tallas</h3><div class="sub">Distribución de tallas vendidas</div><div class="cw t"><canvas id="cTalla_'+g+'"></canvas></div></div>';}).join('');
-  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=ag(gRows,'talla').sort(function(a,b){return sortByTallaName(a.k,b.k);});var col=gcol(g);var maxPct=byT.reduce(function(m,x){return Math.max(m,x.pct);},0);var yMax=Math.min(100,Math.max(10,Math.ceil(maxPct*1.28/2)*2));
+  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=ag(gRows,'talla').filter(function(x){return tallaVisible(x.k);}).sort(function(a,b){return sortByTallaName(a.k,b.k);});var col=gcol(g);var maxPct=byT.reduce(function(m,x){return Math.max(m,x.pct);},0);var yMax=Math.min(100,Math.max(10,Math.ceil(maxPct*1.28/2)*2));
     mc('cTalla_'+g,'bar',{labels:byT.map(function(x){return x.k;}),datasets:[{data:byT.map(function(x){return x.pct;}),backgroundColor:col+'bb',borderColor:col,borderWidth:1,borderRadius:5,_units:byT.map(function(x){return x.v;})}]},Object.assign(bo(),{layout:{padding:{top:18}},plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%  ('+ctx.dataset._units[ctx.dataIndex]+' und)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:11},textShadowBlur:4,textShadowColor:'rgba(0,0,0,0.85)',anchor:'end',align:'start',offset:2,clip:false,formatter:function(v){return v>0?v.toFixed(1)+'%':'';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:yMax}}}));
   });
-  var byColor=ag(rows,'color').slice(0,12),tallas=ag(rows,'talla').map(function(x){return x.k;}).sort(sortByTallaName);var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
+  var byColor=ag(rows,'color').slice(0,12),tallas=ag(rows,'talla').map(function(x){return x.k;}).filter(tallaVisible).sort(sortByTallaName);var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
   var h='<table class="hmt"><thead><tr><th></th>'+tallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';byColor.forEach(function(x){h+='<tr><td class="rl"><span class="chip" style="background:'+cn(x.k)+'"></span>'+x.k+'</td>'+tallas.map(function(t){var v=(m2[x.k]&&m2[x.k][t])||0;return'<td style="background:'+hb(v,mx)+';color:'+ht(v,mx)+'" title="'+x.k+' T'+t+': '+v+'">'+v+'</td>';}).join('')+'</tr>';});
   document.getElementById('colTallaHM').innerHTML=h+'</tbody></table>';
 }
@@ -616,7 +618,7 @@ function rDecisiones(){
     function renderColorCard(cp){
       var isLaunch=!!cp.is_launch;
       var cob_c=isLaunch?'#ef4444':(cp.cob<3?'#ef4444':cp.cob<9?'#f59e0b':'#10b981');
-      var sortedT=cp.tallas.slice().sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
+      var sortedT=cp.tallas.slice().filter(function(t){return tallaVisible(t.talla);}).sort(function(a,b){return(TORD[a.talla]||99)-(TORD[b.talla]||99);});
       var tallaHtml=sortedT.map(function(t){
         var tc=isLaunch?'#ef4444':(t.cob<3?'#ef4444':t.cob<9?'#f59e0b':'#10b981');
         return '<div style="display:flex;align-items:center;gap:7px;padding:3px 8px 3px 14px;background:rgba(0,0,0,.15);border-radius:5px;margin-bottom:2px">'
@@ -733,6 +735,7 @@ function renderReabast(allRows){
               var col=ce[0],colV=ce[1],colSug=calcProp(colV,lt,lineFc);if(colSug<1)return'';
               var tM={};lR.filter(function(r){return r.color===col;}).forEach(function(r){tM[r.talla]=(tM[r.talla]||0)+r.v;});
               var tRows=sortTallaEntries(Object.entries(tM)).map(function(tv){
+                if(!tallaVisible(tv[0]))return'';
                 var sg=calcProp(tv[1],lt,lineFc);
                 return sg>0?'<div style="display:flex;gap:5px;padding:2px 0;font-size:0.65rem"><div style="width:22px;font-weight:700;color:#c0c0e8;text-align:center">'+tv[0]+'</div><div style="color:var(--mu)">'+sg+' und</div></div>':'';
               }).filter(Boolean).join('');
