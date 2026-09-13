@@ -691,12 +691,12 @@ def patch_html(html: str, data: dict, periodo: str) -> str:
 
 
 def resolve_source_html() -> Path:
+    if OUTPUT_HTML.exists():
+        return OUTPUT_HTML
     if SOURCE_HTML.exists():
         return SOURCE_HTML
     if REF_FALLBACK_HTML.exists():
         return REF_FALLBACK_HTML
-    if OUTPUT_HTML.exists():
-        return OUTPUT_HTML
     raise FileNotFoundError("No dashboard HTML template found")
 
 

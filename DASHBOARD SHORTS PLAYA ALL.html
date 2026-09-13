@@ -328,6 +328,10 @@ function filterModelButtons(){
 }
 
 
+var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5,'3XL':6,'2':10,'4':11,'6':12,'8':13,'10':14,'12':15,'14':16};
+function sortByTallaName(a,b){return(TORD[a]||99)-(TORD[b]||99);}
+function sortTallaEntries(entries){return entries.slice().sort(function(a,b){return sortByTallaName(a[0],b[0]);});}
+function hsPeakLabel(){var p=DATA.high_season_peaks||{},parts=[];if(p.diciembre)parts.push('Dic ×'+p.diciembre);if(p.enero)parts.push('Ene ×'+p.enero);if(p.carnaval)parts.push('Carnaval ×'+p.carnaval);if(p.semana_santa)parts.push('SS ×'+p.semana_santa);return parts.length?parts.join(' · '):('×'+(DATA.high_season_factor||1.4));}
 function stockKeyParts(key){var p=key.split('/');return{modelo:p[0]||'',genero:p[1]||'',color:p[2]||'',talla:p[3]||''};}
 function stockMatchesFilters(key,f){var p=stockKeyParts(key);if(_modelo&&p.modelo!==_modelo)return false;if(f.genero&&p.genero!==f.genero)return false;if(f.color&&p.color!==f.color)return false;return true;}
 function getFilteredStockByStore(){var f=gf(),sbs=DATA.stock_by_store||{},out={};Object.keys(sbs).forEach(function(store){if(f.tienda&&store!==f.tienda)return;var data=sbs[store]||{},filtered={};Object.entries(data).forEach(function(kv){var q=Math.max(0,kv[1]||0);if(q>0&&stockMatchesFilters(kv[0],f))filtered[kv[0]]=q;});if(Object.keys(filtered).length)out[store]=filtered;});return out;}
@@ -344,7 +348,7 @@ function rInventario(){
     var colorMap={};Object.entries(sbs[store]||{}).forEach(function(kv){var p=stockKeyParts(kv[0]);var q=Math.max(0,kv[1]||0);if(q>0)colorMap[p.color]=(colorMap[p.color]||0)+q;});
     var colorItems=Object.entries(colorMap).sort(function(a,b){return b[1]-a[1];}).map(function(ce){
       var col=ce[0],colV=ce[1],tA={};Object.entries(sbs[store]||{}).forEach(function(kv){var p=stockKeyParts(kv[0]);var q=Math.max(0,kv[1]||0);if(p.color===col&&q>0)tA[p.talla]=(tA[p.talla]||0)+q;});
-      var tRows=Object.entries(tA).sort(function(a,b){return b[1]-a[1];}).map(function(tv){if((tv[1]||0)<=0)return'';return'<div style="display:flex;gap:6px;padding:2px 0;font-size:0.68rem"><div style="width:70px;font-weight:700;color:#c0c0e8">'+tv[0]+'</div><div style="color:var(--mu)">'+tv[1]+' und</div></div>';}).filter(Boolean).join('');
+      var tRows=sortTallaEntries(Object.entries(tA)).map(function(tv){if((tv[1]||0)<=0)return'';return'<div style="display:flex;gap:6px;padding:2px 0;font-size:0.68rem"><div style="width:70px;font-weight:700;color:#c0c0e8">'+tv[0]+'</div><div style="color:var(--mu)">'+tv[1]+' und</div></div>';}).filter(Boolean).join('');
       var cUid='inv_'+store.replace(/[^a-z0-9]/gi,'_')+'_'+col.replace(/[^a-z0-9]/gi,'_');
       return'<div style="padding:2px 0"><div onclick="toggleInvCol(\''+cUid+'\')" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.73rem"><span style="width:8px;height:8px;border-radius:50%;background:'+cn(col)+'"></span><span style="flex:1;color:#e0e0f5">'+col+'</span><span style="color:var(--yw);font-weight:700;font-size:0.68rem">'+colV+'</span><span style="color:var(--ac);font-size:0.55rem">▶</span></div><div id="'+cUid+'" style="display:none;margin-left:16px;padding:2px 6px;border-left:2px solid '+cn(col)+'33">'+tRows+'</div></div>';
     }).join('');
@@ -427,10 +431,10 @@ function rTallas(){
   var grid=document.getElementById('tallasGrid');var cols=generos.length===1?'1fr':generos.length===2?'1fr 1fr':'1fr 1fr 1fr';
   grid.style.cssText='display:grid;grid-template-columns:'+cols+';gap:14px;margin-bottom:14px';
   grid.innerHTML=generos.map(function(g){return'<div class="card"><h3 style="color:'+gcol(g)+'">'+(GICO[g]||'')+' '+g+' — Tallas</h3><div class="sub">Distribución de tallas vendidas</div><div class="cw"><canvas id="cTalla_'+g+'"></canvas></div></div>';}).join('');
-  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=ag(gRows,'talla');var col=gcol(g);
+  generos.forEach(function(g){var gRows=rows.filter(function(r){return r.genero===g;});var byT=ag(gRows,'talla').sort(function(a,b){return sortByTallaName(a.k,b.k);});var col=gcol(g);
     mc('cTalla_'+g,'bar',{labels:byT.map(function(x){return x.k;}),datasets:[{data:byT.map(function(x){return x.pct;}),backgroundColor:col+'bb',borderColor:col,borderWidth:1,borderRadius:5,_units:byT.map(function(x){return x.v;})}]},Object.assign(bo(),{plugins:{legend:{display:false},tooltip:{backgroundColor:'#1e1f2b',borderColor:'#2a2b3a',borderWidth:1,titleFont:{family:'Syne',weight:'bold'},bodyFont:{family:'DM Sans'},padding:10,callbacks:{title:function(items){return 'Talla '+items[0].label;},label:function(ctx){return ' '+ctx.parsed.y.toFixed(1)+'%  ('+ctx.dataset._units[ctx.dataIndex]+' und)';}}},datalabels:{display:true,color:'#fff',font:{family:'Syne',weight:'bold',size:12},textShadowBlur:3,textShadowColor:'rgba(0,0,0,0.7)',anchor:'end',align:'start',formatter:function(v){return v.toFixed(1)+'%';}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a7b95',font:{family:'DM Sans',size:11},callback:function(v){return v+'%';}},max:Math.min(100,Math.ceil((byT[0]?byT[0].pct:100)*1.3/5)*5)}}}));
   });
-  var byColor=ag(rows,'color').slice(0,12),tallas=ag(rows,'talla').map(function(x){return x.k;});var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
+  var byColor=ag(rows,'color').slice(0,12),tallas=ag(rows,'talla').map(function(x){return x.k;}).sort(sortByTallaName);var m2=ag2(rows,'color','talla');var mx=0;byColor.forEach(function(c){tallas.forEach(function(t){var v=(m2[c.k]&&m2[c.k][t])||0;if(v>mx)mx=v;});});
   var h='<table class="hmt"><thead><tr><th></th>'+tallas.map(function(t){return'<th>'+t+'</th>';}).join('')+'</tr></thead><tbody>';byColor.forEach(function(x){h+='<tr><td class="rl"><span class="chip" style="background:'+cn(x.k)+'"></span>'+x.k+'</td>'+tallas.map(function(t){var v=(m2[x.k]&&m2[x.k][t])||0;return'<td style="background:'+hb(v,mx)+';color:'+ht(v,mx)+'" title="'+x.k+' T'+t+': '+v+'">'+v+'</td>';}).join('')+'</tr>';});
   document.getElementById('colTallaHM').innerHTML=h+'</tbody></table>';
 }
@@ -528,7 +532,6 @@ function rDecisiones(){
   var meses=_decMeses||2;
   var allRows=DATA.raw_rows;
   var filteredRows=allRows.filter(function(r){return(!_modelo||r.modelo===_modelo);});
-  var TORD={'XS':0,'S':1,'M':2,'L':3,'XL':4,'2XL':5,'3XL':6,'2':10,'4':11,'6':12,'8':13,'10':14,'12':15,'14':16};
 
   // ══════════════════════════════════════════════════════════
   //  COMPRA SUGERIDA — Lead time 90 días / 2 compras por año
@@ -543,9 +546,15 @@ function rDecisiones(){
     var totalProduce=plan.reduce(function(a,r){return a+r.produce;},0)+launchProduce;
     var totalVelBase=plan.reduce(function(a,r){return a+(r.v_mes_base||0);},0);
     var totalVel=plan.reduce(function(a,r){return a+r.v_mes;},0);
-    var totalStk=plan.reduce(function(a,r){return a+r.stk;},0);
-    var cobGen=totalVel>0?Math.round(totalStk/totalVel*10)/10:0;
+    var planStk=plan.reduce(function(a,r){return a+r.stk;},0);
+    var invTot=getStockTotals(getFilteredStockByStore());
+    var totalStk=invTot.grand;
+    var tallerStk=invTot.tallerTotal;
+    var cobGen=totalVel>0?Math.round(planStk/totalVel*10)/10:0;
     var hs=DATA.high_season_factor||1.25;
+    var hsDetail=hsPeakLabel();
+    var stkSub='Tiendas: '+invTot.tiendaTotal.toLocaleString()+' · Taller: '+tallerStk.toLocaleString()+' und';
+    if(Math.round(planStk)!==Math.round(totalStk))stkSub+='<br><span style="color:var(--mu2)">Activos en plan: '+Math.round(planStk).toLocaleString()+' und</span>';
     var velLbl=DATA.velocity_months_label||('últimos '+(DATA.velocity_months_count||6)+' meses');
     var velCount=DATA.velocity_months_count||6;
     var modelos=(_modelo?[_modelo]:DATA.filtros.modelos)||[];
@@ -561,8 +570,8 @@ function rDecisiones(){
     var headerHtml='<div style="display:flex;flex-direction:column;gap:12px">'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'
       +kpiCard(Math.round(totalVelBase),'Rotación base','Promedio '+velCount+' meses · '+velLbl,'#a5b4fc')
-      +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')
-      +kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+DATA.stock_taller.toLocaleString()+' und','#22d3ee')
+      +kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' · '+hsDetail,'var(--a2)')
+      +kpiCard(totalStk.toLocaleString(),'Stock actual',stkSub,'#22d3ee')
       +kpiCard(cobGen+'m','Cobertura prom.','Meses hasta agotarse (con rot. ajustada)','#f59e0b')
       +kpiCard(totalProduce,'Unidades a producir',launchProduce>0?'Incluye '+launchProduce+' und lanzamiento nuevo color · resto cobertura &lt; 3m':'Solo variantes con cobertura &lt; 3 meses',totalProduce>0?'#f59e0b':'#10b981',totalProduce>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.08)',totalProduce>0?'rgba(245,158,11,.3)':'rgba(16,185,129,.3)')
       +'</div>'
@@ -570,7 +579,8 @@ function rDecisiones(){
       +'<div style="font-family:var(--fh);font-weight:800;color:var(--a2);margin-bottom:10px;font-size:.78rem">📋 Metodología — rotación y producción</div>'
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">'
       +'<div><strong style="color:var(--tx)">Rotación base</strong><br>Promedio mensual de ventas netas por talla en <em>'+velLbl+'</em> ('+velCount+' meses completos, sin mes parcial).</div>'
-      +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta / diciembre). Es la velocidad usada para cobertura y producción.</div>'
+      +'<div><strong style="color:var(--tx)">Rotación ajustada</strong><br>Base × '+hs+' ('+hsDetail+'). Incluye picos de <strong style="color:var(--tx)">Diciembre, Enero, Carnaval y Semana Santa</strong>. Es la velocidad usada para cobertura y producción.</div>'
+      +'<div><strong style="color:var(--tx)">Stock actual</strong><br>Coincide con la pestaña Inventario (mismos filtros). La cobertura y producción usan solo <strong style="color:var(--tx)">colores activos</strong> del plan.</div>'
       +'<div><strong style="color:var(--tx)">Producción sugerida</strong><br>Solo entra en el análisis lo que tiene <strong style="color:var(--tx)">cobertura &lt; 3 meses</strong>.</div>'
       +'<div><strong style="color:var(--tx)">Colores activos</strong><br>Unicolor activo: Verde Pino, Azul Pizarra, Azul Verdoso, Marron, Cereza. Sublimado: Playuela, Sal, Tucupido, Sombrero. Descontinuados excluidos de producción.</div>'
       +'<div><strong style="color:var(--tx)">🆕 Lanzamiento nuevo color</strong><br>Sin ventas ni stock. Velocidad = <strong style="color:var(--tx)">prom. top 3</strong> sublimado por género en '+velLbl+', × '+hs+' temporada alta. Producción por tienda = benchmark × <strong style="color:var(--tx)">participación</strong> × 3 meses. Red incluye <strong style="color:var(--tx)">VELA</strong> (1.5× GRIETA) y <strong style="color:var(--tx)">Barquisimeto</strong> (prom. CHACAO+GRIETA) al <strong style="color:var(--tx)">'+(Math.round((DATA.launch_new_store_uptake||0.93)*100))+'%</strong> ramp-up inicial.</div>'
@@ -723,7 +733,7 @@ function renderReabast(allRows){
             colorItems=cA.map(function(ce){
               var col=ce[0],colV=ce[1],colSug=calcProp(colV,lt,lineFc);if(colSug<1)return'';
               var tM={};lR.filter(function(r){return r.color===col;}).forEach(function(r){tM[r.talla]=(tM[r.talla]||0)+r.v;});
-              var tRows=Object.entries(tM).sort(function(a,b){return b[1]-a[1];}).map(function(tv){
+              var tRows=sortTallaEntries(Object.entries(tM)).map(function(tv){
                 var sg=calcProp(tv[1],lt,lineFc);
                 return sg>0?'<div style="display:flex;gap:5px;padding:2px 0;font-size:0.65rem"><div style="width:22px;font-weight:700;color:#c0c0e8;text-align:center">'+tv[0]+'</div><div style="color:var(--mu)">'+sg+' und</div></div>':'';
               }).filter(Boolean).join('');
