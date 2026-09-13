@@ -71,6 +71,8 @@ class DashboardHtmlTests(unittest.TestCase):
         self.assertIn("Carnaval", self.text)
         self.assertIn("Semana Santa", self.text)
         self.assertNotIn("Mayo 2026 con datos parciales", self.text)
+        self.assertIn("no entra en el promedio de Decisiones", self.text)
+        self.assertIn("skipMom", self.text)
 
 
 if __name__ == "__main__":

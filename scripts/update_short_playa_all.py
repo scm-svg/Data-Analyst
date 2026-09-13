@@ -596,8 +596,26 @@ def patch_html(html: str, data: dict) -> str:
 
     html = html.replace(
         "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 Mayo 2026 con datos parciales'});",
-        "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales — no entra en el promedio de decisiones'});",
+        "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales — no entra en el promedio de Decisiones'});",
     )
+    html = html.replace(
+        "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales'});",
+        "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales — no entra en el promedio de Decisiones'});",
+    )
+    old_mom = (
+        "if(DATA.meses_order.length>=2){var lv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-1]]||0,"
+        "pv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-2]]||0;if(pv>0){var d=Math.round((lv-pv)/pv*100);"
+        "if(d<-25)alerts.push({type:'danger',text:'🔴 Caída '+Math.abs(d)+'% vs mes anterior'});"
+        "else if(d>25)alerts.push({type:'good',text:'🟢 Crecimiento '+d+'%'});}}"
+    )
+    new_mom = (
+        "if(DATA.meses_order.length>=2){var lastMes=DATA.meses_order[DATA.meses_order.length-1];"
+        "var skipMom=DATA.es_parcial&&lastMes===(DATA.partial_month||lastMes);"
+        "if(!skipMom){var lv=DATA.meses_und[lastMes]||0,pv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-2]]||0;"
+        "if(pv>0){var d=Math.round((lv-pv)/pv*100);if(d<-25)alerts.push({type:'danger',text:'🔴 Caída '+Math.abs(d)+'% vs mes anterior'});"
+        "else if(d>25)alerts.push({type:'good',text:'🟢 Crecimiento '+d+'%'});}}}"
+    )
+    html = html.replace(old_mom, new_mom)
 
     old_sub = (
         "VELA 1.5× GRIETA · BARQUISIMETO 1× GRIETA · factor temporada alta ×"

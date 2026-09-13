@@ -387,8 +387,12 @@ function updateKPIs(){
 
 function renderAlertas(){
   var alerts=[];
-  if(DATA.meses_order.length>=2){var lv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-1]]||0,pv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-2]]||0;if(pv>0){var d=Math.round((lv-pv)/pv*100);if(d<-25)alerts.push({type:'danger',text:'🔴 Caída '+Math.abs(d)+'% vs mes anterior'});else if(d>25)alerts.push({type:'good',text:'🟢 Crecimiento '+d+'%'});}}
-  if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales'});
+  if(DATA.meses_order.length>=2){
+    var lastMes=DATA.meses_order[DATA.meses_order.length-1];
+    var skipMom=DATA.es_parcial&&lastMes===(DATA.partial_month||lastMes);
+    if(!skipMom){var lv=DATA.meses_und[lastMes]||0,pv=DATA.meses_und[DATA.meses_order[DATA.meses_order.length-2]]||0;if(pv>0){var d=Math.round((lv-pv)/pv*100);if(d<-25)alerts.push({type:'danger',text:'🔴 Caída '+Math.abs(d)+'% vs mes anterior'});else if(d>25)alerts.push({type:'good',text:'🟢 Crecimiento '+d+'%'});}}
+  }
+  if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales — no entra en el promedio de Decisiones'});
   var el=document.getElementById('alertBar');if(!el||!alerts.length){if(el)el.style.display='none';return;}
   el.style.display='flex';
   var clr={danger:'#ef4444',warn:'#ffc107',info:'#5b6af7',good:'#4caf76'},bg={danger:'rgba(239,68,68,.12)',warn:'rgba(255,193,7,.12)',info:'rgba(91,106,247,.12)',good:'rgba(76,175,118,.12)'};
