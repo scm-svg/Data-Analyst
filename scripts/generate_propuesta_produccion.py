@@ -133,14 +133,14 @@ def load_dashboard_produce(data: dict) -> dict[str, dict[str, dict[str, int]]]:
 
 
 def load_dashboard_size_mix(data: dict) -> dict[str, dict[str, dict[str, float]]]:
-    """Participación de ventas por talla (meses de velocidad del dashboard)."""
-    velocity_months = data.get("velocity_months") or []
+    """Participación de ventas por talla (periodo completo del dashboard)."""
+    sales_months = data.get("meses_order") or data.get("velocity_months") or []
     raw: dict[str, dict[str, dict[str, float]]] = {"CAB": {}, "KIDS": {}}
 
     for row in data.get("raw_rows", []):
         if row.get("modelo") != "SHORT PLAYA SUBLIMADO":
             continue
-        if row.get("mes") not in velocity_months:
+        if row.get("mes") not in sales_months:
             continue
         if row.get("activo") is False:
             continue
@@ -238,6 +238,68 @@ def reduce_cab_s(row: dict[str, int]) -> dict[str, int]:
     return row
 
 
+def rebalance_row_to_mix(
+    row: dict[str, int],
+    sizes: list[str],
+    weights: dict[str, float],
+) -> dict[str, int]:
+    """Reparte el total actual según mix de ventas (método resto mayor)."""
+    total = sum(row.values())
+    if total <= 0:
+        return row
+    wsum = sum(max(0.0, weights.get(s, 0.0)) for s in sizes) or 1.0
+    ideal = {s: total * weights.get(s, 0.0) / wsum for s in sizes}
+    result = {s: int(math.floor(ideal[s])) for s in sizes}
+    remainder = total - sum(result.values())
+    for size in sorted(sizes, key=lambda s: ideal[s] - result[s], reverse=True):
+        if remainder <= 0:
+            break
+        result[size] += 1
+        remainder -= 1
+    for size in sizes:
+        result[size] = max(MIN_SIZE_QTY, result[size])
+    excess = sum(result.values()) - total
+    if excess > 0:
+        for size in sorted(
+            (s for s in sizes if result[s] > MIN_SIZE_QTY),
+            key=lambda s: weights.get(s, 0.0),
+        ):
+            while excess > 0 and result[size] > MIN_SIZE_QTY:
+                result[size] -= 1
+                excess -= 1
+            if excess <= 0:
+                break
+    return result
+
+
+def nudge_cab_l_over_m(row: dict[str, int]) -> dict[str, int]:
+    """Asegura L >= M cuando hay margen (ventas CAB: L ligeramente > M)."""
+    m, l = row.get("M", 0), row.get("L", 0)
+    if m <= l or l < MIN_SIZE_QTY:
+        return row
+    gap = m - l
+    move = min(gap, m - MIN_SIZE_QTY)
+    if move > 0:
+        row = dict(row)
+        row["M"] = m - move
+        row["L"] = l + move
+    return row
+
+
+def nudge_kids_14_over_12(row: dict[str, int]) -> dict[str, int]:
+    """Asegura 14 >= 12 cuando hay margen (ventas KIDS: 14 lidera en agregado)."""
+    t12, t14 = row.get("12", 0), row.get("14", 0)
+    if t14 >= t12 or t12 < MIN_SIZE_QTY:
+        return row
+    gap = t12 - t14
+    move = min(gap, t12 - MIN_SIZE_QTY)
+    if move > 0:
+        row = dict(row)
+        row["12"] = t12 - move
+        row["14"] = t14 + move
+    return row
+
+
 def trim_kids_row(row: dict[str, int], sizes: list[str]) -> dict[str, int]:
     """Recorte proporcional por talla sin re-aplicar piso de total mínimo."""
     if KIDS_FINAL_TRIM >= 1 or sum(row.values()) <= 0:
@@ -302,10 +364,16 @@ def merge_suggested(
         target_total = max(1, int(round(raw_total * genero_adjustment(genero))))
 
         row = apply_full_curve_row(sizes, weights, target_total)
+        row = rebalance_row_to_mix(row, sizes, weights)
+        if genero == "CAB" and color in CAB_S_REDUCTION_COLORS:
+            row = reduce_cab_s(row)
+        if genero == "CAB":
+            row = nudge_cab_l_over_m(row)
+        else:
+            row = nudge_kids_14_over_12(row)
         if genero == "KIDS":
             row = trim_kids_row(row, sizes)
-        elif genero == "CAB" and color in CAB_S_REDUCTION_COLORS:
-            row = reduce_cab_s(row)
+            row = nudge_kids_14_over_12(row)
         suggested[color] = row
 
     return suggested
