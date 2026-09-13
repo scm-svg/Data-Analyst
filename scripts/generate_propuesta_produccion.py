@@ -25,7 +25,8 @@ UPLIFT_TEMPORADA = 1.22
 UPLIFT_MARGARITA = 1.08
 UPLIFT_TOTAL = UPLIFT_TEMPORADA * UPLIFT_MARGARITA
 QUANTITY_ADJUSTMENT = 0.95  # ~5 % menos sobre la propuesta calculada
-KIDS_EXTRA_ADJUSTMENT = 0.93  # ~7 % adicional en KIDS (proporcional, mantiene mix ventas)
+KIDS_EXTRA_ADJUSTMENT = 0.93  # ~7 % adicional en KIDS al calcular objetivo
+KIDS_FINAL_TRIM = 0.92  # −8 % extra sobre fila ya distribuida (mantiene mix ventas)
 CAB_S_REDUCTION_COLORS = frozenset({"Playuela", "Sal", "Nuevo color"})
 CAB_S_MULTIPLIER = 0.72  # bajar talla S en CAB (Playuela, Sal, Nuevo color)
 MIN_SIZE_QTY = 4
@@ -237,6 +238,22 @@ def reduce_cab_s(row: dict[str, int]) -> dict[str, int]:
     return row
 
 
+def trim_kids_row(row: dict[str, int], sizes: list[str]) -> dict[str, int]:
+    """Recorte proporcional por talla sin re-aplicar piso de total mínimo."""
+    if KIDS_FINAL_TRIM >= 1 or sum(row.values()) <= 0:
+        return row
+    trimmed = {
+        s: max(MIN_SIZE_QTY, int(round(row.get(s, 0) * KIDS_FINAL_TRIM)))
+        if row.get(s, 0) > 0
+        else 0
+        for s in sizes
+    }
+    if any(trimmed.values()):
+        for s in sizes:
+            trimmed[s] = max(MIN_SIZE_QTY, trimmed[s])
+    return trimmed
+
+
 def genero_adjustment(genero: str) -> float:
     adj = QUANTITY_ADJUSTMENT
     if genero == "KIDS":
@@ -285,7 +302,9 @@ def merge_suggested(
         target_total = max(1, int(round(raw_total * genero_adjustment(genero))))
 
         row = apply_full_curve_row(sizes, weights, target_total)
-        if genero == "CAB" and color in CAB_S_REDUCTION_COLORS:
+        if genero == "KIDS":
+            row = trim_kids_row(row, sizes)
+        elif genero == "CAB" and color in CAB_S_REDUCTION_COLORS:
             row = reduce_cab_s(row)
         suggested[color] = row
 
@@ -519,8 +538,8 @@ def main() -> None:
     print(f"CAB  MÍN={cab_min} MÁX={cab_max} rango={cab_pct}%")
     print(f"KIDS MÍN={kids_min} MÁX={kids_max} rango={kids_pct}%")
     print(
-        f"Ajuste CAB ×{QUANTITY_ADJUSTMENT} | KIDS ×{genero_adjustment('KIDS'):.3f} | "
-        f"S CAB (Playuela/Sal/Nuevo) ×{CAB_S_MULTIPLIER} | "
+        f"Ajuste CAB ×{QUANTITY_ADJUSTMENT} | KIDS ×{genero_adjustment('KIDS'):.3f} "
+        f"+ trim ×{KIDS_FINAL_TRIM} | S CAB (Playuela/Sal/Nuevo) ×{CAB_S_MULTIPLIER} | "
         f"Mín/talla={MIN_SIZE_QTY} | MÁX factor=×{HIGH_SEASON_FACTOR}"
     )
 
