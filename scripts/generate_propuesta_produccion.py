@@ -25,6 +25,9 @@ UPLIFT_TEMPORADA = 1.22
 UPLIFT_MARGARITA = 1.08
 UPLIFT_TOTAL = UPLIFT_TEMPORADA * UPLIFT_MARGARITA
 QUANTITY_ADJUSTMENT = 0.95  # ~5 % menos sobre la propuesta calculada
+KIDS_EXTRA_ADJUSTMENT = 0.93  # ~7 % adicional en KIDS (proporcional, mantiene mix ventas)
+CAB_S_REDUCTION_COLORS = frozenset({"Playuela", "Sal", "Nuevo color"})
+CAB_S_MULTIPLIER = 0.72  # bajar talla S en CAB (Playuela, Sal, Nuevo color)
 MIN_SIZE_QTY = 4
 
 CAB_SIZES = ["S", "M", "L", "XL", "2XL"]
@@ -227,6 +230,20 @@ def apply_full_curve_row(
     return row
 
 
+def reduce_cab_s(row: dict[str, int]) -> dict[str, int]:
+    s_qty = row.get("S", 0)
+    if s_qty > 0:
+        row["S"] = max(MIN_SIZE_QTY, int(round(s_qty * CAB_S_MULTIPLIER)))
+    return row
+
+
+def genero_adjustment(genero: str) -> float:
+    adj = QUANTITY_ADJUSTMENT
+    if genero == "KIDS":
+        adj *= KIDS_EXTRA_ADJUSTMENT
+    return adj
+
+
 def merge_suggested(
     genero: str,
     team: dict[str, dict[str, int]],
@@ -265,9 +282,11 @@ def merge_suggested(
             sum(uplifted_sizes.values()),
             int(round(team_total * UPLIFT_TOTAL)),
         )
-        target_total = max(1, int(round(raw_total * QUANTITY_ADJUSTMENT)))
+        target_total = max(1, int(round(raw_total * genero_adjustment(genero))))
 
         row = apply_full_curve_row(sizes, weights, target_total)
+        if genero == "CAB" and color in CAB_S_REDUCTION_COLORS:
+            row = reduce_cab_s(row)
         suggested[color] = row
 
     return suggested
@@ -500,7 +519,8 @@ def main() -> None:
     print(f"CAB  MÍN={cab_min} MÁX={cab_max} rango={cab_pct}%")
     print(f"KIDS MÍN={kids_min} MÁX={kids_max} rango={kids_pct}%")
     print(
-        f"Ajuste −5%: ×{QUANTITY_ADJUSTMENT} | Curva completa | "
+        f"Ajuste CAB ×{QUANTITY_ADJUSTMENT} | KIDS ×{genero_adjustment('KIDS'):.3f} | "
+        f"S CAB (Playuela/Sal/Nuevo) ×{CAB_S_MULTIPLIER} | "
         f"Mín/talla={MIN_SIZE_QTY} | MÁX factor=×{HIGH_SEASON_FACTOR}"
     )
 
