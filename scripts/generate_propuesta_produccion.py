@@ -85,12 +85,21 @@ def load_team_base() -> dict[str, dict[str, dict[str, int]]]:
     return out
 
 
-def load_dashboard_produce() -> dict[str, dict[str, dict[str, int]]]:
+def load_dashboard_data() -> dict:
     html = DASHBOARD_HTML.read_text(encoding="utf-8")
     match = re.search(r"var DATA=(\{.*?\});", html, re.DOTALL)
     if not match:
-        return {"CAB": {}, "KIDS": {}}
-    data = json.loads(match.group(1))
+        return {}
+    return json.loads(match.group(1))
+
+
+def _map_kids_talla(talla: str) -> str | None:
+    if talla == "1":
+        return "2"
+    return talla if talla in KIDS_SIZES else None
+
+
+def load_dashboard_produce(data: dict) -> dict[str, dict[str, dict[str, int]]]:
     out: dict[str, dict[str, dict[str, int]]] = {"CAB": {}, "KIDS": {}}
     for item in data.get("production_plan", []):
         if item.get("modelo") != "SHORT PLAYA SUBLIMADO":
@@ -104,8 +113,7 @@ def load_dashboard_produce() -> dict[str, dict[str, dict[str, int]]]:
             qty = int(round(t.get("produce", 0)))
             if qty > 0:
                 row[t["talla"]] = max(row.get(t["talla"], 0), qty)
-    launch = data.get("launch_production_plan") or []
-    for item in launch:
+    for item in data.get("launch_production_plan") or []:
         if item.get("modelo") != "SHORT PLAYA SUBLIMADO":
             continue
         color = normalize_color(item.get("color", ""))
@@ -120,38 +128,97 @@ def load_dashboard_produce() -> dict[str, dict[str, dict[str, int]]]:
     return out
 
 
-def distribute_curve(total: int, sizes: list[str], curve: dict[str, int]) -> dict[str, int]:
-    weights = [curve[s] for s in sizes]
-    wsum = sum(weights) or 1
+def load_dashboard_size_mix(data: dict) -> dict[str, dict[str, dict[str, float]]]:
+    """Participación de ventas por talla (meses de velocidad del dashboard)."""
+    velocity_months = data.get("velocity_months") or []
+    raw: dict[str, dict[str, dict[str, float]]] = {"CAB": {}, "KIDS": {}}
+
+    for row in data.get("raw_rows", []):
+        if row.get("modelo") != "SHORT PLAYA SUBLIMADO":
+            continue
+        if row.get("mes") not in velocity_months:
+            continue
+        if row.get("activo") is False:
+            continue
+        genero = row["genero"]
+        color = normalize_color(row["color"])
+        talla = row["talla"]
+        if genero == "KIDS":
+            talla = _map_kids_talla(str(talla))
+            if not talla:
+                continue
+        elif talla not in CAB_SIZES:
+            continue
+        if color not in COLORS and color != "Sombrero":
+            continue
+        bucket = raw[genero].setdefault(color, {})
+        bucket[talla] = bucket.get(talla, 0.0) + float(row.get("v", 0))
+
+    out: dict[str, dict[str, dict[str, float]]] = {"CAB": {}, "KIDS": {}}
+    for genero, sizes, fallback in [
+        ("CAB", CAB_SIZES, CAB_CURVE),
+        ("KIDS", KIDS_SIZES, KIDS_CURVE),
+    ]:
+        pool: dict[str, float] = {s: 0.0 for s in sizes}
+        for color in ["Playuela", "Sal", "Tucupido", "Sombrero"]:
+            for size, qty in raw[genero].get(color, {}).items():
+                if size in pool:
+                    pool[size] += qty
+
+        for color in COLORS:
+            color_sales = {s: raw[genero].get(color, {}).get(s, 0.0) for s in sizes}
+            if color == "Nuevo color" or sum(color_sales.values()) <= 0:
+                weights = pool if sum(pool.values()) > 0 else {s: float(fallback[s]) for s in sizes}
+            else:
+                weights = color_sales
+            out[genero][color] = {s: weights.get(s, 0.0) for s in sizes}
+
+    return out
+
+
+def distribute_by_weights(
+    total: int,
+    sizes: list[str],
+    weights: dict[str, float],
+) -> dict[str, int]:
+    wsum = sum(max(0.0, weights.get(s, 0.0)) for s in sizes) or 1.0
     result: dict[str, int] = {}
     allocated = 0
     for i, size in enumerate(sizes):
         if i == len(sizes) - 1:
             qty = total - allocated
         else:
-            qty = int(round(total * curve[size] / wsum))
+            qty = int(round(total * weights.get(size, 0.0) / wsum))
         result[size] = max(0, qty)
         allocated += result[size]
     return result
 
 
+def min_total_for_mix(sizes: list[str], weights: dict[str, float]) -> int:
+    """Total mínimo para que la talla más chica respete MIN_SIZE_QTY con el mix de ventas."""
+    positive = [(s, weights.get(s, 0.0)) for s in sizes if weights.get(s, 0.0) > 0]
+    if not positive:
+        return MIN_SIZE_QTY * len(sizes)
+    wsum = sum(w for _, w in positive)
+    min_totals = [MIN_SIZE_QTY / (w / wsum) for _, w in positive]
+    return max(int(math.ceil(max(min_totals))), MIN_SIZE_QTY * len(sizes))
+
+
 def apply_full_curve_row(
     sizes: list[str],
-    curve: dict[str, int],
+    weights: dict[str, float],
     target_total: int,
 ) -> dict[str, int]:
-    """Distribuye el total en TODAS las tallas según curva, piso 4 por talla."""
-    min_all = MIN_SIZE_QTY * len(sizes)
-    target = max(target_total, min_all)
+    """Distribuye el total en TODAS las tallas según mix de ventas, piso 4 por talla."""
+    target = max(target_total, min_total_for_mix(sizes, weights))
 
-    row = distribute_curve(target, sizes, curve)
+    row = distribute_by_weights(target, sizes, weights)
     for size in sizes:
         row[size] = enforce_min_qty(row[size])
 
-    # Si el piso 4 sube el total, se conserva (no recortar — mantiene forma de curva).
     shortfall = target - sum(row.values())
     if shortfall > 0:
-        for size in sorted(sizes, key=lambda s: curve[s], reverse=True):
+        for size in sorted(sizes, key=lambda s: weights.get(s, 0.0), reverse=True):
             if shortfall <= 0:
                 break
             row[size] += 1
@@ -164,15 +231,19 @@ def merge_suggested(
     genero: str,
     team: dict[str, dict[str, int]],
     dashboard: dict[str, dict[str, dict[str, int]]],
+    size_mix: dict[str, dict[str, dict[str, float]]],
 ) -> dict[str, dict[str, int]]:
     sizes = CAB_SIZES if genero == "CAB" else KIDS_SIZES
-    curve = CAB_CURVE if genero == "CAB" else KIDS_CURVE
+    fallback = CAB_CURVE if genero == "CAB" else KIDS_CURVE
     suggested: dict[str, dict[str, int]] = {}
 
     for color in COLORS:
         team_row = team.get(genero, {}).get(color, {s: 0 for s in sizes})
         dash_row = dashboard.get(genero, {}).get(color, {})
         team_total = sum(team_row.get(s, 0) for s in sizes)
+        weights = size_mix.get(genero, {}).get(color, {})
+        if sum(weights.values()) <= 0:
+            weights = {s: float(fallback[s]) for s in sizes}
 
         if team_total <= 0:
             suggested[color] = {s: 0 for s in sizes}
@@ -196,7 +267,7 @@ def merge_suggested(
         )
         target_total = max(1, int(round(raw_total * QUANTITY_ADJUSTMENT)))
 
-        row = apply_full_curve_row(sizes, curve, target_total)
+        row = apply_full_curve_row(sizes, weights, target_total)
         suggested[color] = row
 
     return suggested
@@ -401,10 +472,12 @@ def write_comp_sheet(
 
 def main() -> None:
     team = load_team_base()
-    dashboard = load_dashboard_produce()
+    dash_data = load_dashboard_data()
+    dashboard = load_dashboard_produce(dash_data)
+    size_mix = load_dashboard_size_mix(dash_data)
     suggested = {
-        "CAB": merge_suggested("CAB", team, dashboard),
-        "KIDS": merge_suggested("KIDS", team, dashboard),
+        "CAB": merge_suggested("CAB", team, dashboard, size_mix),
+        "KIDS": merge_suggested("KIDS", team, dashboard, size_mix),
     }
 
     wb = openpyxl.Workbook()
