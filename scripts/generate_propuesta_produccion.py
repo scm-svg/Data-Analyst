@@ -24,6 +24,7 @@ HIGH_SEASON_FACTOR = 1.2
 UPLIFT_TEMPORADA = 1.22
 UPLIFT_MARGARITA = 1.08
 UPLIFT_TOTAL = UPLIFT_TEMPORADA * UPLIFT_MARGARITA
+QUANTITY_ADJUSTMENT = 0.95  # ~5 % menos sobre la propuesta calculada
 MIN_SIZE_QTY = 4
 
 CAB_SIZES = ["S", "M", "L", "XL", "2XL"]
@@ -58,6 +59,13 @@ def enforce_min_qty(qty: int) -> int:
     if qty <= 0:
         return 0
     return max(MIN_SIZE_QTY, qty)
+
+
+def max_qty(min_qty: int) -> int:
+    """MÁXIMO con el mismo criterio proporcional que Excel ROUND(MÍN × factor)."""
+    if min_qty <= 0:
+        return 0
+    return int(round(min_qty * HIGH_SEASON_FACTOR))
 
 
 def load_team_base() -> dict[str, dict[str, dict[str, int]]]:
@@ -122,24 +130,40 @@ def distribute_curve(total: int, sizes: list[str], curve: dict[str, int]) -> dic
             qty = total - allocated
         else:
             qty = int(round(total * curve[size] / wsum))
-        result[size] = qty
-        allocated += qty
+        result[size] = max(0, qty)
+        allocated += result[size]
     return result
 
 
-def uplift_team_row(team_row: dict[str, int], sizes: list[str]) -> dict[str, int]:
-    out = {s: 0 for s in sizes}
+def apply_full_curve_row(
+    sizes: list[str],
+    curve: dict[str, int],
+    target_total: int,
+) -> dict[str, int]:
+    """Distribuye el total en TODAS las tallas según curva, piso 4 por talla."""
+    min_all = MIN_SIZE_QTY * len(sizes)
+    target = max(target_total, min_all)
+
+    row = distribute_curve(target, sizes, curve)
     for size in sizes:
-        base = team_row.get(size, 0)
-        if base > 0:
-            out[size] = enforce_min_qty(int(round(base * UPLIFT_TOTAL)))
-    return out
+        row[size] = enforce_min_qty(row[size])
+
+    # Si el piso 4 sube el total, se conserva (no recortar — mantiene forma de curva).
+    shortfall = target - sum(row.values())
+    if shortfall > 0:
+        for size in sorted(sizes, key=lambda s: curve[s], reverse=True):
+            if shortfall <= 0:
+                break
+            row[size] += 1
+            shortfall -= 1
+
+    return row
 
 
 def merge_suggested(
     genero: str,
     team: dict[str, dict[str, int]],
-    dashboard: dict[str, dict[str, int]],
+    dashboard: dict[str, dict[str, dict[str, int]]],
 ) -> dict[str, dict[str, int]]:
     sizes = CAB_SIZES if genero == "CAB" else KIDS_SIZES
     curve = CAB_CURVE if genero == "CAB" else KIDS_CURVE
@@ -148,43 +172,31 @@ def merge_suggested(
     for color in COLORS:
         team_row = team.get(genero, {}).get(color, {s: 0 for s in sizes})
         dash_row = dashboard.get(genero, {}).get(color, {})
-        row = uplift_team_row(team_row, sizes)
+        team_total = sum(team_row.get(s, 0) for s in sizes)
 
+        if team_total <= 0:
+            suggested[color] = {s: 0 for s in sizes}
+            continue
+
+        uplifted_sizes: dict[str, int] = {}
         for size in sizes:
+            base = team_row.get(size, 0)
+            qty = 0
+            if base > 0:
+                qty = int(round(base * UPLIFT_TOTAL))
             dash_qty = dash_row.get(size, 0)
             if dash_qty > 0:
-                row[size] = max(row[size], enforce_min_qty(dash_qty))
+                qty = max(qty, dash_qty)
+            if qty > 0:
+                uplifted_sizes[size] = qty
 
-        team_total = sum(team_row.get(s, 0) for s in sizes)
-        has_team_sizes = {s for s in sizes if team_row.get(s, 0) > 0}
-        dash_sizes = {s for s in sizes if dash_row.get(s, 0) > 0}
+        raw_total = max(
+            sum(uplifted_sizes.values()),
+            int(round(team_total * UPLIFT_TOTAL)),
+        )
+        target_total = max(1, int(round(raw_total * QUANTITY_ADJUSTMENT)))
 
-        if color == "Nuevo color" and team_total > 0:
-            target = enforce_min_qty(int(round(team_total * UPLIFT_TOTAL)))
-            if sum(row.values()) < target:
-                curved = distribute_curve(target, sizes, curve)
-                for size in sizes:
-                    row[size] = max(row[size], enforce_min_qty(curved[size]))
-        elif team_total > 0:
-            missing = [s for s in sizes if row[s] == 0 and s not in has_team_sizes]
-            fill_sizes = [s for s in missing if s in dash_sizes]
-            if not fill_sizes and color in ("Playuela", "Sal"):
-                fill_sizes = [s for s in missing if s in {"S", "2", "4", "6", "8"}]
-            if fill_sizes:
-                known_total = sum(row[s] for s in sizes)
-                extra = max(0, enforce_min_qty(int(round(team_total * UPLIFT_TOTAL))) - known_total)
-                if extra > 0:
-                    sub_curve = {s: curve[s] for s in fill_sizes}
-                    filled = distribute_curve(extra, fill_sizes, sub_curve)
-                    for size in fill_sizes:
-                        row[size] = enforce_min_qty(filled[size])
-                else:
-                    for size in fill_sizes:
-                        row[size] = MIN_SIZE_QTY
-
-        for size in sizes:
-            row[size] = enforce_min_qty(row[size]) if row[size] > 0 else 0
-
+        row = apply_full_curve_row(sizes, curve, target_total)
         suggested[color] = row
 
     return suggested
@@ -242,7 +254,11 @@ def write_range_sheet(
                 cell.value = qty
                 cell.font = BLUE_FONT
                 cell.alignment = Alignment(horizontal="center")
-        ws.cell(min_row, total_col, f"=SUM({col_letter(first_data_col)}{min_row}:{col_letter(last_data_col)}{min_row})")
+        ws.cell(
+            min_row,
+            total_col,
+            f"=SUM({col_letter(first_data_col)}{min_row}:{col_letter(last_data_col)}{min_row})",
+        )
         ws.cell(min_row, total_col).font = BOLD
         ws.cell(min_row, total_col).alignment = Alignment(horizontal="center")
 
@@ -251,9 +267,17 @@ def write_range_sheet(
         ws.cell(max_row, 1, f"{color} — MÁXIMO ")
         for i in range(first_data_col, last_data_col + 1):
             min_ref = f"{col_letter(i)}{min_row}"
-            cell = ws.cell(max_row, i, f'=IF({min_ref}="","",ROUND({min_ref}*{factor_ref},0))')
+            cell = ws.cell(
+                max_row,
+                i,
+                f'=IF({min_ref}="","",ROUND({min_ref}*{factor_ref},0))',
+            )
             cell.alignment = Alignment(horizontal="center")
-        ws.cell(max_row, total_col, f"=SUM({col_letter(first_data_col)}{max_row}:{col_letter(last_data_col)}{max_row})")
+        ws.cell(
+            max_row,
+            total_col,
+            f"=SUM({col_letter(first_data_col)}{max_row}:{col_letter(last_data_col)}{max_row})",
+        )
         ws.cell(max_row, total_col).alignment = Alignment(horizontal="center")
         row_idx += 2
 
@@ -295,6 +319,15 @@ def sum_matrix(rows: dict[str, dict[str, int]], sizes: list[str]) -> int:
     return sum(rows[c].get(s, 0) for c in rows for s in sizes)
 
 
+def max_matrix(rows: dict[str, dict[str, int]], sizes: list[str]) -> int:
+    return sum(
+        max_qty(rows[c].get(s, 0))
+        for c in rows
+        for s in sizes
+        if rows[c].get(s, 0) > 0
+    )
+
+
 def write_resumen(
     wb: openpyxl.Workbook,
     team: dict[str, dict[str, dict[str, int]]],
@@ -308,25 +341,44 @@ def write_resumen(
             "SUGERIDO (MÍN)",
             "MÁXIMO",
             "Rango",
+            "% Rango",
             "Δ vs equipo",
         ]
     )
     for genero, sizes in [("CAB", CAB_SIZES), ("KIDS", KIDS_SIZES)]:
         team_total = sum_matrix(team[genero], sizes)
         sug_total = sum_matrix(suggested[genero], sizes)
-        max_total = sum(
-            math.ceil(suggested[genero][c].get(s, 0) * HIGH_SEASON_FACTOR)
-            for c in COLORS
-            for s in sizes
-            if suggested[genero][c].get(s, 0) > 0
+        max_total = max_matrix(suggested[genero], sizes)
+        pct = round((max_total - sug_total) / sug_total * 100, 1) if sug_total else 0
+        ws.append(
+            [
+                genero,
+                team_total,
+                sug_total,
+                max_total,
+                max_total - sug_total,
+                pct,
+                sug_total - team_total,
+            ]
         )
-        ws.append([genero, team_total, sug_total, max_total, max_total - sug_total, sug_total - team_total])
     cab_min = ws["C2"].value or 0
     kids_min = ws["C3"].value or 0
     cab_max = ws["D2"].value or 0
     kids_max = ws["D3"].value or 0
     team_tot = (ws["B2"].value or 0) + (ws["B3"].value or 0)
-    ws.append(["TOTAL", team_tot, cab_min + kids_min, cab_max + kids_max, (cab_max + kids_max) - (cab_min + kids_min), (cab_min + kids_min) - team_tot])
+    total_min = cab_min + kids_min
+    total_max = cab_max + kids_max
+    ws.append(
+        [
+            "TOTAL",
+            team_tot,
+            total_min,
+            total_max,
+            total_max - total_min,
+            round((total_max - total_min) / total_min * 100, 1) if total_min else 0,
+            total_min - team_tot,
+        ]
+    )
     ws["A1"].font = BOLD
 
 
@@ -364,11 +416,27 @@ def main() -> None:
     write_comp_sheet(wb, "KIDS", team, suggested["KIDS"])
     wb.save(OUTPUT_XLSX)
 
-    cab_total = sum_matrix(suggested["CAB"], CAB_SIZES)
-    kids_total = sum_matrix(suggested["KIDS"], KIDS_SIZES)
+    cab_min = sum_matrix(suggested["CAB"], CAB_SIZES)
+    kids_min = sum_matrix(suggested["KIDS"], KIDS_SIZES)
+    cab_max = max_matrix(suggested["CAB"], CAB_SIZES)
+    kids_max = max_matrix(suggested["KIDS"], KIDS_SIZES)
+    cab_pct = round((cab_max - cab_min) / cab_min * 100, 1) if cab_min else 0
+    kids_pct = round((kids_max - kids_min) / kids_min * 100, 1) if kids_min else 0
+
     print(f"Saved {OUTPUT_XLSX}")
-    print(f"CAB MÍN total: {cab_total} | KIDS MÍN total: {kids_total} | TOTAL: {cab_total + kids_total}")
-    print(f"Min per size rule: {MIN_SIZE_QTY} | Uplift: ×{UPLIFT_TOTAL:.4f} | MÁX factor: ×{HIGH_SEASON_FACTOR}")
+    print(f"CAB  MÍN={cab_min} MÁX={cab_max} rango={cab_pct}%")
+    print(f"KIDS MÍN={kids_min} MÁX={kids_max} rango={kids_pct}%")
+    print(
+        f"Ajuste −5%: ×{QUANTITY_ADJUSTMENT} | Curva completa | "
+        f"Mín/talla={MIN_SIZE_QTY} | MÁX factor=×{HIGH_SEASON_FACTOR}"
+    )
+
+    for genero, sizes in [("CAB", CAB_SIZES), ("KIDS", KIDS_SIZES)]:
+        for color in COLORS:
+            row = suggested[genero][color]
+            zeros = [s for s in sizes if row.get(s, 0) == 0]
+            if zeros:
+                print(f"WARN {genero} {color} tallas en cero: {zeros}")
 
 
 if __name__ == "__main__":
