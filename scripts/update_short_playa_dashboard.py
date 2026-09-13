@@ -126,6 +126,14 @@ PEAK_GROUPS = {
 }
 
 ENERO_PLANNING_FLOOR = 1.15
+PLANNING_PEAK_KEYS = ["diciembre", "enero", "carnaval", "semana_santa"]
+PLANNING_FLOORS = {
+    "diciembre": 1.4,
+    "enero": 1.15,
+    "carnaval": 1.08,
+    "semana_santa": 1.05,
+}
+HS_PEAK_BUFFER = 1.08  # margen sobre el pico máximo para cubrir temporada
 
 LEAD_MONTHS = 3
 LAUNCH_NEW_STORE_UPTAKE = 0.93
@@ -303,19 +311,18 @@ def compute_peak_factor(
         if vals:
             peak_factors[label] = round((sum(vals) / len(vals)) / baseline, 2)
 
-    # Floor diciembre at historical planning factor; enero gets planning uplift
-    if "diciembre" in peak_factors:
-        peak_factors["diciembre"] = max(peak_factors["diciembre"], 1.4)
-    if "enero" in peak_factors:
-        peak_factors["enero"] = max(peak_factors["enero"], ENERO_PLANNING_FLOOR)
-    else:
-        peak_factors["enero"] = ENERO_PLANNING_FLOOR
+    for key, floor in PLANNING_FLOORS.items():
+        if key in peak_factors:
+            peak_factors[key] = max(peak_factors[key], floor)
+        else:
+            peak_factors[key] = floor
 
-    hs = max(peak_factors.values()) if peak_factors else 1.4
-    hs = round(max(hs, 1.4), 2)
+    peak_vals = [peak_factors[k] for k in PLANNING_PEAK_KEYS]
+    peak_max = max(peak_vals) if peak_vals else 1.4
+    hs = round(max(peak_max * HS_PEAK_BUFFER, 1.55), 2)
 
     parts = []
-    for key in ["diciembre", "enero", "carnaval", "semana_santa"]:
+    for key in PLANNING_PEAK_KEYS:
         if key in peak_factors:
             parts.append(f"{key.replace('_', ' ').title()} ×{peak_factors[key]}")
     label = " · ".join(parts) if parts else f"×{hs}"
