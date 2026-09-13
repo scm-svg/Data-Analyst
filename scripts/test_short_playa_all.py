@@ -5,15 +5,19 @@ import unittest
 
 from update_short_playa_all import (
     ANCHOR_COMPLETE,
+    COLOR_CATALOG,
+    COLORES_DESCONTINUADOS,
     DEC_FLOOR,
     ENE_FLOOR,
     LEAD_MONTHS,
     PARTIAL_MONTH,
     calc_produce,
+    compute_production_plan,
     compute_seasonality,
     merge_sales,
     mes_sort_key,
     pick_velocity_months,
+    prune_to_original_colors,
 )
 
 
@@ -113,6 +117,59 @@ class MergeSalesTests(unittest.TestCase):
         self.assertIn("agosto-2026", months)
         self.assertEqual(sum(r["v"] for r in merged if r["mes"] == "julio-2026"), 9)
         self.assertNotIn(1, [r["v"] for r in merged if r["mes"] == "julio-2026"])
+
+
+class CatalogColorTests(unittest.TestCase):
+    def test_prune_drops_excel_only_colors_and_keeps_original_order(self):
+        data = {
+            "raw_rows": [
+                {"color": "Cereza", "mes": "julio-2026", "v": 10, "modelo": "SHORT PLAYA UNICOLOR"},
+                {"color": "Honey", "mes": "julio-2026", "v": 2, "modelo": "SHORT PLAYA SUBLIMADO"},
+                {"color": "Santa Teresa", "mes": "agosto-2026", "v": 9, "modelo": "SHORT PLAYA SUBLIMADO"},
+            ],
+            "stock": {
+                "SHORT PLAYA UNICOLOR/CAB/Cereza/M": 20,
+                "SHORT PLAYA SUBLIMADO/CAB/Honey/M": 5,
+                "SHORT PLAYA SUBLIMADO/CAB/Crasqui/L": 3,
+            },
+            "stock_by_store": {
+                "TALLER": {
+                    "SHORT PLAYA UNICOLOR/CAB/Cereza/M": 8,
+                    "SHORT PLAYA SUBLIMADO/CAB/Honey/M": 5,
+                },
+                "GRIETA": {"SHORT PLAYA UNICOLOR/CAB/Cereza/M": 12},
+            },
+            "filtros": {"colores": ["Honey", "Cereza", "Crasqui"]},
+        }
+        pruned = prune_to_original_colors(data)
+        self.assertEqual([r["color"] for r in pruned["raw_rows"]], ["Cereza"])
+        self.assertEqual(list(pruned["stock"]), ["SHORT PLAYA UNICOLOR/CAB/Cereza/M"])
+        self.assertEqual(pruned["filtros"]["colores"], COLOR_CATALOG)
+        self.assertNotIn("Honey", pruned["filtros"]["colores"])
+        self.assertEqual(pruned["colores_descontinuados"], COLORES_DESCONTINUADOS)
+
+    def test_production_plan_includes_active_stock_without_sales(self):
+        rows = [{
+            "modelo": "SHORT PLAYA UNICOLOR",
+            "genero": "CAB",
+            "color": "Cereza",
+            "talla": "M",
+            "mes": "agosto-2026",
+            "v": 6,
+            "activo": True,
+        }]
+        stock = {
+            "SHORT PLAYA UNICOLOR/CAB/Cereza/M": 10,
+            "SHORT PLAYA UNICOLOR/KIDS/Marron/12": 30,
+        }
+        taller = {"SHORT PLAYA UNICOLOR/KIDS/Marron/12": 30}
+        plan, summary, _ = compute_production_plan(
+            rows, stock, taller, ["agosto-2026"], 1.0
+        )
+        colors = {(r["genero"], r["color"]) for r in plan}
+        self.assertIn(("CAB", "Cereza"), colors)
+        self.assertIn(("KIDS", "Marron"), colors)
+        self.assertEqual(summary["SHORT PLAYA UNICOLOR"]["stk"], 40)
 
 
 if __name__ == "__main__":

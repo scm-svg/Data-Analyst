@@ -26,7 +26,8 @@ except ImportError:  # pragma: no cover - installed in the update environment
 ROOT = Path(__file__).resolve().parents[1]
 UPLOAD_DIR = Path("/home/ubuntu/.cursor/projects/workspace/uploads")
 DEFAULT_SOURCE_HTML = ROOT / "SHORT PLAYA SUBL.html"
-OUTPUT_HTML = ROOT / "DASHBOARD SHORTS PLAYA ALL.html"
+OUTPUT_HTML = ROOT / "dashboard short ps.html"
+LEGACY_HTML = ROOT / "DASHBOARD SHORTS PLAYA ALL.html"
 
 MESES_NUM = {
     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
@@ -91,6 +92,16 @@ INV_MODELO_MAP = {
 
 UNICOLOR_ACTIVE = {"Verde Pino", "Azul Pizarra", "Azul Verdoso", "Marron", "Cereza"}
 SUBLIMADO_ACTIVE = {"Playuela", "Sal", "Tucupido", "Sombrero"}
+COLOR_CATALOG = [
+    "Aguamarina", "Azul Marino", "Azul Pizarra", "Azul Rey", "Azul Verdoso",
+    "Cereza", "Coral", "Gris Azulado", "Kaki", "Marron", "Playuela", "Rojo",
+    "Sal", "Sombrero", "Terracota", "Tucupido", "Verde Oliva", "Verde Pino",
+]
+COLOR_CATALOG_SET = set(COLOR_CATALOG)
+COLORES_DESCONTINUADOS = [
+    "Aguamarina", "Azul Marino", "Azul Rey", "Coral", "Gris Azulado",
+    "Kaki", "Rojo", "Terracota", "Verde Oliva",
+]
 MODELS = ["SHORT PLAYA UNICOLOR", "SHORT PLAYA SUBLIMADO"]
 LINEAS = ["CAB", "KIDS"]
 
@@ -382,22 +393,79 @@ def rebuild_aggregates(raw_rows: list[dict]) -> tuple[list[str], dict]:
     return months, und
 
 
+def prune_to_original_colors(data: dict) -> dict:
+    """Drop one-off Excel colors so the catalog matches the original dashboard."""
+    data["raw_rows"] = [r for r in data["raw_rows"] if r.get("color") in COLOR_CATALOG_SET]
+    data["stock"] = {k: q for k, q in data["stock"].items() if k.split("/")[2] in COLOR_CATALOG_SET}
+    pruned_sbs = {}
+    for store, items in (data.get("stock_by_store") or {}).items():
+        kept = {k: q for k, q in items.items() if k.split("/")[2] in COLOR_CATALOG_SET}
+        if kept:
+            pruned_sbs[store] = kept
+    data["stock_by_store"] = pruned_sbs
+    by_modelo = defaultdict(int)
+    for key, qty in data["stock"].items():
+        by_modelo[key.split("/")[0]] += qty
+    data["stock_by_modelo"] = dict(by_modelo)
+    data["filtros"] = dict(data.get("filtros") or {})
+    data["filtros"]["colores"] = list(COLOR_CATALOG)
+    data["colores_activos"] = {
+        "SHORT PLAYA UNICOLOR": sorted(UNICOLOR_ACTIVE),
+        "SHORT PLAYA SUBLIMADO": sorted(SUBLIMADO_ACTIVE),
+    }
+    data["colores_descontinuados"] = list(COLORES_DESCONTINUADOS)
+    return data
+
+
+def stock_split(data: dict) -> None:
+    activos = desc = taller_act = taller_desc = 0
+    for key, qty in data["stock"].items():
+        color = key.split("/")[2]
+        qty = int(qty)
+        if color in UNICOLOR_ACTIVE or color in SUBLIMADO_ACTIVE:
+            activos += qty
+        elif color in COLORES_DESCONTINUADOS:
+            desc += qty
+    for key, qty in (data.get("stock_by_store") or {}).get("TALLER", {}).items():
+        color = key.split("/")[2]
+        qty = int(qty)
+        if color in UNICOLOR_ACTIVE or color in SUBLIMADO_ACTIVE:
+            taller_act += qty
+        elif color in COLORES_DESCONTINUADOS:
+            taller_desc += qty
+    data["stock_total"] = int(sum(data["stock"].values()))
+    data["stock_taller"] = int(sum((data.get("stock_by_store") or {}).get("TALLER", {}).values()))
+    data["stock_activos"] = activos
+    data["stock_descontinuados"] = desc
+    data["stock_taller_activos"] = taller_act
+    data["stock_taller_descontinuados"] = taller_desc
+
+
 def compute_production_plan(raw_rows, stock, stock_taller_by_key, vel_months, hs):
     production_rows = []
     for modelo in MODELS:
         model_rows = [r for r in raw_rows if r["modelo"] == modelo]
-        if not model_rows:
-            continue
         for genero in LINEAS:
-            colors = sorted({
+            colors = {
                 r["color"] for r in model_rows
                 if r["genero"] == genero and is_active(modelo, r["color"])
-            })
-            for color in colors:
-                tallas = sorted({
+            }
+            prefix = f"{modelo}/{genero}/"
+            for key in stock:
+                if key.startswith(prefix):
+                    color = key.split("/")[2]
+                    if is_active(modelo, color):
+                        colors.add(color)
+            for color in sorted(colors):
+                tallas = {
                     r["talla"] for r in model_rows
                     if r["genero"] == genero and r["color"] == color
-                }, key=lambda t: (len(str(t)), str(t)))
+                }
+                color_prefix = f"{modelo}/{genero}/{color}/"
+                for key in stock:
+                    if key.startswith(color_prefix):
+                        tallas.add(key.split("/")[3])
+                tallas = sorted(tallas, key=lambda t: (len(str(t)), str(t)))
                 talla_rows = []
                 color_v = color_v_base = color_stk = color_stk_taller = color_produce = 0.0
                 for talla in tallas:
@@ -557,6 +625,7 @@ def rebuild_data(data: dict, season: dict, vel_months: list[str]) -> dict:
         f"1.5× GRIETA · rotación ajustada ×{hs}",
     )
     data["total"] = sum(data["meses_und"].values())
+    stock_split(data)
     if data.get("launch_production_plan"):
         data["launch_production_plan"] = rescale_launch(data["launch_production_plan"], hs)
         data["summary_launch"] = summarize_launch(data["launch_production_plan"])
@@ -663,16 +732,45 @@ def patch_html(html: str, data: dict) -> str:
         + "Es la velocidad usada para cobertura y producción.",
     )
 
-    html = html.replace(
-        "<h1>Short Playa · <em id=\"titleModelo\">Todas</em></h1>",
-        "<h1>Shorts Playa ALL · <em id=\"titleModelo\">Todas</em></h1>",
+    html = re.sub(
+        r"<h1>Shorts? Playa(?: ALL| SUBL)? · <em id=\"titleModelo\">Todas</em></h1>",
+        '<h1>Dashboard Short PS · <em id="titleModelo">Todas</em></h1>',
+        html,
     )
-    html = html.replace("Short Playa · Dashboard de Ventas", "Shorts Playa ALL · Dashboard de Ventas")
-    html = html.replace("<title>Dashboard Short Playa</title>", "<title>Dashboard Shorts Playa ALL</title>")
-    if "<title>" not in html[:800]:
+    html = re.sub(
+        r"Shorts? Playa(?: ALL| SUBL)? · Dashboard de Ventas",
+        "Dashboard Short PS · Ventas e inventario",
+        html,
+    )
+    html = re.sub(r"<title>[^<]*</title>", "<title>Dashboard Short PS</title>", html, count=1)
+
+    html = html.replace(
+        "function fr(){var f=gf(),mA=getMesesActivos();return DATA.raw_rows.filter(function(r){return(!_modelo||r.modelo===_modelo)&&(!f.tienda||r.tienda===f.tienda)&&(!f.genero||r.genero===f.genero)&&(!f.color||r.color===f.color)&&mA.indexOf(r.mes)>=0;});}",
+        "function fr(){var f=gf(),mA=getMesesActivos();return DATA.raw_rows.filter(function(r){return isCatalogColor(r.color)&&(!_modelo||r.modelo===_modelo)&&(!f.tienda||r.tienda===f.tienda)&&(!f.genero||r.genero===f.genero)&&(!f.color||r.color===f.color)&&mA.indexOf(r.mes)>=0;});}",
+    )
+    html = html.replace(
+        "function updateColorFilter(){var sel=document.getElementById('fC'),cur=sel.value;sel.innerHTML='<option value=\"\">Todos</option>';var rows=DATA.raw_rows.filter(function(r){return(!_modelo||r.modelo===_modelo);});var cols={};rows.forEach(function(r){cols[r.color]=1;});Object.keys(cols).sort().forEach(function(c){sel.innerHTML+='<option value=\"'+c+'\">'+c+'</option>';});if(cur&&cols[cur])sel.value=cur;}",
+        "function isCatalogColor(c){var cat=DATA.filtros&&DATA.filtros.colores||[];return!cat.length||cat.indexOf(c)>=0;}"
+        "function updateColorFilter(){var sel=document.getElementById('fC'),cur=sel.value;sel.innerHTML='<option value=\"\">Todos</option>';"
+        "var present={};"
+        "DATA.raw_rows.forEach(function(r){if((!_modelo||r.modelo===_modelo)&&isCatalogColor(r.color))present[r.color]=1;});"
+        "Object.keys(DATA.stock||{}).forEach(function(k){var p=k.split('/');if(_modelo&&p[0]!==_modelo)return;if(isCatalogColor(p[2]))present[p[2]]=1;});"
+        "(DATA.filtros.colores||Object.keys(present).sort()).forEach(function(c){if(present[c])sel.innerHTML+='<option value=\"'+c+'\">'+c+'</option>';});"
+        "if(cur&&present[cur])sel.value=cur;}",
+    )
+    html = html.replace(
+        "function stockMatchesFilters(key,f){var p=stockKeyParts(key);if(_modelo&&p.modelo!==_modelo)return false;if(f.genero&&p.genero!==f.genero)return false;if(f.color&&p.color!==f.color)return false;return true;}",
+        "function stockMatchesFilters(key,f){var p=stockKeyParts(key);if(!isCatalogColor(p.color))return false;if(_modelo&&p.modelo!==_modelo)return false;if(f.genero&&p.genero!==f.genero)return false;if(f.color&&p.color!==f.color)return false;return true;}",
+    )
+    html = html.replace(
+        "+kpiCard(totalStk.toLocaleString(),'Stock actual','Taller: '+DATA.stock_taller.toLocaleString()+' und','#22d3ee')",
+        "+kpiCard(invTot.grand.toLocaleString(),'Stock actual','Igual que Inventario · Taller '+invTot.tallerTotal.toLocaleString()+' · activos '+(DATA.stock_activos||0).toLocaleString()+' · desc. '+(DATA.stock_descontinuados||0).toLocaleString(),'#22d3ee')",
+    )
+    old_plan = "    var plan=DATA.production_plan.filter(function(r){return(!_modelo||r.modelo===_modelo);});"
+    if old_plan in html and "var invTot=getStockTotals" not in html:
         html = html.replace(
-            "<title>SHORT PLAYA SUBL</title>",
-            "<title>Dashboard Shorts Playa ALL</title>",
+            old_plan,
+            "    var invTot=getStockTotals(getFilteredStockByStore());\n" + old_plan,
         )
     return html
 
@@ -697,10 +795,12 @@ def apply_sales_and_inventory(data: dict, sales_path: Path | None, inv_path: Pat
     else:
         print("Inventory Excel: not found — keeping stock already in the dashboard")
 
+    data = prune_to_original_colors(data)
     meses_order, meses_und = rebuild_aggregates(data["raw_rows"])
     data["meses_order"] = meses_order
     data["meses_und"] = meses_und
     data["replaced_months"] = replaced
+    stock_split(data)
     return data
 
 
@@ -735,6 +835,8 @@ def main() -> None:
 
     out_html = patch_html(html, data)
     OUTPUT_HTML.write_text(out_html, encoding="utf-8")
+    if LEGACY_HTML.exists() and LEGACY_HTML.resolve() != OUTPUT_HTML.resolve():
+        LEGACY_HTML.unlink()
 
     produce = sum(r["produce"] for r in data["production_plan"])
     print(f"Wrote {OUTPUT_HTML}")
