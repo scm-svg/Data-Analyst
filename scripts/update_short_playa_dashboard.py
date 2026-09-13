@@ -12,6 +12,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_HTML = Path(
+    "/home/ubuntu/.cursor/projects/workspace/uploads/DASHBOARD_SHORTS_PLAYA_8185.html"
+)
+REF_FALLBACK_HTML = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/DASHBOARD_SHORTS_PLAYA_ALL_360f.html"
 )
 SALES_XLSX = Path(
@@ -103,6 +106,18 @@ COLORES_ACTIVOS = {
     "SHORT PLAYA SUBLIMADO": ["Playuela", "Sal", "Sombrero", "Tucupido"],
 }
 
+COLORES_DESCONTINUADOS = [
+    "Aguamarina",
+    "Azul Marino",
+    "Azul Rey",
+    "Coral",
+    "Gris Azulado",
+    "Kaki",
+    "Rojo",
+    "Terracota",
+    "Verde Oliva",
+]
+
 PEAK_GROUPS = {
     "diciembre": ["diciembre"],
     "enero": ["enero"],
@@ -165,46 +180,11 @@ def stock_key(modelo: str, genero: str, color: str, talla: str) -> str:
     return f"{modelo}/{genero}/{color}/{talla}"
 
 
-def is_active_color(modelo: str, color: str) -> bool:
-    return color in COLORES_ACTIVOS.get(modelo, [])
-
-
-def filter_active_rows(rows: list[dict]) -> list[dict]:
-    return [r for r in rows if is_active_color(r["modelo"], r["color"])]
-
-
-def filter_active_stock(
-    stock: dict[str, float],
-    stock_by_store: dict[str, dict[str, float]],
-) -> tuple[dict[str, float], dict[str, dict[str, float]], dict[str, float]]:
-    filtered: dict[str, float] = {}
-    filtered_by_store: dict[str, dict[str, float]] = defaultdict(dict)
-    by_modelo: dict[str, float] = defaultdict(float)
-
-    for key, qty in stock.items():
-        parts = key.split("/")
-        if len(parts) != 4:
-            continue
-        modelo, _genero, color, _talla = parts
-        if not is_active_color(modelo, color):
-            continue
-        filtered[key] = qty
-        by_modelo[modelo] += qty
-
-    for store, items in stock_by_store.items():
-        store_items = {}
-        for key, qty in items.items():
-            parts = key.split("/")
-            if len(parts) != 4:
-                continue
-            modelo, _genero, color, _talla = parts
-            if not is_active_color(modelo, color):
-                continue
-            store_items[key] = qty
-        if store_items:
-            filtered_by_store[store] = store_items
-
-    return filtered, dict(filtered_by_store), dict(by_modelo)
+def is_allowed_sales_color(modelo: str, color: str) -> bool:
+    """Sublimado solo acepta los 4 colores oficiales; unicolor conserva activos + descontinuados."""
+    if modelo == "SHORT PLAYA SUBLIMADO":
+        return color in COLORES_ACTIVOS["SHORT PLAYA SUBLIMADO"]
+    return True
 
 
 def load_data(html_path: Path) -> tuple[str, dict]:
@@ -227,7 +207,7 @@ def parse_sales(path: Path) -> list[dict]:
             continue
         genero = str(r["GENERO"]).strip().upper()
         color = title_color(str(r["COLOR"]))
-        if not is_active_color(modelo, color):
+        if not is_allowed_sales_color(modelo, color):
             continue
         talla = str(r["TALLA"]).strip()
         mes = mes_key(int(r["Año"]), str(r["Mes"]))
@@ -264,8 +244,6 @@ def parse_inventory(path: Path) -> tuple[dict, dict, dict]:
             continue
         modelo, genero = mapped
         color = title_color(str(r["COLOR"]))
-        if not is_active_color(modelo, color):
-            continue
         talla = str(r["TALLA"]).strip()
         qty = max(0, float(r["Cantidad en inventario"]))
         if qty <= 0:
@@ -690,53 +668,45 @@ def update_filtros(rows: list[dict], data: dict) -> dict:
     filtros = data.get("filtros", {})
     filtros["tiendas"] = sorted({r["tienda"] for r in rows})
     filtros["generos"] = sorted({r["genero"] for r in rows})
-    active_colors = sorted({c for cols in COLORES_ACTIVOS.values() for c in cols})
-    filtros["colores"] = active_colors
+    filtros["colores"] = sorted({r["color"] for r in rows})
     filtros["modelos"] = sorted({r["modelo"] for r in rows})
     return filtros
 
 
-def patch_html(html: str, data: dict, periodo: str, partial_label: str, hs_label: str) -> str:
+def patch_html(html: str, data: dict, periodo: str) -> str:
     data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     html = re.sub(r"var DATA=\{.*?\};", f"var DATA={data_json};", html, count=1, flags=re.DOTALL)
 
-    html = html.replace("Dashboard de Ventas · Oct 25 — Ago 26", f"Dashboard de Ventas · {periodo}")
-    html = html.replace("Short Playa · Dashboard de Ventas · Oct 25 — Ago 26", f"Short Playa · Dashboard de Ventas · {periodo}")
-
+    html = re.sub(
+        r"Dashboard de Ventas · [^<]+",
+        f"Dashboard de Ventas · {periodo}",
+        html,
+        count=2,
+    )
     html = html.replace(
         "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 Mayo 2026 con datos parciales'});",
         "if(DATA.es_parcial)alerts.push({type:'info',text:'📅 '+(DATA.partial_month_label||'Mes actual')+' con datos parciales'});",
     )
-
-    html = html.replace(
-        "temporada alta ×<span id=\"hsFactorLabel\">1.4</span> · diciembre base ×1.4",
-        f"temporada alta ×<span id=\"hsFactorLabel\">{data['high_season_factor']}</span> · {hs_label}",
-    )
-
-    # Dynamic methodology strings in rDecisiones
-    html = html.replace(
-        "+kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' temporada alta','var(--a2)')",
-        "+kpiCard(Math.round(totalVelBase)+' → '+Math.round(totalVel),'Rotación ajustada','Base × '+hs+' · '+((DATA.high_season_detail_label)||'temporada alta'),'var(--a2)')",
-    )
-    html = html.replace(
-        "'<div><strong style=\"color:var(--tx)\">Rotación ajustada</strong><br>Base × '+hs+' (temporada alta / diciembre). Es la velocidad usada para cobertura y producción.</div>'",
-        "'<div><strong style=\"color:var(--tx)\">Rotación ajustada</strong><br>Base × '+hs+' ('+((DATA.high_season_detail_label)||'temporada alta')+'). Cubre picos de <strong style=\"color:var(--tx)\">Diciembre, Enero, Carnaval y Semana Santa</strong>. Es la velocidad usada para cobertura y producción.</div>'",
-    )
-
     return html
 
 
+def resolve_source_html() -> Path:
+    if SOURCE_HTML.exists():
+        return SOURCE_HTML
+    if REF_FALLBACK_HTML.exists():
+        return REF_FALLBACK_HTML
+    if OUTPUT_HTML.exists():
+        return OUTPUT_HTML
+    raise FileNotFoundError("No dashboard HTML template found")
+
+
 def main() -> None:
-    source = OUTPUT_HTML if OUTPUT_HTML.exists() else SOURCE_HTML
-    html, data = load_data(source)
+    html, data = load_data(resolve_source_html())
     new_sales = parse_sales(SALES_XLSX)
     replace_months = {r["mes"] for r in new_sales}
 
-    merged_rows = filter_active_rows(
-        merge_sales(filter_active_rows(data["raw_rows"]), new_sales, replace_months)
-    )
-    raw_stock, raw_sbs, _raw_by_modelo = parse_inventory(INV_XLSX)
-    stock, stock_by_store, stock_by_modelo = filter_active_stock(raw_stock, raw_sbs)
+    merged_rows = merge_sales(data["raw_rows"], new_sales, replace_months)
+    stock, stock_by_store, stock_by_modelo = parse_inventory(INV_XLSX)
 
     meses_order = compute_meses_order(merged_rows)
     partial_month = "septiembre-2026" if "septiembre-2026" in meses_order else None
@@ -744,15 +714,13 @@ def main() -> None:
     velocity_months = pick_velocity_months(meses_order, partial_month)
     hs, peak_factors, hs_detail = compute_peak_factor(meses_und, velocity_months, meses_order)
 
-    colores_activos = COLORES_ACTIVOS
+    colores_activos = data.get("colores_activos") or COLORES_ACTIVOS
+    colores_descontinuados = data.get("colores_descontinuados") or COLORES_DESCONTINUADOS
     production_plan = build_production_plan(
         merged_rows, stock, stock_by_store, colores_activos, velocity_months, hs
     )
-    plan_stk = int(sum(p["stk"] for p in production_plan))
     stock_total = int(sum(stock.values()))
     stock_taller = int(sum(stock_by_store.get("TALLER", {}).values()))
-    if plan_stk != stock_total:
-        raise RuntimeError(f"Stock mismatch: plan={plan_stk} vs inventory={stock_total}")
     summary_produccion = summarize_plan(production_plan)
     summary_genero = summarize_genero(production_plan)
 
@@ -781,7 +749,7 @@ def main() -> None:
             "meses_und": meses_und,
             "filtros": update_filtros(merged_rows, data),
             "colores_activos": colores_activos,
-            "colores_descontinuados": [],
+            "colores_descontinuados": colores_descontinuados,
             "es_parcial": partial_month is not None,
             "partial_month": partial_month,
             "stock_total": stock_total,
@@ -828,7 +796,7 @@ def main() -> None:
 
     partial_label = "Septiembre 2026" if partial_month else "Mes actual"
     data["partial_month_label"] = partial_label
-    updated_html = patch_html(html, data, periodo.replace(" — ", " — "), partial_label, hs_detail)
+    updated_html = patch_html(html, data, periodo)
 
     OUTPUT_HTML.write_text(updated_html, encoding="utf-8")
 
