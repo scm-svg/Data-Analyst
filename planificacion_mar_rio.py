@@ -19,21 +19,30 @@ OUT_DIR = Path("/workspace/output")
 
 TELA_KG = {
     "Aguamarina": 348.34, "Amarillo Neón": 57.94, "Azul Lavanda": 221.00,
-    "Azul Marino": 689.90, "Azul Rey": 271.46, "Blanco": 162.04,
-    "Gris Claro": 47.68, "Lila": 188.44, "Morado": 94.20, "Negro": 657.16,
-    "Rojo": 0.18, "Rosado Pastel": 31.44, "Verde Militar": 46.02, "Vinotinto": 175.38,
+    "Azul Marino": 689.90, "Azul Rey": 271.46, "Blanco": 202.04,
+    "Gris Claro": 87.68, "Lila": 228.44, "Morado": 94.20, "Negro": 657.16,
+    "Rojo": 0.18, "Rosado Pastel": 31.44, "Verde Militar": 46.02, "Vinotinto": 215.38,
 }
 
-LOTE_CORTADO_COLORES = [
-    "Verde Militar", "Vinotinto", "Azul Marino", "Azul Rey", "Rojo", "Gris Claro",
-    "Azul Lavanda", "Aguamarina", "Rosado Pastel", "Negro", "Lila",
-]
-LOTE_CORTADO_TOTAL = 1300
-LOTE_A_META_KIDS = {
-    "Verde Militar": "Verde Militar", "Vinotinto": None, "Azul Marino": "Azul Marino",
-    "Azul Rey": "Azul Rey", "Rojo": "Rojo", "Gris Claro": None,
-    "Azul Lavanda": "Azul Lavanda", "Aguamarina": "Aguamarina",
-    "Rosado Pastel": "Rosado Pastel", "Negro": "Negro", "Lila": "Lila",
+# Mar KIDS lote ya cortado — cantidades reales por color y talla (producción WIP)
+MAR_KIDS_CORTADO = {
+    "Negro":         {"8": 27, "10": 27, "12": 27, "14": 54},
+    "Azul Marino":   {"8": 12, "10": 12, "12": 12, "14": 24},
+    "Rojo":          {"8": 8,  "10": 8,  "12": 8,  "14": 16},
+    "Aguamarina":    {"8": 6,  "10": 6,  "12": 6,  "14": 12},
+    "Rosado Pastel": {"8": 25, "10": 25, "12": 25, "14": 50},
+    "Azul Lavanda":  {"8": 13, "10": 13, "12": 13, "14": 26},
+    "Lila":          {"8": 32, "10": 32, "12": 32, "14": 64},
+    "Azul Rey":      {"8": 43, "10": 43, "12": 43, "14": 86},
+    "Verde Militar": {"8": 12, "10": 12, "12": 12, "14": 24},
+    "Vinotinto":     {"8": 48, "10": 48, "12": 48, "14": 96},
+    "Gris Claro":    {"8": 34, "10": 34, "12": 34, "14": 68},
+}
+LOTE_CORTADO_TOTAL = sum(sum(v.values()) for v in MAR_KIDS_CORTADO.values())  # 1 300 und
+# Colores en meta Excel Mar KIDS que reciben descuento de und ya cortadas
+MAR_KIDS_META_COLORES = {
+    "Negro", "Azul Marino", "Rojo", "Aguamarina", "Rosado Pastel", "Azul Lavanda",
+    "Lila", "Azul Rey", "Verde Militar",
 }
 
 MIN_KG = 5.0
@@ -148,12 +157,11 @@ def parse_mix_full(path: Path) -> dict[tuple, dict]:
 
 
 def lote_cortado_meta_kids() -> dict[str, float]:
-    por = LOTE_CORTADO_TOTAL / len(LOTE_CORTADO_COLORES)
+    """Total und ya cortadas por color (solo colores en meta Excel Mar KIDS)."""
     out: dict[str, float] = {}
-    for c in LOTE_CORTADO_COLORES:
-        mc = LOTE_A_META_KIDS.get(c)
-        if mc:
-            out[mc] = out.get(mc, 0) + por
+    for color, tallas in MAR_KIDS_CORTADO.items():
+        if color in MAR_KIDS_META_COLORES:
+            out[color] = float(sum(tallas.values()))
     return out
 
 
@@ -209,6 +217,52 @@ def auto_width(ws, mx: int = 20) -> None:
         letter = get_column_letter(col[0].column)
         ws.column_dimensions[letter].width = min(
             max(len(str(c.value or "")) for c in col) + 2, mx)
+
+
+def write_mar_kids_cortado_sheet(ws) -> None:
+    """Detalle real del lote Mar KIDS ya cortado (producción WIP)."""
+    ws["A1"] = "MAR KIDS — LOTE YA CORTADO (producción WIP — NO descuenta inventario kg)"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = f"Total lote: {LOTE_CORTADO_TOTAL} und · Solo descuenta meta Mar KIDS en PLAN COLORES"
+    green = PatternFill("solid", fgColor="548235")
+    green_font = Font(bold=True, color="FFFFFF")
+    hdr = 4
+    ws.cell(hdr, 1, "Color")
+    for i, t in enumerate(["8", "10", "12", "14"], 2):
+        ws.cell(hdr, i, t)
+    ws.cell(hdr, 6, "Total")
+    for c in range(1, 7):
+        cell = ws.cell(hdr, c)
+        cell.fill = green
+        cell.font = green_font
+        cell.alignment = CENTER
+        cell.border = BORDER
+    row = hdr + 1
+    totals = {"8": 0, "10": 0, "12": 0, "14": 0}
+    for color, tallas in MAR_KIDS_CORTADO.items():
+        ws.cell(row, 1, color)
+        tot = 0
+        for i, t in enumerate(["8", "10", "12", "14"], 2):
+            v = tallas.get(t, 0)
+            ws.cell(row, i, v)
+            ws.cell(row, i).alignment = CENTER
+            ws.cell(row, i).border = BORDER
+            totals[t] += v
+            tot += v
+        ws.cell(row, 6, tot)
+        ws.cell(row, 6).font = Font(bold=True)
+        ws.cell(row, 1).border = BORDER
+        row += 1
+    ws.cell(row, 1, "TOTAL")
+    ws.cell(row, 1).font = Font(bold=True)
+    for i, t in enumerate(["8", "10", "12", "14"], 2):
+        ws.cell(row, i, totals[t])
+        ws.cell(row, i).font = Font(bold=True)
+        ws.cell(row, i).fill = TOTAL_MIN_FILL
+    ws.cell(row, 6, sum(totals.values()))
+    ws.cell(row, 6).font = Font(bold=True)
+    ws.cell(row, 6).fill = TOTAL_MIN_FILL
+    auto_width(ws)
 
 
 def write_metas_sheet(ws, metas: dict) -> None:
@@ -499,7 +553,7 @@ def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
                 ws_p.cell(cr, 1, modelo)
                 ws_p.cell(cr, 2, gen)
                 ws_p.cell(cr, 3, color)
-                ws_p.cell(cr, 4, round(val, 1) if val else 0)
+                ws_p.cell(cr, 4, int(val) if val else 0)
                 style_input(ws_p.cell(cr, 4))
                 cr += 1
     cort_end = cr - 1
@@ -509,6 +563,10 @@ def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
     # METAS
     ws_m = wb.create_sheet("METAS")
     write_metas_sheet(ws_m, metas)
+
+    # MAR KIDS ya cortado (detalle real)
+    ws_cort = wb.create_sheet("MAR KIDS CORTADO")
+    write_mar_kids_cortado_sheet(ws_cort)
 
     # MIX TALLAS
     ws_mix = wb.create_sheet("MIX TALLAS")
@@ -660,7 +718,7 @@ def main() -> None:
     (OUT_DIR / "plan_prioridades.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"Excel: {path}")
-    print("Hojas (8): INSTRUCCIONES | PARAMETROS | METAS | MIX TALLAS | PLAN COLORES | CURVAS REF | CURVAS CORTE | RESUMEN")
+    print("Hojas (9): INSTRUCCIONES | PARAMETROS | METAS | MAR KIDS CORTADO | MIX TALLAS | PLAN COLORES | CURVAS REF | CURVAS CORTE | RESUMEN")
     for e in PRIORIDAD_ORDEN:
         d = summary["por_linea"][e]
         print(f"  {e}: {d['und']} und / {d['kg']} kg")

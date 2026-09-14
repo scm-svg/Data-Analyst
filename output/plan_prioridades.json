@@ -176,11 +176,11 @@
       "genero": "KIDS",
       "color": "Azul Marino",
       "meta": 409,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 60.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 145,
-      "kg": 37.7
+      "und_final": 174,
+      "kg": 45.24
     },
     {
       "prio": 2,
@@ -189,11 +189,11 @@
       "genero": "KIDS",
       "color": "Negro",
       "meta": 379,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 135.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 130,
-      "kg": 33.8
+      "und_final": 122,
+      "kg": 31.72
     },
     {
       "prio": 2,
@@ -202,11 +202,11 @@
       "genero": "KIDS",
       "color": "Lila",
       "meta": 254,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 160.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 67,
-      "kg": 17.42
+      "und_final": 47,
+      "kg": 12.22
     },
     {
       "prio": 2,
@@ -215,11 +215,11 @@
       "genero": "KIDS",
       "color": "Aguamarina",
       "meta": 243,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 30.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 62,
-      "kg": 16.12
+      "und_final": 106,
+      "kg": 27.56
     },
     {
       "prio": 2,
@@ -228,7 +228,7 @@
       "genero": "KIDS",
       "color": "Rojo",
       "meta": 239,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 40.0,
       "pct": 0.5,
       "consumo": 0.26,
       "und_final": 0,
@@ -241,11 +241,11 @@
       "genero": "KIDS",
       "color": "Azul Rey",
       "meta": 232,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 215.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 56,
-      "kg": 14.56
+      "und_final": 8,
+      "kg": 2.08
     },
     {
       "prio": 2,
@@ -254,11 +254,11 @@
       "genero": "KIDS",
       "color": "Verde Militar",
       "meta": 224,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 60.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 52,
-      "kg": 13.52
+      "und_final": 77,
+      "kg": 20.02
     },
     {
       "prio": 2,
@@ -267,7 +267,7 @@
       "genero": "KIDS",
       "color": "Rosado Pastel",
       "meta": 214,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 125.0,
       "pct": 0.5,
       "consumo": 0.26,
       "und_final": 33,
@@ -293,11 +293,11 @@
       "genero": "KIDS",
       "color": "Azul Lavanda",
       "meta": 153,
-      "ya_cortado": 118.18181818181819,
+      "ya_cortado": 65.0,
       "pct": 0.5,
       "consumo": 0.26,
-      "und_final": 17,
-      "kg": 4.42
+      "und_final": 44,
+      "kg": 11.44
     },
     {
       "prio": 2,
@@ -348,8 +348,8 @@
       "ya_cortado": 0,
       "pct": 0.5,
       "consumo": 0.5,
-      "und_final": 132,
-      "kg": 66.0
+      "und_final": 195,
+      "kg": 97.5
     },
     {
       "prio": 3,
@@ -361,8 +361,8 @@
       "ya_cortado": 0,
       "pct": 0.5,
       "consumo": 0.5,
-      "und_final": 13,
-      "kg": 6.5
+      "und_final": 0,
+      "kg": 0.0
     },
     {
       "prio": 3,
@@ -478,8 +478,8 @@
       "ya_cortado": 0,
       "pct": 0.5,
       "consumo": 0.4,
-      "und_final": 0,
-      "kg": 0.0
+      "und_final": 22,
+      "kg": 8.8
     },
     {
       "prio": 4,
@@ -673,8 +673,8 @@
       "ya_cortado": 0,
       "pct": 0.5,
       "consumo": 0.66,
-      "und_final": 71,
-      "kg": 46.86
+      "und_final": 60,
+      "kg": 39.6
     },
     {
       "prio": 5,
@@ -738,8 +738,8 @@
       "ya_cortado": 0,
       "pct": 0.5,
       "consumo": 0.66,
-      "und_final": 0,
-      "kg": 0.0
+      "und_final": 60,
+      "kg": 39.6
     },
     {
       "prio": 5,
@@ -917,26 +917,26 @@
       "kg": 430.08
     },
     "MAR KIDS": {
-      "und": 939,
-      "kg": 244.14
+      "und": 988,
+      "kg": 256.88
     },
     "MAR CAB": {
-      "und": 1159,
-      "kg": 579.5
+      "und": 1209,
+      "kg": 604.5
     },
     "MAR DAMA": {
-      "und": 852,
-      "kg": 340.8
+      "und": 874,
+      "kg": 349.6
     },
     "RIO CAB": {
-      "und": 823,
-      "kg": 543.18
+      "und": 872,
+      "kg": 575.52
     },
     "RIO DAMA": {
       "und": 839,
       "kg": 436.28
     }
   },
-  "total_und": 5956,
-  "total_kg": 2573.98
+  "total_und": 6126,
+  "total_kg": 2652.86
 }
