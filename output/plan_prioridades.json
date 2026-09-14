@@ -1,8 +1,31 @@
 {
-  "tela_total_kg": 2991.18,
-  "tela_usada_lote_kg": 338.0,
-  "tela_neta_kg": 2777.93,
+  "tela_inventario_kg": 2991.18,
   "lote_cortado_und": 1300,
+  "lote_cortado_nota": "Und de producción WIP — NO descuenta inventario kg",
+  "lote_cortado_por_color_und": {
+    "Verde Militar": 118.18181818181819,
+    "Vinotinto": 118.18181818181819,
+    "Azul Marino": 118.18181818181819,
+    "Azul Rey": 118.18181818181819,
+    "Rojo": 118.18181818181819,
+    "Gris Claro": 118.18181818181819,
+    "Azul Lavanda": 118.18181818181819,
+    "Aguamarina": 118.18181818181819,
+    "Rosado Pastel": 118.18181818181819,
+    "Negro": 118.18181818181819,
+    "Lila": 118.18181818181819
+  },
+  "lote_descuento_meta_kids_und": {
+    "Verde Militar": 118.18181818181819,
+    "Azul Marino": 118.18181818181819,
+    "Azul Rey": 118.18181818181819,
+    "Rojo": 118.18181818181819,
+    "Azul Lavanda": 118.18181818181819,
+    "Aguamarina": 118.18181818181819,
+    "Rosado Pastel": 118.18181818181819,
+    "Negro": 118.18181818181819,
+    "Lila": 118.18181818181819
+  },
   "meta_max_mar_kids": 3101,
   "meta_max_rio_kids": 2952,
   "consumo": {
@@ -17,37 +40,37 @@
       "KIDS": 0.32
     }
   },
-  "total_und_plan": 6124,
-  "total_kg_plan": 2670.02,
+  "total_und_plan": 6797,
+  "total_kg_plan": 2977.64,
   "por_prioridad": {
     "MAR KIDS": {
-      "und": 906,
-      "kg": 235.56,
+      "und": 953,
+      "kg": 247.78,
       "und_objetivo": 1013
     },
     "RIO KIDS": {
-      "und": 1192,
-      "kg": 381.44,
+      "und": 1333,
+      "kg": 426.56,
       "und_objetivo": 1474
     },
     "MAR CAB": {
-      "und": 1082,
-      "kg": 541.0,
+      "und": 1224,
+      "kg": 612.0,
       "und_objetivo": 2900
     },
     "MAR DAMA": {
-      "und": 1087,
-      "kg": 434.8,
+      "und": 1203,
+      "kg": 481.2,
       "und_objetivo": 2700
     },
     "RIO CAB": {
-      "und": 797,
-      "kg": 526.02,
+      "und": 903,
+      "kg": 595.98,
       "und_objetivo": 2782
     },
     "RIO DAMA": {
-      "und": 1060,
-      "kg": 551.2,
+      "und": 1181,
+      "kg": 614.12,
       "und_objetivo": 2893
     }
   },
@@ -66,12 +89,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 62,
       "kg_necesarios": 16.12,
-      "tela_disponible_kg": 317.61,
+      "tela_disponible_kg": 348.34,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 62,
       "kg_usar_final": 16.12,
-      "tela_restante_kg": 301.49
+      "tela_restante_kg": 332.22
     },
     {
       "prioridad": 1,
@@ -108,12 +131,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 17,
       "kg_necesarios": 4.42,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 17,
       "kg_usar_final": 4.42,
-      "tela_restante_kg": 185.85
+      "tela_restante_kg": 216.58
     },
     {
       "prioridad": 1,
@@ -129,12 +152,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 145,
       "kg_necesarios": 37.7,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "OK",
       "nota": "Alta flexibilidad — repartir entre modelos",
       "und_asignar_final": 145,
       "kg_usar_final": 37.7,
-      "tela_restante_kg": 621.47
+      "tela_restante_kg": 652.2
     },
     {
       "prioridad": 1,
@@ -150,12 +173,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 56,
       "kg_necesarios": 14.56,
-      "tela_disponible_kg": 240.73,
+      "tela_disponible_kg": 271.46,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 56,
       "kg_usar_final": 14.56,
-      "tela_restante_kg": 226.17
+      "tela_restante_kg": 256.9
     },
     {
       "prioridad": 1,
@@ -192,12 +215,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 67,
       "kg_necesarios": 17.42,
-      "tela_disponible_kg": 157.71,
+      "tela_disponible_kg": 188.44,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 67,
       "kg_usar_final": 17.42,
-      "tela_restante_kg": 140.29
+      "tela_restante_kg": 171.02
     },
     {
       "prioridad": 1,
@@ -213,12 +236,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 130,
       "kg_necesarios": 33.8,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "OK",
       "nota": "Alta flexibilidad — repartir entre modelos",
       "und_asignar_final": 130,
       "kg_usar_final": 33.8,
-      "tela_restante_kg": 592.63
+      "tela_restante_kg": 623.36
     },
     {
       "prioridad": 1,
@@ -255,12 +278,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 1,
@@ -274,14 +297,14 @@
       "objetivo_pct": 0.5,
       "und_objetivo": 47,
       "consumo_kg": 0.26,
-      "und_asignar": 0,
-      "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.71,
-      "estado": "SIN TELA",
-      "nota": "Stock crítico — excluir o esperar compra",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 0.71
+      "und_asignar": 47,
+      "kg_necesarios": 12.22,
+      "tela_disponible_kg": 31.44,
+      "estado": "OK",
+      "nota": "",
+      "und_asignar_final": 47,
+      "kg_usar_final": 12.22,
+      "tela_restante_kg": 19.22
     },
     {
       "prioridad": 1,
@@ -297,12 +320,12 @@
       "consumo_kg": 0.26,
       "und_asignar": 52,
       "kg_necesarios": 13.52,
-      "tela_disponible_kg": 15.29,
+      "tela_disponible_kg": 46.02,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 52,
       "kg_usar_final": 13.52,
-      "tela_restante_kg": 1.77
+      "tela_restante_kg": 32.5
     },
     {
       "prioridad": 2,
@@ -318,12 +341,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 107,
       "kg_necesarios": 34.24,
-      "tela_disponible_kg": 317.61,
+      "tela_disponible_kg": 348.34,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 107,
       "kg_usar_final": 34.24,
-      "tela_restante_kg": 267.25
+      "tela_restante_kg": 297.98
     },
     {
       "prioridad": 2,
@@ -360,12 +383,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 175,
       "kg_necesarios": 56.0,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 175,
       "kg_usar_final": 56.0,
-      "tela_restante_kg": 129.85
+      "tela_restante_kg": 160.58
     },
     {
       "prioridad": 2,
@@ -381,12 +404,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 180,
       "kg_necesarios": 57.6,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "OK",
       "nota": "Alta flexibilidad — repartir entre modelos",
       "und_asignar_final": 180,
       "kg_usar_final": 57.6,
-      "tela_restante_kg": 563.87
+      "tela_restante_kg": 594.6
     },
     {
       "prioridad": 2,
@@ -402,12 +425,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 142,
       "kg_necesarios": 45.44,
-      "tela_disponible_kg": 240.73,
+      "tela_disponible_kg": 271.46,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 142,
       "kg_usar_final": 45.44,
-      "tela_restante_kg": 180.73
+      "tela_restante_kg": 211.46
     },
     {
       "prioridad": 2,
@@ -444,12 +467,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 147,
       "kg_necesarios": 47.04,
-      "tela_disponible_kg": 157.71,
+      "tela_disponible_kg": 188.44,
       "estado": "OK",
       "nota": "",
       "und_asignar_final": 147,
       "kg_usar_final": 47.04,
-      "tela_restante_kg": 93.25
+      "tela_restante_kg": 123.98
     },
     {
       "prioridad": 2,
@@ -465,12 +488,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 158,
       "kg_necesarios": 50.56,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "OK",
       "nota": "Alta flexibilidad — repartir entre modelos",
       "und_asignar_final": 158,
       "kg_usar_final": 50.56,
-      "tela_restante_kg": 542.07
+      "tela_restante_kg": 572.8
     },
     {
       "prioridad": 2,
@@ -507,12 +530,12 @@
       "consumo_kg": 0.32,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 2,
@@ -526,14 +549,14 @@
       "objetivo_pct": 0.5,
       "und_objetivo": 71,
       "consumo_kg": 0.32,
-      "und_asignar": 0,
-      "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.71,
-      "estado": "SIN TELA",
-      "nota": "Stock crítico — excluir o esperar compra",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 0.71
+      "und_asignar": 71,
+      "kg_necesarios": 22.72,
+      "tela_disponible_kg": 31.44,
+      "estado": "PARCIAL (limitado tela)",
+      "nota": "",
+      "und_asignar_final": 60,
+      "kg_usar_final": 19.2,
+      "tela_restante_kg": 0.02
     },
     {
       "prioridad": 2,
@@ -547,14 +570,14 @@
       "objetivo_pct": 0.5,
       "und_objetivo": 81,
       "consumo_kg": 0.32,
-      "und_asignar": 47,
-      "kg_necesarios": 15.04,
-      "tela_disponible_kg": 15.29,
-      "estado": "PARCIAL (limitado tela)",
-      "nota": "Limitado por tela disponible",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 1.77
+      "und_asignar": 81,
+      "kg_necesarios": 25.92,
+      "tela_disponible_kg": 46.02,
+      "estado": "OK",
+      "nota": "",
+      "und_asignar_final": 81,
+      "kg_usar_final": 25.92,
+      "tela_restante_kg": 6.58
     },
     {
       "prioridad": 3,
@@ -570,12 +593,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 151,
       "kg_necesarios": 75.5,
-      "tela_disponible_kg": 317.61,
+      "tela_disponible_kg": 348.34,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 111,
-      "kg_usar_final": 55.5,
-      "tela_restante_kg": 1.01
+      "und_asignar_final": 123,
+      "kg_usar_final": 61.5,
+      "tela_restante_kg": 2.78
     },
     {
       "prioridad": 3,
@@ -612,12 +635,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 268,
       "kg_necesarios": 134.0,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 67,
-      "kg_usar_final": 33.5,
-      "tela_restante_kg": 1.27
+      "und_asignar_final": 83,
+      "kg_usar_final": 41.5,
+      "tela_restante_kg": 0.96
     },
     {
       "prioridad": 3,
@@ -633,12 +656,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 473,
       "kg_necesarios": 236.5,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 343,
-      "kg_usar_final": 171.5,
-      "tela_restante_kg": 1.33
+      "und_asignar_final": 361,
+      "kg_usar_final": 180.5,
+      "tela_restante_kg": 1.46
     },
     {
       "prioridad": 3,
@@ -654,12 +677,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 205,
       "kg_necesarios": 102.5,
-      "tela_disponible_kg": 240.73,
+      "tela_disponible_kg": 271.46,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 153,
-      "kg_usar_final": 76.5,
-      "tela_restante_kg": 0.61
+      "und_asignar_final": 179,
+      "kg_usar_final": 89.5,
+      "tela_restante_kg": 0.52
     },
     {
       "prioridad": 3,
@@ -694,14 +717,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 190,
       "consumo_kg": 0.5,
-      "und_asignar": 33,
-      "kg_necesarios": 16.5,
-      "tela_disponible_kg": 16.95,
+      "und_asignar": 95,
+      "kg_necesarios": 47.5,
+      "tela_disponible_kg": 47.68,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 19,
-      "kg_usar_final": 9.5,
-      "tela_restante_kg": 0.85
+      "und_asignar_final": 56,
+      "kg_usar_final": 28.0,
+      "tela_restante_kg": 0.54
     },
     {
       "prioridad": 3,
@@ -717,12 +740,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 555,
       "kg_necesarios": 277.5,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 287,
-      "kg_usar_final": 143.5,
-      "tela_restante_kg": 1.61
+      "und_asignar_final": 304,
+      "kg_usar_final": 152.0,
+      "tela_restante_kg": 0.94
     },
     {
       "prioridad": 3,
@@ -738,12 +761,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 3,
@@ -757,14 +780,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 355,
       "consumo_kg": 0.5,
-      "und_asignar": 30,
-      "kg_necesarios": 15.0,
-      "tela_disponible_kg": 15.29,
-      "estado": "SIN TELA",
+      "und_asignar": 92,
+      "kg_necesarios": 46.0,
+      "tela_disponible_kg": 46.02,
+      "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 1.77
+      "und_asignar_final": 4,
+      "kg_usar_final": 2.0,
+      "tela_restante_kg": 1.14
     },
     {
       "prioridad": 3,
@@ -780,12 +803,12 @@
       "consumo_kg": 0.5,
       "und_asignar": 124,
       "kg_necesarios": 62.0,
-      "tela_disponible_kg": 144.65,
+      "tela_disponible_kg": 175.38,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 56,
-      "kg_usar_final": 28.0,
-      "tela_restante_kg": 1.35
+      "und_asignar_final": 68,
+      "kg_usar_final": 34.0,
+      "tela_restante_kg": 1.7
     },
     {
       "prioridad": 4,
@@ -801,12 +824,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 135,
       "kg_necesarios": 54.0,
-      "tela_disponible_kg": 317.61,
-      "estado": "PARCIAL (limitado tela)",
+      "tela_disponible_kg": 348.34,
+      "estado": "OK",
       "nota": "",
-      "und_asignar_final": 124,
-      "kg_usar_final": 49.6,
-      "tela_restante_kg": 1.01
+      "und_asignar_final": 135,
+      "kg_usar_final": 54.0,
+      "tela_restante_kg": 2.78
     },
     {
       "prioridad": 4,
@@ -843,12 +866,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 232,
       "kg_necesarios": 92.8,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 72,
-      "kg_usar_final": 28.8,
-      "tela_restante_kg": 1.27
+      "und_asignar_final": 89,
+      "kg_usar_final": 35.6,
+      "tela_restante_kg": 0.96
     },
     {
       "prioridad": 4,
@@ -864,12 +887,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 357,
       "kg_necesarios": 142.8,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 323,
-      "kg_usar_final": 129.2,
-      "tela_restante_kg": 1.33
+      "und_asignar_final": 341,
+      "kg_usar_final": 136.4,
+      "tela_restante_kg": 1.46
     },
     {
       "prioridad": 4,
@@ -906,12 +929,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 193,
       "kg_necesarios": 77.2,
-      "tela_disponible_kg": 157.71,
+      "tela_disponible_kg": 188.44,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 94,
-      "kg_usar_final": 37.6,
-      "tela_restante_kg": 0.53
+      "und_asignar_final": 125,
+      "kg_usar_final": 50.0,
+      "tela_restante_kg": 0.66
     },
     {
       "prioridad": 4,
@@ -927,12 +950,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 417,
       "kg_necesarios": 166.8,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 270,
-      "kg_usar_final": 108.0,
-      "tela_restante_kg": 1.61
+      "und_asignar_final": 285,
+      "kg_usar_final": 114.0,
+      "tela_restante_kg": 0.94
     },
     {
       "prioridad": 4,
@@ -969,12 +992,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 4,
@@ -988,14 +1011,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 108,
       "consumo_kg": 0.4,
-      "und_asignar": 0,
-      "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.71,
+      "und_asignar": 78,
+      "kg_necesarios": 31.2,
+      "tela_disponible_kg": 31.44,
       "estado": "SIN TELA",
-      "nota": "Stock crítico — excluir o esperar compra",
+      "nota": "Limitado por tela disponible",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.71
+      "tela_restante_kg": 0.02
     },
     {
       "prioridad": 4,
@@ -1009,14 +1032,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 272,
       "consumo_kg": 0.4,
-      "und_asignar": 38,
-      "kg_necesarios": 15.2,
-      "tela_disponible_kg": 15.29,
-      "estado": "SIN TELA",
+      "und_asignar": 115,
+      "kg_necesarios": 46.0,
+      "tela_disponible_kg": 46.02,
+      "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 1.77
+      "und_asignar_final": 4,
+      "kg_usar_final": 1.6,
+      "tela_restante_kg": 1.14
     },
     {
       "prioridad": 4,
@@ -1032,12 +1055,12 @@
       "consumo_kg": 0.4,
       "und_asignar": 162,
       "kg_necesarios": 64.8,
-      "tela_disponible_kg": 144.65,
+      "tela_disponible_kg": 175.38,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 92,
-      "kg_usar_final": 36.8,
-      "tela_restante_kg": 1.35
+      "und_asignar_final": 112,
+      "kg_usar_final": 44.8,
+      "tela_restante_kg": 1.7
     },
     {
       "prioridad": 5,
@@ -1053,12 +1076,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 154,
       "kg_necesarios": 101.64,
-      "tela_disponible_kg": 317.61,
+      "tela_disponible_kg": 348.34,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 85,
-      "kg_usar_final": 56.1,
-      "tela_restante_kg": 1.01
+      "und_asignar_final": 95,
+      "kg_usar_final": 62.7,
+      "tela_restante_kg": 2.78
     },
     {
       "prioridad": 5,
@@ -1095,12 +1118,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 267,
       "kg_necesarios": 176.22,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 50,
-      "kg_usar_final": 33.0,
-      "tela_restante_kg": 1.27
+      "und_asignar_final": 62,
+      "kg_usar_final": 40.92,
+      "tela_restante_kg": 0.96
     },
     {
       "prioridad": 5,
@@ -1116,12 +1139,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 336,
       "kg_necesarios": 221.76,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 184,
-      "kg_usar_final": 121.44,
-      "tela_restante_kg": 1.33
+      "und_asignar_final": 194,
+      "kg_usar_final": 128.04,
+      "tela_restante_kg": 1.46
     },
     {
       "prioridad": 5,
@@ -1137,12 +1160,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 277,
       "kg_necesarios": 182.82,
-      "tela_disponible_kg": 240.73,
+      "tela_disponible_kg": 271.46,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 157,
-      "kg_usar_final": 103.62,
-      "tela_restante_kg": 0.61
+      "und_asignar_final": 184,
+      "kg_usar_final": 121.44,
+      "tela_restante_kg": 0.52
     },
     {
       "prioridad": 5,
@@ -1177,14 +1200,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 133,
       "consumo_kg": 0.66,
-      "und_asignar": 25,
-      "kg_necesarios": 16.5,
-      "tela_disponible_kg": 16.95,
+      "und_asignar": 72,
+      "kg_necesarios": 47.52,
+      "tela_disponible_kg": 47.68,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 10,
-      "kg_usar_final": 6.6,
-      "tela_restante_kg": 0.85
+      "und_asignar_final": 29,
+      "kg_usar_final": 19.14,
+      "tela_restante_kg": 0.54
     },
     {
       "prioridad": 5,
@@ -1200,12 +1223,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 557,
       "kg_necesarios": 367.62,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 218,
-      "kg_usar_final": 143.88,
-      "tela_restante_kg": 1.61
+      "und_asignar_final": 231,
+      "kg_usar_final": 152.46,
+      "tela_restante_kg": 0.94
     },
     {
       "prioridad": 5,
@@ -1221,12 +1244,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 5,
@@ -1240,14 +1263,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 245,
       "consumo_kg": 0.66,
-      "und_asignar": 23,
-      "kg_necesarios": 15.18,
-      "tela_disponible_kg": 15.29,
-      "estado": "SIN TELA",
+      "und_asignar": 69,
+      "kg_necesarios": 45.54,
+      "tela_disponible_kg": 46.02,
+      "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 1.77
+      "und_asignar_final": 2,
+      "kg_usar_final": 1.32,
+      "tela_restante_kg": 1.14
     },
     {
       "prioridad": 5,
@@ -1263,12 +1286,12 @@
       "consumo_kg": 0.66,
       "und_asignar": 183,
       "kg_necesarios": 120.78,
-      "tela_disponible_kg": 144.65,
+      "tela_disponible_kg": 175.38,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 63,
-      "kg_usar_final": 41.58,
-      "tela_restante_kg": 1.35
+      "und_asignar_final": 76,
+      "kg_usar_final": 50.16,
+      "tela_restante_kg": 1.7
     },
     {
       "prioridad": 6,
@@ -1284,12 +1307,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 286,
       "kg_necesarios": 148.72,
-      "tela_disponible_kg": 317.61,
+      "tela_disponible_kg": 348.34,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 202,
-      "kg_usar_final": 105.04,
-      "tela_restante_kg": 1.01
+      "und_asignar_final": 225,
+      "kg_usar_final": 117.0,
+      "tela_restante_kg": 2.78
     },
     {
       "prioridad": 6,
@@ -1326,12 +1349,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 269,
       "kg_necesarios": 139.88,
-      "tela_disponible_kg": 190.27,
+      "tela_disponible_kg": 221.0,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 64,
-      "kg_usar_final": 33.28,
-      "tela_restante_kg": 1.27
+      "und_asignar_final": 80,
+      "kg_usar_final": 41.6,
+      "tela_restante_kg": 0.96
     },
     {
       "prioridad": 6,
@@ -1347,12 +1370,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 388,
       "kg_necesarios": 201.76,
-      "tela_disponible_kg": 659.17,
+      "tela_disponible_kg": 689.9,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 270,
-      "kg_usar_final": 140.4,
-      "tela_restante_kg": 1.33
+      "und_asignar_final": 285,
+      "kg_usar_final": 148.2,
+      "tela_restante_kg": 1.46
     },
     {
       "prioridad": 6,
@@ -1389,12 +1412,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 283,
       "kg_necesarios": 147.16,
-      "tela_disponible_kg": 157.71,
+      "tela_disponible_kg": 188.44,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 106,
-      "kg_usar_final": 55.12,
-      "tela_restante_kg": 0.53
+      "und_asignar_final": 141,
+      "kg_usar_final": 73.32,
+      "tela_restante_kg": 0.66
     },
     {
       "prioridad": 6,
@@ -1410,12 +1433,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 561,
       "kg_necesarios": 291.72,
-      "tela_disponible_kg": 626.43,
+      "tela_disponible_kg": 657.16,
       "estado": "PARCIAL (limitado tela)",
       "nota": "Alta flexibilidad — repartir entre modelos",
-      "und_asignar_final": 279,
-      "kg_usar_final": 145.08,
-      "tela_restante_kg": 1.61
+      "und_asignar_final": 295,
+      "kg_usar_final": 153.4,
+      "tela_restante_kg": 0.94
     },
     {
       "prioridad": 6,
@@ -1452,12 +1475,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 0,
       "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.0,
+      "tela_disponible_kg": 0.18,
       "estado": "SIN TELA",
       "nota": "Stock crítico — excluir o esperar compra",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.0
+      "tela_restante_kg": 0.18
     },
     {
       "prioridad": 6,
@@ -1471,14 +1494,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 72,
       "consumo_kg": 0.52,
-      "und_asignar": 0,
-      "kg_necesarios": 0.0,
-      "tela_disponible_kg": 0.71,
+      "und_asignar": 60,
+      "kg_necesarios": 31.2,
+      "tela_disponible_kg": 31.44,
       "estado": "SIN TELA",
-      "nota": "Stock crítico — excluir o esperar compra",
+      "nota": "Limitado por tela disponible",
       "und_asignar_final": 0,
       "kg_usar_final": 0,
-      "tela_restante_kg": 0.71
+      "tela_restante_kg": 0.02
     },
     {
       "prioridad": 6,
@@ -1492,14 +1515,14 @@
       "objetivo_pct": 1.0,
       "und_objetivo": 146,
       "consumo_kg": 0.52,
-      "und_asignar": 29,
-      "kg_necesarios": 15.08,
-      "tela_disponible_kg": 15.29,
-      "estado": "SIN TELA",
+      "und_asignar": 88,
+      "kg_necesarios": 45.76,
+      "tela_disponible_kg": 46.02,
+      "estado": "PARCIAL (limitado tela)",
       "nota": "Limitado por tela disponible",
-      "und_asignar_final": 0,
-      "kg_usar_final": 0,
-      "tela_restante_kg": 1.77
+      "und_asignar_final": 1,
+      "kg_usar_final": 0.52,
+      "tela_restante_kg": 1.14
     },
     {
       "prioridad": 6,
@@ -1515,12 +1538,12 @@
       "consumo_kg": 0.52,
       "und_asignar": 163,
       "kg_necesarios": 84.76,
-      "tela_disponible_kg": 144.65,
+      "tela_disponible_kg": 175.38,
       "estado": "PARCIAL (limitado tela)",
       "nota": "",
-      "und_asignar_final": 71,
-      "kg_usar_final": 36.92,
-      "tela_restante_kg": 1.35
+      "und_asignar_final": 86,
+      "kg_usar_final": 44.72,
+      "tela_restante_kg": 1.7
     }
   ]
 }

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
 Planificación Mar / Rio — prioridad KIDS, flexibilidad por color.
-Carga metas desde Excel de proyección, descuenta lote Mar Kids cortado,
-aplica 50% pendiente kids y reparte tela restante en adultos.
+
+IMPORTANTE — Lote Mar Kids ya cortado:
+  • Las tallas (8=260, 10=260, 12=260, 14=520) son UNIDADES (und), total 1.300 und.
+  • Repartidas proporcionalmente entre 11 colores (~118 und/color).
+  • Esa tela salió de PRODUCCIÓN (WIP), NO del inventario actual de la foto.
+  • Solo se descuentan las UND ya cortadas de la meta Mar KIDS (50% del pendiente).
+  • El inventario kg de la foto se usa COMPLETO para planificar lo que sigue.
 """
 
 from __future__ import annotations
@@ -56,9 +61,23 @@ LOTE_CORTADO_COLORES = [
     "Verde Militar", "Vinotinto", "Azul Marino", "Azul Rey", "Rojo",
     "Gris Claro", "Azul Lavanda", "Aguamarina", "Rosado Pastel", "Negro", "Lila",
 ]
-LOTE_CORTADO_TALLAS = {"8": 260, "10": 260, "12": 260, "14": 520}
+LOTE_CORTADO_TALLAS = {"8": 260, "10": 260, "12": 260, "14": 520}  # UND
 LOTE_CORTADO_TOTAL = sum(LOTE_CORTADO_TALLAS.values())  # 1 300 und
-MAR_KIDS_CONSUMO_CORTE = 0.26  # kg/und Mar Kids (Excel Compra de Tela)
+
+# Mapeo nombres lote → Excel Mar KIDS (para descontar und de meta)
+LOTE_A_META_KIDS = {
+    "Verde Militar": "Verde Militar",
+    "Vinotinto": None,  # cortado en kids pero no está en meta Excel KIDS
+    "Azul Marino": "Azul Marino",
+    "Azul Rey": "Azul Rey",
+    "Rojo": "Rojo",
+    "Gris Claro": None,
+    "Azul Lavanda": "Azul Lavanda",  # Lavanda en planta
+    "Aguamarina": "Aguamarina",
+    "Rosado Pastel": "Rosado Pastel",
+    "Negro": "Negro",
+    "Lila": "Lila",
+}
 
 PCT_KIDS_OBJETIVO = 0.50
 MIN_KG_PRODUCIR = 5.0
@@ -124,33 +143,32 @@ def load_metas() -> tuple[dict, dict, dict, dict]:
 
 
 def lote_cortado_por_color() -> dict[str, float]:
-    """Reparte 1 300 und proporcionalmente entre los 11 colores del lote."""
+    """1 300 und totales repartidas proporcionalmente (= und, NO kg)."""
     n = len(LOTE_CORTADO_COLORES)
-    por_color = LOTE_CORTADO_TOTAL / n
+    por_color = LOTE_CORTADO_TOTAL / n  # ~118.18 und/color
     return {c: por_color for c in LOTE_CORTADO_COLORES}
 
 
-def kg_usado_lote() -> dict[str, float]:
-    usado: dict[str, float] = {}
-    for color, und in lote_cortado_por_color().items():
-        key = canonical_color(color)
-        usado[key] = usado.get(key, 0.0) + und * MAR_KIDS_CONSUMO_CORTE
-    return usado
+def lote_cortado_meta_kids() -> dict[str, float]:
+    """Und ya cortadas descontables de meta Mar KIDS (solo colores en Excel)."""
+    por_color = lote_cortado_por_color()
+    descuento: dict[str, float] = {}
+    for color_lote, und in por_color.items():
+        meta_color = LOTE_A_META_KIDS.get(color_lote)
+        if meta_color:
+            descuento[meta_color] = descuento.get(meta_color, 0.0) + und
+    return descuento
 
 
-def tela_disponible_neta() -> dict[str, float]:
-    usado = kg_usado_lote()
-    neto: dict[str, float] = {}
-    for color, kg in TELA_KG.items():
-        neto[color] = max(0.0, kg - usado.get(color, 0.0))
-    # Púrpura accede al stock Morado
+def tela_disponible() -> dict[str, float]:
+    """Inventario actual completo (foto) — NO se descuenta lote de producción."""
+    neto = dict(TELA_KG)
     neto["Púrpura"] = neto.get("Morado", 0.0)
     return neto
 
 
 def calc_filas(metas: dict, consumos: dict) -> list[dict]:
-    cortado = lote_cortado_por_color()
-    neto = tela_disponible_neta()
+    cortado_meta = lote_cortado_meta_kids()
     filas: list[dict] = []
 
     for prio_idx, etiqueta in enumerate(PRIORIDAD_ORDEN, 1):
@@ -160,8 +178,8 @@ def calc_filas(metas: dict, consumos: dict) -> list[dict]:
         color_metas = metas[modelo][genero]
 
         for color, meta in sorted(color_metas.items(), key=lambda x: -tela_stock(x[0])):
-            tela = max(0.0, tela_stock(color) - kg_usado_lote().get(color, 0.0))
-            ya_cort = cortado.get(color, 0) if modelo == "MAR" and genero == "KIDS" else 0
+            tela = tela_stock(color)  # inventario actual completo
+            ya_cort = cortado_meta.get(color, 0) if modelo == "MAR" and genero == "KIDS" else 0
             pendiente = max(0, meta - ya_cort)
             und_obj = int(pendiente * pct)
 
@@ -205,7 +223,7 @@ def _fila(prio, orden, modelo, genero, color, meta, ya_cort, pendiente, pct, und
 
 
 def simular_consumo(filas: list[dict]) -> list[dict]:
-    saldo = tela_disponible_neta().copy()
+    saldo = tela_disponible().copy()
     resultado: list[dict] = []
     adultos_pend: dict[str, list[dict]] = {}
 
@@ -215,7 +233,7 @@ def simular_consumo(filas: list[dict]) -> list[dict]:
     for f in sorted(kids, key=lambda x: (x["prioridad"], -x["tela_disponible_kg"])):
         color = f["color"]
         stock_key = canonical_color(color)
-        tela = saldo.get(stock_key, tela_stock(color) - kg_usado_lote().get(stock_key, 0.0))
+        tela = saldo.get(stock_key, tela_stock(color))
 
         if tela < MIN_KG_PRODUCIR or f["estado"] == "SIN TELA":
             resultado.append({**f, "und_asignar_final": 0, "kg_usar_final": 0,
@@ -273,7 +291,7 @@ def simular_consumo(filas: list[dict]) -> list[dict]:
 
 def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> None:
     wb = Workbook()
-    cortado = lote_cortado_por_color()
+    cortado = lote_cortado_meta_kids()
 
     # RESUMEN
     ws = wb.active
@@ -287,10 +305,10 @@ def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> N
     resumen = [
         ("Fuente metas", "MAR/RIO PROYECCION CANTIDADES SUGERIDAS (2).xlsx"),
         ("Total tela disponible (kg)", round(sum(TELA_KG.values()), 2)),
-        ("Tela usada lote Mar Kids cortado (kg)", round(sum(kg_usado_lote().values()), 2)),
-        ("Tela neta (kg)", round(sum(tela_disponible_neta().values()), 2)),
-        ("Lote Mar Kids cortado (und)", LOTE_CORTADO_TOTAL),
-        ("Und/color lote (~)", round(LOTE_CORTADO_TOTAL / len(LOTE_CORTADO_COLORES), 1)),
+        ("Inventario tela actual (kg) — foto", round(sum(TELA_KG.values()), 2)),
+        ("Lote Mar Kids cortado (und) — tela de PRODUCCIÓN, no inventario", LOTE_CORTADO_TOTAL),
+        ("Und/color lote (~118 und, rep. proporcional)", round(LOTE_CORTADO_TOTAL / len(LOTE_CORTADO_COLORES), 1)),
+        ("Nota lote", "Solo descuenta UND de meta Mar KIDS; NO resta kg del inventario"),
         ("Meta máx Mar KIDS (Excel)", mar_kids_max),
         ("Meta máx Rio KIDS (Excel)", rio_kids_max),
         ("Objetivo KIDS", f"{PCT_KIDS_OBJETIVO:.0%} del pendiente (meta − cortado)"),
@@ -311,18 +329,18 @@ def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> N
 
     # INVENTARIO
     ws2 = wb.create_sheet("INVENTARIO TELA")
-    h = ["Color", "Stock kg", "Usado lote Mar Kids", "Neto kg", "Max und Mar KIDS",
+    cortado_meta = lote_cortado_meta_kids()
+    h = ["Color", "Inventario kg (foto)", "Und ya cortadas Mar KIDS", "Max und Mar KIDS Excel",
          "Max und Rio KIDS", "Max und Mar CAB", "Alerta"]
     ws2.append(h)
     style_header(ws2, 1, len(h))
     for color in sorted(TELA_KG.keys(), key=lambda c: -TELA_KG[c]):
-        usado = kg_usado_lote().get(color, 0)
-        disp = max(0, TELA_KG[color] - usado)
-        alerta = "SIN STOCK" if TELA_KG[color] < MIN_KG_PRODUCIR else (
-            "ALTA flexibilidad" if disp > 400 else ("BAJA" if disp < 30 else "MEDIA")
+        kg = TELA_KG[color]
+        alerta = "SIN STOCK" if kg < MIN_KG_PRODUCIR else (
+            "ALTA flexibilidad" if kg > 400 else ("BAJA" if kg < 30 else "MEDIA")
         )
         ws2.append([
-            color, round(TELA_KG[color], 2), round(usado, 2), round(disp, 2),
+            color, round(kg, 2), round(cortado_meta.get(color, 0), 1),
             metas["MAR"]["KIDS"].get(color, 0),
             metas["RIO"]["KIDS"].get(color, 0),
             metas["MAR"]["CAB"].get(color, 0),
@@ -344,7 +362,7 @@ def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> N
         ws3.append([
             color, meta, round(c, 1), pend, obj,
             f.get("und_asignar_final", 0),
-            f.get("tela_disponible_kg", round(tela_stock(color) - kg_usado_lote().get(color, 0), 2)),
+            f.get("tela_disponible_kg", round(tela_stock(color), 2)),
             f.get("estado", ""),
         ])
     auto_width(ws3)
@@ -386,9 +404,9 @@ def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> N
         by_color[f["color"]][f"{f['modelo']} {f['genero']}"] = f.get("und_asignar_final", 0)
 
     all_colors = sorted(set(list(TELA_KG.keys()) + list(by_color.keys())),
-                        key=lambda c: -max(0, tela_stock(c) - kg_usado_lote().get(c, 0)))
+                        key=lambda c: -tela_stock(c))
     for color in all_colors:
-        tela = max(0, tela_stock(color) - kg_usado_lote().get(color, 0))
+        tela = tela_stock(color)
         vals = [by_color.get(color, {}).get(f"{m} {g}", 0)
                 for m, g in [("MAR", "KIDS"), ("RIO", "KIDS"), ("MAR", "CAB"),
                              ("MAR", "DAMA"), ("RIO", "CAB"), ("RIO", "DAMA")]]
@@ -445,10 +463,11 @@ def main() -> None:
     write_excel(xlsx, filas, metas, consumos)
 
     summary = {
-        "tela_total_kg": round(sum(TELA_KG.values()), 2),
-        "tela_usada_lote_kg": round(sum(kg_usado_lote().values()), 2),
-        "tela_neta_kg": round(sum(tela_disponible_neta().values()), 2),
+        "tela_inventario_kg": round(sum(TELA_KG.values()), 2),
         "lote_cortado_und": LOTE_CORTADO_TOTAL,
+        "lote_cortado_nota": "Und de producción WIP — NO descuenta inventario kg",
+        "lote_cortado_por_color_und": lote_cortado_por_color(),
+        "lote_descuento_meta_kids_und": lote_cortado_meta_kids(),
         "meta_max_mar_kids": sum(metas["MAR"]["KIDS"].values()),
         "meta_max_rio_kids": sum(metas["RIO"]["KIDS"].values()),
         "consumo": {"MAR": mar_c, "RIO": rio_c},
@@ -470,7 +489,8 @@ def main() -> None:
 
     print(f"Excel: {xlsx}")
     print(f"JSON:  {json_path}")
-    print(f"\nTela neta: {summary['tela_neta_kg']} kg")
+    print(f"\nInventario tela (foto): {summary['tela_inventario_kg']} kg")
+    print(f"Lote cortado: {summary['lote_cortado_und']} und (NO resta del inventario)")
     print(f"Plan total: {summary['total_und_plan']} und / {summary['total_kg_plan']} kg\n")
     for p in PRIORIDAD_ORDEN:
         d = summary["por_prioridad"][p]
