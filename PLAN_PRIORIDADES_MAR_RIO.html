@@ -165,6 +165,12 @@ document.getElementById('sec-lotes').innerHTML =
     return `<div class="card" style="margin-bottom:14px"><h3>${n} · ${fmt(rows.reduce((s,f)=>s+f.und,0))} und</h3>
       <div class="lotgrid">${rows.map(lotCard).join('')}</div></div>`;
   }).join('');
+(function openTabFromQuery(){
+  const tab=new URLSearchParams(location.search).get('tab');
+  if(!tab) return;
+  const btn=[...document.querySelectorAll('.tab')].find(t=>t.getAttribute('onclick')?.includes("'"+tab+"'"));
+  if(btn) st(tab, btn);
+})();
 </script>
 </body>
 </html>
