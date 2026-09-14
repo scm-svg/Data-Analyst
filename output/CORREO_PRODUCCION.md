@@ -31,7 +31,7 @@ Les comparto el **plan de corte sugerido para noviembre–diciembre**, armado co
 | P5 | RIO CABALLERO | 872 | 576 |
 | P6 | RIO DAMA | 839 | 436 |
 
-**Importante:** La tela se asigna **por color**, no por modelo. Si un color tiene stock limitado, primero se satisface la línea de mayor prioridad (Rio KIDS antes que Mar KIDS, KIDS antes que adultos). Por eso algunos colores pueden quedar en 0 und en líneas de menor prioridad (ej.: **Rojo** — inventario ~0,18 kg).
+**Importante:** La tela se asigna **por color**, no por modelo. Si un color tiene stock limitado, primero se satisface la línea de mayor prioridad en este orden: **Rio KIDS → Mar KIDS → Mar Caballero → Mar Dama → Rio Caballero → Rio Dama**. Por eso algunos colores pueden quedar en 0 und en líneas de menor prioridad (ej.: **Rojo** — inventario ~0,18 kg).
 
 ---
 
@@ -126,7 +126,7 @@ Colores con stock muy bajo (Rojo, Rosado Pastel, Verde Militar) limitan fuerteme
 ## 6. Resumen ejecutivo para Producción
 
 1. **Continuar** con el lote Mar KIDS ya cortado (1.300 und) — no re-cortar esas cantidades.
-2. **Priorizar cortes nuevos** en este orden: **Rio KIDS → Mar KIDS → adultos Mar → adultos Rio**.
+2. **Priorizar cortes nuevos** en este orden: **Rio KIDS (P1) → Mar KIDS (P2) → Mar Caballero (P3) → Mar Dama (P4) → Rio Caballero (P5) → Rio Dama (P6)**.
 3. **Cantidades exactas por talla:** hoja **CURVAS A CORTAR** del archivo `PLAN_PRIORIDADES_MAR_RIO_KIDS.xlsx`.
 4. **Total nuevo a programar:** ~**6.126 und** / ~**2.653 kg** tela Jabón.
 5. Los Excel de proyección Mar/Rio son **referencia de metas**; el plan operativo es el **documento de trabajo**.
