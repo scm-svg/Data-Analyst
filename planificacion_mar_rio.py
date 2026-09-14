@@ -56,8 +56,11 @@ SECTION_FILL = PatternFill("solid", fgColor="D9E2F3")
 KIDS_FILL = PatternFill("solid", fgColor="E2EFDA")
 TOTAL_MIN_FILL = PatternFill("solid", fgColor="C6EFCE")
 TOTAL_MAX_FILL = PatternFill("solid", fgColor="FFEB9C")
+CORTE_FILL = PatternFill("solid", fgColor="FCE4D6")
+TOTAL_CORTE_FILL = PatternFill("solid", fgColor="FFD966")
 MIN_FONT = Font(color="0563C1")
 MAX_FONT = Font(bold=True)
+CORTE_FONT = Font(bold=True, color="C65911")
 THIN = Side(style="thin", color="999999")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -272,33 +275,37 @@ def write_mix_tallas_sheet(ws, metas: dict, mix: dict) -> None:
     auto_width(ws)
 
 
-def write_curva_sheet(ws, titulo: str, modelo: str, genero: str, metas: dict, mix: dict) -> None:
-    ws["A1"] = titulo
-    ws["A1"].font = Font(bold=True, size=12)
+def _section_title(ws, row: int, title: str) -> int:
+    ws.cell(row, 1, title)
+    ws.cell(row, 1).font = Font(bold=True, size=11, color="1F4E79")
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+    return row + 2
+
+
+def write_curva_ref_section(ws, row: int, modelo: str, genero: str, metas: dict, mix: dict) -> int:
+    """Bloque MÍN/MÁX referencia Excel. Retorna siguiente fila libre."""
+    row = _section_title(ws, row, f"▸ {modelo} {genero} — Curva referencia (Excel proyección)")
     colors = sorted(metas[modelo][genero].items(), key=lambda x: -x[1])
     if not colors:
-        return
+        return row + 1
     sample = mix.get((modelo, genero, colors[0][0]))
     tallas = sample["tallas"] if sample else []
     if not tallas:
-        return
+        return row + 1
 
-    hdr_row = 3
-    ws.cell(hdr_row, 1, "Color")
+    ws.cell(row, 1, "Color")
     for i, t in enumerate(tallas, 2):
-        ws.cell(hdr_row, i, t)
-    ws.cell(hdr_row, len(tallas) + 2, "Total")
-    style_header(ws, hdr_row, len(tallas) + 2)
+        ws.cell(row, i, t)
+    tot_col = len(tallas) + 2
+    ws.cell(row, tot_col, "Total")
+    style_header(ws, row, tot_col)
+    row += 1
+    min_rows, max_rows = [], []
 
-    row = hdr_row + 1
-    min_rows: list[int] = []
-    max_rows: list[int] = []
-
-    for color, _meta in colors:
+    for color, _ in colors:
         block = mix.get((modelo, genero, color))
         if not block:
             continue
-        # MÍNIMO
         ws.cell(row, 1, f"{color} — MÍNIMO")
         ws.cell(row, 1).font = MIN_FONT
         for i, t in enumerate(tallas, 2):
@@ -306,12 +313,9 @@ def write_curva_sheet(ws, titulo: str, modelo: str, genero: str, metas: dict, mi
             ws.cell(row, i).font = MIN_FONT
             ws.cell(row, i).border = BORDER
             ws.cell(row, i).alignment = CENTER
-        tot_col = len(tallas) + 2
         ws.cell(row, tot_col, f"=SUM(B{row}:{get_column_letter(len(tallas)+1)}{row})")
-        ws.cell(row, tot_col).font = MIN_FONT
         min_rows.append(row)
         row += 1
-        # MÁXIMO
         ws.cell(row, 1, f"{color} — MÁXIMO")
         ws.cell(row, 1).font = MAX_FONT
         for i, t in enumerate(tallas, 2):
@@ -320,41 +324,93 @@ def write_curva_sheet(ws, titulo: str, modelo: str, genero: str, metas: dict, mi
             ws.cell(row, i).border = BORDER
             ws.cell(row, i).alignment = CENTER
         ws.cell(row, tot_col, f"=SUM(B{row}:{get_column_letter(len(tallas)+1)}{row})")
-        ws.cell(row, tot_col).font = MAX_FONT
         max_rows.append(row)
         row += 1
 
-    if not min_rows:
-        return
-    tot_col = len(tallas) + 2
-    # TOTAL MÍNIMO
-    ws.cell(row, 1, "TOTAL — MÍNIMO")
-    ws.cell(row, 1).font = Font(bold=True)
-    for i, t in enumerate(tallas, 2):
-        col = get_column_letter(i)
-        refs = ",".join(f"{col}{r}" for r in min_rows)
-        ws.cell(row, i, f"=SUM({refs})")
-        ws.cell(row, i).fill = TOTAL_MIN_FILL
-        ws.cell(row, i).font = Font(bold=True)
-        ws.cell(row, i).border = BORDER
-    ws.cell(row, tot_col, f"=SUM({','.join(f'{get_column_letter(tot_col)}{r}' for r in min_rows)})")
-    ws.cell(row, tot_col).fill = TOTAL_MIN_FILL
-    ws.cell(row, tot_col).font = Font(bold=True)
+    if min_rows:
+        ws.cell(row, 1, "TOTAL — MÍNIMO")
+        ws.cell(row, 1).font = Font(bold=True)
+        for i in range(2, tot_col + 1):
+            col = get_column_letter(i)
+            ws.cell(row, i, f"=SUM({','.join(f'{col}{r}' for r in min_rows)})")
+            ws.cell(row, i).fill = TOTAL_MIN_FILL
+            ws.cell(row, i).font = Font(bold=True)
+            ws.cell(row, i).border = BORDER
+        row += 1
+        ws.cell(row, 1, "TOTAL — MÁXIMO")
+        ws.cell(row, 1).font = Font(bold=True)
+        for i in range(2, tot_col + 1):
+            col = get_column_letter(i)
+            ws.cell(row, i, f"=SUM({','.join(f'{col}{r}' for r in max_rows)})")
+            ws.cell(row, i).fill = TOTAL_MAX_FILL
+            ws.cell(row, i).font = Font(bold=True)
+            ws.cell(row, i).border = BORDER
+        row += 1
+    return row + 1
+
+
+def write_curva_corte_section(
+    ws, row: int, modelo: str, genero: str, metas: dict, mix: dict,
+    plan_row_map: dict[tuple, int], plan_start: int,
+) -> int:
+    """Curva de lo que SE CORTARÍA según PLAN COLORES (Und FINAL × mix)."""
+    row = _section_title(ws, row, f"▸ {modelo} {genero} — Objetivo A CORTAR (desde PLAN COLORES)")
+    colors = sorted(metas[modelo][genero].items(), key=lambda x: -x[1])
+    if not colors:
+        return row + 1
+    sample = mix.get((modelo, genero, colors[0][0]))
+    tallas = sample["tallas"] if sample else []
+    if not tallas:
+        return row + 1
+
+    # Col A=color, B=Und FINAL (ref plan), C+=tallas, last=total check
+    ws.cell(row, 1, "Color")
+    ws.cell(row, 2, "Und FINAL")
+    for i, t in enumerate(tallas, 3):
+        ws.cell(row, i, t)
+    tot_col = len(tallas) + 3
+    ws.cell(row, tot_col, "Total")
+    style_header(ws, row, tot_col)
     row += 1
-    # TOTAL MÁXIMO
-    ws.cell(row, 1, "TOTAL — MÁXIMO")
-    ws.cell(row, 1).font = Font(bold=True)
-    for i, t in enumerate(tallas, 2):
-        col = get_column_letter(i)
-        refs = ",".join(f"{col}{r}" for r in max_rows)
-        ws.cell(row, i, f"=SUM({refs})")
-        ws.cell(row, i).fill = TOTAL_MAX_FILL
-        ws.cell(row, i).font = Font(bold=True)
-        ws.cell(row, i).border = BORDER
-    ws.cell(row, tot_col, f"=SUM({','.join(f'{get_column_letter(tot_col)}{r}' for r in max_rows)})")
-    ws.cell(row, tot_col).fill = TOTAL_MAX_FILL
-    ws.cell(row, tot_col).font = Font(bold=True)
-    auto_width(ws)
+    data_rows: list[int] = []
+
+    for color, _ in colors:
+        block = mix.get((modelo, genero, color))
+        plan_r = plan_row_map.get((modelo, genero, color))
+        if not block or not plan_r:
+            continue
+        ws.cell(row, 1, f"{color} — A CORTAR")
+        ws.cell(row, 1).font = CORTE_FONT
+        ws.cell(row, 2, f"='PLAN COLORES'!P{plan_r}")
+        ws.cell(row, 2).fill = CORTE_FILL
+        ws.cell(row, 2).border = BORDER
+        for i, t in enumerate(tallas, 3):
+            mix_val = block["max"].get(t, 0)
+            total = block["total_max"] or 1
+            col_b = f"$B{row}"
+            ws.cell(row, i, f'=IF({col_b}=0,0,ROUND({col_b}*{mix_val}/{total},0))')
+            ws.cell(row, i).border = BORDER
+            ws.cell(row, i).alignment = CENTER
+        first_t = get_column_letter(3)
+        last_t = get_column_letter(len(tallas) + 2)
+        ws.cell(row, tot_col, f"=SUM({first_t}{row}:{last_t}{row})")
+        ws.cell(row, tot_col).font = Font(bold=True)
+        data_rows.append(row)
+        row += 1
+
+    if data_rows:
+        ws.cell(row, 1, "TOTAL — A CORTAR")
+        ws.cell(row, 1).font = Font(bold=True)
+        ws.cell(row, 2, f"=SUM({','.join(f'B{r}' for r in data_rows)})")
+        ws.cell(row, 2).fill = TOTAL_CORTE_FILL
+        for i in range(3, tot_col + 1):
+            col = get_column_letter(i)
+            ws.cell(row, i, f"=SUM({','.join(f'{col}{r}' for r in data_rows)})")
+            ws.cell(row, i).fill = TOTAL_CORTE_FILL
+            ws.cell(row, i).font = Font(bold=True)
+            ws.cell(row, i).border = BORDER
+        row += 1
+    return row + 1
 
 
 def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
@@ -372,9 +428,10 @@ def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
         "• PARAMETROS: edita % objetivo y consumo por MODELO + GÉNERO (amarillo).",
         "• Inventario kg y und ya cortadas por modelo/género/color.",
         "• METAS: referencia agrupada como Excel proyección.",
-        "• MIX TALLAS: curva por color con celdas combinadas.",
-        "• CURVA *: formato MÍN/MÁX por talla con totales (verde/amarillo).",
-        "• PLAN COLORES: fórmulas — cambia PARAMETROS y recalcula solo.",
+        "• MIX TALLAS: mix por color (referencia Excel).",
+        "• PLAN COLORES: und final por color (fórmulas).",
+        "• CURVAS REFERENCIA: MÍN/MÁX del Excel proyección (todas las líneas).",
+        "• CURVAS A CORTAR: lo que se cortaría hoy según PLAN × mix talla.",
     ], 1):
         ws0.cell(i, 1, t)
         if i == 1:
@@ -457,13 +514,7 @@ def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
     ws_mix = wb.create_sheet("MIX TALLAS")
     write_mix_tallas_sheet(ws_mix, metas, mix)
 
-    # CURVA por línea
-    for modelo, genero, *_ in LINEAS_CONFIG:
-        name = f"CURVA {modelo} {genero}"[:31]
-        ws_c = wb.create_sheet(name)
-        write_curva_sheet(ws_c, f"CURVA DE TALLAS — {modelo} {genero}", modelo, genero, metas, mix)
-
-    # PLAN COLORES
+    # PLAN COLORES (antes de curvas a cortar — las fórmulas lo referencian)
     ws_plan = wb.create_sheet("PLAN COLORES")
     headers = [
         "P", "Línea", "Modelo", "Género", "Color", "Meta máx", "Ya cortado", "Pendiente",
@@ -530,45 +581,31 @@ def write_workbook(path: Path, metas: dict, consumos: dict, mix: dict) -> dict:
 
     plan_end = plan_start + len(plan_rows) - 1
     refs["plan_start"], refs["plan_end"] = plan_start, plan_end
+    plan_row_map = {
+        (pr["modelo"], pr["genero"], pr["color"]): plan_start + i
+        for i, pr in enumerate(plan_rows)
+    }
 
-    # DETALLE PRODUCCIÓN por talla (4 pestañas agrupadas)
-    for sheet_name, modelo_f, gen_f in [
-        ("PROD RIO KIDS", "RIO", ("KIDS",)),
-        ("PROD MAR KIDS", "MAR", ("KIDS",)),
-        ("PROD MAR CAB-DAMA", "MAR", ("CAB", "DAMA")),
-        ("PROD RIO CAB-DAMA", "RIO", ("CAB", "DAMA")),
-    ]:
-        ws_t = wb.create_sheet(sheet_name[:31])
-        ws_t.append(["Modelo", "Género", "Color", "Talla", "Mix máx", "Total color",
-                     "Und FINAL color", "Und talla PRODUCIR"])
-        style_header(ws_t, 1, 8)
-        trow = 2
-        for pr in plan_rows:
-            if pr["modelo"] != modelo_f or pr["genero"] not in gen_f:
-                continue
-            plan_r = plan_start + plan_rows.index(pr)
-            block = mix.get((pr["modelo"], pr["genero"], pr["color"]))
-            if not block:
-                continue
-            col_start = trow
-            for t in block["tallas"]:
-                ws_t.cell(trow, 4, t)
-                ws_t.cell(trow, 5, block["max"].get(t, 0))
-                ws_t.cell(trow, 6, block["total_max"])
-                ws_t.cell(trow, 7, f"='PLAN COLORES'!P{plan_r}")
-                ws_t.cell(trow, 8, f'=IF(G{trow}=0,0,IF(F{trow}=0,0,ROUND(G{trow}*E{trow}/F{trow},0)))')
-                for c in range(4, 9):
-                    ws_t.cell(trow, c).border = BORDER
-                trow += 1
-            col_end = trow - 1
-            ws_t.cell(col_start, 1, pr["modelo"])
-            ws_t.cell(col_start, 2, pr["genero"])
-            ws_t.cell(col_start, 3, pr["color"])
-            merge_block(ws_t, 1, col_start, col_end)
-            merge_block(ws_t, 2, col_start, col_end)
-            merge_block(ws_t, 3, col_start, col_end)
-            merge_block(ws_t, 7, col_start, col_end)
-        auto_width(ws_t)
+    # CURVAS REFERENCIA — una sola pestaña, todas las líneas
+    ws_ref = wb.create_sheet("CURVAS REFERENCIA")
+    ws_ref["A1"] = "CURVAS DE REFERENCIA — MÍN / MÁX (Excel proyección)"
+    ws_ref["A1"].font = Font(bold=True, size=13)
+    rr = 3
+    for modelo, genero, *_ in LINEAS_CONFIG:
+        rr = write_curva_ref_section(ws_ref, rr, modelo, genero, metas, mix)
+    auto_width(ws_ref)
+
+    # CURVAS A CORTAR — objetivo real repartido por talla
+    ws_corte = wb.create_sheet("CURVAS A CORTAR")
+    ws_corte["A1"] = "CURVAS A CORTAR — Objetivo actual según PLAN COLORES × mix talla"
+    ws_corte["A1"].font = Font(bold=True, size=13)
+    ws_corte["A2"] = "Edita PARAMETROS o PLAN COLORES → estas curvas recalculan solas (columna B = Und FINAL)."
+    cr = 4
+    for modelo, genero, *_ in LINEAS_CONFIG:
+        cr = write_curva_corte_section(
+            ws_corte, cr, modelo, genero, metas, mix, plan_row_map, plan_start,
+        )
+    auto_width(ws_corte)
 
     # RESUMEN
     ws_r = wb.create_sheet("RESUMEN")
@@ -623,7 +660,7 @@ def main() -> None:
     (OUT_DIR / "plan_prioridades.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"Excel: {path}")
-    print("Hojas: INSTRUCCIONES, PARAMETROS, METAS, MIX TALLAS, CURVA x6, PLAN COLORES, PROD x4, RESUMEN")
+    print("Hojas (8): INSTRUCCIONES | PARAMETROS | METAS | MIX TALLAS | PLAN COLORES | CURVAS REF | CURVAS CORTE | RESUMEN")
     for e in PRIORIDAD_ORDEN:
         d = summary["por_linea"][e]
         print(f"  {e}: {d['und']} und / {d['kg']} kg")
