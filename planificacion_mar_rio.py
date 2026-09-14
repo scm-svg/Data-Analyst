@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Planificación de producción Mar / Rio con prioridad KIDS.
-Genera Excel con prioridades basado en tela disponible, lote ya cortado y metas sugeridas.
+Planificación Mar / Rio — prioridad KIDS, flexibilidad por color.
+Carga metas desde Excel de proyección, descuenta lote Mar Kids cortado,
+aplica 50% pendiente kids y reparte tela restante en adultos.
 """
 
 from __future__ import annotations
@@ -9,11 +10,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-# ── Inventario tela JABON (kg) — foto usuario ──────────────────────────────
+# ── Rutas ───────────────────────────────────────────────────────────────────
+MAR_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/MAR_PROYECCION_CANTIDADES_SUGERIDAS__2__23dd.xlsx")
+RIO_XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/RIO_PROYECCION_CANTIDADES_SUGERIDAS__2__cc77.xlsx")
+OUT_DIR = Path("/workspace/output")
+
+# ── Inventario tela JABON (kg) — foto usuario ───────────────────────────────
 TELA_KG = {
     "Aguamarina": 348.34,
     "Amarillo Neón": 57.94,
@@ -23,90 +30,391 @@ TELA_KG = {
     "Blanco": 162.04,
     "Gris Claro": 47.68,
     "Lila": 188.44,
-    "Morado": 94.20,
+    "Morado": 94.20,  # = Púrpura en Excel
     "Negro": 657.16,
-    "Púrpura": 0.00,
     "Rojo": 0.18,
     "Rosado Pastel": 31.44,
     "Verde Militar": 46.02,
     "Vinotinto": 175.38,
 }
 
-# Colores activos Mar Kids (lote ya cortado)
-MAR_KIDS_COLORES = [
-    "Verde Militar",
-    "Vinotinto",
-    "Azul Marino",
-    "Azul Rey",
-    "Rojo",
-    "Gris Claro",
-    "Azul Lavanda",  # Lavanda en producción
-    "Aguamarina",
-    "Rosado Pastel",
-    "Negro",
-    "Lila",
+# Púrpura (Excel) = Morado (inventario físico)
+COLOR_CANONICAL = {"Púrpura": "Morado", "Morado": "Morado"}
+
+
+def canonical_color(color: str) -> str:
+    return COLOR_CANONICAL.get(color, color)
+
+
+def tela_stock(color: str) -> float:
+    """Stock kg; Púrpura del Excel usa inventario Morado."""
+    key = canonical_color(color)
+    return TELA_KG.get(key, TELA_KG.get(color, 0.0))
+
+# ── Lote Mar Kids ya cortado ────────────────────────────────────────────────
+LOTE_CORTADO_COLORES = [
+    "Verde Militar", "Vinotinto", "Azul Marino", "Azul Rey", "Rojo",
+    "Gris Claro", "Azul Lavanda", "Aguamarina", "Rosado Pastel", "Negro", "Lila",
 ]
-
-# Lote Mar Kids ya cortado — tallas totales del lote (rep. proporcional entre colores)
 LOTE_CORTADO_TALLAS = {"8": 260, "10": 260, "12": 260, "14": 520}
-LOTE_CORTADO_TOTAL = sum(LOTE_CORTADO_TALLAS.values())  # 1 300 und total del lote
+LOTE_CORTADO_TOTAL = sum(LOTE_CORTADO_TALLAS.values())  # 1 300 und
+MAR_KIDS_CONSUMO_CORTE = 0.26  # kg/und Mar Kids (Excel Compra de Tela)
 
-# Consumo tela estimado (kg/unidad) — ajustar si tienen ficha técnica
-CONSUMO_KG = {
-    "KIDS": 0.132,
-    "CAB": 0.205,
-    "DAMA": 0.195,
-}
-
-# Meta sugerida placeholder por color/género (und) — reemplazar con Excel real
-# Estructura: modelo -> genero -> color -> unidades sugeridas máximas
-# Valores estimados conservadores para demostrar lógica; pegar datos reales del Excel.
-META_SUGERIDA: dict[str, dict[str, dict[str, int]]] = {
-    "MAR": {
-        "KIDS": {c: 2600 for c in MAR_KIDS_COLORES},
-        "CAB": {
-            "Aguamarina": 800, "Azul Lavanda": 600, "Azul Marino": 1200,
-            "Azul Rey": 700, "Blanco": 500, "Gris Claro": 400, "Lila": 500,
-            "Morado": 350, "Negro": 1100, "Rosado Pastel": 300, "Verde Militar": 400,
-            "Vinotinto": 550, "Amarillo Neón": 250,
-        },
-        "DAMA": {
-            "Aguamarina": 900, "Azul Lavanda": 650, "Azul Marino": 1300,
-            "Azul Rey": 750, "Blanco": 550, "Gris Claro": 450, "Lila": 550,
-            "Morado": 400, "Negro": 1200, "Rosado Pastel": 350, "Verde Militar": 450,
-            "Vinotinto": 600, "Amarillo Neón": 280,
-        },
-    },
-    "RIO": {
-        "KIDS": {c: 2200 for c in MAR_KIDS_COLORES if c != "Rojo"},
-        "CAB": {
-            "Aguamarina": 700, "Azul Lavanda": 550, "Azul Marino": 1000,
-            "Azul Rey": 650, "Blanco": 450, "Gris Claro": 350, "Lila": 450,
-            "Morado": 300, "Negro": 950, "Rosado Pastel": 280, "Verde Militar": 350,
-            "Vinotinto": 500, "Amarillo Neón": 220,
-        },
-        "DAMA": {
-            "Aguamarina": 800, "Azul Lavanda": 600, "Azul Marino": 1100,
-            "Azul Rey": 700, "Blanco": 500, "Gris Claro": 400, "Lila": 500,
-            "Morado": 350, "Negro": 1050, "Rosado Pastel": 320, "Verde Militar": 400,
-            "Vinotinto": 550, "Amarillo Neón": 250,
-        },
-    },
-}
-
-PCT_KIDS_OBJETIVO = 0.50  # 50% del pendiente kids
-PCT_ADULTOS_OBJETIVO = 1.00  # adultos: usar tela restante al máximo sugerido
-MIN_KG_PRODUCIR = 5.0  # mínimo kg para considerar viable un color
+PCT_KIDS_OBJETIVO = 0.50
+MIN_KG_PRODUCIR = 5.0
 PRIORIDAD_ORDEN = ["MAR KIDS", "RIO KIDS", "MAR CAB", "MAR DAMA", "RIO CAB", "RIO DAMA"]
 
 HEADER_FILL = PatternFill("solid", fgColor="1F4E79")
 HEADER_FONT = Font(bold=True, color="FFFFFF", size=10)
-SUBHEADER_FILL = PatternFill("solid", fgColor="D9E2F3")
 KIDS_FILL = PatternFill("solid", fgColor="FFF2CC")
 ALERT_FILL = PatternFill("solid", fgColor="FCE4D6")
 OK_FILL = PatternFill("solid", fgColor="E2EFDA")
 THIN = Side(style="thin", color="AAAAAA")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+
+
+def parse_colores(path: Path) -> dict[str, dict[str, int]]:
+    df = pd.read_excel(path, sheet_name="Cantidades por Colores", header=None)
+    result: dict[str, dict[str, int]] = {"CAB": {}, "DAMA": {}, "KIDS": {}}
+    current: str | None = None
+    for _, row in df.iterrows():
+        val0 = str(row[0]) if pd.notna(row[0]) else ""
+        upper = val0.upper()
+        if "CABALLERO" in upper:
+            current = "CAB"
+            continue
+        if "DAMA" in upper and "CAB" not in upper:
+            current = "DAMA"
+            continue
+        if "KIDS" in upper or "NIÑ" in upper:
+            current = "KIDS"
+            continue
+        if val0.strip() in ("Color", "TOTAL", "nan", "") or not current:
+            continue
+        if pd.notna(row[3]):
+            try:
+                result[current][val0.strip()] = int(float(row[3]))
+            except (ValueError, TypeError):
+                pass
+    return result
+
+
+def parse_consumo(path: Path) -> dict[str, float]:
+    df = pd.read_excel(path, sheet_name="Compra de Tela", header=None)
+    consumo: dict[str, float] = {}
+    for _, row in df.iterrows():
+        v0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+        if v0 in ("CABALLERO", "DAMA", "KIDS") and pd.notna(row[1]):
+            key = "CAB" if v0 == "CABALLERO" else v0
+            consumo[key] = float(row[1])
+    return consumo
+
+
+def load_metas() -> tuple[dict, dict, dict, dict]:
+    mar = parse_colores(MAR_XLSX)
+    rio = parse_colores(RIO_XLSX)
+    mar_consumo = parse_consumo(MAR_XLSX)
+    rio_consumo = parse_consumo(RIO_XLSX)
+    return (
+        {"MAR": mar, "RIO": rio},
+        {"MAR": mar_consumo, "RIO": rio_consumo},
+        mar_consumo,
+        rio_consumo,
+    )
+
+
+def lote_cortado_por_color() -> dict[str, float]:
+    """Reparte 1 300 und proporcionalmente entre los 11 colores del lote."""
+    n = len(LOTE_CORTADO_COLORES)
+    por_color = LOTE_CORTADO_TOTAL / n
+    return {c: por_color for c in LOTE_CORTADO_COLORES}
+
+
+def kg_usado_lote() -> dict[str, float]:
+    usado: dict[str, float] = {}
+    for color, und in lote_cortado_por_color().items():
+        key = canonical_color(color)
+        usado[key] = usado.get(key, 0.0) + und * MAR_KIDS_CONSUMO_CORTE
+    return usado
+
+
+def tela_disponible_neta() -> dict[str, float]:
+    usado = kg_usado_lote()
+    neto: dict[str, float] = {}
+    for color, kg in TELA_KG.items():
+        neto[color] = max(0.0, kg - usado.get(color, 0.0))
+    # Púrpura accede al stock Morado
+    neto["Púrpura"] = neto.get("Morado", 0.0)
+    return neto
+
+
+def calc_filas(metas: dict, consumos: dict) -> list[dict]:
+    cortado = lote_cortado_por_color()
+    neto = tela_disponible_neta()
+    filas: list[dict] = []
+
+    for prio_idx, etiqueta in enumerate(PRIORIDAD_ORDEN, 1):
+        modelo, genero = etiqueta.split()[0], etiqueta.split()[1]
+        pct = PCT_KIDS_OBJETIVO if genero == "KIDS" else 1.0
+        consumo = consumos[modelo][genero]
+        color_metas = metas[modelo][genero]
+
+        for color, meta in sorted(color_metas.items(), key=lambda x: -tela_stock(x[0])):
+            tela = max(0.0, tela_stock(color) - kg_usado_lote().get(color, 0.0))
+            ya_cort = cortado.get(color, 0) if modelo == "MAR" and genero == "KIDS" else 0
+            pendiente = max(0, meta - ya_cort)
+            und_obj = int(pendiente * pct)
+
+            if tela < MIN_KG_PRODUCIR:
+                filas.append(_fila(prio_idx, etiqueta, modelo, genero, color, meta, ya_cort,
+                                   pendiente, pct, und_obj, consumo, tela, "SIN TELA",
+                                   "Stock crítico — excluir o esperar compra"))
+                continue
+
+            und_tela = int(tela / consumo)
+            und_asignar = min(und_obj, und_tela)
+            nota = ""
+            if color == "Rojo" and tela < 1:
+                nota = "Stock 0.18 kg — no viable"
+            elif tela > 400:
+                nota = "Alta flexibilidad — repartir entre modelos"
+            elif und_asignar < und_obj:
+                nota = "Limitado por tela disponible"
+
+            estado = "OK" if und_asignar == und_obj and und_asignar > 0 else (
+                "PARCIAL (limitado tela)" if und_asignar > 0 else "SIN TELA"
+            )
+            filas.append(_fila(prio_idx, etiqueta, modelo, genero, color, meta, ya_cort,
+                               pendiente, pct, und_obj, consumo, tela, estado, nota,
+                               und_asignar=und_asignar))
+
+    return filas
+
+
+def _fila(prio, orden, modelo, genero, color, meta, ya_cort, pendiente, pct, und_obj,
+          consumo, tela, estado, nota, und_asignar=0) -> dict:
+    kg = und_asignar * consumo
+    return {
+        "prioridad": prio, "orden": orden, "modelo": modelo, "genero": genero,
+        "color": color, "meta_sugerida": meta, "ya_cortado": round(ya_cort, 1),
+        "pendiente_meta": int(pendiente), "objetivo_pct": pct, "und_objetivo": und_obj,
+        "consumo_kg": consumo, "und_asignar": und_asignar,
+        "kg_necesarios": round(kg, 2), "tela_disponible_kg": round(tela, 2),
+        "estado": estado, "nota": nota,
+    }
+
+
+def simular_consumo(filas: list[dict]) -> list[dict]:
+    saldo = tela_disponible_neta().copy()
+    resultado: list[dict] = []
+    adultos_pend: dict[str, list[dict]] = {}
+
+    kids = [f for f in filas if f["genero"] == "KIDS"]
+    adultos = [f for f in filas if f["genero"] != "KIDS"]
+
+    for f in sorted(kids, key=lambda x: (x["prioridad"], -x["tela_disponible_kg"])):
+        color = f["color"]
+        stock_key = canonical_color(color)
+        tela = saldo.get(stock_key, tela_stock(color) - kg_usado_lote().get(stock_key, 0.0))
+
+        if tela < MIN_KG_PRODUCIR or f["estado"] == "SIN TELA":
+            resultado.append({**f, "und_asignar_final": 0, "kg_usar_final": 0,
+                              "tela_restante_kg": round(tela, 2)})
+            continue
+
+        consumo = f["consumo_kg"]
+        und = min(f["und_objetivo"], int(tela / consumo))
+        kg = und * consumo
+        saldo[stock_key] = max(0.0, tela - kg)
+        if color == "Púrpura":
+            saldo["Púrpura"] = saldo[stock_key]
+
+        estado = "OK" if und == f["und_objetivo"] and und > 0 else (
+            "PARCIAL (limitado tela)" if und > 0 else "SIN TELA"
+        )
+        resultado.append({**f, "und_asignar_final": und, "kg_usar_final": round(kg, 2),
+                          "tela_restante_kg": round(saldo[stock_key], 2), "estado": estado})
+
+    for f in adultos:
+        adultos_pend.setdefault(f["color"], []).append(f)
+
+    for color, grupo in adultos_pend.items():
+        stock_key = canonical_color(color)
+        tela = saldo.get(stock_key, 0.0)
+        if tela < MIN_KG_PRODUCIR:
+            for f in grupo:
+                resultado.append({**f, "und_asignar_final": 0, "kg_usar_final": 0,
+                                  "tela_restante_kg": round(tela, 2), "estado": "SIN TELA"})
+            continue
+
+        peso_total = sum(g["und_objetivo"] for g in grupo) or 1
+        tela_usada = 0.0
+        asignaciones = []
+
+        for f in sorted(grupo, key=lambda x: x["prioridad"]):
+            share = f["und_objetivo"] / peso_total
+            tela_share = tela * share
+            und = min(f["und_objetivo"], int(tela_share / f["consumo_kg"]))
+            kg = und * f["consumo_kg"]
+            tela_usada += kg
+            estado = "OK" if und == f["und_objetivo"] and und > 0 else (
+                "PARCIAL (limitado tela)" if und > 0 else "SIN TELA"
+            )
+            asignaciones.append({**f, "und_asignar_final": und, "kg_usar_final": round(kg, 2),
+                                 "estado": estado})
+
+        saldo[stock_key] = max(0.0, tela - tela_usada)
+        for a in asignaciones:
+            a["tela_restante_kg"] = round(saldo[stock_key], 2)
+            resultado.append(a)
+
+    return sorted(resultado, key=lambda x: (x["prioridad"], x["modelo"], x["genero"], x["color"]))
+
+
+def write_excel(path: Path, filas: list[dict], metas: dict, consumos: dict) -> None:
+    wb = Workbook()
+    cortado = lote_cortado_por_color()
+
+    # RESUMEN
+    ws = wb.active
+    ws.title = "RESUMEN"
+    ws["A1"] = "PLAN PRIORIDADES MAR / RIO — DATOS REALES EXCEL"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.merge_cells("A1:F1")
+
+    mar_kids_max = sum(metas["MAR"]["KIDS"].values())
+    rio_kids_max = sum(metas["RIO"]["KIDS"].values())
+    resumen = [
+        ("Fuente metas", "MAR/RIO PROYECCION CANTIDADES SUGERIDAS (2).xlsx"),
+        ("Total tela disponible (kg)", round(sum(TELA_KG.values()), 2)),
+        ("Tela usada lote Mar Kids cortado (kg)", round(sum(kg_usado_lote().values()), 2)),
+        ("Tela neta (kg)", round(sum(tela_disponible_neta().values()), 2)),
+        ("Lote Mar Kids cortado (und)", LOTE_CORTADO_TOTAL),
+        ("Und/color lote (~)", round(LOTE_CORTADO_TOTAL / len(LOTE_CORTADO_COLORES), 1)),
+        ("Meta máx Mar KIDS (Excel)", mar_kids_max),
+        ("Meta máx Rio KIDS (Excel)", rio_kids_max),
+        ("Objetivo KIDS", f"{PCT_KIDS_OBJETIVO:.0%} del pendiente (meta − cortado)"),
+        ("Consumo Mar KIDS", f"{consumos['MAR']['KIDS']} kg/und"),
+        ("Consumo Rio KIDS", f"{consumos['RIO']['KIDS']} kg/und"),
+    ]
+    for i, (k, v) in enumerate(resumen, 3):
+        ws.cell(row=i, column=1, value=k)
+        ws.cell(row=i, column=2, value=v)
+
+    row = len(resumen) + 4
+    ws.cell(row=row, column=1, value="ORDEN PRIORIDAD").font = Font(bold=True)
+    row += 1
+    for i, p in enumerate(PRIORIDAD_ORDEN, 1):
+        ws.cell(row=row, column=1, value=f"P{i}")
+        ws.cell(row=row, column=2, value=p)
+        row += 1
+
+    # INVENTARIO
+    ws2 = wb.create_sheet("INVENTARIO TELA")
+    h = ["Color", "Stock kg", "Usado lote Mar Kids", "Neto kg", "Max und Mar KIDS",
+         "Max und Rio KIDS", "Max und Mar CAB", "Alerta"]
+    ws2.append(h)
+    style_header(ws2, 1, len(h))
+    for color in sorted(TELA_KG.keys(), key=lambda c: -TELA_KG[c]):
+        usado = kg_usado_lote().get(color, 0)
+        disp = max(0, TELA_KG[color] - usado)
+        alerta = "SIN STOCK" if TELA_KG[color] < MIN_KG_PRODUCIR else (
+            "ALTA flexibilidad" if disp > 400 else ("BAJA" if disp < 30 else "MEDIA")
+        )
+        ws2.append([
+            color, round(TELA_KG[color], 2), round(usado, 2), round(disp, 2),
+            metas["MAR"]["KIDS"].get(color, 0),
+            metas["RIO"]["KIDS"].get(color, 0),
+            metas["MAR"]["CAB"].get(color, 0),
+            alerta,
+        ])
+    auto_width(ws2)
+
+    # MAR KIDS CORTADO vs OBJETIVO
+    ws3 = wb.create_sheet("MAR KIDS OBJETIVO")
+    ws3.append(["Color", "Meta máx Excel", "Ya cortado", "Pendiente", "Objetivo 50%",
+                "Und asignar FINAL", "Tela disp kg", "Estado"])
+    style_header(ws3, 1, 8)
+    kids_filas = {f["color"]: f for f in filas if f["orden"] == "MAR KIDS"}
+    for color, meta in sorted(metas["MAR"]["KIDS"].items(), key=lambda x: -x[1]):
+        c = cortado.get(color, 0)
+        pend = max(0, meta - c)
+        obj = int(pend * PCT_KIDS_OBJETIVO)
+        f = kids_filas.get(color, {})
+        ws3.append([
+            color, meta, round(c, 1), pend, obj,
+            f.get("und_asignar_final", 0),
+            f.get("tela_disponible_kg", round(tela_stock(color) - kg_usado_lote().get(color, 0), 2)),
+            f.get("estado", ""),
+        ])
+    auto_width(ws3)
+
+    # PRIORIDADES
+    ws4 = wb.create_sheet("PRIORIDADES PRODUCCION")
+    cols = ["Prioridad", "Orden", "Modelo", "Género", "Color", "Meta máx", "Ya cortado",
+            "Pendiente", "% Obj", "Und objetivo", "Und FINAL", "Kg usar", "Consumo kg/und",
+            "Tela rest kg", "Estado", "Nota"]
+    ws4.append(cols)
+    style_header(ws4, 1, len(cols))
+    total_und = total_kg = 0
+    for f in filas:
+        ws4.append([
+            f["prioridad"], f["orden"], f["modelo"], f["genero"], f["color"],
+            f["meta_sugerida"], f["ya_cortado"], f["pendiente_meta"],
+            f"{f['objetivo_pct']:.0%}", f["und_objetivo"],
+            f.get("und_asignar_final", 0), f.get("kg_usar_final", 0), f["consumo_kg"],
+            f.get("tela_restante_kg", f["tela_disponible_kg"]),
+            f["estado"], f["nota"],
+        ])
+        total_und += f.get("und_asignar_final", 0)
+        total_kg += f.get("kg_usar_final", 0)
+        r = ws4.max_row
+        if f["genero"] == "KIDS":
+            for c in range(1, len(cols) + 1):
+                ws4.cell(row=r, column=c).fill = KIDS_FILL
+    ws4.append(["", "TOTALES", "", "", "", "", "", "", "", "", total_und, round(total_kg, 2)])
+    auto_width(ws4)
+
+    # FLEXIBILIDAD POR COLOR
+    ws5 = wb.create_sheet("FLEXIBILIDAD POR COLOR")
+    ws5.append(["Color", "Tela neta kg", "Mar KIDS", "Rio KIDS", "Mar CAB", "Mar DAMA",
+                "Rio CAB", "Rio DAMA", "Total und", "Recomendación"])
+    style_header(ws5, 1, 10)
+    by_color: dict[str, dict[str, int]] = {}
+    for f in filas:
+        by_color.setdefault(f["color"], {})
+        by_color[f["color"]][f"{f['modelo']} {f['genero']}"] = f.get("und_asignar_final", 0)
+
+    all_colors = sorted(set(list(TELA_KG.keys()) + list(by_color.keys())),
+                        key=lambda c: -max(0, tela_stock(c) - kg_usado_lote().get(c, 0)))
+    for color in all_colors:
+        tela = max(0, tela_stock(color) - kg_usado_lote().get(color, 0))
+        vals = [by_color.get(color, {}).get(f"{m} {g}", 0)
+                for m, g in [("MAR", "KIDS"), ("RIO", "KIDS"), ("MAR", "CAB"),
+                             ("MAR", "DAMA"), ("RIO", "CAB"), ("RIO", "DAMA")]]
+        tot = sum(vals)
+        if tela < MIN_KG_PRODUCIR:
+            rec = "NO PRODUCIR — sin tela"
+        elif tela > 500:
+            rec = "Kids 50% + repartir excedente Mar/Rio adultos"
+        elif tela > 100:
+            rec = "Kids prioritario + balance adultos"
+        else:
+            rec = "Solo KIDS parcial"
+        ws5.append([color, round(tela, 2), *vals, tot, rec])
+    auto_width(ws5)
+
+    # METAS EXCEL (referencia)
+    ws6 = wb.create_sheet("METAS EXCEL REF")
+    ws6.append(["Modelo", "Género", "Color", "Máximo sugerido"])
+    style_header(ws6, 1, 4)
+    for modelo in ("MAR", "RIO"):
+        for gen in ("KIDS", "CAB", "DAMA"):
+            for color, mx in sorted(metas[modelo][gen].items(), key=lambda x: -x[1]):
+                ws6.append([modelo, gen, color, mx])
+    auto_width(ws6)
+
+    wb.save(path)
 
 
 def style_header(ws, row: int, cols: int) -> None:
@@ -118,376 +426,55 @@ def style_header(ws, row: int, cols: int) -> None:
         cell.border = BORDER
 
 
-def auto_width(ws, max_width: int = 22) -> None:
+def auto_width(ws, max_width: int = 24) -> None:
     for col in ws.columns:
         letter = get_column_letter(col[0].column)
         width = min(max(len(str(c.value or "")) for c in col) + 2, max_width)
         ws.column_dimensions[letter].width = width
 
 
-def lote_por_color() -> dict[str, float]:
-    """Distribuye el lote cortado proporcionalmente entre colores Mar Kids."""
-    n = len(MAR_KIDS_COLORES)
-    por_color = LOTE_CORTADO_TOTAL / n
-    return {c: por_color for c in MAR_KIDS_COLORES}
-
-
-def kg_usado_lote() -> dict[str, float]:
-    usado = {}
-    for color, und in lote_por_color().items():
-        usado[color] = und * CONSUMO_KG["KIDS"]
-    return usado
-
-
-def tela_disponible_neta() -> dict[str, float]:
-    usado = kg_usado_lote()
-    neto = {}
-    for color, kg in TELA_KG.items():
-        neto[color] = max(0.0, kg - usado.get(color, 0.0))
-    return neto
-
-
-def calc_prioridades() -> list[dict]:
-    """Calcula prioridades de producción por modelo/género/color."""
-    neto = tela_disponible_neta()
-    cortado = lote_por_color()
-    filas = []
-
-    for prio_idx, etiqueta in enumerate(PRIORIDAD_ORDEN, 1):
-        partes = etiqueta.split()
-        modelo, genero = partes[0], partes[1]
-        pct = PCT_KIDS_OBJETIVO if genero == "KIDS" else PCT_ADULTOS_OBJETIVO
-
-        metas = META_SUGERIDA.get(modelo, {}).get(genero, {})
-        for color, meta in sorted(metas.items(), key=lambda x: -neto.get(x[0], 0)):
-            tela = neto.get(color, 0.0)
-            if tela < MIN_KG_PRODUCIR:
-                filas.append({
-                    "prioridad": prio_idx,
-                    "orden": etiqueta,
-                    "modelo": modelo,
-                    "genero": genero,
-                    "color": color,
-                    "meta_sugerida": meta,
-                    "ya_cortado": cortado.get(color, 0) if modelo == "MAR" and genero == "KIDS" else 0,
-                    "pendiente_meta": max(0, meta - cortado.get(color, 0)) if modelo == "MAR" and genero == "KIDS" else meta,
-                    "objetivo_pct": pct,
-                    "und_objetivo": 0,
-                    "und_por_tela": 0,
-                    "und_asignar": 0,
-                    "kg_necesarios": 0,
-                    "tela_disponible_kg": round(tela, 2),
-                    "estado": "SIN TELA" if tela < MIN_KG_PRODUCIR else "PENDIENTE",
-                    "nota": "Stock crítico — excluir o esperar compra" if tela < MIN_KG_PRODUCIR else "",
-                })
-                continue
-
-            pendiente = max(0, meta - cortado.get(color, 0)) if modelo == "MAR" and genero == "KIDS" else meta
-            und_obj = int(pendiente * pct)
-            consumo = CONSUMO_KG[genero]
-            und_tela = int(tela / consumo)
-            und_asignar = min(und_obj, und_tela)
-            kg_nec = und_asignar * consumo
-
-            if und_asignar == 0:
-                estado = "SIN TELA"
-            elif und_asignar < und_obj:
-                estado = "PARCIAL (limitado tela)"
-            else:
-                estado = "OK"
-
-            nota = ""
-            if color == "Rojo":
-                nota = "Stock 0.18 kg — no viable"
-            elif tela > 400:
-                nota = "Alta flexibilidad — puede repartirse entre modelos"
-
-            filas.append({
-                "prioridad": prio_idx,
-                "orden": etiqueta,
-                "modelo": modelo,
-                "genero": genero,
-                "color": color,
-                "meta_sugerida": meta,
-                "ya_cortado": round(cortado.get(color, 0), 1) if modelo == "MAR" and genero == "KIDS" else 0,
-                "pendiente_meta": pendiente,
-                "objetivo_pct": pct,
-                "und_objetivo": und_obj,
-                "und_por_tela": und_tela,
-                "und_asignar": und_asignar,
-                "kg_necesarios": round(kg_nec, 2),
-                "tela_disponible_kg": round(tela, 2),
-                "estado": estado,
-                "nota": nota,
-            })
-
-    return filas
-
-
-def simular_consumo_secuencial(filas: list[dict]) -> list[dict]:
-    """Descuenta tela en orden de prioridad; adultos comparten tela restante por color."""
-    saldo = tela_disponible_neta().copy()
-    resultado: list[dict] = []
-    adultos_pendientes: dict[str, list[dict]] = {}
-
-    # Fase 1: KIDS (prioridad estricta)
-    kids_filas = [f for f in filas if f["genero"] == "KIDS"]
-    adult_filas = [f for f in filas if f["genero"] != "KIDS"]
-
-    for f in sorted(kids_filas, key=lambda x: (x["prioridad"], -x["tela_disponible_kg"])):
-        color = f["color"]
-        tela = saldo.get(color, 0.0)
-        if tela < MIN_KG_PRODUCIR or f["estado"] == "SIN TELA":
-            resultado.append({**f, "und_asignar_final": 0, "kg_usar_final": 0, "tela_restante_kg": round(tela, 2)})
-            continue
-        consumo = CONSUMO_KG["KIDS"]
-        und = min(f["und_objetivo"], int(tela / consumo))
-        kg = und * consumo
-        saldo[color] = max(0.0, tela - kg)
-        estado = "OK" if und == f["und_objetivo"] and und > 0 else ("PARCIAL (limitado tela)" if und > 0 else "SIN TELA")
-        resultado.append({**f, "und_asignar_final": und, "kg_usar_final": round(kg, 2), "tela_restante_kg": round(saldo[color], 2), "estado": estado})
-
-    # Fase 2: Adultos — reparto flexible por color según peso de meta sugerida
-    for f in adult_filas:
-        adultos_pendientes.setdefault(f["color"], []).append(f)
-
-    for color, grupo in adultos_pendientes.items():
-        tela = saldo.get(color, 0.0)
-        if tela < MIN_KG_PRODUCIR:
-            for f in grupo:
-                resultado.append({**f, "und_asignar_final": 0, "kg_usar_final": 0, "tela_restante_kg": round(tela, 2), "estado": "SIN TELA"})
-            continue
-
-        # Peso = meta sugerida; reparte tela restante proporcionalmente
-        peso_total = sum(g["und_objetivo"] for g in grupo) or 1
-        asignaciones: list[dict] = []
-        tela_usada = 0.0
-
-        for f in sorted(grupo, key=lambda x: x["prioridad"]):
-            share = f["und_objetivo"] / peso_total
-            tela_share = tela * share
-            consumo = CONSUMO_KG[f["genero"]]
-            und = min(f["und_objetivo"], int(tela_share / consumo))
-            kg = und * consumo
-            tela_usada += kg
-            estado = "OK" if und == f["und_objetivo"] and und > 0 else ("PARCIAL (limitado tela)" if und > 0 else "SIN TELA")
-            asignaciones.append({**f, "und_asignar_final": und, "kg_usar_final": round(kg, 2), "estado": estado})
-
-        saldo[color] = max(0.0, tela - tela_usada)
-        for a in asignaciones:
-            a["tela_restante_kg"] = round(saldo[color], 2)
-            resultado.append(a)
-
-    return sorted(resultado, key=lambda x: (x["prioridad"], x["modelo"], x["genero"], x["color"]))
-
-
-def write_excel(path: Path, filas: list[dict]) -> None:
-    wb = Workbook()
-
-    # ── Hoja 1: Resumen ejecutivo ──
-    ws = wb.active
-    ws.title = "RESUMEN"
-    ws["A1"] = "PLAN DE PRIORIDADES — MAR / RIO (TELA JABÓN)"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws.merge_cells("A1:F1")
-
-    resumen = [
-        ("", ""),
-        ("Total tela disponible (kg)", round(sum(TELA_KG.values()), 2)),
-        ("Tela usada lote Mar Kids ya cortado (kg)", round(sum(kg_usado_lote().values()), 2)),
-        ("Tela neta disponible (kg)", round(sum(tela_disponible_neta().values()), 2)),
-        ("Lote Mar Kids cortado (und total)", LOTE_CORTADO_TOTAL),
-        ("Und por color en lote (promedio)", round(LOTE_CORTADO_TOTAL / len(MAR_KIDS_COLORES), 1)),
-        ("Objetivo Kids (% pendiente)", f"{PCT_KIDS_OBJETIVO:.0%}"),
-        ("", ""),
-        ("ORDEN DE PRIORIDAD", ""),
-    ]
-    for i, (k, v) in enumerate(resumen, 3):
-        ws.cell(row=i, column=1, value=k)
-        ws.cell(row=i, column=2, value=v)
-
-    row = len(resumen) + 3
-    for i, p in enumerate(PRIORIDAD_ORDEN, 1):
-        ws.cell(row=row, column=1, value=f"P{i}")
-        ws.cell(row=row, column=2, value=p)
-        ws.cell(row=row, column=1).fill = KIDS_FILL if "KIDS" in p else SUBHEADER_FILL
-        row += 1
-
-    row += 1
-    ws.cell(row=row, column=1, value="REGLAS DE FLEXIBILIDAD").font = Font(bold=True)
-    row += 1
-    reglas = [
-        "1. KIDS primero (Mar Kids → Rio Kids) al 50% del pendiente tras descontar lote cortado.",
-        "2. Con tela restante: Mar CAB/DAMA y Rio CAB/DAMA según stock por color.",
-        "3. Colores con >400 kg (Azul Marino, Negro): flexibles entre modelos/géneros.",
-        "4. Rojo (0.18 kg) y Púrpura (0 kg): EXCLUIR de producción.",
-        "5. Si un color no alcanza para un modelo, reasignar a otro modelo del mismo color.",
-        "6. Actualizar columnas META con datos reales de los Excel de proyección.",
-    ]
-    for r in reglas:
-        ws.cell(row=row, column=1, value=r)
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
-        row += 1
-
-    auto_width(ws)
-
-    # ── Hoja 2: Inventario tela ──
-    ws2 = wb.create_sheet("INVENTARIO TELA")
-    headers = ["Color", "Stock kg", "Usado lote Mar Kids", "Disponible neto kg", "Und max KIDS", "Und max CAB", "Und max DAMA", "Alerta"]
-    ws2.append(headers)
-    style_header(ws2, 1, len(headers))
-
-    for color, kg in sorted(TELA_KG.items(), key=lambda x: -x[1]):
-        usado = kg_usado_lote().get(color, 0)
-        disp = max(0, kg - usado)
-        alerta = ""
-        if kg < MIN_KG_PRODUCIR:
-            alerta = "SIN STOCK"
-        elif disp > 400:
-            alerta = "ALTA — flexibilidad total"
-        elif disp < 30:
-            alerta = "BAJA — solo kids parcial"
-
-        ws2.append([
-            color, round(kg, 2), round(usado, 2), round(disp, 2),
-            int(disp / CONSUMO_KG["KIDS"]),
-            int(disp / CONSUMO_KG["CAB"]),
-            int(disp / CONSUMO_KG["DAMA"]),
-            alerta,
-        ])
-
-    auto_width(ws2)
-
-    # ── Hoja 3: Mar Kids lote cortado ──
-    ws3 = wb.create_sheet("MAR KIDS CORTADO")
-    ws3.append(["Detalle lote Mar Kids ya en corte"])
-    ws3["A1"].font = Font(bold=True, size=12)
-    ws3.append([])
-    ws3.append(["Talla", "Und lote total"])
-    for t, u in LOTE_CORTADO_TALLAS.items():
-        ws3.append([t, u])
-    ws3.append(["TOTAL", LOTE_CORTADO_TOTAL])
-    ws3.append([])
-    ws3.append(["Color", "Und cortadas (prop.)", "Meta sugerida", "Pendiente", "Objetivo 50%", "Tela disp. kg"])
-    style_header(ws3, ws3.max_row, 6)
-
-    cortado = lote_por_color()
-    for color in MAR_KIDS_COLORES:
-        meta = META_SUGERIDA["MAR"]["KIDS"].get(color, 0)
-        pend = max(0, meta - cortado[color])
-        obj = int(pend * PCT_KIDS_OBJETIVO)
-        ws3.append([
-            color, round(cortado[color], 1), meta, int(pend), obj,
-            round(tela_disponible_neta().get(color, 0), 2),
-        ])
-
-    auto_width(ws3)
-
-    # ── Hoja 4: Prioridades producción ──
-    ws4 = wb.create_sheet("PRIORIDADES PRODUCCION")
-    cols = [
-        "Prioridad", "Orden", "Modelo", "Género", "Color",
-        "Meta sugerida", "Ya cortado", "Pendiente", "% Objetivo",
-        "Und objetivo", "Und asignar FINAL", "Kg usar", "Tela restante kg",
-        "Estado", "Nota",
-    ]
-    ws4.append(cols)
-    style_header(ws4, 1, len(cols))
-
-    total_und = 0
-    total_kg = 0
-    for f in filas:
-        ws4.append([
-            f["prioridad"], f["orden"], f["modelo"], f["genero"], f["color"],
-            f["meta_sugerida"], f["ya_cortado"], f["pendiente_meta"],
-            f"{f['objetivo_pct']:.0%}",
-            f["und_objetivo"], f.get("und_asignar_final", 0), f.get("kg_usar_final", 0),
-            f.get("tela_restante_kg", f["tela_disponible_kg"]),
-            f["estado"], f["nota"],
-        ])
-        total_und += f.get("und_asignar_final", 0)
-        total_kg += f.get("kg_usar_final", 0)
-
-        r = ws4.max_row
-        if f["genero"] == "KIDS":
-            for c in range(1, len(cols) + 1):
-                ws4.cell(row=r, column=c).fill = KIDS_FILL
-        if f["estado"] == "SIN TELA":
-            ws4.cell(row=r, column=14).fill = ALERT_FILL
-        elif f["estado"] == "OK":
-            ws4.cell(row=r, column=14).fill = OK_FILL
-
-    ws4.append([])
-    ws4.append(["TOTALES", "", "", "", "", "", "", "", "", "", total_und, round(total_kg, 2)])
-
-    auto_width(ws4)
-
-    # ── Hoja 5: Por color (vista flexibilidad) ──
-    ws5 = wb.create_sheet("FLEXIBILIDAD POR COLOR")
-    ws5.append(["Color", "Tela neta kg", "Mar Kids", "Rio Kids", "Mar CAB", "Mar DAMA", "Rio CAB", "Rio DAMA", "Recomendación"])
-    style_header(ws5, 1, 9)
-
-    by_color: dict[str, dict[str, int]] = {}
-    for f in filas:
-        c = f["color"]
-        by_color.setdefault(c, {})
-        key = f"{f['modelo']} {f['genero']}"
-        by_color[c][key] = f.get("und_asignar_final", 0)
-
-    for color in sorted(TELA_KG.keys(), key=lambda c: -tela_disponible_neta().get(c, 0)):
-        tela = tela_disponible_neta().get(color, 0)
-        rec = ""
-        if tela < MIN_KG_PRODUCIR:
-            rec = "No producir — sin tela"
-        elif tela > 500:
-            rec = "Priorizar CAB/DAMA ambos modelos + completar kids"
-        elif tela > 150:
-            rec = "Kids 50% + balance CAB/DAMA"
-        else:
-            rec = "Solo KIDS parcial"
-
-        ws5.append([
-            color, round(tela, 2),
-            by_color.get(color, {}).get("MAR KIDS", 0),
-            by_color.get(color, {}).get("RIO KIDS", 0),
-            by_color.get(color, {}).get("MAR CAB", 0),
-            by_color.get(color, {}).get("MAR DAMA", 0),
-            by_color.get(color, {}).get("RIO CAB", 0),
-            by_color.get(color, {}).get("RIO DAMA", 0),
-            rec,
-        ])
-
-    auto_width(ws5)
-
-    wb.save(path)
-
-
 def main() -> None:
-    out_dir = Path("/workspace/output")
-    out_dir.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(exist_ok=True)
+    metas_dict, consumos, mar_c, rio_c = load_metas()
+    metas = metas_dict
 
-    filas = calc_prioridades()
-    filas = simular_consumo_secuencial(filas)
+    filas = calc_filas(metas, consumos)
+    filas = simular_consumo(filas)
 
-    xlsx_path = out_dir / "PLAN_PRIORIDADES_MAR_RIO_KIDS.xlsx"
-    write_excel(xlsx_path, filas)
+    xlsx = OUT_DIR / "PLAN_PRIORIDADES_MAR_RIO_KIDS.xlsx"
+    write_excel(xlsx, filas, metas, consumos)
 
     summary = {
         "tela_total_kg": round(sum(TELA_KG.values()), 2),
+        "tela_usada_lote_kg": round(sum(kg_usado_lote().values()), 2),
         "tela_neta_kg": round(sum(tela_disponible_neta().values()), 2),
         "lote_cortado_und": LOTE_CORTADO_TOTAL,
+        "meta_max_mar_kids": sum(metas["MAR"]["KIDS"].values()),
+        "meta_max_rio_kids": sum(metas["RIO"]["KIDS"].values()),
+        "consumo": {"MAR": mar_c, "RIO": rio_c},
         "total_und_plan": sum(f.get("und_asignar_final", 0) for f in filas),
         "total_kg_plan": round(sum(f.get("kg_usar_final", 0) for f in filas), 2),
-        "prioridades": PRIORIDAD_ORDEN,
+        "por_prioridad": {},
         "filas": filas,
     }
-    json_path = out_dir / "plan_prioridades.json"
+    for p in PRIORIDAD_ORDEN:
+        pf = [f for f in filas if f["orden"] == p]
+        summary["por_prioridad"][p] = {
+            "und": sum(f.get("und_asignar_final", 0) for f in pf),
+            "kg": round(sum(f.get("kg_usar_final", 0) for f in pf), 2),
+            "und_objetivo": sum(f["und_objetivo"] for f in pf),
+        }
+
+    json_path = OUT_DIR / "plan_prioridades.json"
     json_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"Excel generado: {xlsx_path}")
-    print(f"JSON generado: {json_path}")
-    print(f"Total unidades planificadas: {summary['total_und_plan']}")
-    print(f"Total kg a usar: {summary['total_kg_plan']}")
+    print(f"Excel: {xlsx}")
+    print(f"JSON:  {json_path}")
+    print(f"\nTela neta: {summary['tela_neta_kg']} kg")
+    print(f"Plan total: {summary['total_und_plan']} und / {summary['total_kg_plan']} kg\n")
+    for p in PRIORIDAD_ORDEN:
+        d = summary["por_prioridad"][p]
+        print(f"  {p}: objetivo={d['und_objetivo']} und → asignado={d['und']} und ({d['kg']} kg)")
 
 
 if __name__ == "__main__":
