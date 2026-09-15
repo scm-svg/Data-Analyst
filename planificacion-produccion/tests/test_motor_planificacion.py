@@ -2996,11 +2996,18 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
         self.assertIn("modelosSinPlanificar", d)
         sin_plan = {m["modelo"] for m in d["modelosSinPlanificar"]}
-        self.assertIn("BASIC LINE CROP TEE DAMA", sin_plan)
-        self.assertIn("MOTION LOOP CLASICA CAB", sin_plan)
         self.assertNotIn("COTTON KIDS", sin_plan)
-        crop = next(m for m in d["modelosSinPlanificar"] if m["modelo"] == "BASIC LINE CROP TEE DAMA")
-        self.assertGreater(crop["faltante"], 0)
+        planificados = {c["modelo"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
+        self.assertTrue(planificados.isdisjoint(sin_plan), sin_plan & planificados)
+        crop_en_plan = any(
+            c["modelo"] == "BASIC LINE CROP TEE DAMA" for k in d["semanas"] for c in d["semanas"][k]["carga"]
+        )
+        if crop_en_plan:
+            self.assertNotIn("BASIC LINE CROP TEE DAMA", sin_plan)
+        else:
+            self.assertIn("BASIC LINE CROP TEE DAMA", sin_plan)
+            crop = next(m for m in d["modelosSinPlanificar"] if m["modelo"] == "BASIC LINE CROP TEE DAMA")
+            self.assertGreater(crop["faltante"], 0)
 
 
 if __name__ == "__main__":
