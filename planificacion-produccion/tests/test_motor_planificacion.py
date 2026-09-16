@@ -3064,6 +3064,11 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("window.chkImpSku", html)
         self.assertIn("window.chkImpModelo", html)
         self.assertIn("window.chkImpSemana", html)
+        self.assertIn("function agruparCarga", html)
+        self.assertGreater(html.find('data-tab="imp"'), html.find('data-tab="sup"'))
+        self.assertIn("<th>Cant. semana</th><th>Logo</th>", html)
+        self.assertIn("<th>A fabricar</th><th>Logo</th>", html)
+        self.assertIn("appearance:none", html)
 
 
 if __name__ == "__main__":

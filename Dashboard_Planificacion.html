@@ -104,11 +104,16 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .cal-grid{display:grid;grid-template-columns:90px repeat(5,1fr);gap:6px}
 .imp-week{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .imp-week .imp-meta{flex:1}
-.imp-week.imp-done{border-left-color:var(--gr)}
+.imp-week.imp-done{border-left-color:var(--ac)}
 .imp-chk{display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;vertical-align:middle;user-select:none}
-.imp-chk input{width:15px;height:15px;accent-color:var(--gr);cursor:pointer}
+.imp-chk input{appearance:none;-webkit-appearance:none;width:16px;height:16px;margin:0;border:2px solid var(--ac);border-radius:4px;background:rgba(91,106,247,.12);cursor:pointer;position:relative;vertical-align:middle;box-shadow:0 0 0 1px rgba(91,106,247,.35)}
+.imp-chk input:hover{background:rgba(91,106,247,.22)}
+.imp-chk input:checked{background:var(--ac);border-color:var(--ac)}
+.imp-chk input:checked:after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.imp-chk input:indeterminate{background:rgba(91,106,247,.5);border-color:var(--ac)}
+.imp-chk input:indeterminate:after{content:'';position:absolute;left:3px;top:6px;width:8px;height:2px;background:#fff;border:none;transform:none}
 .imp-chk span{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
-.imp-chk.ok span{color:var(--gr);font-weight:700}
+.imp-chk.ok span{color:var(--ac);font-weight:700}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 @media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}}
 @media(max-width:780px){.g2,.g3,.cal-grid{grid-template-columns:1fr}.content,.fbar,.tabs,.hdr,.ebar,.mbar{padding-left:16px;padding-right:16px}}
@@ -149,22 +154,22 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 <div class="tabs">
   <button class="tab active" data-tab="cal">📅 Calendario</button>
   <button class="tab" data-tab="salida">📦 Salida semanal</button>
-  <button class="tab" data-tab="imp">🖨 Impresión Digital</button>
   <button class="tab" data-tab="seg">● Seguimiento</button>
   <button class="tab" data-tab="pend">⏳ Pendientes</button>
   <button class="tab" data-tab="alm">🏭 Almacén</button>
   <button class="tab" data-tab="sup">⚙️ Supuestos</button>
+  <button class="tab" data-tab="imp">🖨 Impresión Digital</button>
 </div>
 <div class="content">
   <div id="boot-fail" class="note">Abre este archivo en <b>Google Chrome</b> (doble clic o Archivo → Abrir). El visor del código no ejecuta el dashboard y se ve vacío.</div>
   <noscript><div class="note">Activa JavaScript o ábrelo en Chrome. Sin JS no se pueden ver los números.</div></noscript>
   <div id="sec-cal" class="sec active"></div>
   <div id="sec-salida" class="sec"></div>
-  <div id="sec-imp" class="sec"></div>
   <div id="sec-seg" class="sec"></div>
   <div id="sec-pend" class="sec"></div>
   <div id="sec-alm" class="sec"></div>
   <div id="sec-sup" class="sec"></div>
+  <div id="sec-imp" class="sec"></div>
 </div>
 <div class="footer">Planificación de producción · v<span id="footVer"></span> · archivo autónomo (abrir en el navegador)</div>
 <script type="application/json" id="dash-data">{
@@ -34933,6 +34938,34 @@ function cargaFiltrada(k){
     return matchQ(c.modelo);
   });
 }
+function agruparCarga(carga, wi){
+  var order=[], map={};
+  (carga||[]).forEach(function(c){
+    var m=c.modelo;
+    if(!map[m]){
+      map[m]={modelo:m, lineas:[], mos:0, solicitada:0, total:0};
+      order.push(m);
+    }
+    var g=map[m];
+    var lin=String(c.linea).replace(/\D/g,'');
+    if(lin && g.lineas.indexOf(lin)<0) g.lineas.push(lin);
+    g.mos += Number(c.mos)||0;
+    g.solicitada += Number(c.solicitada)||0;
+    g.total += Number(c.total)||0;
+  });
+  return order.map(function(m){
+    var g=map[m];
+    g.lineas.sort(function(a,b){ return (parseInt(a,10)||0)-(parseInt(b,10)||0); });
+    if(typeof wi==='number'){
+      var n=mosUnicas(filasImpRaw(m, wi));
+      if(n) g.mos=n;
+    }
+    return g;
+  });
+}
+function chipsLineas(lineas){
+  return (lineas||[]).map(function(l){ return '<span class="chip '+linCls(l)+'">'+l+'</span>'; }).join(' ');
+}
 
 function renderCal(){
   var el=document.getElementById('sec-cal');
@@ -35023,7 +35056,7 @@ function renderSalida(){
   var html='<div class="card"><h3>Volumen por semana</h3><p class="sub">Total a fabricar según el plan (filtros aplicados).</p><div class="cw"><canvas id="cSalida"></canvas></div></div>';
   html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las cantidades de SKU salen del desglose semanal de Proyeccion - SKUS.</p>';
   keys.forEach(function(k, wi){
-    var carga=cargaFiltrada(k);
+    var carga=agruparCarga(cargaFiltrada(k), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
     if(!tot && fLin()) return;
     html+='<div class="note expand" data-open="w'+wi+'" onclick="tog(this)">'+(k)+' · '+(D.fechasSemanas[k]||'')+' · <b>'+fmtN(tot)+'</b> pzas · '+carga.length+' modelos</div>';
@@ -35031,7 +35064,7 @@ function renderSalida(){
     html+='<table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th></tr></thead><tbody>';
     carga.forEach(function(c, mi){
       var id='w'+wi+'m'+mi;
-      html+='<tr class="tr-exp" onclick="togSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td><td class="left">'+esc(c.modelo)+'</td><td><span class="chip '+linCls(c.linea)+'">'+String(c.linea).replace(/\D/g,'')+'</span></td><td class="num">'+fmtN(c.mos)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
+      html+='<tr class="tr-exp" onclick="togSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td><td class="left">'+esc(c.modelo)+'</td><td>'+chipsLineas(c.lineas)+'</td><td class="num">'+fmtN(c.mos)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
       html+='<tr id="'+id+'" class="sku-row" style="display:none"><td colspan="6">Cargando SKUs…</td></tr>';
     });
     html+='</tbody></table></div>';
@@ -35169,7 +35202,7 @@ function renderImp(){
   var keys=weekKeys();
   var html='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan de producción. Drill-down semana → modelo → MO / SKU. Marca el check cuando el logotipo esté listo (se guarda en este navegador).</p>';
   keys.forEach(function(k, wi){
-    var carga=cargaImp(k, wi);
+    var carga=agruparCarga(cargaImp(k, wi), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
     if(!tot && fLin()) return;
     var filasSem=[];
@@ -35179,15 +35212,15 @@ function renderImp(){
     html+='<div class="note expand imp-week'+(est.all?' imp-done':'')+'" data-open="impw'+wi+'" onclick="tog(this)"><span class="imp-meta">'+(k)+' · '+(D.fechasSemanas[k]||'')+' · <b>'+fmtN(tot)+'</b> pzas · '+carga.length+' modelos · '+fmtN(nMos)+' MOs</span>';
     html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Semana cubierta" onclick="event.stopPropagation()"><input type="checkbox" data-imp-week="'+wi+'" '+(est.all?'checked ':'')+'onchange="chkImpSemana(event,'+wi+')"><span>Listo</span></label></div>';
     html+='<div id="impw'+wi+'" style="display:none;margin:0 0 12px 8px">';
-    html+='<table class="ct ct-mid"><thead><tr><th></th><th>Logo</th><th class="left">Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th></tr></thead><tbody>';
+    html+='<table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th><th>Logo</th></tr></thead><tbody>';
     carga.forEach(function(c, mi){
       var id='impw'+wi+'m'+mi;
       var filas=filasImp(c.modelo, wi);
       var nMo=mosUnicas(filas);
       var estM=estadoKeys(filas.map(function(f){ return impKey(wi, f.sku, f.mo); }));
       html+='<tr class="tr-exp" onclick="togImpSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td>';
-      html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'" title="Modelo listo"><input type="checkbox" data-imp-mod="'+wi+','+mi+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,'+wi+','+mi+')"></label></td>';
-      html+='<td class="left">'+esc(c.modelo)+'</td><td><span class="chip '+linCls(c.linea)+'">'+String(c.linea).replace(/\D/g,'')+'</span></td><td class="num">'+fmtN(nMo)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
+      html+='<td class="left">'+esc(c.modelo)+'</td><td>'+chipsLineas(c.lineas)+'</td><td class="num">'+fmtN(nMo)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td>';
+      html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'" title="Modelo listo"><input type="checkbox" data-imp-mod="'+wi+','+mi+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,'+wi+','+mi+')"></label></td></tr>';
       html+='<tr id="'+id+'" class="sku-row" style="display:none"><td colspan="7">Cargando MOs…</td></tr>';
     });
     html+='</tbody></table></div>';
@@ -35205,13 +35238,13 @@ window.togImpSku=function(id, wi, mi){
   var filas=filasImp(c.modelo, wi);
   if(!filas.length){ row.innerHTML='<td colspan="7" class="sub">Sin SKUs con cantidad en esta semana.</td>'; }
   else {
-    var t='<td colspan="7"><table class="ct ct-mid"><thead><tr><th class="left">MO</th><th>Logo</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th></tr></thead><tbody>';
+    var t='<td colspan="7"><table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th><th>Logo</th></tr></thead><tbody>';
     filas.forEach(function(f){
       var key=impKey(wi, f.sku, f.mo);
       var on=!!impLoad()[key];
       t+='<tr><td class="left">'+esc(f.mo||'—')+'</td>';
-      t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,'+wi+',this)"></label></td>';
-      t+='<td class="left">'+esc(f.sku)+'</td><td class="left">'+esc(f.detalle)+'</td><td>'+esc(f.color)+'</td><td>'+esc(f.talla)+'</td><td class="num">'+fmtN(f.cant)+'</td></tr>';
+      t+='<td class="left">'+esc(f.sku)+'</td><td class="left">'+esc(f.detalle)+'</td><td>'+esc(f.color)+'</td><td>'+esc(f.talla)+'</td><td class="num">'+fmtN(f.cant)+'</td>';
+      t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,'+wi+',this)"></label></td></tr>';
     });
     t+='</tbody></table></td>';
     row.innerHTML=t;
@@ -35419,9 +35452,9 @@ function exportCSV(){
     var rows=[['Semana','Fecha','Linea','Modelo','MO','SKU','Detalle','Color','Talla','Cant semana','Logo listo']];
     var st=impLoad();
     keys.forEach(function(k, wi){
-      cargaImp(k, wi).forEach(function(c){
+      agruparCarga(cargaImp(k, wi), wi).forEach(function(c){
         filasImp(c.modelo, wi).forEach(function(f){
-          rows.push([k, D.fechasSemanas[k]||'', c.linea, c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(wi, f.sku, f.mo)]?'SI':'NO']);
+          rows.push([k, D.fechasSemanas[k]||'', (c.lineas||[]).join('/'), c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(wi, f.sku, f.mo)]?'SI':'NO']);
         });
       });
     });
