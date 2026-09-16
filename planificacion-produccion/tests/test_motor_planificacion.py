@@ -3069,6 +3069,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("<th>Cant. semana</th><th>Logo</th>", html)
         self.assertIn("<th>A fabricar</th><th>Logo</th>", html)
         self.assertIn("appearance:none", html)
+        self.assertIn('class="note imp-leyenda"', html)
         self.assertIn('Las Ordenes de Produccion con siglas "PD"', html)
         self.assertIn("estan a la esperas de ser creadas en Odoo", html)
 

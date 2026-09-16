@@ -105,6 +105,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .imp-week{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .imp-week .imp-meta{flex:1}
 .imp-week.imp-done{border-left-color:var(--ac)}
+.imp-leyenda{border:1px solid var(--yw);border-left:3px solid var(--yw);background:rgba(255,193,7,.08);color:var(--tx);margin-bottom:14px}
 .imp-chk{display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;vertical-align:middle;user-select:none}
 .imp-chk input{appearance:none;-webkit-appearance:none;width:16px;height:16px;margin:0;border:2px solid var(--ac);border-radius:4px;background:rgba(91,106,247,.12);cursor:pointer;position:relative;vertical-align:middle;box-shadow:0 0 0 1px rgba(91,106,247,.35)}
 .imp-chk input:hover{background:rgba(91,106,247,.22)}
@@ -35201,7 +35202,7 @@ function renderImp(){
   window._impCarga={};
   var keys=weekKeys();
   var html='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan de producción. Drill-down semana → modelo → MO / SKU. Marca el check cuando el logotipo esté listo (se guarda en este navegador).</p>';
-  html+='<div class="note">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
+  html+='<div class="note imp-leyenda">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaImp(k, wi), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
