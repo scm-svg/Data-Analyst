@@ -722,20 +722,18 @@ tr:hover td { background:rgba(37,99,235,.03); }
           <li><strong>🔲 Pendiente — Proceso de despacho:</strong> Reemplazar Sheets de solicitudes Tiendas/Taller por flujo de despacho en Odoo (picking, confirmación de entrega).</li>
           <li><strong>🔲 Pendiente — Control de inventario de salidas:</strong> Registrar en Odoo cada movimiento de salida con trazabilidad por SKU, cantidad y destino.</li>
           <li><strong>🔲 Pendiente — Descuento automático al enviar a Tiendas/Taller:</strong> Definir reglas de transferencia/descuento de stock al confirmar envío — diferenciando envío a Tienda (cajas) vs entrega interna a Taller.</li>
-          <li><strong>🔲 Pendiente — Ubicaciones de stock:</strong> Configurar ubicaciones virtuales (Almacén Consumibles, Tiendas, Taller) para reflejar dónde está el inventario en todo momento.</li>
         </ul>
       </div>
 
-      <div class="rec-card priority-med">
-        <div class="rec-tag">🟠 Prioridad media</div>
-        <h5>Digitalizar hoja de soporte de recepción de tela</h5>
-        <p>La revisión en plegadora se registra en papel. Migrar a formulario digital en Odoo Quality o app móvil vinculada al lote de recepción, con campos de variables QA, peso, aprobación/rechazo automática.</p>
-      </div>
-
-      <div class="rec-card priority-med">
-        <div class="rec-tag">🟠 Prioridad media</div>
-        <h5>Notificación automática Compras → Logística</h5>
-        <p>Hoy Compras informa manualmente la llegada de mercancía. Configurar alerta automática en Odoo al confirmar recepción de compra (PO), notificando al Supervisor y Operadores correspondientes.</p>
+      <div class="rec-card priority-high">
+        <div class="rec-tag">🔴 Prioridad alta</div>
+        <h5>Agilizar validación de Materia Prima para desbloquear Producto Terminado</h5>
+        <p>Cuando Logística satisface las cantidades que Producción solicita y hace la entrega física, el descuento en Odoo ocurre en <strong>dos momentos distintos</strong> dentro de la orden de manufactura:</p>
+        <ul>
+          <li><strong>Tela (1.ª etapa):</strong> El traslado se asocia a la OT de manufactura, se genera la PC y el descuento de tela se ejecuta por <strong>traslado por ola</strong> al inicio del proceso.</li>
+          <li><strong>Otros insumos (última etapa — Validación):</strong> El descuento de insumos (hang tag, cinta TPU, tinta, cordones, etc.) se realiza en la etapa final de manufactura. En ese momento es obligatorio <strong>aprobar la materia prima consumida</strong> para poder validar el producto terminado e ingresarlo a su ubicación teórica.</li>
+        </ul>
+        <p style="margin-top:10px">Si la aprobación de MP en la etapa de Validación es lenta o manual, <strong>se retrasa directamente la validación e ingreso del producto terminado</strong>. Se recomienda automatizar y adelantar los pasos previos (formulario QA digital, creación automática de órdenes de traslado interno alimentadas por QA) para que cuando Producción llegue a Validación, la MP ya esté lista para aprobar y el PT pueda ingresar sin demora.</p>
       </div>
 
       <div class="rec-card priority-low">
@@ -778,11 +776,6 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <div class="num-big">03</div>
         <h5>Descuento de inventario al enviar</h5>
         <p>No hay regla automática de descuento por destino (Tienda vs Taller). <strong>¿Transferencia interna o salida directa?</strong></p>
-      </div>
-      <div class="meeting-card">
-        <div class="num-big">04</div>
-        <h5>Stock por ubicación</h5>
-        <p>Sin ubicaciones configuradas no se sabe cuánto hay en almacén vs lo enviado. <strong>¿Definimos ubicaciones virtuales?</strong></p>
       </div>
     </div>
 
@@ -830,35 +823,29 @@ tr:hover td { background:rgba(37,99,235,.03); }
               <td>Salida interna automática al confirmar entrega directa</td>
               <td><span class="status-auto alto">Alto</span></td>
             </tr>
-            <tr>
-              <td>Visibilidad stock por ubicación</td>
-              <td>❌ No existe en ERP</td>
-              <td>Ubicaciones: Almacén Consumibles / Tiendas / Taller</td>
-              <td><span class="status-auto medio">Medio</span></td>
-            </tr>
           </tbody>
         </table>
       </div>
     </div>
 
     <div class="card" style="margin-top:18px">
-      <h4>⚡ Automatizar validaciones de Materia Prima → agilizar Producto Terminado</h4>
-      <p style="font-size:.84rem;color:var(--muted);margin-bottom:14px">Hoy la recepción de tela requiere revisión manual en plegadora, registro en hoja de soporte y validación QA rollo por rollo. Automatizar y digitalizar este flujo permitiría validar materia prima más rápido y, en cascada, <strong>liberar producto terminado con mayor agilidad</strong> al reducir cuellos de botella en insumos.</p>
+      <h4>⚡ Automatizar validaciones de Materia Prima</h4>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:14px">En manufactura, la tela se descuenta en la <strong>1.ª etapa</strong> (traslado por ola vinculado a la OT), pero los demás insumos se descuentan en la <strong>última etapa (Validación)</strong>. Ahí se debe aprobar la MP consumida para validar el PT e ingresarlo a ubicación teórica. Automatizar la recepción y traslado de MP adelanta el trabajo previo para que Validación no sea un cuello de botella.</p>
       <div class="steps">
         <div class="step">
           <div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div>
           <div class="step-body">
-            <h5>Formulario digital de recepción QA</h5>
-            <p>Reemplazar hoja de soporte en papel por checklist digital en Odoo Quality vinculado al lote. QA aprueba/rechaza en el momento con registro automático.</p>
+            <h5>Formulario digital de recepción QA (Odoo Quality)</h5>
+            <p>Reemplazar hoja de soporte en papel por checklist digital vinculado al lote de recepción. QA registra variables, peso, aprobación o rechazo — esa información alimenta directamente los movimientos en Odoo.</p>
             <span class="badge qa">Calidad + Operadores MP</span>
           </div>
         </div>
         <div class="step">
           <div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div>
           <div class="step-body">
-            <h5>Traslado automático post-aprobación</h5>
-            <p>Al aprobar un rollo, Odoo ejecuta automáticamente el traslado TH/Por Auditar Tela → Materia Prima sin intervención manual del Supervisor.</p>
-            <span class="badge supervisor">Supervisor</span>
+            <h5>Creación automática de orden de traslado interno</h5>
+            <p>Al completar el formulario QA, Odoo <strong>genera automáticamente</strong> la orden de traslado interno asociada al lote de recepción (TH/Por Auditar Tela → Materia Prima), alimentada con los datos del formulario (kg/metros, SKU, lote). El Supervisor <strong>audita y valida</strong> que la orden generada sea correcta antes de confirmar — se adelanta la creación, no se elimina el control.</p>
+            <span class="badge supervisor">Supervisor audita y confirma</span>
           </div>
         </div>
         <div class="step">
@@ -869,12 +856,33 @@ tr:hover td { background:rgba(37,99,235,.03); }
             <span class="badge compras">Compras</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h4>🔗 Cómo se conecta con Producto Terminado</h4>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:14px">El beneficio en PT no es directo en recepción, sino en la <strong>etapa de Validación de manufactura</strong>:</p>
+      <div class="steps">
         <div class="step">
-          <div class="step-num" style="background:var(--purple-bg);color:var(--purple)">4</div>
+          <div class="step-num" style="background:var(--accent-light);color:var(--accent)">A</div>
           <div class="step-body">
-            <h5>Impacto en Producto Terminado</h5>
-            <p>Con MP validada más rápido en Odoo, Producción recibe tela e insumos disponibles antes → menos espera en OT → <strong>validación y liberación de PT más ágil</strong>.</p>
-            <span class="badge solicitante">Producción</span>
+            <h5>Logística entrega físicamente lo solicitado</h5>
+            <p>Producción recibe tela e insumos. Tela ya fue descontada por traslado por ola en la 1.ª etapa de la OT.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:var(--orange-bg);color:var(--orange)">B</div>
+          <div class="step-body">
+            <h5>Última etapa — Validación en manufactura</h5>
+            <p>Se descuentan los insumos restantes (hang tag, TPU, tinta, cordones, etc.). Para avanzar es necesario <strong>aprobar la materia prima consumida</strong> en Odoo.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:var(--purple-bg);color:var(--purple)">C</div>
+          <div class="step-body">
+            <h5>Validación e ingreso de Producto Terminado</h5>
+            <p>Solo después de aprobar MP se puede validar el PT e ingresarlo a su ubicación teórica. Si MP no está lista o el traslado interno no fue creado/auditado a tiempo, <strong>Validación de PT se bloquea</strong>.</p>
+            <span class="badge solicitante">Producción — etapa Validación</span>
           </div>
         </div>
       </div>
@@ -888,10 +896,10 @@ tr:hover td { background:rgba(37,99,235,.03); }
           <tbody>
             <tr><td>1</td><td>¿Cómo registramos el despacho de consumibles a Tiendas en Odoo?</td><td>Transferencia interna vs salida directa</td></tr>
             <tr><td>2</td><td>¿Cómo descontamos inventario al enviar a Taller (entrega interna)?</td><td>Flujo de salida / consumo interno</td></tr>
-            <tr><td>3</td><td>¿Configuramos ubicaciones virtuales para consumibles?</td><td>Almacén / Tiendas / Taller</td></tr>
+            <tr><td>3</td><td>¿Odoo puede crear automáticamente la OT de traslado interno desde el formulario QA?</td><td>Reglas + flujo de auditoría del Supervisor</td></tr>
             <tr><td>4</td><td>¿Quién lidera la configuración técnica en Odoo?</td><td>Responsable TI / Consultor</td></tr>
-            <tr><td>5</td><td>¿Priorizamos digitalizar validación QA de MP para agilizar PT?</td><td>Sí/No + alcance inicial</td></tr>
-            <tr><td>6</td><td>¿Cuándo dejamos de usar Sheets para despacho de consumibles?</td><td>Fecha + plan de transición</td></tr>
+            <tr><td>5</td><td>¿Cuándo dejamos de usar Sheets para despacho de consumibles?</td><td>Fecha + plan de transición</td></tr>
+            <tr><td>6</td><td>¿Qué insumos se descuentan en Validación y cuáles en traslado por ola?</td><td>Confirmar reglas por SKU en OT</td></tr>
           </tbody>
         </table>
       </div>
