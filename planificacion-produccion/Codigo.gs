@@ -1,10 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.28 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.29 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - URGENTE EXPLOTA LÍNEAS ASIGNADAS: un modelo Urgente (o mínima)
+ *     con 2+ líneas (ej. COTTON KIDS en 2 y 4) ocupa TODAS esas líneas
+ *     el día que entra. Si RIO u otro de peor prioridad ya está en una
+ *     de ellas, lo desaloja. No espera ni cede por lote de color: llena
+ *     cada línea con el faltante que quepa (cualquier color). La familia
+ *     sigue compartiendo: un género no acapara la segunda línea si el
+ *     hermano aún no tiene. Resto de modelos (Media/Alta/Baja) conservan
+ *     Negro → Blanco → Marino y CAB → DAMA → KIDS.
  *   - SECUENCIA=NO EN LÍNEA 5: en Priorizacion col. H, No significa
  *     que ese modelo NO comparte la Línea 5. Corre solo (sin rueda
  *     en paralelo) y no espera/cede por color o género de la familia
@@ -130,7 +138,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.28";
+var VERSION_SISTEMA = "5.9.29";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1611,6 +1619,11 @@ function generarPlanificacionSemanal_() {
     return piezas;
   }
 
+  function capRestanteHoy_(lin, d, capRef) {
+    var cap = capRef > 0 ? capRef : capLinea_(lin);
+    return Math.max(0, 1 - carga[lin][d]) * cap;
+  }
+
   function producirLote_(mP, lin, d, overflow, maxLote, soloMinima, colorRankFiltro) {
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
@@ -1639,25 +1652,28 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
+    var explota = esUrgenteExplosivo_(mP, overflow);
     while (carga[lin][d] < 0.999) {
       var soloMinima = restanteMinima_(mP) > 0;
       var rank = null;
       var hayRank = false;
-      for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
-        var tR = mP.tareas[tiR];
-        if (tR.restante <= 0) continue;
-        if (soloMinima && !tR.esMinima) continue;
-        var claveR = claveMO_(tR);
-        var fijaR = lineaPorMO[claveR] || tR.lineaFija;
-        if (fijaR && fijaR !== lin) continue;
-        if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
-        rank = rangoColor_(tR.color);
-        hayRank = true;
-        break;
+      if (!explota) {
+        for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
+          var tR = mP.tareas[tiR];
+          if (tR.restante <= 0) continue;
+          if (soloMinima && !tR.esMinima) continue;
+          var claveR = claveMO_(tR);
+          var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+          if (fijaR && fijaR !== lin) continue;
+          if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
+          rank = rangoColor_(tR.color);
+          hayRank = true;
+          break;
+        }
       }
       if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayRank ? rank : null) <= 0) break;
       if (restanteMinima_(mP) <= 0 && tuvoMinima_(mP)) break;
-      if (debeCederAlLoteFamilia_(mP, overflow)) break;
+      if (!explota && debeCederAlLoteFamilia_(mP, overflow)) break;
     }
   }
 
@@ -1736,6 +1752,12 @@ function generarPlanificacionSemanal_() {
     });
     out.sort();
     return out;
+  }
+
+  function esUrgenteExplosivo_(m, overflow) {
+    if (!m || m.esEspecial) return false;
+    if (bandaViva_(m) > BANDA_URGENTE) return false;
+    return lineasModelo_(m, overflow).length >= 2;
   }
 
   function lineasClaveModelo_(m, overflow) {
@@ -1821,6 +1843,7 @@ function generarPlanificacionSemanal_() {
 
   function debeEsperarLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (esUrgenteExplosivo_(m, overflow)) return false;
     if (esExclusivoLinea5_(m) && lineasModelo_(m, overflow).indexOf("5") !== -1) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
@@ -1860,6 +1883,7 @@ function generarPlanificacionSemanal_() {
 
   function debeCederAlLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (esUrgenteExplosivo_(m, overflow)) return false;
     if (esExclusivoLinea5_(m) && (lineasDondeEsta_(m.nombre).indexOf("5") !== -1 ||
         lineasModelo_(m, overflow).indexOf("5") !== -1)) return false;
     var fam = familiaModelo_(m);
@@ -2067,13 +2091,26 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
-      var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
+      var explota = esUrgenteExplosivo_(m, overflowL1);
+      var capOwned = owned.reduce(function (s, lin) {
+        return s + (explota
+          ? capRestanteHoy_(lin, d, capModelo_(m, lin))
+          : capRestanteSemana_(lin, d, capModelo_(m, lin)));
+      }, 0);
       if (restanteModelo_(m) <= capOwned + 0.001) return;
-      lineasLibresDe_(m).forEach(function (lin) {
+      var candidatas = explota ? lineasModelo_(m, overflowL1) : lineasLibresDe_(m);
+      candidatas.forEach(function (lin) {
+        if (ocupante[lin].indexOf(m.nombre) !== -1) return;
         if (restanteModelo_(m) <= capOwned + 0.001) return;
         if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
-        ocupante[lin].push(m.nombre);
-        capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
+        if (explota) {
+          if (!desalojarPara_(m, lin)) return;
+        } else {
+          ocupante[lin].push(m.nombre);
+        }
+        capOwned += explota
+          ? capRestanteHoy_(lin, d, capModelo_(m, lin))
+          : capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
     });
 
@@ -2424,6 +2461,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
+    "• Urgente/mínima con 2+ líneas: explota todas las asignadas (desaloja peor prioridad). No espera lote de color; la familia sigue compartiendo un género por línea.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
