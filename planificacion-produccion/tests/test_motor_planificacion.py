@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.29 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.30 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
 from collections import defaultdict
+from datetime import date, timedelta
 
 
 BANDA_ESPECIAL = 0
@@ -772,12 +773,53 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.29: Urgente explota líneas asignadas; Secuencia=No en L5 es ocupante exclusivo."""
+LUNES_BASE_DEFAULT = date(2026, 9, 14)
+
+
+def fecha_de_dia_idx(lunes_base, indice):
+    semana = indice // DIAS_LABORALES
+    dia = indice % DIAS_LABORALES
+    return lunes_base + timedelta(days=semana * 7 + dia)
+
+
+def parse_fecha_key(fk):
+    if fk is None or fk == float("inf"):
+        return None
+    if isinstance(fk, date):
+        return fk
+    if isinstance(fk, (int, float)):
+        if 20200101 <= fk <= 20991231:
+            n = int(fk)
+            return date(n // 10000, (n // 100) % 100, n % 100)
+        if fk > 1e11:
+            return date.fromtimestamp(fk / 1000.0)
+    return None
+
+
+def dia_objetivo_fecha(fk, total_dias, lunes_base=None):
+    if lunes_base is None:
+        lunes_base = LUNES_BASE_DEFAULT
+    target = parse_fecha_key(fk)
+    if target is None:
+        return None
+    if target < lunes_base:
+        return -1
+    last = fecha_de_dia_idx(lunes_base, total_dias - 1)
+    if target > last:
+        return None
+    for dx in range(total_dias):
+        if fecha_de_dia_idx(lunes_base, dx) >= target:
+            return dx
+    return None
+
+
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, lunes_base=None):
+    """Motor v5.9.30: Urgente explota en fecha estimada o el día hábil anterior."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
     apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
+    lunes_base = lunes_base or LUNES_BASE_DEFAULT
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     for t in tareas:
@@ -950,12 +992,26 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     seen.append(lin)
         return seen
 
-    def es_urgente_explosivo(m, overflow):
+    def dia_objetivo_modelo(m):
+        return dia_objetivo_fecha(m.get("fechaMin"), total_dias, lunes_base)
+
+    def en_ventana_fecha_estimada(m, d):
+        dia_obj = dia_objetivo_modelo(m)
+        if dia_obj is None:
+            return False
+        if dia_obj < 0:
+            return True
+        return d >= dia_obj - 1 and d <= dia_obj
+
+    def es_candidato_explosivo(m, overflow):
         if not m or m.get("esEspecial"):
             return False
         if banda_viva(m) > BANDA_URGENTE:
             return False
         return len(lineas_modelo(m, overflow)) >= 2
+
+    def es_urgente_explosivo(m, overflow, d):
+        return es_candidato_explosivo(m, overflow) and en_ventana_fecha_estimada(m, d)
 
     def es_exclusivo_linea5(m):
         return bool(m and m.get("secuenciaNo") and not m.get("esEspecial"))
@@ -1063,7 +1119,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def debe_esperar_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
-        if es_urgente_explosivo(m, overflow):
+        if es_urgente_explosivo(m, overflow, d):
             return False
         if es_exclusivo_linea5(m) and "5" in lineas_modelo(m, overflow):
             return False
@@ -1092,7 +1148,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def debe_ceder_al_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
-        if es_urgente_explosivo(m, overflow):
+        if es_urgente_explosivo(m, overflow, d):
             return False
         if es_exclusivo_linea5(m) and ("5" in lineas_donde_esta(m["nombre"]) or "5" in lineas_modelo(m, overflow)):
             return False
@@ -1260,30 +1316,30 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if not owned:
                 continue
-            explota = es_urgente_explosivo(m, overflow)
+            explota = es_urgente_explosivo(m, overflow, d)
+            if not explota and m.get("secuenciaNo"):
+                continue
             if explota:
                 cap_owned = sum(cap_restante_hoy(lin, d, cap_modelo(m, lin)) for lin in owned)
             else:
                 cap_owned = sum(cap_restante_semana(lin, d, cap_modelo(m, lin)) for lin in owned)
-            if restante_modelo(m) <= cap_owned + 1e-6:
+            if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                 continue
-            candidatas = lineas_modelo(m, overflow) if explota else lineas_libres_de(m, overflow)
+            if explota and restante_modelo(m) <= 1e-6:
+                continue
+            candidatas = lineas_libres_de(m, overflow)
             for lin in candidatas:
                 if m["nombre"] in (ocupante.get(lin) or []):
                     continue
                 if hermano_sin_linea_puede_usar(m, lin, overflow):
                     continue
-                if restante_modelo(m) <= cap_owned + 1e-6:
+                if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
+                ocupante[lin].append(m["nombre"])
                 if explota:
-                    if not desalojar_para(m, lin):
-                        continue
                     cap_owned += cap_restante_hoy(lin, d, cap_modelo(m, lin))
                 else:
-                    ocupante[lin].append(m["nombre"])
                     cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
-                if restante_modelo(m) <= cap_owned + 1e-6:
-                    break
 
     def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None):
         for t in m["tareas"]:
@@ -1322,7 +1378,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return 0
 
     def producir_modelo_dia(m, lin, d, overflow):
-        explota = es_urgente_explosivo(m, overflow)
+        explota = es_urgente_explosivo(m, overflow, d)
         while carga[lin][d] < 0.999:
             solo_minima = restante_minima(m) > 0
             rank = None
@@ -1874,8 +1930,35 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertGreater(por_linea["4"], 0)
 
     def test_urgente_explota_todas_las_lineas_asignadas(self):
-        """COTTON KIDS Urgente en 2 y 4 desalojan a RIO Media y usan ambas el día de inicio."""
-        tareas = [
+        """No explota el día de ingreso si la fecha está lejos; en la fecha, si L4 está libre, sí la toma."""
+        far = [
+            {"sku": "CKN", "modelo": "COTTON KIDS", "mo": "MO-CKN", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKB", "modelo": "COTTON KIDS", "mo": "MO-CKB", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKR", "modelo": "COTTON KIDS", "mo": "MO-CKR", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Rosado", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKV", "modelo": "COTTON KIDS", "mo": "MO-CKV", "cantidad": 60, "cap": 80,
+             "lineas": ["2", "4"], "color": "Verde", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 60, "genero": "KIDS"},
+            {"sku": "RC", "modelo": "RIO CAB", "mo": "MO-RC", "cantidad": 400, "cap": 101,
+             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260920, "solicitadaOrig": 400, "genero": "CAB"},
+        ]
+        out = planificar(far, {}, total_dias=10)
+        d0_2 = defaultdict(int)
+        d0_4 = defaultdict(int)
+        for t in out:
+            d0_2[t["modelo"]] += t["plan"]["2"][0]
+            d0_4[t["modelo"]] += t["plan"]["4"][0]
+        self.assertEqual(d0_2.get("COTTON KIDS", 0), 80, dict(d0_2))
+        self.assertEqual(d0_4.get("COTTON KIDS", 0), 0, "fecha lejana no toma L4: %s" % dict(d0_4))
+        self.assertGreater(d0_4.get("RIO CAB", 0), 0, dict(d0_4))
+
+        due = [
             {"sku": "CKN", "modelo": "COTTON KIDS", "mo": "MO-CKN", "cantidad": 80, "cap": 80,
              "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
              "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
@@ -1889,43 +1972,30 @@ class TestLineasExclusivas(unittest.TestCase):
              "lineas": ["2", "4"], "color": "Verde", "prioridadNum": 1, "esEspecial": False,
              "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 60, "genero": "KIDS"},
             {"sku": "RC", "modelo": "RIO CAB", "mo": "MO-RC", "cantidad": 400, "cap": 101,
-             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+             "lineas": ["3"], "color": "Negro", "prioridadNum": 3, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260920, "solicitadaOrig": 400, "genero": "CAB"},
         ]
-        out = planificar(tareas, {}, total_dias=10)
-        d2_2 = defaultdict(int)
-        d2_4 = defaultdict(int)
-        for t in out:
-            d2_2[t["modelo"]] += t["plan"]["2"][2]
-            d2_4[t["modelo"]] += t["plan"]["4"][2]
-        self.assertEqual(d2_2["COTTON KIDS"], 80, dict(d2_2))
-        self.assertEqual(d2_4["COTTON KIDS"], 80, dict(d2_4))
-        self.assertEqual(d2_2["RIO CAB"], 0, dict(d2_2))
-        self.assertEqual(d2_4["RIO CAB"], 0, dict(d2_4))
-        por_linea = defaultdict(int)
-        for t in out:
-            if t["modelo"] != "COTTON KIDS":
-                continue
-            for lin, arr in t["plan"].items():
-                por_linea[lin] += sum(arr)
-        self.assertGreater(por_linea["2"], 0)
-        self.assertGreater(por_linea["4"], 0)
-        self.assertEqual(por_linea["2"] + por_linea["4"], 300)
+        out2 = planificar(due, {}, total_dias=10)
+        d2_2 = sum(t["plan"]["2"][2] for t in out2 if t["modelo"] == "COTTON KIDS")
+        d2_4 = sum(t["plan"]["4"][2] for t in out2 if t["modelo"] == "COTTON KIDS")
+        self.assertEqual(d2_2, 80, d2_2)
+        self.assertEqual(d2_4, 80, "en la fecha, L4 libre: Cotton la toma")
+        self.assertEqual(sum(t["planificada"] for t in out2 if t["modelo"] == "COTTON KIDS"), 300)
 
     def test_urgente_explota_mezcla_colores_para_llenar_lineas(self):
-        """Urgente con 2 líneas no se queda parado en un color: L2 y L4 se llenan el mismo día."""
-        tareas = [
+        """En la ventana de fecha mezcla colores para llenar L2 y L4; fuera no."""
+        mix = [
             {"sku": "N1", "modelo": "COTTON KIDS", "mo": "MO-N1", "cantidad": 40, "cap": 80,
              "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
-             "diaIngreso": 0, "fechaKey": 20260916, "solicitadaOrig": 40, "genero": "KIDS"},
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 40, "genero": "KIDS"},
             {"sku": "B1", "modelo": "COTTON KIDS", "mo": "MO-B1", "cantidad": 80, "cap": 80,
              "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
-             "diaIngreso": 0, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 80, "genero": "KIDS"},
             {"sku": "R1", "modelo": "COTTON KIDS", "mo": "MO-R1", "cantidad": 80, "cap": 80,
              "lineas": ["2", "4"], "color": "Rosado", "prioridadNum": 1, "esEspecial": False,
-             "diaIngreso": 0, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+             "diaIngreso": 0, "fechaKey": 20260914, "solicitadaOrig": 80, "genero": "KIDS"},
         ]
-        out = planificar(tareas, {}, total_dias=5)
+        out = planificar(mix, {}, total_dias=5)
         d0_2 = sum(t["plan"]["2"][0] for t in out)
         d0_4 = sum(t["plan"]["4"][0] for t in out)
         self.assertEqual(d0_2, 80, d0_2)
@@ -1935,6 +2005,96 @@ class TestLineasExclusivas(unittest.TestCase):
             if t["plan"]["2"][0] > 0 or t["plan"]["4"][0] > 0:
                 colores_hoy.add(t["color"])
         self.assertGreaterEqual(len(colores_hoy), 2, colores_hoy)
+
+        lejos = [
+            {"sku": "N1", "modelo": "COTTON KIDS", "mo": "MO-N1", "cantidad": 40, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 40, "genero": "KIDS"},
+            {"sku": "B1", "modelo": "COTTON KIDS", "mo": "MO-B1", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "R1", "modelo": "COTTON KIDS", "mo": "MO-R1", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Rosado", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 80, "genero": "KIDS"},
+        ]
+        out2 = planificar(lejos, {}, total_dias=5)
+        d0_lineas = (sum(t["plan"]["2"][0] for t in out2), sum(t["plan"]["4"][0] for t in out2))
+        self.assertEqual(sorted(d0_lineas), [0, 80], "fuera de fecha una sola línea: %s" % (d0_lineas,))
+
+    def test_urgente_fuera_de_fecha_no_desaloja(self):
+        """Fuera de la ventana Cotton no toma L4 ocupada; en la fecha tampoco desaloja a VITA."""
+        tareas = [
+            {"sku": "CK%d" % i, "modelo": "COTTON KIDS", "mo": "MO-CK%d" % i, "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260918, "solicitadaOrig": 80, "genero": "KIDS"}
+            for i in range(5)
+        ]
+        tareas.append(
+            {"sku": "V1", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 400, "cap": 130,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260930, "solicitadaOrig": 400, "genero": "DAMA"},
+        )
+        out = planificar(tareas, {}, total_dias=5)
+
+        def por(lin, d):
+            r = defaultdict(int)
+            for t in out:
+                r[t["modelo"]] += t["plan"][lin][d]
+            return dict((k, v) for k, v in r.items() if v > 0)
+
+        for d in range(3):
+            self.assertIn("COTTON KIDS", por("2", d), "día %s L2" % d)
+            self.assertNotIn("COTTON KIDS", por("4", d), "día %s no desaloja L4: %s" % (d, por("4", d)))
+            self.assertIn("VITA BIKER DAMA", por("4", d), "día %s L4" % d)
+        for d in (3, 4):
+            self.assertGreater(por("2", d).get("COTTON KIDS", 0), 0, por("2", d))
+            self.assertNotEqual(por("4", d), {"COTTON KIDS": 80}, "día %s no echa a VITA de L4: %s" % (d, por("4", d)))
+
+    def test_urgente_explota_un_dia_antes_y_en_fecha_si_libre(self):
+        """Entra lunes, fecha viernes: lun-mie una línea; jueves y viernes ambas si L4 está libre."""
+        tareas = [
+            {"sku": "CK%d" % i, "modelo": "COTTON KIDS", "mo": "MO-CK%d" % i, "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260918, "solicitadaOrig": 80, "genero": "KIDS"}
+            for i in range(8)
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"COTTON KIDS": "NO"})
+
+        def por(lin, d):
+            return sum(t["plan"][lin][d] for t in out if t["modelo"] == "COTTON KIDS")
+
+        for d in range(3):
+            self.assertEqual(por("2", d), 80, "día %s L2" % d)
+            self.assertEqual(por("4", d), 0, "día %s L4 aún no explota" % d)
+        for d in (3, 4):
+            self.assertEqual(por("2", d), 80, "día %s L2" % d)
+            self.assertEqual(por("4", d), 80, "día %s L4 libre en ventana" % d)
+
+    def test_urgente_excel22_secuencia_no_en_fecha(self):
+        """Excel 22: COTTON KIDS Urgente Secuencia=No, fecha=miércoles, 2 y 4. L4 libre → ambas el miércoles."""
+        tareas = [
+            {"sku": "CKN", "modelo": "COTTON KIDS", "mo": "MO-CKN", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro Aventura", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKB", "modelo": "COTTON KIDS", "mo": "MO-CKB", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKR", "modelo": "COTTON KIDS", "mo": "MO-CKR", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Rosado Pastel", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKV", "modelo": "COTTON KIDS", "mo": "MO-CKV", "cantidad": 60, "cap": 80,
+             "lineas": ["2", "4"], "color": "Verde", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 60, "genero": "KIDS"},
+            {"sku": "RC", "modelo": "RIO CAB", "mo": "MO-RC", "cantidad": 200, "cap": 101,
+             "lineas": ["3", "4"], "color": "Negro", "prioridadNum": 4, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260925, "solicitadaOrig": 200, "genero": "CAB"},
+        ]
+        out = planificar(tareas, {}, total_dias=10, mapa_secuencia={"COTTON KIDS": "NO"})
+        d2_2 = sum(t["plan"]["2"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        d2_4 = sum(t["plan"]["4"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        self.assertEqual(d2_2, 80, d2_2)
+        self.assertEqual(d2_4, 80, "miércoles fecha + L4 libre + Secuencia=No: Cotton en L2 y L4")
+        self.assertEqual(sum(t["plan"]["4"][2] for t in out if t["modelo"].startswith("RIO")), 0)
 
     def test_no_paralelo_mientras_ocupante_sigue(self):
         """L1-4: si el ocupante aún llena el día, el siguiente espera. Al terminar, el sobrante sí cambia de modelo."""

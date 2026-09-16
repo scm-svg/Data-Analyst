@@ -1,18 +1,21 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.29 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.30 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - URGENTE EXPLOTA LÍNEAS ASIGNADAS: un modelo Urgente (o mínima)
- *     con 2+ líneas (ej. COTTON KIDS en 2 y 4) ocupa TODAS esas líneas
- *     el día que entra. Si RIO u otro de peor prioridad ya está en una
- *     de ellas, lo desaloja. No espera ni cede por lote de color: llena
- *     cada línea con el faltante que quepa (cualquier color). La familia
- *     sigue compartiendo: un género no acapara la segunda línea si el
- *     hermano aún no tiene. Resto de modelos (Media/Alta/Baja) conservan
- *     Negro → Blanco → Marino y CAB → DAMA → KIDS.
+ *   - URGENTE CERCA DE FECHA ESTIMADA: un modelo Urgente/mínima con
+ *     2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
+ *     El día de Fecha de Salida Estimada y el hábil anterior reparte
+ *     el faltante en las líneas asignadas que estén LIBRES. No desaloja
+ *     al ocupante (RIO, etc.). Sin fecha no explota. Si la fecha ya
+ *     venció al inicio del horizonte, explota desde el día 0. En la
+ *     ventana no espera lote de color (mezcla para llenar). Secuencia=No
+ *     NO impide tomar la segunda línea libre en esa ventana. La familia
+ *     sigue compartiendo: un género no acapara si el hermano no tiene
+ *     línea. Media/Alta/Baja conservan Negro → Blanco → Marino y
+ *     CAB → DAMA → KIDS.
  *   - SECUENCIA=NO EN LÍNEA 5: en Priorizacion col. H, No significa
  *     que ese modelo NO comparte la Línea 5. Corre solo (sin rueda
  *     en paralelo) y no espera/cede por color o género de la familia
@@ -138,7 +141,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.29";
+var VERSION_SISTEMA = "5.9.30";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1652,7 +1655,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
-    var explota = esUrgenteExplosivo_(mP, overflow);
+    var explota = esUrgenteExplosivo_(mP, overflow, d);
     while (carga[lin][d] < 0.999) {
       var soloMinima = restanteMinima_(mP) > 0;
       var rank = null;
@@ -1754,10 +1757,66 @@ function generarPlanificacionSemanal_() {
     return out;
   }
 
-  function esUrgenteExplosivo_(m, overflow) {
+  function ymdDeFechaObj_(f) {
+    if (!f || isNaN(f.getTime())) return null;
+    return f.getFullYear() * 10000 + (f.getMonth() + 1) * 100 + f.getDate();
+  }
+
+  function ymdDeClave_(ms) {
+    if (!isFinite(ms)) return null;
+    return ymdDeFechaObj_(new Date(ms));
+  }
+
+  function diaObjetivoModelo_(m) {
+    if (!m || !isFinite(m.fechaMin)) return null;
+    var ymdObj = ymdDeClave_(m.fechaMin);
+    if (ymdObj === null) return null;
+    var ymd0 = ymdDeFechaObj_(fechaDeDia_(cfg, 0));
+    if (ymdObj < ymd0) return -1;
+    var ymdLast = ymdDeFechaObj_(fechaDeDia_(cfg, totalDias - 1));
+    if (ymdObj > ymdLast) return null;
+    for (var dx = 0; dx < totalDias; dx++) {
+      var ymdi = ymdDeFechaObj_(fechaDeDia_(cfg, dx));
+      if (ymdi >= ymdObj) return dx;
+    }
+    return null;
+  }
+
+  function enVentanaFechaEstimada_(m, dHoy) {
+    var diaObj = diaObjetivoModelo_(m);
+    if (diaObj === null) return false;
+    if (diaObj < 0) return true;
+    return dHoy >= diaObj - 1 && dHoy <= diaObj;
+  }
+
+  function esCandidatoExplosivo_(m, overflow) {
     if (!m || m.esEspecial) return false;
     if (bandaViva_(m) > BANDA_URGENTE) return false;
     return lineasModelo_(m, overflow).length >= 2;
+  }
+
+  function esUrgenteExplosivo_(m, overflow, d) {
+    return esCandidatoExplosivo_(m, overflow) && enVentanaFechaEstimada_(m, d);
+  }
+
+  function produjoAlgo_(t) {
+    if (!t || !t.plan) return false;
+    for (var linP in t.plan) {
+      var arrP = t.plan[linP] || [];
+      for (var iP = 0; iP < arrP.length; iP++) {
+        if ((arrP[iP] || 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+
+  function liberarMosSinProducir_(m) {
+    if (!m) return;
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0 || produjoAlgo_(t)) return;
+      delete lineaPorMO[claveMO_(t)];
+      t.lineaFija = null;
+    });
   }
 
   function lineasClaveModelo_(m, overflow) {
@@ -1843,7 +1902,7 @@ function generarPlanificacionSemanal_() {
 
   function debeEsperarLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
-    if (esUrgenteExplosivo_(m, overflow)) return false;
+    if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && lineasModelo_(m, overflow).indexOf("5") !== -1) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
@@ -1883,7 +1942,7 @@ function generarPlanificacionSemanal_() {
 
   function debeCederAlLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
-    if (esUrgenteExplosivo_(m, overflow)) return false;
+    if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && (lineasDondeEsta_(m.nombre).indexOf("5") !== -1 ||
         lineasModelo_(m, overflow).indexOf("5") !== -1)) return false;
     var fam = familiaModelo_(m);
@@ -2091,27 +2150,26 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
-      var explota = esUrgenteExplosivo_(m, overflowL1);
+      var explota = esUrgenteExplosivo_(m, overflowL1, d);
+      if (!explota && m.secuenciaNo) return;
       var capOwned = owned.reduce(function (s, lin) {
         return s + (explota
           ? capRestanteHoy_(lin, d, capModelo_(m, lin))
           : capRestanteSemana_(lin, d, capModelo_(m, lin)));
       }, 0);
-      if (restanteModelo_(m) <= capOwned + 0.001) return;
-      var candidatas = explota ? lineasModelo_(m, overflowL1) : lineasLibresDe_(m);
+      if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
+      if (explota && restanteModelo_(m) <= 0.001) return;
+      var candidatas = lineasLibresDe_(m);
       candidatas.forEach(function (lin) {
         if (ocupante[lin].indexOf(m.nombre) !== -1) return;
-        if (restanteModelo_(m) <= capOwned + 0.001) return;
+        if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
         if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
-        if (explota) {
-          if (!desalojarPara_(m, lin)) return;
-        } else {
-          ocupante[lin].push(m.nombre);
-        }
+        ocupante[lin].push(m.nombre);
         capOwned += explota
           ? capRestanteHoy_(lin, d, capModelo_(m, lin))
           : capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
+      if (explota) liberarMosSinProducir_(m);
     });
 
     vivos.forEach(function (m) {
@@ -2461,7 +2519,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
-    "• Urgente/mínima con 2+ líneas: explota todas las asignadas (desaloja peor prioridad). No espera lote de color; la familia sigue compartiendo un género por línea.\n" +
+    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior reparte el faltante en las asignadas LIBRES (no desaloja). Secuencia=No no impide tomar esa segunda línea libre. Sin fecha no explota.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
