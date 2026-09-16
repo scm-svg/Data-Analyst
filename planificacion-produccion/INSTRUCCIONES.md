@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.28 — códigos listos para pegar
+# Planificación de Producción v5.9.31 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -8,7 +8,7 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`.
 3. Guarda el proyecto. Recarga la hoja. Corre **2️⃣ Actualizar Priorización** si hace falta crear/verificar `Priorizacion - SKUs`, y luego **3️⃣ Generar Planificación**.
 
-Esta versión incluye **Secuencia=No en Línea 5** (el modelo corre solo, sin paralelo), el **horizonte de 12 semanas** y el **Dashboard de información**. Pégalo en el archivo HTML `Dashboard`. En 5.9.25, la **Meta (Faltante)** de Proyeccion es la columna **Faltante** de Por Hacer. En 5.9.24, cada pestaña semanal cuenta **solo las MOs y el faltante de esa semana**. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**.
+Esta versión incluye **Urgente cerca de fecha estimada** (toma todas sus líneas el día de la fecha o el hábil anterior; en esa ventana color, género y prioridad de otros quedan atrás para ese producto; fuera de eso, extra solo si hay línea libre, como en 5.9.28), **Secuencia=No en Línea 5**, el **horizonte de 12 semanas** y el **Dashboard de información**. Pégalo en el archivo HTML `Dashboard`. En 5.9.25, la **Meta (Faltante)** de Proyeccion es la columna **Faltante** de Por Hacer. En 5.9.24, cada pestaña semanal cuenta **solo las MOs y el faltante de esa semana**. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -17,7 +17,7 @@ Encabezado en H2: `Secuencia`.
 - Escribe **No** (también vale `NO` / `no`) en el modelo que **no** debe seguir el orden de género CAB → DAMA → KIDS.
 - En **L1–4** ese modelo **sí** respeta el lote de color: Negro → Blanco → Marino → resto.
 - En **Línea 5**, `No` significa que el modelo **no trabaja en paralelo**: es el único que corre en L5, sin esperar color ni género de la familia.
-- No reclama la segunda línea ni parte una MO. Urgente con 2+ líneas sigue la regla de 5.9.15 (una línea por género de la familia).
+- No reclama la segunda línea ni parte una MO, salvo el urgente/mínima en su ventana de fecha estimada (sí o sí todas las asignadas). Fuera de esa ventana, Urgente con 2+ líneas sigue 5.9.28 (extra solo si está libre).
 - Vacío u otro valor: secuencia normal de 5.9.15.
 - **Actualizar Priorización** conserva la columna H.
 
@@ -33,8 +33,9 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.28 (base 5.9.15 + Secuencia=No)
+## Motor v5.9.31 (base 5.9.28 + explosión en fecha estimada)
 
+- **Urgente cerca de fecha estimada:** un modelo Urgente o con cantidad mínima que lista 2+ líneas (COTTON KIDS en `2, 4`) **no** explota el día que entra. El **día de Fecha de Salida Estimada** y el **hábil anterior** toma **sí o sí** todas las asignadas. En esa ventana, **color, género, reserva de hermano y prioridad de otros quedan atrás** para ese producto (un Especial que sí pueda producir ese día no se toca). Así COTTON no deja L4 vacía porque CARRERA (Especial, Día de inicio 29/09) la tenía “reservada”. **Fuera de esa ventana**, la segunda línea solo entra si está libre (misma regla que 5.9.28). `Secuencia=No` no impide esta explosión.
 - **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo y no espera/cede por color o género de la familia mientras corre ahí. En L1–4, `No` sigue saltando solo el orden de género (el lote de color se mantiene).
 - **Horizonte 12 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 12 semanas (la actual + 11), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 11` y `Semana 12` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 10`. El menú **Ver Pestañas** las incluye.
 - **Dashboard de información:** menú **Producción → Dashboard de información** (también `doGet` / app web). Seis pestañas: calendario semana/día/línea, drill-down semana→modelo→SKU, seguimiento de líneas (puntos por semana, como el calendario A/B de producto), pendientes, entrada de almacén y supuestos (cap por modelo, lead time 4 días, apoyo 50% L1, reajuste si hay consideraciones mayores). Lee las hojas visibles del plan (`Planificacion` / `Semana 2–12`, `Proyeccion`, `Proyeccion - SKUS`, almacén).
@@ -55,7 +56,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Actualizar MOs:** las MO en **Hecho** de `Por Hacer - Especial` **no** se archivan ni se borran, y **no entran al backlog** ni a la planificación. Cancelada sí se archiva. Producción regular sigue igual.
 - **Línea 1 y cambio de modelo:** si el ocupante termina a media jornada, el sobrante pasa al siguiente que **sí lista L1** (igual que L2-4). Un especial de otra línea **no** se redirige a L1. Dos modelos en L1 el mismo día van **en secuencia**, no en paralelo.
 - **Cantidad mínima** (columna en `Priorizacion`): máxima prioridad **después de Especial**. El cupo es la cantidad pedida (ej. 100) tomada del **faltante**; lo ya producido **no recorta** ese cupo (no convierte 100 en 67). Solo si el piso ya está cubierto (producido ≥ mínima) el modelo no entra a esa banda. El cupo sale antes que Urgente / Alta / fecha. Cuando se cubre, el modelo **cede la línea** (el sobrante del día pasa al siguiente) y el resto de su pedido vuelve a la cola normal.
-- **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos.
+- **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Con 2+ líneas, el día de la fecha estimada (y el hábil anterior) toma **todas** las asignadas: color, género y prioridad de otros no bloquean a ese producto. Fuera de esa ventana, extra solo si está libre. `Secuencia=No` no bloquea esa toma.
 - **Líneas 1-4:** un modelo a la vez (**no en paralelo**). Si el modelo termina o no puede seguir, el **sobrante del mismo día** pasa al siguiente de la cola.
 - **Línea 5** es la única que puede trabajar **dos familias** en paralelo. Si va un modelo solo, usa su cap del día (típico 40). Si hay dos familias, se turnan en lotes de 5. El mismo producto en distinto género **no** corre en paralelo: va en secuencia por color y género. Si el modelo tiene **Secuencia=No**, L5 no admite segundo ocupante.
 - **Especial:** se respeta `Linea de Produccion`. Si la celda viene vacía, se usa 1 (dato faltante, no desborde). Si L1 queda libre, **no** se redirigen ahí modelos/cantidades de otras líneas. Al llegar **Día de inicio**, el Especial (y cualquier modelo de mejor prioridad en L1-4) desaloja al ocupante peor y entra ese día. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
