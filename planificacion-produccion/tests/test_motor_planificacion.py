@@ -3028,7 +3028,9 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn(">A Producir<", html)
         self.assertNotIn(">Almacén</div>", html)
         self.assertIn("document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);", html)
-        self.assertIn("document.getElementById('k-alm').textContent=fmtN(r.vDes);", html)
+        self.assertIn("document.getElementById('k-alm').textContent=fmtN(alm);", html)
+        self.assertIn("var alm=(D.almacenModelo||[]).filter(function(m){ return matchModelo(m.modelo); })", html)
+        self.assertNotIn("document.getElementById('k-alm').textContent=fmtN(r.vDes);", html)
 
     def test_filtro_modelos_multiseleccion(self):
         html = self._html()

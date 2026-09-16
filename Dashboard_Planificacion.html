@@ -34907,7 +34907,8 @@ function kpis(){
   var nmod=_modelos.length?_modelos.length:((D.proyModelo||[]).length);
   document.getElementById('k-plan').textContent=fmtN(plan);
   document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);
-  document.getElementById('k-alm').textContent=fmtN(r.vDes);
+  var alm=(D.almacenModelo||[]).filter(function(m){ return matchModelo(m.modelo); }).reduce(function(a,p){ return a+(Number(p.cantidad)||0); },0);
+  document.getElementById('k-alm').textContent=fmtN(alm);
   document.getElementById('k-mod').textContent=String(nmod);
 }
 function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; toggleModelo(''); }
