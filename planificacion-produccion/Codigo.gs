@@ -5,17 +5,15 @@
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
- *   - URGENTE CERCA DE FECHA ESTIMADA: un modelo Urgente/mínima con
- *     2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
- *     El día de Fecha de Salida Estimada y el hábil anterior reparte
- *     el faltante en las líneas asignadas que estén LIBRES. No desaloja
- *     al ocupante (RIO, etc.). Sin fecha no explota. Si la fecha ya
- *     venció al inicio del horizonte, explota desde el día 0. En la
- *     ventana no espera lote de color (mezcla para llenar). Secuencia=No
- *     NO impide tomar la segunda línea libre en esa ventana. La familia
- *     sigue compartiendo: un género no acapara si el hermano no tiene
- *     línea. Media/Alta/Baja conservan Negro → Blanco → Marino y
- *     CAB → DAMA → KIDS.
+ *   - URGENTE EN FECHA ESTIMADA (base 5.9.28): un modelo Urgente/mínima
+ *     con 2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
+ *     El día de Fecha de Salida Estimada y el hábil anterior toma
+ *     SÍ O SÍ todas las asignadas (desaloja peor prioridad). Fuera
+ *     de esa ventana, la segunda línea solo si está libre (regla
+ *     5.9.28). En la ventana no espera lote de color. Secuencia=No
+ *     no impide explotar. La familia sigue compartiendo un género
+ *     por línea. Media/Alta/Baja conservan Negro → Blanco → Marino
+ *     y CAB → DAMA → KIDS.
  *   - SECUENCIA=NO EN LÍNEA 5: en Priorizacion col. H, No significa
  *     que ese modelo NO comparte la Línea 5. Corre solo (sin rueda
  *     en paralelo) y no espera/cede por color o género de la familia
@@ -1622,11 +1620,6 @@ function generarPlanificacionSemanal_() {
     return piezas;
   }
 
-  function capRestanteHoy_(lin, d, capRef) {
-    var cap = capRef > 0 ? capRef : capLinea_(lin);
-    return Math.max(0, 1 - carga[lin][d]) * cap;
-  }
-
   function producirLote_(mP, lin, d, overflow, maxLote, soloMinima, colorRankFiltro) {
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
@@ -1772,7 +1765,7 @@ function generarPlanificacionSemanal_() {
     var ymdObj = ymdDeClave_(m.fechaMin);
     if (ymdObj === null) return null;
     var ymd0 = ymdDeFechaObj_(fechaDeDia_(cfg, 0));
-    if (ymdObj < ymd0) return -1;
+    if (ymdObj < ymd0) return 0;
     var ymdLast = ymdDeFechaObj_(fechaDeDia_(cfg, totalDias - 1));
     if (ymdObj > ymdLast) return null;
     for (var dx = 0; dx < totalDias; dx++) {
@@ -1785,8 +1778,7 @@ function generarPlanificacionSemanal_() {
   function enVentanaFechaEstimada_(m, dHoy) {
     var diaObj = diaObjetivoModelo_(m);
     if (diaObj === null) return false;
-    if (diaObj < 0) return true;
-    return dHoy >= diaObj - 1 && dHoy <= diaObj;
+    return dHoy === diaObj || dHoy === diaObj - 1;
   }
 
   function esCandidatoExplosivo_(m, overflow) {
@@ -2151,23 +2143,19 @@ function generarPlanificacionSemanal_() {
       });
       if (owned.length === 0) return;
       var explota = esUrgenteExplosivo_(m, overflowL1, d);
-      if (!explota && m.secuenciaNo) return;
-      var capOwned = owned.reduce(function (s, lin) {
-        return s + (explota
-          ? capRestanteHoy_(lin, d, capModelo_(m, lin))
-          : capRestanteSemana_(lin, d, capModelo_(m, lin)));
-      }, 0);
+      var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
       if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
-      if (explota && restanteModelo_(m) <= 0.001) return;
-      var candidatas = lineasLibresDe_(m);
+      var candidatas = explota ? lineasModelo_(m, overflowL1) : lineasLibresDe_(m);
       candidatas.forEach(function (lin) {
         if (ocupante[lin].indexOf(m.nombre) !== -1) return;
         if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
         if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
-        ocupante[lin].push(m.nombre);
-        capOwned += explota
-          ? capRestanteHoy_(lin, d, capModelo_(m, lin))
-          : capRestanteSemana_(lin, d, capModelo_(m, lin));
+        if (explota) {
+          if (!desalojarPara_(m, lin)) return;
+        } else {
+          ocupante[lin].push(m.nombre);
+        }
+        capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
       if (explota) liberarMosSinProducir_(m);
     });
@@ -2519,7 +2507,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
-    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior reparte el faltante en las asignadas LIBRES (no desaloja). Secuencia=No no impide tomar esa segunda línea libre. Sin fecha no explota.\n" +
+    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas (desaloja peor prioridad). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +

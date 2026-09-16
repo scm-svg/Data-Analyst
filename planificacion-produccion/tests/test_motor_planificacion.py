@@ -803,7 +803,7 @@ def dia_objetivo_fecha(fk, total_dias, lunes_base=None):
     if target is None:
         return None
     if target < lunes_base:
-        return -1
+        return 0
     last = fecha_de_dia_idx(lunes_base, total_dias - 1)
     if target > last:
         return None
@@ -967,10 +967,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             piezas += max(0.0, 1.0 - carga[lin][dd]) * cap
         return piezas
 
-    def cap_restante_hoy(lin, d, cap_ref=None):
-        cap = cap_ref if cap_ref and cap_ref > 0 else caps_lineas[lin]
-        return max(0.0, 1.0 - carga[lin][d]) * cap
-
     def familia_ocupa_linea(fam, lin, except_nom=None):
         if not fam:
             return False
@@ -995,13 +991,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def dia_objetivo_modelo(m):
         return dia_objetivo_fecha(m.get("fechaMin"), total_dias, lunes_base)
 
-    def en_ventana_fecha_estimada(m, d):
+    def en_ventana_fecha_estimada(m, d_hoy):
         dia_obj = dia_objetivo_modelo(m)
         if dia_obj is None:
             return False
-        if dia_obj < 0:
-            return True
-        return d >= dia_obj - 1 and d <= dia_obj
+        return d_hoy == dia_obj or d_hoy == dia_obj - 1
 
     def es_candidato_explosivo(m, overflow):
         if not m or m.get("esEspecial"):
@@ -1012,6 +1006,23 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def es_urgente_explosivo(m, overflow, d):
         return es_candidato_explosivo(m, overflow) and en_ventana_fecha_estimada(m, d)
+
+    def produjo_algo(t):
+        if not t or not t.get("plan"):
+            return False
+        for arr in t["plan"].values():
+            if any((x or 0) > 0 for x in arr):
+                return True
+        return False
+
+    def liberar_mos_sin_producir(m):
+        if not m:
+            return
+        for t in m["tareas"]:
+            if t["restante"] <= 0 or produjo_algo(t):
+                continue
+            linea_por_mo.pop(t.get("mo") or t["sku"], None)
+            t["lineaFija"] = None
 
     def es_exclusivo_linea5(m):
         return bool(m and m.get("secuenciaNo") and not m.get("esEspecial"))
@@ -1317,29 +1328,25 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if not owned:
                 continue
             explota = es_urgente_explosivo(m, overflow, d)
-            if not explota and m.get("secuenciaNo"):
-                continue
-            if explota:
-                cap_owned = sum(cap_restante_hoy(lin, d, cap_modelo(m, lin)) for lin in owned)
-            else:
-                cap_owned = sum(cap_restante_semana(lin, d, cap_modelo(m, lin)) for lin in owned)
+            cap_owned = sum(cap_restante_semana(lin, d, cap_modelo(m, lin)) for lin in owned)
             if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                 continue
-            if explota and restante_modelo(m) <= 1e-6:
-                continue
-            candidatas = lineas_libres_de(m, overflow)
+            candidatas = lineas_modelo(m, overflow) if explota else lineas_libres_de(m, overflow)
             for lin in candidatas:
                 if m["nombre"] in (ocupante.get(lin) or []):
                     continue
-                if hermano_sin_linea_puede_usar(m, lin, overflow):
-                    continue
                 if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
-                ocupante[lin].append(m["nombre"])
+                if hermano_sin_linea_puede_usar(m, lin, overflow):
+                    continue
                 if explota:
-                    cap_owned += cap_restante_hoy(lin, d, cap_modelo(m, lin))
+                    if not desalojar_para(m, lin):
+                        continue
                 else:
-                    cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
+                    ocupante[lin].append(m["nombre"])
+                cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
+            if explota:
+                liberar_mos_sin_producir(m)
 
     def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None):
         for t in m["tareas"]:
@@ -1575,6 +1582,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if len(owned) < 2:
                 continue
             unfixed = [t for t in m["tareas"] if t["restante"] > 0 and not t.get("lineaFija")
+                       and not linea_por_mo.get(t.get("mo") or t["sku"])
                        and d >= dia_inicio_efectivo(t)]
             unfixed.sort(key=cmp_tareas_modelo)
             load = {lin: carga[lin][d] for lin in owned}
@@ -1955,7 +1963,7 @@ class TestLineasExclusivas(unittest.TestCase):
             d0_2[t["modelo"]] += t["plan"]["2"][0]
             d0_4[t["modelo"]] += t["plan"]["4"][0]
         self.assertEqual(d0_2.get("COTTON KIDS", 0), 80, dict(d0_2))
-        self.assertEqual(d0_4.get("COTTON KIDS", 0), 0, "fecha lejana no toma L4: %s" % dict(d0_4))
+        self.assertEqual(d0_4.get("COTTON KIDS", 0), 0, "fecha lejana no toma L4 ocupada: %s" % dict(d0_4))
         self.assertGreater(d0_4.get("RIO CAB", 0), 0, dict(d0_4))
 
         due = [
@@ -1983,7 +1991,7 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(sum(t["planificada"] for t in out2 if t["modelo"] == "COTTON KIDS"), 300)
 
     def test_urgente_explota_mezcla_colores_para_llenar_lineas(self):
-        """En la ventana de fecha mezcla colores para llenar L2 y L4; fuera no."""
+        """En la ventana mezcla colores para llenar L2 y L4; fuera, una sola línea (lote 5.9.28)."""
         mix = [
             {"sku": "N1", "modelo": "COTTON KIDS", "mo": "MO-N1", "cantidad": 40, "cap": 80,
              "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
@@ -2020,14 +2028,19 @@ class TestLineasExclusivas(unittest.TestCase):
         out2 = planificar(lejos, {}, total_dias=5)
         d0_lineas = (sum(t["plan"]["2"][0] for t in out2), sum(t["plan"]["4"][0] for t in out2))
         self.assertEqual(sorted(d0_lineas), [0, 80], "fuera de fecha una sola línea: %s" % (d0_lineas,))
+        colores_l2 = {t["color"] for t in out2 if t["plan"]["2"][0] > 0}
+        colores_l4 = {t["color"] for t in out2 if t["plan"]["4"][0] > 0}
+        vivos = colores_l2 or colores_l4
+        self.assertIn("Negro", vivos, "fuera de fecha sale Negro primero: L2=%s L4=%s" % (colores_l2, colores_l4))
+        self.assertEqual(sum(t["plan"]["2"][0] + t["plan"]["4"][0] for t in out2 if t["color"] == "Negro"), 40)
 
     def test_urgente_fuera_de_fecha_no_desaloja(self):
-        """Fuera de la ventana Cotton no toma L4 ocupada; en la fecha tampoco desaloja a VITA."""
+        """Fuera de la ventana Cotton no toma L4 ocupada; en jueves-viernes sí desaloja a VITA."""
         tareas = [
             {"sku": "CK%d" % i, "modelo": "COTTON KIDS", "mo": "MO-CK%d" % i, "cantidad": 80, "cap": 80,
              "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260918, "solicitadaOrig": 80, "genero": "KIDS"}
-            for i in range(5)
+            for i in range(8)
         ]
         tareas.append(
             {"sku": "V1", "modelo": "VITA BIKER DAMA", "mo": "MO-V", "cantidad": 400, "cap": 130,
@@ -2047,18 +2060,19 @@ class TestLineasExclusivas(unittest.TestCase):
             self.assertNotIn("COTTON KIDS", por("4", d), "día %s no desaloja L4: %s" % (d, por("4", d)))
             self.assertIn("VITA BIKER DAMA", por("4", d), "día %s L4" % d)
         for d in (3, 4):
-            self.assertGreater(por("2", d).get("COTTON KIDS", 0), 0, por("2", d))
-            self.assertNotEqual(por("4", d), {"COTTON KIDS": 80}, "día %s no echa a VITA de L4: %s" % (d, por("4", d)))
+            self.assertIn("COTTON KIDS", por("2", d), "día %s L2 ventana" % d)
+            self.assertIn("COTTON KIDS", por("4", d), "día %s desaloja L4: %s" % (d, por("4", d)))
+            self.assertNotIn("VITA BIKER DAMA", por("4", d), "día %s VITA cedió: %s" % (d, por("4", d)))
 
     def test_urgente_explota_un_dia_antes_y_en_fecha_si_libre(self):
-        """Entra lunes, fecha viernes: lun-mie una línea; jueves y viernes ambas si L4 está libre."""
+        """Entra lunes, fecha viernes: lun-mie una línea si el cupo semanal basta; jueves explota L4 libre."""
         tareas = [
             {"sku": "CK%d" % i, "modelo": "COTTON KIDS", "mo": "MO-CK%d" % i, "cantidad": 80, "cap": 80,
              "lineas": ["2", "4"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260918, "solicitadaOrig": 80, "genero": "KIDS"}
-            for i in range(8)
+            for i in range(5)
         ]
-        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"COTTON KIDS": "NO"})
+        out = planificar(tareas, {}, total_dias=5)
 
         def por(lin, d):
             return sum(t["plan"][lin][d] for t in out if t["modelo"] == "COTTON KIDS")
@@ -2066,9 +2080,8 @@ class TestLineasExclusivas(unittest.TestCase):
         for d in range(3):
             self.assertEqual(por("2", d), 80, "día %s L2" % d)
             self.assertEqual(por("4", d), 0, "día %s L4 aún no explota" % d)
-        for d in (3, 4):
-            self.assertEqual(por("2", d), 80, "día %s L2" % d)
-            self.assertEqual(por("4", d), 80, "día %s L4 libre en ventana" % d)
+        self.assertEqual(por("2", 3), 80, "jueves L2")
+        self.assertEqual(por("4", 3), 80, "jueves L4 libre en ventana")
 
     def test_urgente_excel22_secuencia_no_en_fecha(self):
         """Excel 22: COTTON KIDS Urgente Secuencia=No, fecha=miércoles, 2 y 4. L4 libre → ambas el miércoles."""
