@@ -2991,12 +2991,18 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 11"]["carga"]), 0)
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 12"]["carga"]), 0)
         self.assertEqual(d["supuestos"]["semanas"], 12)
-        self.assertEqual(d["version"], "5.9.28")
+        self.assertEqual(d["version"], "5.9.31")
         lineas = {c["linea"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
         self.assertIn("modelosSinPlanificar", d)
         sin_plan = {m["modelo"] for m in d["modelosSinPlanificar"]}
         self.assertNotIn("COTTON KIDS", sin_plan)
+        cotton_l4 = [
+            c for c in d["semanas"]["Semana 1"]["carga"]
+            if c["modelo"] == "COTTON KIDS" and c["linea"] == "4"
+        ]
+        self.assertTrue(cotton_l4, "Excel 24: COTTON KIDS debe estar en L4 semana 1")
+        self.assertGreater(cotton_l4[0]["dias"]["miercoles"], 0)
         planificados = {c["modelo"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(planificados.isdisjoint(sin_plan), sin_plan & planificados)
         crop_en_plan = any(
