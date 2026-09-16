@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOMOS CUADRO — Manuales de Proceso · Logística e Inventarios</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface2: #f0f3fa;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --green: #059669;
+  --green-bg: #d1fae5;
+  --orange: #d97706;
+  --orange-bg: #fef3c7;
+  --purple: #7c3aed;
+  --purple-bg: #ede9fe;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --shadow: 0 1px 3px rgba(15,23,42,.08), 0 4px 16px rgba(15,23,42,.06);
+  --radius: 14px;
+  --font-head: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font-body); background:var(--bg); color:var(--text); line-height:1.6; min-height:100vh; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+  color: #fff;
+  padding: 28px 32px 0;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 4px 24px rgba(37,99,235,.25);
+}
+.header-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; padding-bottom:20px; }
+.brand-tag { font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-bottom:4px; }
+.header h1 { font-family:var(--font-head); font-size:1.65rem; font-weight:800; letter-spacing:-.02em; }
+.header p { font-size:.88rem; opacity:.85; margin-top:4px; max-width:560px; }
+.header-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.meta-chip { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:5px 14px; font-size:.75rem; font-weight:600; backdrop-filter:blur(4px); }
+
+/* Main tabs */
+.main-tabs { display:flex; gap:4px; overflow-x:auto; padding-bottom:0; scrollbar-width:none; }
+.main-tabs::-webkit-scrollbar { display:none; }
+.main-tab {
+  background:transparent; border:none; color:rgba(255,255,255,.7);
+  font-family:var(--font-head); font-size:.82rem; font-weight:700;
+  padding:10px 18px; cursor:pointer; white-space:nowrap;
+  border-bottom:3px solid transparent; transition:all .2s;
+  border-radius:8px 8px 0 0;
+}
+.main-tab:hover { color:#fff; background:rgba(255,255,255,.1); }
+.main-tab.active { color:#fff; border-bottom-color:#fff; background:rgba(255,255,255,.15); }
+
+/* Layout */
+.container { max-width:1200px; margin:0 auto; padding:28px 24px 60px; }
+.panel { display:none; animation: fadeIn .3s ease; }
+.panel.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+/* Hero cards on home */
+.hero-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; margin-bottom:28px; }
+.hero-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:24px; box-shadow:var(--shadow); cursor:pointer; transition:all .2s;
+  position:relative; overflow:hidden;
+}
+.hero-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
+.hero-card.blue::before { background:var(--accent); }
+.hero-card.green::before { background:var(--green); }
+.hero-card.purple::before { background:var(--purple); }
+.hero-card:hover { transform:translateY(-3px); box-shadow:0 8px 28px rgba(15,23,42,.12); border-color:var(--accent); }
+.hero-card .icon { font-size:2rem; margin-bottom:10px; }
+.hero-card h3 { font-family:var(--font-head); font-size:1.05rem; font-weight:800; margin-bottom:6px; }
+.hero-card p { font-size:.84rem; color:var(--muted); }
+.hero-card .arrow { position:absolute; bottom:20px; right:20px; color:var(--accent); font-size:1.2rem; font-weight:700; }
+
+/* Section title */
+.section-title { font-family:var(--font-head); font-size:1.3rem; font-weight:800; margin-bottom:6px; letter-spacing:-.02em; }
+.section-sub { color:var(--muted); font-size:.88rem; margin-bottom:22px; }
+
+/* Sub tabs */
+.sub-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:22px; }
+.sub-tab {
+  background:var(--surface); border:1.5px solid var(--border); color:var(--muted);
+  font-family:var(--font-head); font-size:.78rem; font-weight:700;
+  padding:7px 16px; border-radius:999px; cursor:pointer; transition:all .2s;
+}
+.sub-tab:hover { border-color:var(--accent); color:var(--accent); }
+.sub-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Cards */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:18px; }
+.card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+
+/* Steps timeline */
+.steps { display:flex; flex-direction:column; gap:0; }
+.step {
+  display:grid; grid-template-columns:44px 1fr; gap:0 16px;
+  position:relative; padding-bottom:20px;
+}
+.step:not(:last-child)::before {
+  content:''; position:absolute; left:21px; top:44px; bottom:0;
+  width:2px; background:var(--border);
+}
+.step-num {
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-weight:800; font-size:.9rem; flex-shrink:0; z-index:1;
+}
+.step-body { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+.step-body h5 { font-family:var(--font-head); font-size:.88rem; font-weight:700; margin-bottom:4px; }
+.step-body p { font-size:.82rem; color:var(--muted); }
+
+/* Role badges */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  margin-top:8px;
+}
+.badge.supervisor { background:#dbeafe; color:#1d4ed8; }
+.badge.operador { background:#d1fae5; color:#065f46; }
+.badge.qa { background:#fef3c7; color:#92400e; }
+.badge.compras { background:#ede9fe; color:#5b21b6; }
+.badge.solicitante { background:#fce7f3; color:#9d174d; }
+.badge.consumibles { background:#ffedd5; color:#c2410c; }
+
+/* Flowchart */
+.flowchart-wrap { text-align:center; margin:16px 0; }
+.flowchart-wrap img { max-width:100%; border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow); }
+.flowchart-caption { font-size:.82rem; color:var(--muted); margin-top:10px; font-style:italic; }
+
+/* Legend */
+.legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.legend-item { display:flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; color:var(--muted); }
+.legend-dot { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+.legend-dot.start { background:var(--green-bg); border:2px solid var(--green); }
+.legend-dot.process { background:var(--accent-light); border:2px solid var(--accent); }
+.legend-dot.decision { background:var(--orange-bg); border:2px solid var(--orange); transform:rotate(45deg); border-radius:2px; width:12px; height:12px; }
+.legend-dot.end { background:var(--purple-bg); border:2px solid var(--purple); }
+.legend-dot.note { background:#f1f5f9; border:2px dashed #94a3b8; }
+
+/* Roles table */
+.roles-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+.role-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+.role-card h5 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin-bottom:4px; }
+.role-card .rel { font-size:.72rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.role-card ul { list-style:none; }
+.role-card li { font-size:.82rem; color:var(--muted); padding:4px 0; padding-left:16px; position:relative; }
+.role-card li::before { content:'→'; position:absolute; left:0; color:var(--accent); font-weight:700; }
+
+/* Records table */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th { background:var(--surface2); color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; padding:10px 14px; text-align:left; border-bottom:2px solid var(--border); font-weight:700; }
+td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(37,99,235,.03); }
+
+/* Systems pills */
+.systems { display:flex; flex-wrap:wrap; gap:10px; }
+.system-pill { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; flex:1; min-width:180px; box-shadow:var(--shadow); }
+.system-pill strong { display:block; font-family:var(--font-head); font-size:.85rem; font-weight:800; margin-bottom:4px; color:var(--accent); }
+.system-pill span { font-size:.78rem; color:var(--muted); }
+
+/* Alert / info box */
+.info-box { background:var(--accent-light); border:1px solid #93c5fd; border-radius:12px; padding:14px 18px; font-size:.84rem; color:#1e40af; margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+.info-box .ico { font-size:1.1rem; flex-shrink:0; }
+
+/* Process map visual */
+.process-map { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0; }
+@media(max-width:768px){ .process-map { grid-template-columns:1fr; } }
+.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; }
+.map-node:hover, .map-node.highlight { border-color:var(--accent); background:var(--accent-light); }
+.map-node .num { font-family:var(--font-head); font-size:2rem; font-weight:800; color:var(--accent); opacity:.3; }
+.map-node h4 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin:6px 0; }
+.map-node p { font-size:.76rem; color:var(--muted); }
+.map-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem; }
+@media(max-width:768px){ .map-arrow { transform:rotate(90deg); } }
+
+/* Footer */
+.footer { text-align:center; padding:24px; color:var(--muted); font-size:.78rem; border-top:1px solid var(--border); margin-top:40px; }
+
+/* Split layout: steps + flowchart side by side on wide screens */
+.split { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+@media(max-width:900px){ .split { grid-template-columns:1fr; } }
+
+.sub-panel { display:none; }
+.sub-panel.active { display:block; animation: fadeIn .25s ease; }
+
+/* Search */
+.search-box { margin-bottom:20px; }
+.search-box input {
+  width:100%; max-width:400px; padding:10px 16px 10px 40px;
+  border:1.5px solid var(--border); border-radius:999px; font-family:var(--font-body);
+  font-size:.88rem; outline:none; transition:border .2s; background:var(--surface);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242 1.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:14px center;
+}
+.search-box input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-top">
+    <div>
+      <div class="brand-tag">SOMOS CUADRO · Logística e Inventarios</div>
+      <h1>Manuales de Proceso</h1>
+      <p>Guía visual de los procesos de Materia Prima, Insumos, Consumibles y Requisición de Compra.</p>
+    </div>
+    <div class="header-meta">
+      <span class="meta-chip">Versión 1.0</span>
+      <span class="meta-chip">16/09/2026</span>
+      <span class="meta-chip">Supervisor de Logística</span>
+    </div>
+  </div>
+  <nav class="main-tabs" id="mainTabs">
+    <button class="main-tab active" data-panel="inicio">🏠 Inicio</button>
+    <button class="main-tab" data-panel="logistica">📦 Materia Prima</button>
+    <button class="main-tab" data-panel="consumibles">🛒 Consumibles</button>
+    <button class="main-tab" data-panel="requisicion">📋 Requisición Compra</button>
+    <button class="main-tab" data-panel="roles">👥 Roles</button>
+    <button class="main-tab" data-panel="registros">📊 Registros</button>
+  </nav>
+</header>
+
+<main class="container">
+
+  <!-- INICIO -->
+  <section class="panel active" id="inicio">
+    <div class="info-box">
+      <span class="ico">💡</span>
+      <span>Selecciona una tarjeta o usa las pestañas superiores para explorar cada proceso. Cada sección incluye pasos detallados, responsables y flujograma visual.</span>
+    </div>
+
+    <div class="hero-grid">
+      <div class="hero-card blue" onclick="goTo('logistica')">
+        <div class="icon">📦</div>
+        <h3>Despacho y Recepción MP</h3>
+        <p>Tela, insumos de Etiquetado, devoluciones y recepción de mercancía comprada con trazabilidad en Odoo.</p>
+        <span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('consumibles')">
+        <div class="icon">🛒</div>
+        <h3>Consumibles Tiendas / Taller</h3>
+        <p>Despacho y recepción de suministros registrados en Sheets de Consumibles (sin Odoo).</p>
+        <span class="arrow">→</span>
+      </div>
+      <div class="hero-card purple" onclick="goTo('requisicion')">
+        <div class="icon">📋</div>
+        <h3>Requisición de Compra</h3>
+        <p>Solicitud de tela y consumibles en Odoo Aprobaciones, con seguimiento de lead time.</p>
+        <span class="arrow">→</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Mapa de procesos</h2>
+    <p class="section-sub">Visión general de cómo se conectan los tres procesos principales del área.</p>
+
+    <div class="process-map">
+      <div class="map-node" onclick="goTo('requisicion')">
+        <div class="num">1</div>
+        <h4>Requisición de Compra</h4>
+        <p>Supervisor identifica necesidad → Odoo Aprobaciones → Compras aprueba</p>
+      </div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('logistica','recepcion-tela')">
+        <div class="num">2</div>
+        <h4>Recepción</h4>
+        <p>Compras informa llegada → QA revisa → Odoo / Sheets</p>
+      </div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('logistica','despacho-tela')">
+        <div class="num">3</div>
+        <h4>Despacho</h4>
+        <p>Área solicita → Picking → Entrega → Registro Odoo / Sheets</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>🎨 Leyenda de flujogramas</h4>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot start"></div> Inicio</div>
+        <div class="legend-item"><div class="legend-dot process"></div> Actividad</div>
+        <div class="legend-item"><div class="legend-dot decision"></div> Decisión</div>
+        <div class="legend-item"><div class="legend-dot end"></div> Fin</div>
+        <div class="legend-item"><div class="legend-dot note"></div> Nota</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>🔧 Sistemas y herramientas</h4>
+      <div class="systems">
+        <div class="system-pill"><strong>Audaces</strong><span>Trazos (tizadas) para cálculo de tela</span></div>
+        <div class="system-pill"><strong>Odoo</strong><span>OT, PC, traslados entre ubicaciones</span></div>
+        <div class="system-pill"><strong>Google Sheets MP</strong><span>Control interno de entregas y devoluciones</span></div>
+        <div class="system-pill"><strong>Sheets Consumibles</strong><span>Solicitudes y control de inventario</span></div>
+        <div class="system-pill"><strong>Hoja soporte recepción</strong><span>Variables revisadas por rollo</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGÍSTICA MP -->
+  <section class="panel" id="logistica">
+    <h2 class="section-title">Materia Prima e Insumos</h2>
+    <p class="section-sub">Despacho y recepción de tela e insumos con trazabilidad física y en Odoo.</p>
+
+    <div class="sub-tabs" id="logisticaSubTabs">
+      <button class="sub-tab active" data-sub="despacho-tela">Despacho tela</button>
+      <button class="sub-tab" data-sub="despacho-insumos">Insumos Etiquetado</button>
+      <button class="sub-tab" data-sub="devolucion">Devolución tela</button>
+      <button class="sub-tab" data-sub="recepcion-tela">Recepción tela</button>
+      <button class="sub-tab" data-sub="rechazados">Rechazados</button>
+      <button class="sub-tab" data-sub="recepcion-insumos">Recepción insumos</button>
+    </div>
+
+    <!-- Despacho tela -->
+    <div class="sub-panel active" id="despacho-tela">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Despacho de Tela (Proceso 5.1)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Solicitud con OT en Odoo</h5><p>El área solicitante pide tela y entrega trazos impresos de Audaces.</p><span class="badge solicitante">Producción / Diseño / Pedidos / Calidad</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Cálculo de tela</h5><p>Supervisor calcula cantidad necesaria según trazos recibidos.</p><span class="badge supervisor">Supervisor</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Informa al equipo</h5><p>Envía información del cálculo a operadores de Materia Prima.</p><span class="badge supervisor">Supervisor</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Picking</h5><p>Operadores preparan el pedido según indicación.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">5</div><div class="step-body"><h5>Entrega física</h5><p>Se entrega la tela al área solicitante.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">6</div><div class="step-body"><h5>Registro Sheets</h5><p>Registro en Sheets de control (SKU, cantidad, área).</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">7</div><div class="step-body"><h5>Registro Odoo</h5><p>OT + PC: TH/Existencia MP → Preproducción.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/01_despacho_tela.png" alt="Flujograma despacho de tela" loading="lazy">
+            <p class="flowchart-caption">Proceso 1.1 — Despacho de Tela a Áreas Solicitantes</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Despacho insumos -->
+    <div class="sub-panel" id="despacho-insumos">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Despacho Insumos Etiquetado (Proceso 5.2)</h4>
+          <div class="info-box"><span class="ico">ℹ️</span><span>Insumos: hang tag, cinta TPU, tinta Zencamer, cordones, etc. Mismo flujo operativo que despacho de tela.</span></div>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Solicitud de insumos</h5><p>Etiquetado solicita insumos distintos a tela.</p><span class="badge solicitante">Etiquetado</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Picking</h5><p>Operadores preparan insumos solicitados.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Entrega física</h5><p>Entrega al área de Etiquetado.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Registro Sheets</h5><p>Registro en Sheets de control interno.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">5</div><div class="step-body"><h5>Registro Odoo</h5><p>Supervisor registra movimiento en Odoo.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/02_despacho_insumos_etiquetado.png" alt="Flujograma despacho insumos" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Devolución -->
+    <div class="sub-panel" id="devolucion">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Devolución de Tela (Proceso 5.3)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Informe de rollos no usados</h5><p>Producción informa rollos que ya no utilizará.</p><span class="badge solicitante">Producción</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Retiro y pesaje</h5><p>Operadores retiran y pesan rollos devueltos.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Actualizar hablador</h5><p>Modifican hablador con nuevo peso.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Ubicación en almacén</h5><p>Ubican rollo en sección correspondiente.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">5</div><div class="step-body"><h5>Registro Sheets</h5><p>Registran devolución en Sheets de control.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">6</div><div class="step-body"><h5>Registro Odoo</h5><p>Supervisor registra movimiento de devolución.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/03_devolucion_tela.png" alt="Flujograma devolución tela" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recepción tela -->
+    <div class="sub-panel" id="recepcion-tela">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Recepción de Tela (Proceso 6.1)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Informe de llegada</h5><p>Compras informa llegada y entrega detalle.</p><span class="badge compras">Compras</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Revisión en plegadora</h5><p>Operadores tienden rollo para verificar calidad.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--orange-bg);color:var(--orange)">3</div><div class="step-body"><h5>QA valida rollo</h5><p>Calidad acompaña revisión y anota variables. Aprueba o rechaza.</p><span class="badge qa">Operadores + QA</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Pesaje e identificación</h5><p>Pesan, identifican con hablador y ubican (aprobados por tipo / rechazados en área de rechazo).</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">5</div><div class="step-body"><h5>Hoja de soporte</h5><p>Registran todos los rollos en hoja de soporte de recepción.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">6</div><div class="step-body"><h5>Traslado Odoo (aprobados)</h5><p>TH/Por Auditar Tela → Materia Prima con kg/m validados.</p><span class="badge supervisor">Supervisor</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--red-bg);color:var(--red)">7</div><div class="step-body"><h5>Rechazados / Diferencias</h5><p>Rechazados: notificar Compras (sin transferencia Odoo). Diferencias: informar para ajuste.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujogramas</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/04_recepcion_tela.png" alt="Flujograma recepción tela" loading="lazy">
+            <p class="flowchart-caption">Flujo principal — recepción con decisión QA</p>
+          </div>
+          <div class="flowchart-wrap" style="margin-top:16px">
+            <img src="flowcharts/04b_recepcion_tela_rechazo.png" alt="Flujograma rollo rechazado" loading="lazy">
+            <p class="flowchart-caption">Rama — rollo rechazado por Calidad</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rechazados -->
+    <div class="sub-panel" id="rechazados">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Rechazados y Devolución al Proveedor (Proceso 6.2)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Reclamo al proveedor</h5><p>Compras gestiona reclamo correspondiente.</p><span class="badge compras">Compras</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Apto para devolución</h5><p>Compras informa que rollos están listos para devolver.</p><span class="badge compras">Compras</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Preparación de rollos</h5><p>Embobinan y protegen rollos como originalmente.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">4</div><div class="step-body"><h5>Listos para retiro</h5><p>Informan a Compras que rollos están listos.</p><span class="badge supervisor">Supervisor / Operadores</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/05_rechazados_devolucion.png" alt="Flujograma rechazados" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recepción insumos -->
+    <div class="sub-panel" id="recepcion-insumos">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Recepción de Insumos no Tela (Proceso 6.3)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Detalle de insumos</h5><p>Compras entrega detalle de insumos recibidos.</p><span class="badge compras">Compras</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Conteo</h5><p>Operadores contabilizan insumos recibidos.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Reporte al Supervisor</h5><p>Pasan detalle al Supervisor.</p><span class="badge operador">Operadores MP</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">4</div><div class="step-body"><h5>Traslado Odoo</h5><p>Supervisor realiza traslado — inventario teórico disponible.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/06_recepcion_insumos.png" alt="Flujograma recepción insumos" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONSUMIBLES -->
+  <section class="panel" id="consumibles">
+    <h2 class="section-title">Consumibles — Tiendas y Taller</h2>
+    <p class="section-sub">Despacho y recepción registrados en Sheets de Consumibles (sin Odoo).</p>
+
+    <div class="sub-tabs" id="consumiblesSubTabs">
+      <button class="sub-tab active" data-sub="despacho-cons">Despacho</button>
+      <button class="sub-tab" data-sub="recepcion-cons">Recepción</button>
+    </div>
+
+    <div class="sub-panel active" id="despacho-cons">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Despacho Consumibles (Proceso 8.1)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Solicitud en Sheets</h5><p>Tienda o Taller registra requerimiento en Sheets de solicitudes.</p><span class="badge solicitante">Tienda / Taller</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Revisión de solicitudes</h5><p>Operador revisa Sheets de Tiendas y Taller.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Impresión y picking</h5><p>Imprime solicitud y realiza picking.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--orange-bg);color:var(--orange)">4</div><div class="step-body"><h5>Entrega según destino</h5><p><strong>Tiendas:</strong> prepara cajas para envío. <strong>Taller:</strong> entrega directa interna.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">5</div><div class="step-body"><h5>Registro descuento</h5><p>Registra movimiento en Sheets de control de inventario.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/07_despacho_consumibles.png" alt="Flujograma despacho consumibles" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="recepcion-cons">
+      <div class="split">
+        <div class="card">
+          <h4>📋 Pasos — Recepción Consumibles (Proceso 8.2)</h4>
+          <div class="steps">
+            <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Informe de llegada</h5><p>Compras informa llegada y entrega detalle.</p><span class="badge compras">Compras</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Recepción y conteo</h5><p>Recibe, contabiliza y chequea lo recibido.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>Ubicación</h5><p>Ubica consumibles en zona de almacén.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Informe y registro</h5><p>Informa al Supervisor y registra en Sheets.</p><span class="badge consumibles">Operador Consumibles</span></div></div>
+            <div class="step"><div class="step-num" style="background:var(--red-bg);color:var(--red)">5</div><div class="step-body"><h5>Diferencias</h5><p>Si hay diferencias, Supervisor informa a Compras.</p><span class="badge supervisor">Supervisor</span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>📊 Flujograma</h4>
+          <div class="flowchart-wrap">
+            <img src="flowcharts/08_recepcion_consumibles.png" alt="Flujograma recepción consumibles" loading="lazy">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQUISICIÓN -->
+  <section class="panel" id="requisicion">
+    <h2 class="section-title">Requisición de Compra</h2>
+    <p class="section-sub">Solicitud de tela y consumibles en Odoo — módulo de Aprobaciones.</p>
+
+    <div class="split">
+      <div class="card">
+        <h4>📋 Pasos — Solicitud de Requisición</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div><div class="step-body"><h5>Identificar necesidad</h5><p>Supervisor detecta necesidad de tela o consumibles.</p><span class="badge supervisor">Supervisor</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div><div class="step-body"><h5>Odoo Aprobaciones</h5><p>Ingresa al módulo de Aprobaciones en Odoo.</p><span class="badge supervisor">Supervisor</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">3</div><div class="step-body"><h5>SKU y cantidad</h5><p>Ingresa SKU (o descripción si no existe) y cantidad requerida.</p><span class="badge supervisor">Supervisor</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">4</div><div class="step-body"><h5>Justificación</h5><p>Adjunta justificación respaldada en datos y envía la orden.</p><span class="badge supervisor">Supervisor</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--orange-bg);color:var(--orange)">5</div><div class="step-body"><h5>Revisión Compras</h5><p>Compras revisa, aprueba o solicita información adicional.</p><span class="badge compras">Compras</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--accent-light);color:var(--accent)">6</div><div class="step-body"><h5>Aprobación y compra</h5><p>Compras aprueba y gestiona compra según lead time.</p><span class="badge compras">Compras</span></div></div>
+          <div class="step"><div class="step-num" style="background:var(--purple-bg);color:var(--purple)">7</div><div class="step-body"><h5>Seguimiento lead time</h5><p>Supervisor da seguimiento al tiempo de entrega.</p><span class="badge supervisor">Supervisor</span></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h4>📊 Flujogramas</h4>
+        <div class="flowchart-wrap">
+          <img src="flowcharts/req_01_requisicion_compra.png" alt="Flujograma requisición compra" loading="lazy">
+          <p class="flowchart-caption">Flujo principal — requisición de compra</p>
+        </div>
+        <div class="flowchart-wrap" style="margin-top:16px">
+          <img src="flowcharts/req_02_requisicion_info_adicional.png" alt="Flujograma info adicional" loading="lazy">
+          <p class="flowchart-caption">Rama — Compras solicita información adicional</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROLES -->
+  <section class="panel" id="roles">
+    <h2 class="section-title">Roles y Responsabilidades</h2>
+    <p class="section-sub">Quién hace qué en cada proceso del área de Logística e Inventarios.</p>
+
+    <div class="roles-grid">
+      <div class="role-card">
+        <div class="rel">Rol propio</div>
+        <h5>Supervisor de Logística e Inventarios</h5>
+        <ul>
+          <li>Calcula tela según trazos Audaces</li>
+          <li>Registra OT, PC y traslados en Odoo</li>
+          <li>Notifica diferencias y rechazos a Compras</li>
+          <li>Genera requisiciones de compra en Odoo</li>
+          <li>Da seguimiento al lead time</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Equipo a cargo</div>
+        <h5>Operadores de Materia Prima</h5>
+        <ul>
+          <li>Preparan picking y entregan pedidos</li>
+          <li>Registran en Sheets de control interno</li>
+          <li>Reciben, pesan e identifican rollos</li>
+          <li>Ubican en almacén con habladores</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Calidad</div>
+        <h5>Operador de Calidad (QA)</h5>
+        <ul>
+          <li>Acompaña revisión en plegadora</li>
+          <li>Valida aprobación o rechazo de rollos</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Equipo a cargo</div>
+        <h5>Operador de Consumibles</h5>
+        <ul>
+          <li>Revisa Sheets de Tiendas y Taller</li>
+          <li>Picking, empaque y entrega de consumibles</li>
+          <li>Registra movimientos en Sheets</li>
+          <li>Recibe consumibles comprados</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Área externa</div>
+        <h5>Compras</h5>
+        <ul>
+          <li>Informa llegada de mercancía</li>
+          <li>Revisa y aprueba requisiciones en Odoo</li>
+          <li>Gestiona reclamos y devoluciones</li>
+          <li>Solicita ajustes por diferencias</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Áreas solicitantes</div>
+        <h5>Producción / Diseño / Pedidos / Calidad / Etiquetado</h5>
+        <ul>
+          <li>Solicitan tela o insumos vinculados a OT</li>
+          <li>Entregan trazos de Audaces</li>
+          <li>Informan devoluciones de rollos</li>
+        </ul>
+      </div>
+      <div class="role-card">
+        <div class="rel">Áreas solicitantes</div>
+        <h5>Tiendas / Taller</h5>
+        <ul>
+          <li>Registran requerimientos en Sheets de solicitudes</li>
+          <li>Reciben consumibles despachados</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- REGISTROS -->
+  <section class="panel" id="registros">
+    <h2 class="section-title">Registros y Soportes</h2>
+    <p class="section-sub">Dónde y cuándo se registra cada movimiento del proceso.</p>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Registro</th><th>Responsable</th><th>Dónde y cuándo</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Entrega picking (tela/insumos)</strong></td><td>Operadores</td><td>Sheets de control interno — al momento de la entrega</td></tr>
+            <tr><td><strong>Salida a Preproducción</strong></td><td>Supervisor</td><td>Odoo — Orden de Trabajo y PC de transferencia</td></tr>
+            <tr><td><strong>Devolución de tela</strong></td><td>Operadores</td><td>Sheets de control interno — al pesar el rollo devuelto</td></tr>
+            <tr><td><strong>Movimiento de devolución</strong></td><td>Supervisor</td><td>Odoo — tras el registro físico</td></tr>
+            <tr><td><strong>Recepción de rollos</strong></td><td>Operadores + QA</td><td>Hoja de soporte de recepción — durante revisión en plegadora</td></tr>
+            <tr><td><strong>Traslado tela aprobada</strong></td><td>Supervisor</td><td>Odoo — TH/Por Auditar Tela → Materia Prima</td></tr>
+            <tr><td><strong>Notificación rechazo/diferencias</strong></td><td>Supervisor</td><td>Comunicación directa a Compras</td></tr>
+            <tr><td><strong>Recepción insumos (no tela)</strong></td><td>Operadores</td><td>Conteo físico y reporte al Supervisor</td></tr>
+            <tr><td><strong>Traslado insumos (no tela)</strong></td><td>Supervisor</td><td>Odoo</td></tr>
+            <tr><td><strong>Entrega consumibles</strong></td><td>Operador Consumibles</td><td>Sheets de control de inventario — al entregar</td></tr>
+            <tr><td><strong>Recepción consumibles</strong></td><td>Operador Consumibles</td><td>Sheets de Consumibles — al recibir y ubicar</td></tr>
+            <tr><td><strong>Requisición de compra</strong></td><td>Supervisor</td><td>Odoo — módulo de Aprobaciones</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h4>📊 Vista general — Flujograma completo</h4>
+      <div class="flowchart-wrap">
+        <img src="flowcharts/00_overview_logistica.png" alt="Vista general procesos logística" loading="lazy">
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  SOMOS CUADRO · Área de Logística e Inventarios de Materia Prima y Consumibles · Manual v1.0 · 16/09/2026
+</footer>
+
+<script>
+// Main tabs
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
+// Sub tabs — generic handler
+function setupSubTabs(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const parentPanel = container.closest('.panel');
+  container.querySelectorAll('.sub-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      parentPanel.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.sub).classList.add('active');
+    });
+  });
+}
+setupSubTabs('logisticaSubTabs');
+setupSubTabs('consumiblesSubTabs');
+
+// Navigate from hero cards / map
+function goTo(panel, sub) {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-panel="${panel}"]`).classList.add('active');
+  document.getElementById(panel).classList.add('active');
+  if (sub) {
+    const subTabsId = panel === 'consumibles' ? 'consumiblesSubTabs' : 'logisticaSubTabs';
+    const container = document.getElementById(subTabsId);
+    if (container) {
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(panel).querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      const targetTab = container.querySelector(`[data-sub="${sub}"]`);
+      if (targetTab) {
+        targetTab.classList.add('active');
+        document.getElementById(sub).classList.add('active');
+      }
+    }
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
