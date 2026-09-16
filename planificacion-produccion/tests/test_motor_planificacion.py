@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.28 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.31 (espejo de las reglas en Codigo.gs)."""
+import json
 import math
 import os
 import re
@@ -3022,7 +3023,12 @@ class TestDashboardInfo(unittest.TestCase):
 
 class TestDashboardUx(unittest.TestCase):
     def _html(self):
-        path = os.path.join(os.path.dirname(__file__), "..", "..", "Dashboard_Planificacion.html")
+        path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def _gs(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             return f.read()
 
@@ -3072,6 +3078,52 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn('class="note imp-leyenda"', html)
         self.assertIn('Las Ordenes de Produccion con siglas "PD"', html)
         self.assertIn("estan a la esperas de ser creadas en Odoo", html)
+        self.assertIn("persistCheckItems", html)
+        self.assertIn("guardarChecksImpresion", html)
+        self.assertIn("leerDashboardPublicado", html)
+        self.assertIn("se guarda por orden, para todo el equipo", html)
+        self.assertNotIn('id="dash-data"', html)
+        self.assertLess(len(html), 200_000)
+
+    def test_apps_script_publica_snapshot_y_checks_por_mo(self):
+        gs = self._gs()
+        self.assertIn('addItem("🔄 Actualizar Dashboard", "actualizarDashboardInformacion")', gs)
+        self.assertIn("function actualizarDashboardInformacion()", gs)
+        self.assertIn("function leerDashboardPublicado()", gs)
+        self.assertIn("function leerChecksImpresion()", gs)
+        self.assertIn("function guardarChecksImpresion(", gs)
+        self.assertIn("function leerModelosSinPlanificar_(", gs)
+        self.assertIn('var HOJA_DASH_CACHE = "_DashboardCache"', gs)
+        self.assertIn('var HOJA_IMP_CHECKS = "_ImpresionChecks"', gs)
+        self.assertIn("resp.modelosSinPlanificar", gs)
+        self.assertIn("DASH-CACHE-V1", gs)
+        self.assertIn("esUrgenteExplosivo_", gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.31"', gs)
+
+    def test_cache_json_se_parte_y_rearma(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
+        with open(path, encoding="utf-8") as f:
+            raw = f.read()
+        tam = 40000
+        chunks = [raw[i:i + tam] for i in range(0, len(raw), tam)]
+        self.assertGreater(len(chunks), 1)
+        self.assertLess(max(len(c) for c in chunks), 50000)
+        self.assertEqual("".join(chunks), raw)
+        wrapped = json.dumps({"success": True, "data": json.loads(raw), "version": "5.9.31"})
+        chunks2 = [wrapped[i:i + tam] for i in range(0, len(wrapped), tam)]
+        parsed = json.loads("".join(chunks2))
+        self.assertTrue(parsed["success"])
+        self.assertEqual(parsed["data"]["version"], "5.9.31")
+        self.assertIn("semanas", parsed["data"])
+
+    def test_clave_check_impresion_por_orden(self):
+        def imp_key(wi, sku, mo):
+            return str(wi) + "|" + str(sku or "") + "|" + str(mo or "")
+        k = imp_key(0, "SKU-1", "PD-001")
+        self.assertEqual(k, "0|SKU-1|PD-001")
+        st = {k: 1}
+        self.assertTrue(st[imp_key(0, "SKU-1", "PD-001")])
+        self.assertNotIn(imp_key(1, "SKU-1", "PD-001"), st)
 
 
 if __name__ == "__main__":

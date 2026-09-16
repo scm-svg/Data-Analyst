@@ -1,10 +1,26 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.28 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.31 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - DASHBOARD WEB COMPARTIDO: el menú 🔄 Actualizar Dashboard publica
+ *     un snapshot en la hoja oculta _DashboardCache. doGet y el enlace
+ *     de la app web sirven ese snapshot (el URL no cambia). Impresión
+ *     Digital guarda los checks por MO+SKU+semana en _ImpresionChecks
+ *     para que todo el mundo vea el mismo seguimiento por orden.
+ *   - URGENTE EN FECHA ESTIMADA (base 5.9.28): un modelo Urgente/mínima
+ *     con 2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
+ *     El día de Fecha de Salida Estimada y el hábil anterior toma
+ *     SÍ O SÍ todas las asignadas. En esa ventana, secuencia de color,
+ *     género, reserva de hermano y prioridad de otros (salvo un
+ *     Especial que sí pueda producir ese día) quedan atrás para ese
+ *     producto: desaloja ocupantes fantasma (CARRERA en L4 sin Día
+ *     de inicio) y no cede L4 a un hermano sin línea. Fuera de esa
+ *     ventana, la segunda línea solo si está libre (regla 5.9.28).
+ *     Secuencia=No no impide explotar. Media/Alta/Baja conservan
+ *     Negro → Blanco → Marino y CAB → DAMA → KIDS.
  *   - SECUENCIA=NO EN LÍNEA 5: en Priorizacion col. H, No significa
  *     que ese modelo NO comparte la Línea 5. Corre solo (sin rueda
  *     en paralelo) y no espera/cede por color o género de la familia
@@ -19,7 +35,8 @@
  *     línea), drill-down semana→modelo→SKU, seguimiento de líneas
  *     (puntos por semana), pendientes, pestaña de almacén y supuestos
  *     (cap por modelo, lead time 4 días, apoyo 50% L1). Menú
- *     📊 Dashboard de información. doGet sirve el mismo HTML.
+ *     📊 Dashboard de información (modal) y 🔄 Actualizar Dashboard
+ *     (publica el HTML web). doGet sirve el mismo HTML.
  *   - META = COLUMNA FALTANTE: Proyeccion y el plan usan el valor de
  *     Faltante en Por Hacer, no Cantidad Solicitada − Cantida Producida.
  *     RIO CAB 1871 (no 1834) y SHORT SPORT R1 CAB+DAMA 202 (no 195).
@@ -130,7 +147,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.28";
+var VERSION_SISTEMA = "5.9.31";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -154,6 +171,10 @@ var COLOR_META_TEXTO_PROY = "#38761D";
 var COLOR_BORDE_INTERNO = "#D0D0D0";
 var NOMBRES_PRIO_SKU = ["Priorizacion - SKUs", "Priorizacion - SKUS", "Priorización - SKUs", "Priorizacion SKUs"];
 var HOJA_SYNC_COSTURA = "Sync Costura Aplicada";
+var HOJA_DASH_CACHE = "_DashboardCache";
+var HOJA_IMP_CHECKS = "_ImpresionChecks";
+var DASH_CACHE_ESQUEMA = "DASH-CACHE-V1";
+var DASH_CACHE_CHUNK = 40000;
 var SEMANAS_DEFAULT = 12;
 var SEMANAS_MAX = 12;
 var NOMBRES_HOJAS_SEMANAS = [
@@ -176,6 +197,7 @@ function onOpen() {
     .addItem("1️⃣ Actualizar MOs", "actualizarMOs")
     .addItem("2️⃣ Actualizar Priorización", "actualizarModelosPriorizacion")
     .addItem("3️⃣ Generar Planificación", "generarPlanificacionSemanal")
+    .addItem("🔄 Actualizar Dashboard", "actualizarDashboardInformacion")
     .addItem("📊 Dashboard de información", "abrirDashboardInformacion")
     .addSeparator()
     .addItem("🔄 Sincronizar Producción", "sincronizarProduccionExterna")
@@ -469,10 +491,17 @@ function hojaPorNombreFlex_(ss, nombres) {
   return null;
 }
 
+function fechaLocalYmd_(y, m, d) {
+  return new Date(y, m, d).getTime();
+}
+
 function claveFecha_(v) {
-  if (v instanceof Date && !isNaN(v)) return v.getTime();
+  if (v instanceof Date && !isNaN(v)) {
+    return fechaLocalYmd_(v.getFullYear(), v.getMonth(), v.getDate());
+  }
   if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) {
-    return new Date(Math.round((v - 25569) * 86400 * 1000)).getTime();
+    var utcN = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return fechaLocalYmd_(utcN.getUTCFullYear(), utcN.getUTCMonth(), utcN.getUTCDate());
   }
   var s = norm_(v);
   if (s === "") return Infinity;
@@ -480,11 +509,12 @@ function claveFecha_(v) {
   if (m) {
     var anio = Number(m[3]); if (anio < 100) anio += 2000;
     var f = new Date(anio, Number(m[2]) - 1, Number(m[1]));
-    if (!isNaN(f)) return f.getTime();
+    if (!isNaN(f)) return fechaLocalYmd_(f.getFullYear(), f.getMonth(), f.getDate());
   }
   var n = Number(s);
   if (isFinite(n) && n > 20000 && n < 80000) {
-    return new Date(Math.round((n - 25569) * 86400 * 1000)).getTime();
+    var utcS = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return fechaLocalYmd_(utcS.getUTCFullYear(), utcS.getUTCMonth(), utcS.getUTCDate());
   }
   return Infinity;
 }
@@ -1639,25 +1669,28 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
+    var explota = esUrgenteExplosivo_(mP, overflow, d);
     while (carga[lin][d] < 0.999) {
       var soloMinima = restanteMinima_(mP) > 0;
       var rank = null;
       var hayRank = false;
-      for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
-        var tR = mP.tareas[tiR];
-        if (tR.restante <= 0) continue;
-        if (soloMinima && !tR.esMinima) continue;
-        var claveR = claveMO_(tR);
-        var fijaR = lineaPorMO[claveR] || tR.lineaFija;
-        if (fijaR && fijaR !== lin) continue;
-        if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
-        rank = rangoColor_(tR.color);
-        hayRank = true;
-        break;
+      if (!explota) {
+        for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
+          var tR = mP.tareas[tiR];
+          if (tR.restante <= 0) continue;
+          if (soloMinima && !tR.esMinima) continue;
+          var claveR = claveMO_(tR);
+          var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+          if (fijaR && fijaR !== lin) continue;
+          if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
+          rank = rangoColor_(tR.color);
+          hayRank = true;
+          break;
+        }
       }
       if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayRank ? rank : null) <= 0) break;
       if (restanteMinima_(mP) <= 0 && tuvoMinima_(mP)) break;
-      if (debeCederAlLoteFamilia_(mP, overflow)) break;
+      if (!explota && debeCederAlLoteFamilia_(mP, overflow)) break;
     }
   }
 
@@ -1736,6 +1769,67 @@ function generarPlanificacionSemanal_() {
     });
     out.sort();
     return out;
+  }
+
+  function ymdDeFechaObj_(f) {
+    if (!f || isNaN(f.getTime())) return null;
+    return f.getFullYear() * 10000 + (f.getMonth() + 1) * 100 + f.getDate();
+  }
+
+  function ymdDeClave_(ms) {
+    if (!isFinite(ms)) return null;
+    return ymdDeFechaObj_(new Date(ms));
+  }
+
+  function diaObjetivoModelo_(m) {
+    if (!m || !isFinite(m.fechaMin)) return null;
+    var ymdObj = ymdDeClave_(m.fechaMin);
+    if (ymdObj === null) return null;
+    var ymd0 = ymdDeFechaObj_(fechaDeDia_(cfg, 0));
+    if (ymdObj < ymd0) return 0;
+    var ymdLast = ymdDeFechaObj_(fechaDeDia_(cfg, totalDias - 1));
+    if (ymdObj > ymdLast) return null;
+    for (var dx = 0; dx < totalDias; dx++) {
+      var ymdi = ymdDeFechaObj_(fechaDeDia_(cfg, dx));
+      if (ymdi >= ymdObj) return dx;
+    }
+    return null;
+  }
+
+  function enVentanaFechaEstimada_(m, dHoy) {
+    var diaObj = diaObjetivoModelo_(m);
+    if (diaObj === null) return false;
+    return dHoy === diaObj || dHoy === diaObj - 1;
+  }
+
+  function esCandidatoExplosivo_(m, overflow) {
+    if (!m || m.esEspecial) return false;
+    if (bandaViva_(m) > BANDA_URGENTE) return false;
+    return lineasModelo_(m, overflow).length >= 2;
+  }
+
+  function esUrgenteExplosivo_(m, overflow, d) {
+    return esCandidatoExplosivo_(m, overflow) && enVentanaFechaEstimada_(m, d);
+  }
+
+  function produjoAlgo_(t) {
+    if (!t || !t.plan) return false;
+    for (var linP in t.plan) {
+      var arrP = t.plan[linP] || [];
+      for (var iP = 0; iP < arrP.length; iP++) {
+        if ((arrP[iP] || 0) > 0) return true;
+      }
+    }
+    return false;
+  }
+
+  function liberarMosSinProducir_(m) {
+    if (!m) return;
+    m.tareas.forEach(function (t) {
+      if (t.restante <= 0 || produjoAlgo_(t)) return;
+      delete lineaPorMO[claveMO_(t)];
+      t.lineaFija = null;
+    });
   }
 
   function lineasClaveModelo_(m, overflow) {
@@ -1821,6 +1915,7 @@ function generarPlanificacionSemanal_() {
 
   function debeEsperarLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && lineasModelo_(m, overflow).indexOf("5") !== -1) return false;
     var fam = familiaModelo_(m);
     if (!fam) return false;
@@ -1860,6 +1955,7 @@ function generarPlanificacionSemanal_() {
 
   function debeCederAlLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && (lineasDondeEsta_(m.nombre).indexOf("5") !== -1 ||
         lineasModelo_(m, overflow).indexOf("5") !== -1)) return false;
     var fam = familiaModelo_(m);
@@ -1957,9 +2053,18 @@ function generarPlanificacionSemanal_() {
       return out;
     }
 
-    function ocupaPeorQue_(nomOcc, mNew) {
+    function ocupaPeorQue_(nomOcc, mNew, lin) {
       var mO = mapaModelos[nomOcc];
       if (!mO) return true;
+      if (esUrgenteExplosivo_(mNew, overflowL1, d)) {
+        if (!modeloPuedeProducirHoyNom_(nomOcc, lin, d, overflowL1)) return true;
+        if (familiaModelo_(mO) === familiaModelo_(mNew)) return true;
+        var bOx = bandaViva_(mO);
+        var bNx = bandaViva_(mNew);
+        if (bOx < bNx) return false;
+        if (bOx === bNx && mO.prioMin < mNew.prioMin) return false;
+        return true;
+      }
       if (familiaModelo_(mO) === familiaModelo_(mNew) && !mNew.esEspecial) return false;
       var bO = bandaViva_(mO);
       var bN = bandaViva_(mNew);
@@ -1977,6 +2082,14 @@ function generarPlanificacionSemanal_() {
         }
         return true;
       }
+      if (esUrgenteExplosivo_(m, overflowL1, d)) {
+        var iF;
+        for (iF = 0; iF < occ.length; iF++) {
+          if (!ocupaPeorQue_(occ[iF], m, lin)) return false;
+        }
+        ocupante[lin] = [m.nombre];
+        return true;
+      }
       if (occ.length < maxOcupantes_(lin, m)) {
         ocupante[lin].push(m.nombre);
         return true;
@@ -1984,7 +2097,7 @@ function generarPlanificacionSemanal_() {
       var worstI = -1;
       var iW;
       for (iW = 0; iW < occ.length; iW++) {
-        if (ocupaPeorQue_(occ[iW], m)) {
+        if (ocupaPeorQue_(occ[iW], m, lin)) {
           worstI = iW;
           break;
         }
@@ -2031,7 +2144,9 @@ function generarPlanificacionSemanal_() {
       });
       if (ya) return;
       if (debeEsperarLoteFamilia_(m, overflowL1)) return;
-      var libres = lineasLibresDe_(m);
+      var libres = lineasLibresDe_(m).filter(function (linLib) {
+        return modeloPuedeProducirHoyNom_(m.nombre, linLib, d, overflowL1);
+      });
       if (libres.length === 0) {
         libres = lineasDondePuedeHoy_(m).filter(function (lin) {
           return maxOcupantes_(lin, m) === 1;
@@ -2067,14 +2182,22 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
+      var explota = esUrgenteExplosivo_(m, overflowL1, d);
       var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
-      if (restanteModelo_(m) <= capOwned + 0.001) return;
-      lineasLibresDe_(m).forEach(function (lin) {
-        if (restanteModelo_(m) <= capOwned + 0.001) return;
-        if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
-        ocupante[lin].push(m.nombre);
+      if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
+      var candidatas = explota ? lineasModelo_(m, overflowL1) : lineasLibresDe_(m);
+      candidatas.forEach(function (lin) {
+        if (ocupante[lin].indexOf(m.nombre) !== -1) return;
+        if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
+        if (!explota && hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
+        if (explota) {
+          if (!desalojarPara_(m, lin)) return;
+        } else {
+          ocupante[lin].push(m.nombre);
+        }
         capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
+      if (explota) liberarMosSinProducir_(m);
     });
 
     vivos.forEach(function (m) {
@@ -2424,6 +2547,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
+    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas. Color, género y prioridad de otros quedan atrás para ese producto (un Especial que sí produzca ese día no se toca). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
@@ -4254,10 +4378,11 @@ function supuestosDashboard_(capsModelo) {
     capsModelo: capsModelo || {},
     notas: [
       "La planificación se puede regenerar (menú Producción → Generar Planificación) si hay consideraciones mayores: paros, cambio de mix, MOs nuevas o ajustes de prioridad.",
-      "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2; el ocupante nativo de L1 se queda con el otro 50%.",
-      "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
-      "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
-      "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo."
+    "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2; el ocupante nativo de L1 se queda con el otro 50%.",
+    "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
+    "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
+    "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo.",
+    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se conservan por MO."
     ]
   };
 }
@@ -4360,7 +4485,7 @@ function obtenerDatosDashboardCompleto() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var resp = {
     backlog: [], semanas: {}, proyModelo: [], proySku: [], fechasSemanas: {}, fechasDias: {},
-    skuDiarioS1: {}, pendientes: [], almacenModelo: [], almacenSku: [],
+    skuDiarioS1: {}, pendientes: [], modelosSinPlanificar: [], almacenModelo: [], almacenSku: [],
     supuestos: {},
     opcionesFiltro: { modelos: [], skus: [], generos: [], colores: [], tallas: [], prioridades: [], lineas: [] }
   };
@@ -4730,6 +4855,304 @@ function obtenerDatosDashboardCompleto() {
     if (s.modelo && s.cap) capsModelo[s.modelo] = s.cap;
   });
   resp.supuestos = supuestosDashboard_(capsModelo);
+  resp.modelosSinPlanificar = leerModelosSinPlanificar_(ss, resp);
+  resp.version = VERSION_SISTEMA;
 
   return JSON.stringify({ success: true, data: resp, version: VERSION_SISTEMA });
+}
+
+// =====================================================================
+//  DASHBOARD WEB: SNAPSHOT PUBLICADO + CHECKS DE IMPRESIÓN DIGITAL
+// =====================================================================
+function celdaVaciaDash_(v) {
+  if (v === null || v === undefined || v === "") return true;
+  if (Object.prototype.toString.call(v) === "[object Date]") return false;
+  var s = String(v).trim();
+  return s === "" || s === "--";
+}
+
+function leerModelosSinPlanificar_(ss, resp) {
+  var planificados = {};
+  var k;
+  for (k in (resp.semanas || {})) {
+    if (!resp.semanas.hasOwnProperty(k)) continue;
+    (resp.semanas[k].carga || []).forEach(function (c) {
+      if (c && c.modelo) planificados[c.modelo] = true;
+    });
+  }
+
+  var qty = {};
+  function acumQty(hoja, esEspecial) {
+    if (!hoja) return;
+    var data = hoja.getDataRange().getValues();
+    var det = encontrarFilaEncabezado_(data, ["sku"], 6);
+    if (det.fila === -1) return;
+    var h = det.celdas;
+    var iMod = h.indexOf("producto") !== -1 ? h.indexOf("producto") : h.indexOf("modelo");
+    var iGen = h.indexOf("genero") !== -1 ? h.indexOf("genero") : h.indexOf("género");
+    var iMo = h.indexOf("mo");
+    var iCant = h.indexOf("cantidad solicitada");
+    var iFalt = h.indexOf("faltante");
+    var iProd = h.findIndex(function (x) { return x.indexOf("producida") !== -1; });
+    var iStatus = h.findIndex(function (x) { return x.indexOf("mo status") !== -1; });
+    var i;
+    for (i = det.fila + 1; i < data.length; i++) {
+      if (esEspecial && iStatus !== -1 && esEspecialHecho_(data[i][iStatus])) continue;
+      var base = iMod !== -1 ? String(data[i][iMod] || "").trim() : "";
+      if (!base) continue;
+      var gen = iGen !== -1 ? String(data[i][iGen] || "").trim() : "";
+      var m = base + (gen !== "" && gen !== "--" ? " " + gen : "");
+      if (esEspecial) m += " (Especial)";
+      if (!qty[m]) qty[m] = { solicitada: 0, faltante: 0, mos: {} };
+      var sol = iCant !== -1 ? (Number(data[i][iCant]) || 0) : 0;
+      var prod = iProd !== -1 ? (Number(data[i][iProd]) || 0) : 0;
+      var falt = faltanteEfectivo_(
+        sol,
+        prod,
+        iFalt !== -1 ? data[i][iFalt] : "",
+        iProd !== -1,
+        iFalt !== -1 && data[i][iFalt] !== ""
+      );
+      qty[m].solicitada += sol;
+      qty[m].faltante += falt;
+      var mo = iMo !== -1 ? String(data[i][iMo] || "").trim() : "";
+      if (mo) qty[m].mos[mo] = true;
+    }
+  }
+  acumQty(ss.getSheetByName("Por Hacer"), false);
+  acumQty(ss.getSheetByName("Por Hacer - Especial"), true);
+
+  var out = [];
+  var hojaPrio = ss.getSheetByName("Priorizacion");
+  if (hojaPrio) {
+    var dp = hojaPrio.getDataRange().getValues();
+    var detP = encontrarFilaEncabezado_(dp, ["modelo"], 6);
+    if (detP.fila !== -1) {
+      var hp = detP.celdas;
+      var pMod = hp.indexOf("modelo");
+      var pTip = hp.indexOf("tipo");
+      var pPri = hp.indexOf("prioridad");
+      var pFec = hp.findIndex(function (x) { return x.indexOf("fecha") !== -1; });
+      var pLin = hp.findIndex(function (x) { return x.indexOf("linea") !== -1 || x.indexOf("línea") !== -1; });
+      var i;
+      for (i = detP.fila + 1; i < dp.length; i++) {
+        var mod = pMod !== -1 ? String(dp[i][pMod] || "").trim() : "";
+        if (!mod) continue;
+        var tipo = pTip !== -1 ? String(dp[i][pTip] || "").trim() : "";
+        var nombre = tipo.toLowerCase() === "especial" ? (mod + " (Especial)") : mod;
+        if (planificados[nombre] || planificados[mod]) continue;
+        if (!celdaVaciaDash_(pPri !== -1 ? dp[i][pPri] : "") ||
+            !celdaVaciaDash_(pFec !== -1 ? dp[i][pFec] : "") ||
+            !celdaVaciaDash_(pLin !== -1 ? dp[i][pLin] : "")) continue;
+        var q = qty[nombre] || qty[mod] || { solicitada: 0, faltante: 0, mos: {} };
+        out.push({
+          modelo: nombre,
+          tipo: tipo,
+          mos: Object.keys(q.mos).length,
+          solicitada: q.solicitada,
+          faltante: q.faltante
+        });
+      }
+    }
+  }
+  out.sort(function (a, b) { return String(a.modelo).localeCompare(String(b.modelo), "es"); });
+  return out;
+}
+
+function asegurarHojaOculta_(ss, nombre, headers) {
+  var hoja = ss.getSheetByName(nombre);
+  if (!hoja) {
+    hoja = ss.insertSheet(nombre);
+    try { hoja.hideSheet(); } catch (eHide) {}
+  }
+  if (headers && headers.length) {
+    var cab = hoja.getRange(1, 1, 1, headers.length);
+    var actuales = cab.getValues()[0];
+    var falta = false;
+    var i;
+    for (i = 0; i < headers.length; i++) {
+      if (normUp_(actuales[i] || "") !== normUp_(headers[i])) { falta = true; break; }
+    }
+    if (falta) {
+      cab.setNumberFormat("@");
+      cab.setValues([headers])
+        .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
+    }
+  }
+  try { hoja.hideSheet(); } catch (eHide2) {}
+  return hoja;
+}
+
+function partirTexto_(txt, tam) {
+  var s = String(txt || "");
+  var out = [];
+  var i;
+  for (i = 0; i < s.length; i += tam) out.push(s.substring(i, i + tam));
+  if (out.length === 0) out.push("");
+  return out;
+}
+
+function guardarCacheDashboard_(payloadTxt) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = asegurarHojaOculta_(ss, HOJA_DASH_CACHE, [
+    "CHUNK", "META", "VERSION", "PUBLICADO", "NCHUNKS"
+  ]);
+  var chunks = partirTexto_(payloadTxt, DASH_CACHE_CHUNK);
+  var maxR = hoja.getMaxRows();
+  if (maxR > 1) hoja.getRange(1, 1, maxR, 5).clearContent();
+  hoja.getRange(1, 1, 1, 5).setNumberFormat("@");
+  hoja.getRange(1, 1, 1, 5).setValues([[
+    DASH_CACHE_ESQUEMA,
+    String(payloadTxt.length),
+    VERSION_SISTEMA,
+    Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "dd/MM/yyyy HH:mm"),
+    String(chunks.length)
+  ]]).setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
+  var i;
+  var filas = [];
+  for (i = 0; i < chunks.length; i++) filas.push([chunks[i], "", "", "", ""]);
+  hoja.getRange(2, 1, filas.length, 5).setNumberFormat("@");
+  hoja.getRange(2, 1, filas.length, 5).setValues(filas);
+  try { hoja.hideSheet(); } catch (eHide) {}
+}
+
+function leerCacheDashboard_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(HOJA_DASH_CACHE);
+  if (!hoja || hoja.getLastRow() < 2) return "";
+  var meta = hoja.getRange(1, 1).getValue();
+  if (String(meta || "").trim() !== DASH_CACHE_ESQUEMA) return "";
+  var n = hoja.getLastRow() - 1;
+  var datos = hoja.getRange(2, 1, n, 1).getValues();
+  var parts = [];
+  var i;
+  for (i = 0; i < datos.length; i++) {
+    var t = String(datos[i][0] || "");
+    if (t) parts.push(t);
+  }
+  return parts.join("");
+}
+
+function actualizarDashboardInformacion() {
+  conLock_(actualizarDashboardInformacion_);
+}
+
+function actualizarDashboardInformacion_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.toast("Leyendo hojas del plan para el dashboard...", "📊 Dashboard", 8);
+  var raw = obtenerDatosDashboardCompleto();
+  var parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (errParse) {
+    SpreadsheetApp.getUi().alert("No se pudo armar el dashboard: " + errParse);
+    return;
+  }
+  if (!parsed || !parsed.success || !parsed.data) {
+    SpreadsheetApp.getUi().alert("No hay datos de planificación para publicar. Genera el plan primero.");
+    return;
+  }
+  parsed.publicadoEn = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "dd/MM/yyyy HH:mm");
+  parsed.version = VERSION_SISTEMA;
+  parsed.data.version = VERSION_SISTEMA;
+  guardarCacheDashboard_(JSON.stringify(parsed));
+  ss.toast("Dashboard publicado. El mismo enlace web ya muestra estos datos.", "📊 Dashboard", 8);
+  SpreadsheetApp.getUi().alert(
+    "✅ Dashboard actualizado (v" + VERSION_SISTEMA + ")\n\n" +
+    "El enlace de la app web (Implementar → Implementaciones) muestra ahora este snapshot.\n" +
+    "No hace falta volver a desplegar: el URL se mantiene.\n\n" +
+    "Los checks de Impresión Digital se conservan por MO en la hoja oculta '" + HOJA_IMP_CHECKS + "'.\n\n" +
+    "Publicado: " + parsed.publicadoEn
+  );
+}
+
+function leerDashboardPublicado() {
+  var txt = leerCacheDashboard_();
+  if (!txt) {
+    return {
+      success: false,
+      error: "El dashboard aún no se ha publicado. En la hoja: menú ⚙️ Producción → 🔄 Actualizar Dashboard."
+    };
+  }
+  try {
+    return JSON.parse(txt);
+  } catch (err) {
+    return {
+      success: false,
+      error: "El snapshot del dashboard está dañado. Vuelve a ejecutar Actualizar Dashboard."
+    };
+  }
+}
+
+function asegurarHojaImpChecks_(ss) {
+  return asegurarHojaOculta_(ss, HOJA_IMP_CHECKS, [
+    "CLAVE", "SKU", "MO", "SEMANA", "LISTO", "ACTUALIZADO"
+  ]);
+}
+
+function leerChecksImpresion() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(HOJA_IMP_CHECKS);
+  var out = {};
+  if (!hoja || hoja.getLastRow() < 2) return out;
+  var n = hoja.getLastRow() - 1;
+  var datos = hoja.getRange(2, 1, n, 5).getValues();
+  var i;
+  for (i = 0; i < datos.length; i++) {
+    var clave = String(datos[i][0] || "").trim();
+    if (!clave || clave === "CLAVE") continue;
+    var listo = String(datos[i][4] || "").trim().toUpperCase();
+    if (listo === "SI" || listo === "TRUE" || listo === "1") out[clave] = 1;
+  }
+  return out;
+}
+
+function guardarChecksImpresion(items) {
+  if (!items) return { success: false };
+  if (Object.prototype.toString.call(items) !== "[object Array]") items = [items];
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) return { success: false, error: "lock" };
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var hoja = asegurarHojaImpChecks_(ss);
+    var last = hoja.getLastRow();
+    var map = {};
+    if (last >= 2) {
+      var claves = hoja.getRange(2, 1, last - 1, 1).getValues();
+      var i;
+      for (i = 0; i < claves.length; i++) {
+        var k0 = String(claves[i][0] || "").trim();
+        if (k0) map[k0] = i + 2;
+      }
+    }
+    var now = new Date();
+    var nuevas = [];
+    var j;
+    for (j = 0; j < items.length; j++) {
+      var it = items[j] || {};
+      var clave = String(it.clave || "").trim();
+      if (!clave) continue;
+      var parts = clave.split("|");
+      var semana = parts[0] || "";
+      var sku = parts[1] || "";
+      var mo = parts[2] || "";
+      var listo = it.listo ? "SI" : "NO";
+      var fila = [clave, sku, mo, semana, listo, now];
+      if (map[clave]) {
+        hoja.getRange(map[clave], 1, 1, 6).setValues([fila]);
+      } else {
+        nuevas.push(fila);
+        map[clave] = true;
+      }
+    }
+    if (nuevas.length) {
+      var dest = hoja.getLastRow() + 1;
+      hoja.getRange(dest, 1, nuevas.length, 6).setNumberFormat("@");
+      hoja.getRange(dest, 1, nuevas.length, 6).setValues(nuevas);
+      hoja.getRange(dest, 6, nuevas.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    }
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
