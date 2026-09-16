@@ -1,6 +1,6 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.30 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.31 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
@@ -8,12 +8,14 @@
  *   - URGENTE EN FECHA ESTIMADA (base 5.9.28): un modelo Urgente/mínima
  *     con 2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
  *     El día de Fecha de Salida Estimada y el hábil anterior toma
- *     SÍ O SÍ todas las asignadas (desaloja peor prioridad). Fuera
- *     de esa ventana, la segunda línea solo si está libre (regla
- *     5.9.28). En la ventana no espera lote de color. Secuencia=No
- *     no impide explotar. La familia sigue compartiendo un género
- *     por línea. Media/Alta/Baja conservan Negro → Blanco → Marino
- *     y CAB → DAMA → KIDS.
+ *     SÍ O SÍ todas las asignadas. En esa ventana, secuencia de color,
+ *     género, reserva de hermano y prioridad de otros (salvo un
+ *     Especial que sí pueda producir ese día) quedan atrás para ese
+ *     producto: desaloja ocupantes fantasma (CARRERA en L4 sin Día
+ *     de inicio) y no cede L4 a un hermano sin línea. Fuera de esa
+ *     ventana, la segunda línea solo si está libre (regla 5.9.28).
+ *     Secuencia=No no impide explotar. Media/Alta/Baja conservan
+ *     Negro → Blanco → Marino y CAB → DAMA → KIDS.
  *   - SECUENCIA=NO EN LÍNEA 5: en Priorizacion col. H, No significa
  *     que ese modelo NO comparte la Línea 5. Corre solo (sin rueda
  *     en paralelo) y no espera/cede por color o género de la familia
@@ -139,7 +141,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.30";
+var VERSION_SISTEMA = "5.9.31";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -478,10 +480,17 @@ function hojaPorNombreFlex_(ss, nombres) {
   return null;
 }
 
+function fechaLocalYmd_(y, m, d) {
+  return new Date(y, m, d).getTime();
+}
+
 function claveFecha_(v) {
-  if (v instanceof Date && !isNaN(v)) return v.getTime();
+  if (v instanceof Date && !isNaN(v)) {
+    return fechaLocalYmd_(v.getFullYear(), v.getMonth(), v.getDate());
+  }
   if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) {
-    return new Date(Math.round((v - 25569) * 86400 * 1000)).getTime();
+    var utcN = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return fechaLocalYmd_(utcN.getUTCFullYear(), utcN.getUTCMonth(), utcN.getUTCDate());
   }
   var s = norm_(v);
   if (s === "") return Infinity;
@@ -489,11 +498,12 @@ function claveFecha_(v) {
   if (m) {
     var anio = Number(m[3]); if (anio < 100) anio += 2000;
     var f = new Date(anio, Number(m[2]) - 1, Number(m[1]));
-    if (!isNaN(f)) return f.getTime();
+    if (!isNaN(f)) return fechaLocalYmd_(f.getFullYear(), f.getMonth(), f.getDate());
   }
   var n = Number(s);
   if (isFinite(n) && n > 20000 && n < 80000) {
-    return new Date(Math.round((n - 25569) * 86400 * 1000)).getTime();
+    var utcS = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return fechaLocalYmd_(utcS.getUTCFullYear(), utcS.getUTCMonth(), utcS.getUTCDate());
   }
   return Infinity;
 }
@@ -2032,9 +2042,18 @@ function generarPlanificacionSemanal_() {
       return out;
     }
 
-    function ocupaPeorQue_(nomOcc, mNew) {
+    function ocupaPeorQue_(nomOcc, mNew, lin) {
       var mO = mapaModelos[nomOcc];
       if (!mO) return true;
+      if (esUrgenteExplosivo_(mNew, overflowL1, d)) {
+        if (!modeloPuedeProducirHoyNom_(nomOcc, lin, d, overflowL1)) return true;
+        if (familiaModelo_(mO) === familiaModelo_(mNew)) return true;
+        var bOx = bandaViva_(mO);
+        var bNx = bandaViva_(mNew);
+        if (bOx < bNx) return false;
+        if (bOx === bNx && mO.prioMin < mNew.prioMin) return false;
+        return true;
+      }
       if (familiaModelo_(mO) === familiaModelo_(mNew) && !mNew.esEspecial) return false;
       var bO = bandaViva_(mO);
       var bN = bandaViva_(mNew);
@@ -2052,6 +2071,14 @@ function generarPlanificacionSemanal_() {
         }
         return true;
       }
+      if (esUrgenteExplosivo_(m, overflowL1, d)) {
+        var iF;
+        for (iF = 0; iF < occ.length; iF++) {
+          if (!ocupaPeorQue_(occ[iF], m, lin)) return false;
+        }
+        ocupante[lin] = [m.nombre];
+        return true;
+      }
       if (occ.length < maxOcupantes_(lin, m)) {
         ocupante[lin].push(m.nombre);
         return true;
@@ -2059,7 +2086,7 @@ function generarPlanificacionSemanal_() {
       var worstI = -1;
       var iW;
       for (iW = 0; iW < occ.length; iW++) {
-        if (ocupaPeorQue_(occ[iW], m)) {
+        if (ocupaPeorQue_(occ[iW], m, lin)) {
           worstI = iW;
           break;
         }
@@ -2106,7 +2133,9 @@ function generarPlanificacionSemanal_() {
       });
       if (ya) return;
       if (debeEsperarLoteFamilia_(m, overflowL1)) return;
-      var libres = lineasLibresDe_(m);
+      var libres = lineasLibresDe_(m).filter(function (linLib) {
+        return modeloPuedeProducirHoyNom_(m.nombre, linLib, d, overflowL1);
+      });
       if (libres.length === 0) {
         libres = lineasDondePuedeHoy_(m).filter(function (lin) {
           return maxOcupantes_(lin, m) === 1;
@@ -2149,7 +2178,7 @@ function generarPlanificacionSemanal_() {
       candidatas.forEach(function (lin) {
         if (ocupante[lin].indexOf(m.nombre) !== -1) return;
         if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
-        if (hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
+        if (!explota && hermanoSinLineaPuedeUsar_(m, lin, overflowL1)) return;
         if (explota) {
           if (!desalojarPara_(m, lin)) return;
         } else {
@@ -2507,7 +2536,7 @@ function generarPlanificacionSemanal_() {
   SpreadsheetApp.getUi().alert(
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
-    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas (desaloja peor prioridad). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
+    "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas. Color, género y prioridad de otros quedan atrás para ese producto (un Especial que sí produzca ese día no se toca). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +

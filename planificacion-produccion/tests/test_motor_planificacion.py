@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.30 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.31 (espejo de las reglas en Codigo.gs)."""
 import math
 import re
 import unittest
@@ -814,7 +814,7 @@ def dia_objetivo_fecha(fk, total_dias, lunes_base=None):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, lunes_base=None):
-    """Motor v5.9.30: Urgente explota en fecha estimada o el día hábil anterior."""
+    """Motor v5.9.31: Urgente explota en fecha estimada o el día hábil anterior."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -1208,9 +1208,20 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return lineas_libres_para_modelo(m, overflow)
 
     def reclamar_lineas(d, ocupante, overflow):
-        def ocupa_peor_que(nom_occ, m_new):
+        def ocupa_peor_que(nom_occ, m_new, lin):
             m_o = modelos.get(nom_occ)
             if not m_o:
+                return True
+            if es_urgente_explosivo(m_new, overflow, d):
+                if not modelo_puede(m_o, d, lin, overflow):
+                    return True
+                if familia_modelo(m_o) == familia_modelo(m_new):
+                    return True
+                b_o, b_n = banda_viva(m_o), banda_viva(m_new)
+                if b_o < b_n:
+                    return False
+                if b_o == b_n and m_o["prioMin"] < m_new["prioMin"]:
+                    return False
                 return True
             if familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial"):
                 return False
@@ -1229,12 +1240,18 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if es_exclusivo_linea5(m) and str(lin) == "5" and len(occ) > 1:
                     ocupante[lin] = [m["nombre"]]
                 return True
+            if es_urgente_explosivo(m, overflow, d):
+                for nom in occ:
+                    if not ocupa_peor_que(nom, m, lin):
+                        return False
+                ocupante[lin] = [m["nombre"]]
+                return True
             if len(occ) < max_ocupantes_ahora(lin, m):
                 ocupante.setdefault(lin, []).append(m["nombre"])
                 return True
             worst_i = -1
             for i_w, nom in enumerate(occ):
-                if ocupa_peor_que(nom, m):
+                if ocupa_peor_que(nom, m, lin):
                     worst_i = i_w
                     break
             if worst_i < 0:
@@ -1288,7 +1305,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             if debe_esperar_lote_familia(m, overflow):
                 continue
-            libres = lineas_libres_de(m, overflow)
+            libres = [
+                lin for lin in lineas_libres_de(m, overflow)
+                if modelo_puede(m, d, lin, overflow)
+            ]
             if not libres:
                 cands = []
                 seen = {}
@@ -1337,7 +1357,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
                 if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
-                if hermano_sin_linea_puede_usar(m, lin, overflow):
+                if not explota and hermano_sin_linea_puede_usar(m, lin, overflow):
                     continue
                 if explota:
                     if not desalojar_para(m, lin):
@@ -2108,6 +2128,65 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(d2_2, 80, d2_2)
         self.assertEqual(d2_4, 80, "miércoles fecha + L4 libre + Secuencia=No: Cotton en L2 y L4")
         self.assertEqual(sum(t["plan"]["4"][2] for t in out if t["modelo"].startswith("RIO")), 0)
+
+    def test_urgente_excel23_explota_l4_aunque_especial_reservado(self):
+        """Excel 23: CARRERA especial lista L4 pero entra el 29/09; el miércoles Cotton toma L4 sí o sí."""
+        tareas = [
+            {"sku": "CKN", "modelo": "COTTON KIDS", "mo": "MO-CKN", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Negro Aventura", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKB", "modelo": "COTTON KIDS", "mo": "MO-CKB", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKR", "modelo": "COTTON KIDS", "mo": "MO-CKR", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Rosado Pastel", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKV", "modelo": "COTTON KIDS", "mo": "MO-CKV", "cantidad": 60, "cap": 80,
+             "lineas": ["2", "4"], "color": "Verde", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 60, "genero": "KIDS"},
+            {"sku": "ESP", "modelo": "CARRERA (MAFE, DANI, RUNNING, CLASICA) TODOS (Especial)",
+             "mo": "MO-ESP", "cantidad": 1200, "cap": 105, "lineas": ["4"], "color": "TODOS",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 11, "fechaKey": 20260929,
+             "solicitadaOrig": 1200, "genero": "TODOS"},
+            {"sku": "RC", "modelo": "RIO CAB", "mo": "MO-RC", "cantidad": 127, "cap": 101,
+             "lineas": ["3", "4"], "color": "Negro", "prioridadNum": 4, "esEspecial": False,
+             "diaIngreso": 3, "fechaKey": 20261030, "solicitadaOrig": 127, "genero": "CAB"},
+            {"sku": "RD", "modelo": "RIO DAMA", "mo": "MO-RD", "cantidad": 84, "cap": 101,
+             "lineas": ["3", "4"], "color": "Negro", "prioridadNum": 4, "esEspecial": False,
+             "diaIngreso": 3, "fechaKey": 20261030, "solicitadaOrig": 84, "genero": "DAMA"},
+        ]
+        out = planificar(tareas, {}, total_dias=15, mapa_secuencia={"COTTON KIDS": "NO"})
+        d2_2 = sum(t["plan"]["2"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        d2_4 = sum(t["plan"]["4"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        self.assertEqual(d2_2, 80, d2_2)
+        self.assertEqual(d2_4, 80, "miércoles fecha: Cotton toma L4 aunque CARRERA la tenía reservada")
+        self.assertEqual(sum(t["plan"]["4"][2] for t in out if "CARRERA" in t["modelo"]), 0)
+        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "COTTON KIDS"), 300)
+
+    def test_urgente_explota_ignora_hermano_y_color(self):
+        """En la ventana, Cotton no cede L4 al hermano CAB ni espera Negro para llenar las dos líneas."""
+        tareas = [
+            {"sku": "CKB", "modelo": "COTTON KIDS", "mo": "MO-CKB", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Blanco", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKR", "modelo": "COTTON KIDS", "mo": "MO-CKR", "cantidad": 80, "cap": 80,
+             "lineas": ["2", "4"], "color": "Rosado Pastel", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 80, "genero": "KIDS"},
+            {"sku": "CKV", "modelo": "COTTON KIDS", "mo": "MO-CKV", "cantidad": 60, "cap": 80,
+             "lineas": ["2", "4"], "color": "Verde", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260916, "solicitadaOrig": 60, "genero": "KIDS"},
+            {"sku": "CC", "modelo": "COTTON CAB", "mo": "MO-CC", "cantidad": 200, "cap": 80,
+             "lineas": ["4"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 2, "fechaKey": 20260930, "solicitadaOrig": 200, "genero": "CAB"},
+        ]
+        out = planificar(tareas, {}, total_dias=10, mapa_secuencia={"COTTON KIDS": "NO"})
+        d2_2 = sum(t["plan"]["2"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        d2_4 = sum(t["plan"]["4"][2] for t in out if t["modelo"] == "COTTON KIDS")
+        self.assertEqual(d2_2, 80, d2_2)
+        self.assertEqual(d2_4, 80, "explosión ignora reserva de hermano CAB: %s" % d2_4)
+        self.assertEqual(sum(t["plan"]["4"][2] for t in out if t["modelo"] == "COTTON CAB"), 0)
+        colores = {t["color"] for t in out if t["modelo"] == "COTTON KIDS" and (t["plan"]["2"][2] or t["plan"]["4"][2])}
+        self.assertGreaterEqual(len(colores), 2, colores)
 
     def test_no_paralelo_mientras_ocupante_sigue(self):
         """L1-4: si el ocupante aún llena el día, el siguiente espera. Al terminar, el sobrante sí cambia de modelo."""
