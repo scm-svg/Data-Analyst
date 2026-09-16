@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests del motor de planificación v5.9.28 (espejo de las reglas en Codigo.gs)."""
 import math
+import os
 import re
 import unittest
 from collections import defaultdict
@@ -2971,7 +2972,7 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertEqual(idx_col_sem_dash(headers, 12), 6)
 
     def test_payload_json_tiene_pestanias(self):
-        import json, os
+        import json
         path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
         with open(path, encoding="utf-8") as f:
             d = json.load(f)
@@ -2991,12 +2992,21 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 11"]["carga"]), 0)
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 12"]["carga"]), 0)
         self.assertEqual(d["supuestos"]["semanas"], 12)
-        self.assertEqual(d["version"], "5.9.28")
+        self.assertEqual(d["version"], "5.9.31")
+        sku_mo = {s["sku"]: s["mo"] for s in d["almacenSku"] if s.get("sku") and s.get("mo")}
+        self.assertEqual(len(sku_mo), len(d["proySku"]))
+        self.assertTrue(all(s["sku"] in sku_mo for s in d["proySku"]))
         lineas = {c["linea"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
         self.assertIn("modelosSinPlanificar", d)
         sin_plan = {m["modelo"] for m in d["modelosSinPlanificar"]}
         self.assertNotIn("COTTON KIDS", sin_plan)
+        cotton_l4 = [
+            c for c in d["semanas"]["Semana 1"]["carga"]
+            if c["modelo"] == "COTTON KIDS" and c["linea"] == "4"
+        ]
+        self.assertTrue(cotton_l4, "Excel 25: COTTON KIDS debe estar en L4 semana 1")
+        self.assertGreater(cotton_l4[0]["dias"]["miercoles"], 0)
         planificados = {c["modelo"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(planificados.isdisjoint(sin_plan), sin_plan & planificados)
         crop_en_plan = any(
@@ -3008,6 +3018,60 @@ class TestDashboardInfo(unittest.TestCase):
             self.assertIn("BASIC LINE CROP TEE DAMA", sin_plan)
             crop = next(m for m in d["modelosSinPlanificar"] if m["modelo"] == "BASIC LINE CROP TEE DAMA")
             self.assertGreater(crop["faltante"], 0)
+
+
+class TestDashboardUx(unittest.TestCase):
+    def _html(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "Dashboard_Planificacion.html")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_encabezados_pendiente_y_a_producir(self):
+        html = self._html()
+        self.assertIn(">A Producir<", html)
+        self.assertNotIn(">Almacén</div>", html)
+        self.assertIn("document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);", html)
+        self.assertIn("document.getElementById('k-alm').textContent=fmtN(alm);", html)
+        self.assertIn("var alm=(D.almacenModelo||[]).filter(function(m){ return matchModelo(m.modelo); })", html)
+        self.assertNotIn("document.getElementById('k-alm').textContent=fmtN(r.vDes);", html)
+
+    def test_filtro_modelos_multiseleccion(self):
+        html = self._html()
+        self.assertIn("var _modelos = [];", html)
+        self.assertIn("function toggleModelo(m)", html)
+        self.assertNotRegex(html, r"\b_modelo\b")
+        self.assertNotIn("Clic para sumar varios", html)
+
+    def test_semana_encima_detalle_diario(self):
+        html = self._html()
+        self.assertIn('class="wchip', html)
+        self.assertIn("function setSemana(k)", html)
+        self.assertIn("Detalle diario", html)
+
+    def test_pendientes_mix_incluye_sin_planificar(self):
+        html = self._html()
+        self.assertIn("labels:['En horizonte','Fuera / sin programar','Sin planificar']", html)
+        self.assertIn("data:[r.vDes,r.vFue,r.vSinPlan]", html)
+        self.assertIn("Modelos sin planificar", html)
+
+    def test_impresion_digital_drilldown_y_checks(self):
+        html = self._html()
+        self.assertIn('data-tab="imp"', html)
+        self.assertIn("Impresión Digital", html)
+        self.assertIn("function renderImp()", html)
+        self.assertIn("dash-impdig-checks", html)
+        self.assertIn("<th class=\"left\">MO</th>", html)
+        self.assertIn("window.chkImpSku", html)
+        self.assertIn("window.chkImpModelo", html)
+        self.assertIn("window.chkImpSemana", html)
+        self.assertIn("function agruparCarga", html)
+        self.assertGreater(html.find('data-tab="imp"'), html.find('data-tab="sup"'))
+        self.assertIn("<th>Cant. semana</th><th>Logo</th>", html)
+        self.assertIn("<th>A fabricar</th><th>Logo</th>", html)
+        self.assertIn("appearance:none", html)
+        self.assertIn('class="note imp-leyenda"', html)
+        self.assertIn('Las Ordenes de Produccion con siglas "PD"', html)
+        self.assertIn("estan a la esperas de ser creadas en Odoo", html)
 
 
 if __name__ == "__main__":
