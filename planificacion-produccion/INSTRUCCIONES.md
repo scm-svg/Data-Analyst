@@ -1,14 +1,20 @@
-# Planificación de Producción v5.9.28 — códigos listos para pegar
+# Planificación de Producción v5.9.31 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
 En el editor de **Google Apps Script** del archivo de Planificación:
 
 1. Abre `Codigo.gs`, selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Codigo.gs`.
-2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`.
+2. Abre (o crea) el archivo HTML llamado **`Dashboard`** (sin `.html`). Selecciona **todo**, bórralo y pega el contenido completo de `planificacion-produccion/Dashboard.html`. **Sustituye** el dashboard HTML anterior: este archivo ya no lleva datos embebidos.
 3. Guarda el proyecto. Recarga la hoja. Corre **2️⃣ Actualizar Priorización** si hace falta crear/verificar `Priorizacion - SKUs`, y luego **3️⃣ Generar Planificación**.
+4. Corre **🔄 Actualizar Dashboard**. Eso publica el snapshot que ve todo el mundo.
+5. Publica la app web **una sola vez** (o actualiza la implementación existente para no cambiar el enlace): **Implementar → Implementaciones → Aplicación web**. Ejecutar como *tú*. Acceso: *cualquier persona con el enlace* (o tu dominio). El `doGet` sirve el mismo `Dashboard`.
 
-Esta versión incluye **Secuencia=No en Línea 5** (el modelo corre solo, sin paralelo), el **horizonte de 12 semanas** y el **Dashboard de información**. Pégalo en el archivo HTML `Dashboard`. En 5.9.25, la **Meta (Faltante)** de Proyeccion es la columna **Faltante** de Por Hacer. En 5.9.24, cada pestaña semanal cuenta **solo las MOs y el faltante de esa semana**. En 5.9.23, al generar el plan se pregunta si quieres el **50% de la Línea 1** para el modelo que corre en la **Línea 2**.
+El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas ya calculadas (`Planificacion`, `Semana 2–12`, `Proyeccion`, almacén, pendientes) y las deja en la hoja oculta `_DashboardCache`. El enlace de la app web no cambia.
+
+Los checks de **Impresión Digital** se guardan en la hoja oculta `_ImpresionChecks` (clave `semana|SKU|MO`). Quedan en la hoja, no en el navegador de cada persona, para seguimiento por orden.
+
+Esta versión incluye el motor **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -33,11 +39,13 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.28 (base 5.9.15 + Secuencia=No)
+## Motor v5.9.31 (base 5.9.28 + urgente en fecha estimada)
 
+- **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** persiste checks por MO en `_ImpresionChecks`.
+- **Urgente en fecha estimada:** un modelo Urgente/mínima con 2+ líneas toma **sí o sí** todas las asignadas el día de Fecha de Salida Estimada y el hábil anterior. Fuera de esa ventana, la segunda línea solo si está libre.
 - **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo y no espera/cede por color o género de la familia mientras corre ahí. En L1–4, `No` sigue saltando solo el orden de género (el lote de color se mantiene).
 - **Horizonte 12 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 12 semanas (la actual + 11), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 11` y `Semana 12` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 10`. El menú **Ver Pestañas** las incluye.
-- **Dashboard de información:** menú **Producción → Dashboard de información** (también `doGet` / app web). Seis pestañas: calendario semana/día/línea, drill-down semana→modelo→SKU, seguimiento de líneas (puntos por semana, como el calendario A/B de producto), pendientes, entrada de almacén y supuestos (cap por modelo, lead time 4 días, apoyo 50% L1, reajuste si hay consideraciones mayores). Lee las hojas visibles del plan (`Planificacion` / `Semana 2–12`, `Proyeccion`, `Proyeccion - SKUS`, almacén).
+- **Dashboard de información:** menú **Producción → Dashboard de información** (modal en la hoja) y el mismo HTML en la app web. Pestañas: calendario, salida semanal, seguimiento, pendientes, almacén, supuestos e **Impresión Digital**. Lee el snapshot publicado.
 - **Meta = columna Faltante:** `Proyeccion` y el backlog usan el número de **Faltante** en `Por Hacer`. No se recorta a `Cantidad Solicitada − Cantida Producida` (eso dejaba RIO CAB en 1834 en vez de 1871, y SHORT SPORT R1 CAB+DAMA en 195 en vez de 202). Si Faltante está vacío, sí se usa sol−prod. Si Faltante es 0, la MO no entra.
 - **Conteo por semana (MOs y cantidades):** en `Planificacion` / `Semana 2`–`Semana 12` las columnas **MOs** y **Solicitada** son de esa semana (MOs con producción > 0). El resumen ejecutivo solo lista modelos que fabrican esa semana. Las pestañas `Linea 1`–`Linea 5` omiten MOs que solo salen en semanas futuras. `Proyeccion` / `Proyeccion - SKUS` omiten filas con faltante 0.
 - **Apoyo L1 50% al modelo de L2:** al pulsar **Generar Planificación** el sistema pregunta si quieres disponer del 50% de la Línea 1. Si aceptas, pide la semana de inicio (1 = actual). Desde esa semana, el modelo que está corriendo en L2 también produce en L1 a la **mitad** de su `Cap Produccion por Dia` (p. ej. 65 si la cap es 130). El ocupante nativo de L1 se queda con el otro 50%. No hace falta que L2 liste la línea 1 en Por Hacer. La MO sigue anclada a L2; L1 es solo apoyo. Si ese modelo ya ocupa L1 (Urgente con 1 y 2), no se duplica.
