@@ -278,7 +278,7 @@ tr:hover td { background:rgba(37,99,235,.03); }
       <div class="hero-card green" onclick="goTo('consumibles')">
         <div class="icon">🛒</div>
         <h3>Consumibles Tiendas / Taller</h3>
-        <p>Despacho y recepción de suministros registrados en Sheets de Consumibles (sin Odoo).</p>
+        <p>Compras ya en Odoo. Pendiente: despacho, descuentos de inventario y salidas a Tiendas/Taller.</p>
         <span class="arrow">→</span>
       </div>
       <div class="hero-card purple" onclick="goTo('requisicion')">
@@ -290,13 +290,13 @@ tr:hover td { background:rgba(37,99,235,.03); }
       <div class="hero-card blue" onclick="goTo('recomendaciones')" style="border-top:4px solid var(--orange)">
         <div class="icon">💡</div>
         <h3>Recomendaciones</h3>
-        <p>Propuestas de mejora, incluyendo migración de consumibles al ERP Odoo.</p>
+        <p>Cerrar ciclo de consumibles en Odoo (despacho e inventario) y otras mejoras.</p>
         <span class="arrow">→</span>
       </div>
       <div class="hero-card purple" onclick="goTo('analisis')" style="border-top:4px solid var(--red)">
         <div class="icon">⚡</div>
         <h3>Análisis y Automatización</h3>
-        <p>Oportunidades de automatización y puntos clave para reunión.</p>
+        <p>Consumibles (inventario/descuentos) y validaciones MP para agilizar PT.</p>
         <span class="arrow">→</span>
       </div>
     </div>
@@ -707,28 +707,23 @@ tr:hover td { background:rgba(37,99,235,.03); }
     <p class="section-sub">Propuestas para estandarizar procesos, reducir trabajo manual y unificar sistemas.</p>
 
     <div class="gap-card">
-      <h4>⚠️ Brecha principal detectada</h4>
-      <p>Hoy existen <strong>dos sistemas paralelos</strong>: Materia Prima opera en <strong>Odoo + Sheets</strong>, mientras Consumibles opera <strong>solo en Google Sheets</strong>. Esto genera doble digitación, inventarios desincronizados y sin trazabilidad unificada entre áreas.</p>
+      <h4>⚠️ Brecha principal detectada — Consumibles</h4>
+      <p>En consumibles, las <strong>solicitudes de compra</strong> y el <strong>inventario teórico de entrada</strong> ya se gestionan en Odoo (módulo de Aprobaciones + recepción de compra). Lo que aún falta llevar al ERP es el <strong>proceso operativo de despacho</strong>, el <strong>control de inventario de salidas</strong> y la <strong>lógica de descuento de stock</strong> cuando se envía mercancía a Tiendas y Taller — hoy eso sigue en Google Sheets.</p>
     </div>
 
     <div class="rec-grid">
       <div class="rec-card priority-high">
         <div class="rec-tag">🔴 Prioridad alta — Propuesta principal</div>
-        <h5>Migrar todo el proceso de Consumibles al ERP Odoo</h5>
-        <p>Actualmente Tiendas y Taller solicitan en Sheets, el Operador de Consumibles registra salidas/entradas en Sheets separados, y no hay conexión con Compras ni con inventario teórico. Se recomienda:</p>
+        <h5>Completar migración de Consumibles al ERP Odoo (despacho e inventario)</h5>
+        <p>La base en Odoo ya existe para compras. Falta cerrar el ciclo operativo:</p>
         <ul>
-          <li><strong>Solicitudes:</strong> Reemplazar Sheets por requisiciones internas en Odoo (similar a transferencias internas o módulo de solicitudes de almacén).</li>
-          <li><strong>Despacho:</strong> Picking y entrega registrados en Odoo con descuento automático de stock.</li>
-          <li><strong>Recepción:</strong> Recepción de compra en Odoo (mismo flujo que insumos MP), eliminando registro manual en Sheets.</li>
-          <li><strong>Inventario:</strong> Stock teórico en tiempo real por ubicación (Tiendas, Taller, Almacén Consumibles).</li>
-          <li><strong>Integración:</strong> Conectar con módulo de Aprobaciones ya usado para requisiciones de compra.</li>
+          <li><strong>✅ Ya resuelto — Solicitudes de compra:</strong> Se gestionan en Odoo vía módulo de Aprobaciones.</li>
+          <li><strong>✅ Ya resuelto — Inventario teórico (entrada):</strong> Se registra al recibir compra en Odoo.</li>
+          <li><strong>🔲 Pendiente — Proceso de despacho:</strong> Reemplazar Sheets de solicitudes Tiendas/Taller por flujo de despacho en Odoo (picking, confirmación de entrega).</li>
+          <li><strong>🔲 Pendiente — Control de inventario de salidas:</strong> Registrar en Odoo cada movimiento de salida con trazabilidad por SKU, cantidad y destino.</li>
+          <li><strong>🔲 Pendiente — Descuento automático al enviar a Tiendas/Taller:</strong> Definir reglas de transferencia/descuento de stock al confirmar envío — diferenciando envío a Tienda (cajas) vs entrega interna a Taller.</li>
+          <li><strong>🔲 Pendiente — Ubicaciones de stock:</strong> Configurar ubicaciones virtuales (Almacén Consumibles, Tiendas, Taller) para reflejar dónde está el inventario en todo momento.</li>
         </ul>
-      </div>
-
-      <div class="rec-card priority-high">
-        <div class="rec-tag">🔴 Prioridad alta</div>
-        <h5>Eliminar doble registro en Materia Prima (Sheets + Odoo)</h5>
-        <p>Los operadores registran en Sheets y el Supervisor vuelve a registrar en Odoo. Propuesta: usar Odoo como única fuente de verdad — el picking se confirma en Odoo y el Sheets queda como respaldo temporal hasta completar la migración.</p>
       </div>
 
       <div class="rec-card priority-med">
@@ -743,12 +738,6 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <p>Hoy Compras informa manualmente la llegada de mercancía. Configurar alerta automática en Odoo al confirmar recepción de compra (PO), notificando al Supervisor y Operadores correspondientes.</p>
       </div>
 
-      <div class="rec-card priority-med">
-        <div class="rec-tag">🟠 Prioridad media</div>
-        <h5>Integrar cálculo de tela Audaces → Odoo</h5>
-        <p>El Supervisor calcula tela manualmente desde trazos impresos. Evaluar exportación de consumo de tela desde Audaces hacia la OT en Odoo para reducir errores y tiempo de cálculo.</p>
-      </div>
-
       <div class="rec-card priority-low">
         <div class="rec-tag">🟢 Prioridad baja / mediano plazo</div>
         <h5>Reglas de reorden automático por stock mínimo</h5>
@@ -760,126 +749,92 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <h5>Etiquetas con código de barras / QR en habladores</h5>
         <p>Reemplazar habladores manuales por etiquetas impresas desde Odoo con código de barras del lote, peso y tipo de tela. Escaneo en despacho y devolución para actualización instantánea.</p>
       </div>
-
-      <div class="rec-card priority-low">
-        <div class="rec-tag">🟢 Prioridad baja / mediano plazo</div>
-        <h5>Dashboard de lead time en Odoo</h5>
-        <p>El seguimiento de lead time es manual post-aprobación. Crear vista/dashboard con fechas prometidas vs reales, alertas de vencimiento y KPIs por proveedor e insumo.</p>
-      </div>
     </div>
   </section>
 
   <!-- ANÁLISIS / AUTOMATIZACIÓN -->
   <section class="panel" id="analisis">
     <h2 class="section-title">Análisis de Proceso y Automatización</h2>
-    <p class="section-sub">Evaluación de oportunidades para la reunión — qué se puede automatizar, mejorar y priorizar.</p>
+    <p class="section-sub">Oportunidades prioritarias para la reunión — enfoque en consumibles (inventario y descuentos) y validaciones de materia prima.</p>
 
     <div class="info-box">
       <span class="ico">🎯</span>
-      <span><strong>Objetivo de la reunión:</strong> Identificar quick wins (cambios inmediatos), definir roadmap de migración consumibles → Odoo, y acordar responsables y plazos por iniciativa.</span>
+      <span><strong>Objetivo de la reunión:</strong> Definir cómo cerrar el ciclo operativo de consumibles en Odoo (despacho, inventario y descuentos a Tiendas/Taller) y evaluar automatización de validaciones de MP para agilizar también producto terminado.</span>
     </div>
 
-    <h3 class="section-title" style="font-size:1.05rem;margin-top:8px">Puntos clave para discutir hoy</h3>
+    <h3 class="section-title" style="font-size:1.05rem;margin-top:8px">Puntos clave — Consumibles en Odoo</h3>
     <div class="meeting-grid" style="margin-bottom:24px">
       <div class="meeting-card">
         <div class="num-big">01</div>
-        <h5>Consumibles fuera del ERP</h5>
-        <p>Es el gap más crítico. Sin Odoo no hay inventario confiable, ni integración con compras. <strong>¿Cuándo iniciamos la migración?</strong></p>
+        <h5>Compras ya en Odoo ✅</h5>
+        <p>Solicitudes vía Aprobaciones e inventario teórico de entrada ya funcionan. <strong>El gap está en la operación de salida.</strong></p>
       </div>
       <div class="meeting-card">
         <div class="num-big">02</div>
-        <h5>Doble registro MP</h5>
-        <p>Sheets + Odoo duplica trabajo y genera discrepancias. <strong>¿Podemos eliminar Sheets en el corto plazo?</strong></p>
+        <h5>Despacho sin trazabilidad ERP</h5>
+        <p>Picking, empaque y entrega a Tiendas/Taller siguen en Sheets. <strong>¿Cómo lo llevamos a Odoo?</strong></p>
       </div>
       <div class="meeting-card">
         <div class="num-big">03</div>
-        <h5>Comunicación manual con Compras</h5>
-        <p>Llegada de mercancía, rechazos y diferencias se comunican por mensaje. <strong>¿Automatizamos con alertas Odoo?</strong></p>
+        <h5>Descuento de inventario al enviar</h5>
+        <p>No hay regla automática de descuento por destino (Tienda vs Taller). <strong>¿Transferencia interna o salida directa?</strong></p>
       </div>
       <div class="meeting-card">
         <div class="num-big">04</div>
-        <h5>Lead time sin control</h5>
-        <p>Seguimiento post-aprobación es 100% manual. <strong>¿Implementamos alertas de vencimiento?</strong></p>
+        <h5>Stock por ubicación</h5>
+        <p>Sin ubicaciones configuradas no se sabe cuánto hay en almacén vs lo enviado. <strong>¿Definimos ubicaciones virtuales?</strong></p>
       </div>
     </div>
 
     <div class="card">
-      <h4>📋 Matriz de automatización por proceso</h4>
+      <h4>📋 Proceso de consumibles — qué falta automatizar</h4>
       <div class="table-wrap" style="margin-top:12px">
         <table class="analysis-table">
           <thead>
-            <tr><th>Proceso</th><th>Situación actual</th><th>Automatización propuesta</th><th>Impacto</th><th>Esfuerzo</th></tr>
+            <tr><th>Etapa del proceso</th><th>Estado actual</th><th>Qué falta en Odoo</th><th>Impacto</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td>Despacho consumibles</td>
-              <td>Sheets solicitud + Sheets control manual</td>
-              <td>Requisiciones internas + picking Odoo</td>
+              <td>Solicitud de compra</td>
+              <td>✅ Odoo Aprobaciones</td>
+              <td>— Ya resuelto</td>
+              <td><span class="status-auto bajo">OK</span></td>
+            </tr>
+            <tr>
+              <td>Recepción / inventario teórico entrada</td>
+              <td>✅ Odoo (PO → stock)</td>
+              <td>— Ya resuelto</td>
+              <td><span class="status-auto bajo">OK</span></td>
+            </tr>
+            <tr>
+              <td>Solicitud interna Tiendas / Taller</td>
+              <td>❌ Google Sheets</td>
+              <td>Requisición interna o transferencia solicitada en Odoo</td>
               <td><span class="status-auto alto">Alto</span></td>
-              <td>Medio-Alto</td>
             </tr>
             <tr>
-              <td>Recepción consumibles</td>
-              <td>Conteo manual + Sheets</td>
-              <td>Recepción de compra Odoo (PO → stock)</td>
+              <td>Despacho / picking</td>
+              <td>❌ Manual + Sheets</td>
+              <td>Orden de picking en Odoo con confirmación de entrega</td>
               <td><span class="status-auto alto">Alto</span></td>
-              <td>Medio</td>
             </tr>
             <tr>
-              <td>Despacho tela / insumos</td>
-              <td>Sheets + registro manual Odoo</td>
-              <td>Confirmar picking solo en Odoo (eliminar Sheets)</td>
+              <td>Descuento inventario → Tienda</td>
+              <td>❌ Registro manual Sheets</td>
+              <td>Transferencia o salida automática al confirmar envío en cajas</td>
               <td><span class="status-auto alto">Alto</span></td>
-              <td>Bajo-Medio</td>
             </tr>
             <tr>
-              <td>Requisición de compra</td>
-              <td>Manual en Aprobaciones Odoo</td>
-              <td>Reglas reorden automático por stock mínimo</td>
+              <td>Descuento inventario → Taller</td>
+              <td>❌ Registro manual Sheets</td>
+              <td>Salida interna automática al confirmar entrega directa</td>
+              <td><span class="status-auto alto">Alto</span></td>
+            </tr>
+            <tr>
+              <td>Visibilidad stock por ubicación</td>
+              <td>❌ No existe en ERP</td>
+              <td>Ubicaciones: Almacén Consumibles / Tiendas / Taller</td>
               <td><span class="status-auto medio">Medio</span></td>
-              <td>Medio</td>
-            </tr>
-            <tr>
-              <td>Recepción tela</td>
-              <td>Peso manual, hablador manual, hoja papel</td>
-              <td>Formulario QA digital + etiqueta Odoo + báscula</td>
-              <td><span class="status-auto medio">Medio</span></td>
-              <td>Alto</td>
-            </tr>
-            <tr>
-              <td>Cálculo de tela</td>
-              <td>Manual desde trazos Audaces impresos</td>
-              <td>Integración Audaces → consumo en OT Odoo</td>
-              <td><span class="status-auto medio">Medio</span></td>
-              <td>Alto</td>
-            </tr>
-            <tr>
-              <td>Notificación llegada mercancía</td>
-              <td>Compras informa manualmente</td>
-              <td>Alerta automática al confirmar PO en Odoo</td>
-              <td><span class="status-auto medio">Medio</span></td>
-              <td>Bajo</td>
-            </tr>
-            <tr>
-              <td>Seguimiento lead time</td>
-              <td>Supervisor revisa manualmente</td>
-              <td>Dashboard + alertas de vencimiento Odoo</td>
-              <td><span class="status-auto medio">Medio</span></td>
-              <td>Bajo-Medio</td>
-            </tr>
-            <tr>
-              <td>Devolución tela</td>
-              <td>Pesaje + hablador + Sheets + Odoo</td>
-              <td>Escaneo lote + ajuste stock automático Odoo</td>
-              <td><span class="status-auto bajo">Bajo</span></td>
-              <td>Medio</td>
-            </tr>
-            <tr>
-              <td>Rechazados → proveedor</td>
-              <td>Comunicación manual Compras ↔ Logística</td>
-              <td>Flujo de devolución proveedor en Odoo</td>
-              <td><span class="status-auto bajo">Bajo</span></td>
-              <td>Medio</td>
             </tr>
           </tbody>
         </table>
@@ -887,30 +842,39 @@ tr:hover td { background:rgba(37,99,235,.03); }
     </div>
 
     <div class="card" style="margin-top:18px">
-      <h4>🚀 Roadmap sugerido (3 fases)</h4>
-      <div class="steps" style="margin-top:14px">
+      <h4>⚡ Automatizar validaciones de Materia Prima → agilizar Producto Terminado</h4>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:14px">Hoy la recepción de tela requiere revisión manual en plegadora, registro en hoja de soporte y validación QA rollo por rollo. Automatizar y digitalizar este flujo permitiría validar materia prima más rápido y, en cascada, <strong>liberar producto terminado con mayor agilidad</strong> al reducir cuellos de botella en insumos.</p>
+      <div class="steps">
         <div class="step">
-          <div class="step-num" style="background:var(--green-bg);color:var(--green)">F1</div>
+          <div class="step-num" style="background:var(--green-bg);color:var(--green)">1</div>
           <div class="step-body">
-            <h5>Fase 1 — Quick wins (1-2 meses)</h5>
-            <p>Alertas automáticas Compras→Logística · Eliminar Sheets MP (solo Odoo) · Dashboard lead time básico · Definir plan migración consumibles</p>
-            <span class="badge supervisor">Responsable: Supervisor + Compras + TI</span>
+            <h5>Formulario digital de recepción QA</h5>
+            <p>Reemplazar hoja de soporte en papel por checklist digital en Odoo Quality vinculado al lote. QA aprueba/rechaza en el momento con registro automático.</p>
+            <span class="badge qa">Calidad + Operadores MP</span>
           </div>
         </div>
         <div class="step">
-          <div class="step-num" style="background:var(--orange-bg);color:var(--orange)">F2</div>
+          <div class="step-num" style="background:var(--accent-light);color:var(--accent)">2</div>
           <div class="step-body">
-            <h5>Fase 2 — Migración Consumibles a Odoo (2-4 meses)</h5>
-            <p>Configurar ubicaciones y productos consumibles · Solicitudes internas Tiendas/Taller · Picking y recepción en Odoo · Capacitar operadores · Deprecar Sheets</p>
-            <span class="badge consumibles">Responsable: Logística + TI + Operadores Consumibles</span>
+            <h5>Traslado automático post-aprobación</h5>
+            <p>Al aprobar un rollo, Odoo ejecuta automáticamente el traslado TH/Por Auditar Tela → Materia Prima sin intervención manual del Supervisor.</p>
+            <span class="badge supervisor">Supervisor</span>
           </div>
         </div>
         <div class="step">
-          <div class="step-num" style="background:var(--purple-bg);color:var(--purple)">F3</div>
+          <div class="step-num" style="background:var(--orange-bg);color:var(--orange)">3</div>
           <div class="step-body">
-            <h5>Fase 3 — Optimización avanzada (4-6 meses)</h5>
-            <p>Integración Audaces · QA digital recepción tela · Etiquetas código barras · Reorden automático stock mínimo · KPIs y reportes gerenciales</p>
-            <span class="badge supervisor">Responsable: Logística + TI + Calidad</span>
+            <h5>Alertas de rechazo y diferencias</h5>
+            <p>Notificación automática a Compras cuando QA rechaza un rollo o detecta diferencias en kg/metros — sin depender de mensajes manuales.</p>
+            <span class="badge compras">Compras</span>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:var(--purple-bg);color:var(--purple)">4</div>
+          <div class="step-body">
+            <h5>Impacto en Producto Terminado</h5>
+            <p>Con MP validada más rápido en Odoo, Producción recibe tela e insumos disponibles antes → menos espera en OT → <strong>validación y liberación de PT más ágil</strong>.</p>
+            <span class="badge solicitante">Producción</span>
           </div>
         </div>
       </div>
@@ -922,12 +886,12 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <table>
           <thead><tr><th>#</th><th>Pregunta</th><th>Decisión esperada</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td>¿Aprobamos migrar consumibles completamente a Odoo?</td><td>Sí/No + fecha inicio</td></tr>
-            <tr><td>2</td><td>¿Cuándo dejamos de usar Sheets para Materia Prima?</td><td>Fecha + plan transición</td></tr>
-            <tr><td>3</td><td>¿Quién lidera técnicamente la configuración Odoo?</td><td>Responsable TI/Consultor</td></tr>
-            <tr><td>4</td><td>¿Presupuesto/tiempo disponible para Fase 1?</td><td>Recursos asignados</td></tr>
-            <tr><td>5</td><td>¿Tiendas/Taller pueden solicitar vía Odoo en vez de Sheets?</td><td>Capacitación necesaria</td></tr>
-            <tr><td>6</td><td>¿Compras puede usar flujo PO estándar para consumibles?</td><td>Alineación Compras-Logística</td></tr>
+            <tr><td>1</td><td>¿Cómo registramos el despacho de consumibles a Tiendas en Odoo?</td><td>Transferencia interna vs salida directa</td></tr>
+            <tr><td>2</td><td>¿Cómo descontamos inventario al enviar a Taller (entrega interna)?</td><td>Flujo de salida / consumo interno</td></tr>
+            <tr><td>3</td><td>¿Configuramos ubicaciones virtuales para consumibles?</td><td>Almacén / Tiendas / Taller</td></tr>
+            <tr><td>4</td><td>¿Quién lidera la configuración técnica en Odoo?</td><td>Responsable TI / Consultor</td></tr>
+            <tr><td>5</td><td>¿Priorizamos digitalizar validación QA de MP para agilizar PT?</td><td>Sí/No + alcance inicial</td></tr>
+            <tr><td>6</td><td>¿Cuándo dejamos de usar Sheets para despacho de consumibles?</td><td>Fecha + plan de transición</td></tr>
           </tbody>
         </table>
       </div>
