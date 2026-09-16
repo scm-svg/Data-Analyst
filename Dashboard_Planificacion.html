@@ -30,6 +30,18 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .mbtn.active{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:700}
 .mbtn .mcnt{background:rgba(255,255,255,.22);border-radius:10px;padding:1px 6px;font-size:.62rem;font-weight:700}
 .mbtn:not(.active) .mcnt{background:var(--mu2);color:var(--bg)}
+.mbar-hint{font-size:.62rem;color:var(--mu);margin-left:6px}
+.wbar{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.wbar-lbl{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-right:2px}
+.wchip{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:999px;padding:4px 9px;font-family:var(--fb);font-size:.68rem;font-weight:600;cursor:pointer;line-height:1.2}
+.wchip:hover{border-color:var(--ac);color:var(--tx)}
+.wchip.active{background:var(--ac);color:#fff;border-color:var(--ac)}
+.pend-n{font-family:var(--fh);font-size:1.4rem;font-weight:800;line-height:1.1}
+.pend-n.ac{color:var(--ac)}
+.pend-n.a2{color:var(--a2)}
+.pend-n.yw{color:var(--yw)}
+.pend-block{margin-top:16px}
+.pend-block:first-child{margin-top:0}
 .fbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:10px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .fbar label{font-size:.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
 .fbar select,.fbar input{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:7px;padding:5px 10px;font-family:var(--fb);font-size:.78rem;outline:none}
@@ -105,7 +117,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
     <div class="kpi-bar">
       <div class="kpib"><div class="kv" id="k-plan">—</div><div class="kl" id="k-plan-lbl">Plan</div></div>
       <div class="kpib"><div class="kv" id="k-pend">—</div><div class="kl">Pendiente</div></div>
-      <div class="kpib"><div class="kv" id="k-alm">—</div><div class="kl">Almacén</div></div>
+      <div class="kpib"><div class="kv" id="k-alm">—</div><div class="kl">A Producir</div></div>
       <div class="kpib"><div class="kv" id="k-mod">—</div><div class="kl">Modelos</div></div>
     </div>
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️ Light</button>
@@ -34706,7 +34718,7 @@ try {
   if (st0) { st0.textContent = 'Error leyendo datos: ' + e.message; st0.style.color = 'var(--rd)'; }
 }
 var CI = {};
-var _modelo = '';
+var _modelos = [];
 var _theme = 'dark';
 var _tab = 'cal';
 var LINE_COLORS = {1:'#5b6af7',2:'#f75b8a',3:'#4caf76',4:'#e6a800',5:'#7c3aed'};
@@ -34769,7 +34781,7 @@ function boot(){
   fillModelos();
   var m='';
   try{ m=(new URLSearchParams(location.search)).get('modelo')||''; }catch(e){}
-  if(m){ setModelo(m); return; }
+  if(m){ toggleModelo(m); return; }
   kpis();
   renderAll();
 }
@@ -34790,10 +34802,11 @@ function fillModelos(){
   var bar=document.getElementById('mbar');
   var mods=(D.opcionesFiltro && D.opcionesFiltro.modelos) || [];
   var html='<span class="mbar-lbl">Modelo:</span>';
-  html+='<button class="mbtn active" data-m="" onclick="setModelo(\'\')">Todos <span class="mcnt" id="mcnt_all">0</span></button>';
+  html+='<button class="mbtn active" data-m="" onclick="toggleModelo(\'\')">Todos <span class="mcnt" id="mcnt_all">0</span></button>';
   mods.forEach(function(m,i){
-    html+='<button class="mbtn" data-m="'+esc(m)+'" onclick="setModelo(this.dataset.m)">'+esc(shortMod(m))+' <span class="mcnt" id="mcnt_'+i+'">0</span></button>';
+    html+='<button class="mbtn" data-m="'+esc(m)+'" onclick="toggleModelo(this.dataset.m)">'+esc(shortMod(m))+' <span class="mcnt" id="mcnt_'+i+'">0</span></button>';
   });
+  html+='<span class="mbar-hint">Clic para sumar varios</span>';
   bar.innerHTML=html;
   updateModeloCounts();
 }
@@ -34809,8 +34822,22 @@ function updateModeloCounts(){
     var n=document.getElementById('mcnt_'+i); if(n) n.textContent=fmtN(by[m]||0);
   });
 }
+function matchModelo(nombre){
+  if(!_modelos.length) return true;
+  return _modelos.indexOf(nombre)!==-1;
+}
+function matchModeloTexto(txt){
+  if(!_modelos.length) return true;
+  var t=String(txt||'').toLowerCase();
+  return _modelos.some(function(m){ return t.indexOf(String(m).toLowerCase())!==-1; });
+}
+function tituloModelos(){
+  if(!_modelos.length) return 'información';
+  if(_modelos.length===1) return shortMod(_modelos[0]);
+  return _modelos.length+' modelos';
+}
 function primeraSemanaModelo(){
-  if(!_modelo) return '';
+  if(!_modelos.length) return '';
   var keys=weekKeys();
   for(var i=0;i<keys.length;i++){
     var hay=cargaFiltrada(keys[i]).some(function(c){ return (Number(c.total)||0)>0; });
@@ -34818,15 +34845,52 @@ function primeraSemanaModelo(){
   }
   return '';
 }
-function setModelo(m){
-  _modelo=m||'';
-  document.querySelectorAll('.mbtn').forEach(function(b){ b.classList.toggle('active', (b.dataset.m||'')===_modelo); });
-  document.getElementById('titleModelo').textContent = _modelo ? shortMod(_modelo) : 'información';
-  if(_modelo){
+function toggleModelo(m){
+  if(!m){
+    _modelos=[];
+  } else {
+    var i=_modelos.indexOf(m);
+    if(i>=0) _modelos.splice(i,1);
+    else _modelos.push(m);
+  }
+  document.querySelectorAll('.mbtn').forEach(function(b){
+    var val=b.dataset.m||'';
+    var on=val==='' ? _modelos.length===0 : _modelos.indexOf(val)!==-1;
+    b.classList.toggle('active', on);
+  });
+  document.getElementById('titleModelo').textContent = tituloModelos();
+  if(_modelos.length===1){
     var w=primeraSemanaModelo();
     if(w) document.getElementById('f-sem').value=w;
   }
   onFilter();
+}
+window.toggleModelo=toggleModelo;
+function setSemana(k){
+  var sel=document.getElementById('f-sem');
+  if(sel) sel.value=k;
+  onFilter();
+}
+window.setSemana=setSemana;
+function resumenPendientes(usarBusqueda){
+  var rows=(D.pendientes||[]).filter(function(p){
+    if(!matchModeloTexto(p.producto)) return false;
+    if(usarBusqueda && q() && !matchQ(p.producto+p.sku+p.mo+p.para)) return false;
+    return true;
+  });
+  var fuera=rows.filter(function(p){ return /fuera|sin capacidad/i.test(p.para||''); });
+  var despues=rows.filter(function(p){ return !/fuera|sin capacidad/i.test(p.para||''); });
+  var sinPlan=(D.modelosSinPlanificar||[]).filter(function(m){
+    if(!matchModelo(m.modelo)) return false;
+    if(usarBusqueda && !matchQ(m.modelo+(m.tipo||''))) return false;
+    return true;
+  });
+  return {
+    despues:despues, fuera:fuera, sinPlan:sinPlan,
+    vDes:despues.reduce(function(a,p){return a+(Number(p.cant)||0);},0),
+    vFue:fuera.reduce(function(a,p){return a+(Number(p.cant)||0);},0),
+    vSinPlan:sinPlan.reduce(function(a,m){return a+(Number(m.faltante)||0);},0)
+  };
 }
 function fmtDiaHead(s){
   var p=String(s||'').split('/');
@@ -34839,15 +34903,14 @@ function fmtDiaHead(s){
 }
 function kpis(){
   var plan=0; weekKeys().forEach(function(k){ cargaFiltrada(k).forEach(function(c){ plan+=Number(c.total)||0; }); });
-  var pend=(D.pendientes||[]).reduce(function(a,p){ return a+(Number(p.cant)||0); },0);
-  var alm=(D.almacenModelo||[]).filter(function(m){ return !_modelo || m.modelo===_modelo; }).reduce(function(a,p){ return a+(Number(p.cantidad)||0); },0);
-  var nmod=_modelo?1:((D.proyModelo||[]).length);
+  var r=resumenPendientes(false);
+  var nmod=_modelos.length?_modelos.length:((D.proyModelo||[]).length);
   document.getElementById('k-plan').textContent=fmtN(plan);
-  document.getElementById('k-pend').textContent=fmtN(pend);
-  document.getElementById('k-alm').textContent=fmtN(alm);
+  document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);
+  document.getElementById('k-alm').textContent=fmtN(r.vDes);
   document.getElementById('k-mod').textContent=String(nmod);
 }
-function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; setModelo(''); }
+function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; toggleModelo(''); }
 function onFilter(){ kpis(); renderAll(); }
 function renderAll(){
   renderCal(); renderSalida(); renderSeg(); renderPend(); renderAlm(); renderSup();
@@ -34856,7 +34919,7 @@ function renderAll(){
 function cargaFiltrada(k){
   var lin=fLin();
   return (D.semanas[k]&&D.semanas[k].carga||[]).filter(function(c){
-    if(_modelo && c.modelo!==_modelo) return false;
+    if(!matchModelo(c.modelo)) return false;
     if(lin && String(c.linea).replace(/\D/g,'')!==lin) return false;
     return matchQ(c.modelo);
   });
@@ -34922,12 +34985,25 @@ function renderCal(){
   });
   gridHtml+='</div>';
 
+  var wbar='<div class="wbar"><span class="wbar-lbl">Semana</span>';
+  keys.forEach(function(k,i){
+    wbar+='<button type="button" class="wchip'+(k===sel?' active':'')+'" onclick="setSemana(\''+esc(k)+'\')">S'+(i+1)+'</button>';
+  });
+  wbar+='</div>';
+  var subDia='';
+  if(_modelos.length===1){
+    subDia='Semana en la que inicia '+esc(shortMod(_modelos[0]))+'. ';
+  } else if(_modelos.length>1){
+    subDia=_modelos.length+' modelos seleccionados. ';
+  }
+
   el.innerHTML=
     tk+
     '<div class="card"><h3>Calendario de producción</h3><p class="sub">Piezas por línea y semana. El detalle inferior es el día a día de la semana seleccionada.</p>'+
     '<div class="ctwrap"><table class="ct"><thead><tr>'+thead+'<th>Total</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
     '<div class="card"><h3>Detalle diario · '+sel+(D.fechasSemanas[sel]?' ('+D.fechasSemanas[sel]+')':'')+'</h3>'+
-    '<p class="sub">'+(_modelo?'Semana en la que inicia '+esc(shortMod(_modelo))+'. ':'')+'Qué modelo corre en cada línea y cuántas piezas salen ese día.</p>'+gridHtml+'</div>';
+    wbar+
+    '<p class="sub">'+subDia+'Qué modelo corre en cada línea y cuántas piezas salen ese día.</p>'+gridHtml+'</div>';
 }
 
 function renderSalida(){
@@ -35040,49 +35116,39 @@ window.togSeg=function(i){
 
 function renderPend(){
   var el=document.getElementById('sec-pend');
-  var rows=(D.pendientes||[]).filter(function(p){
-    if(_modelo && String(p.producto||'').toLowerCase().indexOf(_modelo.toLowerCase())<0) return false;
-    if(q() && !matchQ(p.producto+p.sku+p.mo+p.para)) return false;
-    return true;
-  });
-  var fuera=rows.filter(function(p){ return /fuera|sin capacidad/i.test(p.para||''); });
-  var despues=rows.filter(function(p){ return !/fuera|sin capacidad/i.test(p.para||''); });
-  var vDes=despues.reduce(function(a,p){return a+(Number(p.cant)||0);},0);
-  var vFue=fuera.reduce(function(a,p){return a+(Number(p.cant)||0);},0);
-  var html='<div class="g2"><div class="card"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–'+nSem()+').</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--ac)">'+fmtN(vDes)+'</div><div class="sub">'+despues.length+' MOs</div><h3 style="margin-top:16px">Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las '+nSem()+' semanas o no hay línea.</p><div style="font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--a2)">'+fmtN(vFue)+'</div><div class="sub">'+fuera.length+' MOs</div></div>';
-  html+='<div class="card"><h3>Mix de pendientes</h3><p class="sub">En horizonte vs fuera / sin programar.</p><div class="cw t"><canvas id="cPend"></canvas></div></div></div>';
-  var sin=(D.proyModelo||[]).filter(function(m){ return (m.sin||0)>0 && matchQ(m.modelo) && (!_modelo || m.modelo===_modelo); });
+  var r=resumenPendientes(true);
+  var html='<div class="g2"><div class="card">';
+  html+='<div class="pend-block"><h3>Más adelante en el horizonte</h3><p class="sub">Ya tienen semana asignada (Semana 2–'+nSem()+').</p><div class="pend-n ac">'+fmtN(r.vDes)+'</div><div class="sub">'+r.despues.length+' MOs</div></div>';
+  html+='<div class="pend-block"><h3>Sin programar / fuera de horizonte</h3><p class="sub">No cupieron en las '+nSem()+' semanas o no hay línea.</p><div class="pend-n a2">'+fmtN(r.vFue)+'</div><div class="sub">'+r.fuera.length+' MOs</div></div>';
+  html+='<div class="pend-block"><h3>Modelos sin planificar</h3><p class="sub">Sin prioridad, sin fecha de salida estimada y sin línea.</p><div class="pend-n yw">'+fmtN(r.vSinPlan)+'</div><div class="sub">'+r.sinPlan.length+' modelos</div></div>';
+  html+='</div>';
+  html+='<div class="card"><h3>Mix de pendientes</h3><p class="sub">En horizonte, fuera de horizonte y modelos sin planificar.</p><div class="cw t"><canvas id="cPend"></canvas></div></div></div>';
+  var sin=(D.proyModelo||[]).filter(function(m){ return (m.sin||0)>0 && matchQ(m.modelo) && matchModelo(m.modelo); });
   if(sin.length){
     html+='<div class="card"><h3>Modelos con piezas sin programar (Proyección)</h3><table class="ct ct-mid"><thead><tr><th class="left">Modelo</th><th>Meta</th><th>Sin programar</th><th>Estado</th></tr></thead><tbody>';
     sin.forEach(function(m){ html+='<tr><td class="left">'+esc(m.modelo)+'</td><td class="num">'+fmtN(m.meta)+'</td><td class="num">'+fmtN(m.sin)+'</td><td>'+esc(m.estado)+'</td></tr>'; });
     html+='</tbody></table></div>';
   }
-  var sinPlan=(D.modelosSinPlanificar||[]).filter(function(m){
-    if(_modelo && m.modelo!==_modelo) return false;
-    return matchQ(m.modelo+(m.tipo||''));
-  });
-  var vSinPlan=sinPlan.reduce(function(a,m){ return a+(Number(m.faltante)||0); },0);
-  html+='<div class="card"><h3>Modelos sin planificar</h3><p class="sub">Están en Priorización sin prioridad, sin fecha de salida estimada y sin línea. Cantidades de Por Hacer.</p>';
-  html+='<div style="font-family:var(--fh);font-size:1.2rem;font-weight:800;color:var(--a2);margin-bottom:10px">'+fmtN(vSinPlan)+' <span class="sub">pzas · '+sinPlan.length+' modelos</span></div>';
+  html+='<div class="card"><h3>Detalle · modelos sin planificar</h3><p class="sub">Están en Priorización sin prioridad, sin fecha de salida estimada y sin línea. Cantidades de Por Hacer.</p>';
   html+='<table class="ct ct-mid"><thead><tr><th class="left">Modelo</th><th>Tipo</th><th>MOs</th><th>Solicitada</th><th>Faltante</th></tr></thead><tbody>';
-  if(!sinPlan.length){
+  if(!r.sinPlan.length){
     html+='<tr><td colspan="5" class="sub">No hay modelos sin planificar.</td></tr>';
   } else {
-    sinPlan.forEach(function(m){
+    r.sinPlan.forEach(function(m){
       html+='<tr><td class="left">'+esc(m.modelo)+'</td><td>'+esc(m.tipo||'')+'</td><td class="num">'+fmtN(m.mos)+'</td><td class="num">'+fmtN(m.solicitada)+'</td><td class="num">'+fmtN(m.faltante)+'</td></tr>';
     });
   }
   html+='</tbody></table></div>';
   el.innerHTML=html;
   mc('cPend','doughnut',{
-    labels:['En horizonte','Fuera / sin programar'],
-    datasets:[{data:[vDes,vFue], backgroundColor:['#5b6af7','#f75b8a'], borderWidth:0}]
+    labels:['En horizonte','Fuera / sin programar','Sin planificar'],
+    datasets:[{data:[r.vDes,r.vFue,r.vSinPlan], backgroundColor:['#5b6af7','#f75b8a','#ffc107'], borderWidth:0}]
   }, {responsive:true, maintainAspectRatio:false, animation:false, plugins:{legend:{position:'bottom', labels:{color:'#7a7b95', font:{family:'DM Sans', size:11}}}}});
 }
 
 function renderAlm(){
   var el=document.getElementById('sec-alm');
-  var mods=(D.almacenModelo||[]).filter(function(m){ return matchQ(m.modelo) && (!_modelo || m.modelo===_modelo); });
+  var mods=(D.almacenModelo||[]).filter(function(m){ return matchQ(m.modelo) && matchModelo(m.modelo); });
   var skus=D.almacenSku||[];
   var html='<div class="card"><h3>Entrada de almacén</h3><p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Clic en el modelo para ver SKUs.</p>';
   html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Cantidad</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
@@ -35110,9 +35176,6 @@ function skusDeModeloAlm(modelo){
   var set={};
   (D.proySku||[]).forEach(function(s){ if(s.modelo===modelo) set[s.sku]=1; });
   return (D.almacenSku||[]).filter(function(s){
-    if(_modelo && s.modelo && s.modelo!==modelo && String(s.producto||'').toLowerCase().indexOf(String(modelo||'').toLowerCase())<0) {
-      /* keep matching logic below */
-    }
     if(set[s.sku]) return true;
     return String(s.producto||'').toLowerCase().indexOf(String(modelo||'').toLowerCase())!==-1;
   });
@@ -35137,8 +35200,7 @@ function renderSup(){
   html+='</div></div>';
   html+='<div class="card"><h3>Capacidad de producción por modelo</h3><p class="sub">Cap Produccion por Dia tomada de Proyeccion - SKUS.</p><table class="ct ct-mid"><thead><tr><th class="left">Modelo</th><th>Pzas / día</th></tr></thead><tbody>';
   Object.keys(caps).sort().forEach(function(m){
-    if(!matchQ(m)) return;
-    if(_modelo && m!==_modelo) return;
+    if(!matchQ(m) || !matchModelo(m)) return;
     html+='<tr><td class="left">'+esc(m)+'</td><td class="num">'+fmtN(caps[m])+'</td></tr>';
   });
   html+='</tbody></table></div>';
