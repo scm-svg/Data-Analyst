@@ -102,6 +102,13 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .tr-exp .chev{color:var(--ac);display:inline-block;width:14px}
 .sku-row td{background:var(--s2);font-size:.72rem}
 .cal-grid{display:grid;grid-template-columns:90px repeat(5,1fr);gap:6px}
+.imp-week{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.imp-week .imp-meta{flex:1}
+.imp-week.imp-done{border-left-color:var(--gr)}
+.imp-chk{display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;vertical-align:middle;user-select:none}
+.imp-chk input{width:15px;height:15px;accent-color:var(--gr);cursor:pointer}
+.imp-chk span{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.imp-chk.ok span{color:var(--gr);font-weight:700}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 @media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}}
 @media(max-width:780px){.g2,.g3,.cal-grid{grid-template-columns:1fr}.content,.fbar,.tabs,.hdr,.ebar,.mbar{padding-left:16px;padding-right:16px}}
@@ -142,6 +149,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 <div class="tabs">
   <button class="tab active" data-tab="cal">📅 Calendario</button>
   <button class="tab" data-tab="salida">📦 Salida semanal</button>
+  <button class="tab" data-tab="imp">🖨 Impresión Digital</button>
   <button class="tab" data-tab="seg">● Seguimiento</button>
   <button class="tab" data-tab="pend">⏳ Pendientes</button>
   <button class="tab" data-tab="alm">🏭 Almacén</button>
@@ -152,6 +160,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
   <noscript><div class="note">Activa JavaScript o ábrelo en Chrome. Sin JS no se pueden ver los números.</div></noscript>
   <div id="sec-cal" class="sec active"></div>
   <div id="sec-salida" class="sec"></div>
+  <div id="sec-imp" class="sec"></div>
   <div id="sec-seg" class="sec"></div>
   <div id="sec-pend" class="sec"></div>
   <div id="sec-alm" class="sec"></div>
@@ -34913,7 +34922,7 @@ function kpis(){
 function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; toggleModelo(''); }
 function onFilter(){ kpis(); renderAll(); }
 function renderAll(){
-  renderCal(); renderSalida(); renderSeg(); renderPend(); renderAlm(); renderSup();
+  renderCal(); renderSalida(); renderImp(); renderSeg(); renderPend(); renderAlm(); renderSup();
 }
 
 function cargaFiltrada(k){
@@ -35052,6 +35061,182 @@ window.togSku=function(id, wi, mi){
   }
   row.setAttribute('data-ok','1');
   row.style.display='table-row';
+};
+
+function moPorSku(){
+  if(window._moPorSku) return window._moPorSku;
+  var map={};
+  (D.almacenSku||[]).forEach(function(s){ if(s.sku && s.mo) map[s.sku]=String(s.mo); });
+  (D.pendientes||[]).forEach(function(p){ if(p.sku && p.mo && !map[p.sku]) map[p.sku]=String(p.mo); });
+  window._moPorSku=map;
+  return map;
+}
+function filasImpRaw(modelo, wi){
+  var map=moPorSku();
+  return (D.proySku||[]).filter(function(s){
+    return s.modelo===modelo && (Number((s.weeks||[])[wi])||0)>0;
+  }).map(function(s){
+    return {
+      mo:map[s.sku]||'',
+      sku:s.sku,
+      detalle:s.detalle,
+      color:s.color,
+      talla:s.talla,
+      cant:Number((s.weeks||[])[wi])||0,
+      meta:s.meta
+    };
+  }).sort(function(a,b){
+    var c=String(a.mo).localeCompare(String(b.mo),'es');
+    return c||String(a.sku).localeCompare(String(b.sku),'es');
+  });
+}
+function filasImp(modelo, wi){
+  return filasImpRaw(modelo, wi).filter(function(f){
+    return !q() || matchQ(f.mo+f.sku+f.detalle+f.color) || matchQ(modelo);
+  });
+}
+function cargaImp(k, wi){
+  var lin=fLin();
+  return (D.semanas[k]&&D.semanas[k].carga||[]).filter(function(c){
+    if(!matchModelo(c.modelo)) return false;
+    if(lin && String(c.linea).replace(/\D/g,'')!==lin) return false;
+    if(!q()) return true;
+    if(matchQ(c.modelo)) return true;
+    return filasImpRaw(c.modelo, wi).some(function(f){ return matchQ(f.mo+f.sku+f.detalle); });
+  });
+}
+function mosUnicas(filas){
+  var set={};
+  filas.forEach(function(f){ if(f.mo) set[f.mo]=1; });
+  return Object.keys(set).length;
+}
+function impKey(wi, sku, mo){ return String(wi)+'|'+String(sku||'')+'|'+String(mo||''); }
+function impLoad(){
+  try{ return JSON.parse(localStorage.getItem('dash-impdig-checks')||'{}'); }catch(e){ return {}; }
+}
+function impSave(st){
+  try{ localStorage.setItem('dash-impdig-checks', JSON.stringify(st)); }catch(e){}
+}
+function keysImpModelo(wi, mi){
+  var c=(window._impCarga[wi]||[])[mi];
+  if(!c) return [];
+  return filasImp(c.modelo, wi).map(function(f){ return impKey(wi, f.sku, f.mo); });
+}
+function keysImpSemana(wi){
+  var keys=[], carga=window._impCarga[wi]||[];
+  for(var mi=0; mi<carga.length; mi++) keys=keys.concat(keysImpModelo(wi, mi));
+  return keys;
+}
+function setImpKeys(keys, on){
+  var st=impLoad();
+  keys.forEach(function(k){ if(on) st[k]=1; else delete st[k]; });
+  impSave(st);
+}
+function estadoKeys(keys){
+  var st=impLoad(), n=keys.length, ok=0;
+  keys.forEach(function(k){ if(st[k]) ok++; });
+  return {n:n, ok:ok, all:n>0 && ok===n, some:ok>0 && ok<n};
+}
+function applyImpBox(el, est){
+  if(!el) return;
+  el.checked=!!est.all;
+  el.indeterminate=!!est.some;
+  var lab=el.closest('.imp-chk');
+  if(lab) lab.classList.toggle('ok', !!est.all);
+}
+function syncImpChecks(){
+  document.querySelectorAll('input[data-imp-sku]').forEach(function(el){
+    var st=impLoad();
+    el.checked=!!st[el.getAttribute('data-imp-sku')];
+  });
+  document.querySelectorAll('input[data-imp-mod]').forEach(function(el){
+    var p=String(el.getAttribute('data-imp-mod')||'').split(',');
+    var est=estadoKeys(keysImpModelo(Number(p[0]), Number(p[1])));
+    applyImpBox(el, est);
+  });
+  document.querySelectorAll('input[data-imp-week]').forEach(function(el){
+    var wi=Number(el.getAttribute('data-imp-week'));
+    var est=estadoKeys(keysImpSemana(wi));
+    applyImpBox(el, est);
+    var note=el.closest('.imp-week');
+    if(note) note.classList.toggle('imp-done', !!est.all);
+  });
+}
+function renderImp(){
+  var el=document.getElementById('sec-imp');
+  if(!el) return;
+  window._impCarga={};
+  var keys=weekKeys();
+  var html='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan de producción. Drill-down semana → modelo → MO / SKU. Marca el check cuando el logotipo esté listo (se guarda en este navegador).</p>';
+  keys.forEach(function(k, wi){
+    var carga=cargaImp(k, wi);
+    var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
+    if(!tot && fLin()) return;
+    var filasSem=[];
+    carga.forEach(function(c){ filasSem=filasSem.concat(filasImp(c.modelo, wi)); });
+    var nMos=mosUnicas(filasSem);
+    var est=estadoKeys(filasSem.map(function(f){ return impKey(wi, f.sku, f.mo); }));
+    html+='<div class="note expand imp-week'+(est.all?' imp-done':'')+'" data-open="impw'+wi+'" onclick="tog(this)"><span class="imp-meta">'+(k)+' · '+(D.fechasSemanas[k]||'')+' · <b>'+fmtN(tot)+'</b> pzas · '+carga.length+' modelos · '+fmtN(nMos)+' MOs</span>';
+    html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Semana cubierta" onclick="event.stopPropagation()"><input type="checkbox" data-imp-week="'+wi+'" '+(est.all?'checked ':'')+'onchange="chkImpSemana(event,'+wi+')"><span>Listo</span></label></div>';
+    html+='<div id="impw'+wi+'" style="display:none;margin:0 0 12px 8px">';
+    html+='<table class="ct ct-mid"><thead><tr><th></th><th>Logo</th><th class="left">Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th></tr></thead><tbody>';
+    carga.forEach(function(c, mi){
+      var id='impw'+wi+'m'+mi;
+      var filas=filasImp(c.modelo, wi);
+      var nMo=mosUnicas(filas);
+      var estM=estadoKeys(filas.map(function(f){ return impKey(wi, f.sku, f.mo); }));
+      html+='<tr class="tr-exp" onclick="togImpSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td>';
+      html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'" title="Modelo listo"><input type="checkbox" data-imp-mod="'+wi+','+mi+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,'+wi+','+mi+')"></label></td>';
+      html+='<td class="left">'+esc(c.modelo)+'</td><td><span class="chip '+linCls(c.linea)+'">'+String(c.linea).replace(/\D/g,'')+'</span></td><td class="num">'+fmtN(nMo)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td></tr>';
+      html+='<tr id="'+id+'" class="sku-row" style="display:none"><td colspan="7">Cargando MOs…</td></tr>';
+    });
+    html+='</tbody></table></div>';
+    window._impCarga[wi]=carga;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+  syncImpChecks();
+}
+window.togImpSku=function(id, wi, mi){
+  var row=document.getElementById(id);
+  if(!row) return;
+  if(row.style.display!=='none' && row.getAttribute('data-ok')){ row.style.display='none'; return; }
+  var c=(window._impCarga[wi]||[])[mi]||{};
+  var filas=filasImp(c.modelo, wi);
+  if(!filas.length){ row.innerHTML='<td colspan="7" class="sub">Sin SKUs con cantidad en esta semana.</td>'; }
+  else {
+    var t='<td colspan="7"><table class="ct ct-mid"><thead><tr><th class="left">MO</th><th>Logo</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th></tr></thead><tbody>';
+    filas.forEach(function(f){
+      var key=impKey(wi, f.sku, f.mo);
+      var on=!!impLoad()[key];
+      t+='<tr><td class="left">'+esc(f.mo||'—')+'</td>';
+      t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,'+wi+',this)"></label></td>';
+      t+='<td class="left">'+esc(f.sku)+'</td><td class="left">'+esc(f.detalle)+'</td><td>'+esc(f.color)+'</td><td>'+esc(f.talla)+'</td><td class="num">'+fmtN(f.cant)+'</td></tr>';
+    });
+    t+='</tbody></table></td>';
+    row.innerHTML=t;
+  }
+  row.setAttribute('data-ok','1');
+  row.style.display='table-row';
+  syncImpChecks();
+};
+window.chkImpSku=function(ev, wi, el){
+  if(ev) ev.stopPropagation();
+  var key=el.getAttribute('data-imp-sku');
+  var st=impLoad();
+  if(el.checked) st[key]=1; else delete st[key];
+  impSave(st);
+  syncImpChecks();
+};
+window.chkImpModelo=function(ev, wi, mi){
+  if(ev) ev.stopPropagation();
+  setImpKeys(keysImpModelo(wi, mi), !!(ev && ev.target && ev.target.checked));
+  syncImpChecks();
+};
+window.chkImpSemana=function(ev, wi){
+  if(ev) ev.stopPropagation();
+  setImpKeys(keysImpSemana(wi), !!(ev && ev.target && ev.target.checked));
+  syncImpChecks();
 };
 
 function primerDiaCarga(c){
@@ -35230,6 +35415,17 @@ function exportCSV(){
       });
     });
     downloadCSV('planificacion-calendario.csv', rows);
+  } else if(_tab==='imp'){
+    var rows=[['Semana','Fecha','Linea','Modelo','MO','SKU','Detalle','Color','Talla','Cant semana','Logo listo']];
+    var st=impLoad();
+    keys.forEach(function(k, wi){
+      cargaImp(k, wi).forEach(function(c){
+        filasImp(c.modelo, wi).forEach(function(f){
+          rows.push([k, D.fechasSemanas[k]||'', c.linea, c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(wi, f.sku, f.mo)]?'SI':'NO']);
+        });
+      });
+    });
+    downloadCSV('impresion-digital.csv', rows);
   } else if(_tab==='pend'){
     var rows=[['Seccion','Modelo','Tipo','MOs','Solicitada','Faltante','Meta','Sin programar','Estado']];
     (D.proyModelo||[]).filter(function(m){ return (m.sin||0)>0; }).forEach(function(m){
@@ -35258,6 +35454,7 @@ function exportCSV(){
 function paintTab(){
   if(_tab==='cal') renderCal();
   else if(_tab==='salida') renderSalida();
+  else if(_tab==='imp') renderImp();
   else if(_tab==='seg') renderSeg();
   else if(_tab==='pend') renderPend();
   else if(_tab==='alm') renderAlm();

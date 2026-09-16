@@ -2993,6 +2993,9 @@ class TestDashboardInfo(unittest.TestCase):
         self.assertGreater(sum(x["total"] for x in d["semanas"]["Semana 12"]["carga"]), 0)
         self.assertEqual(d["supuestos"]["semanas"], 12)
         self.assertEqual(d["version"], "5.9.31")
+        sku_mo = {s["sku"]: s["mo"] for s in d["almacenSku"] if s.get("sku") and s.get("mo")}
+        self.assertEqual(len(sku_mo), len(d["proySku"]))
+        self.assertTrue(all(s["sku"] in sku_mo for s in d["proySku"]))
         lineas = {c["linea"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(lineas.issubset({"1", "2", "3", "4", "5"}), lineas)
         self.assertIn("modelosSinPlanificar", d)
@@ -3050,6 +3053,17 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("labels:['En horizonte','Fuera / sin programar','Sin planificar']", html)
         self.assertIn("data:[r.vDes,r.vFue,r.vSinPlan]", html)
         self.assertIn("Modelos sin planificar", html)
+
+    def test_impresion_digital_drilldown_y_checks(self):
+        html = self._html()
+        self.assertIn('data-tab="imp"', html)
+        self.assertIn("Impresión Digital", html)
+        self.assertIn("function renderImp()", html)
+        self.assertIn("dash-impdig-checks", html)
+        self.assertIn("<th class=\"left\">MO</th>", html)
+        self.assertIn("window.chkImpSku", html)
+        self.assertIn("window.chkImpModelo", html)
+        self.assertIn("window.chkImpSemana", html)
 
 
 if __name__ == "__main__":
