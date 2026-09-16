@@ -3005,7 +3005,7 @@ class TestDashboardInfo(unittest.TestCase):
             c for c in d["semanas"]["Semana 1"]["carga"]
             if c["modelo"] == "COTTON KIDS" and c["linea"] == "4"
         ]
-        self.assertTrue(cotton_l4, "Excel 24: COTTON KIDS debe estar en L4 semana 1")
+        self.assertTrue(cotton_l4, "Excel 25: COTTON KIDS debe estar en L4 semana 1")
         self.assertGreater(cotton_l4[0]["dias"]["miercoles"], 0)
         planificados = {c["modelo"] for k in d["semanas"] for c in d["semanas"][k]["carga"]}
         self.assertTrue(planificados.isdisjoint(sin_plan), sin_plan & planificados)
@@ -3069,6 +3069,8 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("<th>Cant. semana</th><th>Logo</th>", html)
         self.assertIn("<th>A fabricar</th><th>Logo</th>", html)
         self.assertIn("appearance:none", html)
+        self.assertIn('Las Ordenes de Produccion con siglas "PD"', html)
+        self.assertIn("estan a la esperas de ser creadas en Odoo", html)
 
 
 if __name__ == "__main__":
