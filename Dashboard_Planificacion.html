@@ -15,7 +15,8 @@ body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh
 body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3 100%)}
 .hdr-l h1{font-family:var(--fh);font-size:1.55rem;font-weight:800;letter-spacing:-.5px}
 .hdr-l h1 em{color:var(--ac);font-style:normal}
-.hdr-l p{color:var(--mu);font-size:.8rem;margin-top:2px}
+#status{color:var(--mu);font-size:.8rem;margin-top:2px}
+#status:empty{display:none}
 .hdr-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .kpi-bar{display:flex;gap:10px;flex-wrap:wrap}
 .kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:9px 14px;text-align:center;min-width:76px}
@@ -30,7 +31,6 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .mbtn.active{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:700}
 .mbtn .mcnt{background:rgba(255,255,255,.22);border-radius:10px;padding:1px 6px;font-size:.62rem;font-weight:700}
 .mbtn:not(.active) .mcnt{background:var(--mu2);color:var(--bg)}
-.mbar-hint{font-size:.62rem;color:var(--mu);margin-left:6px}
 .wbar{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
 .wbar-lbl{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-right:2px}
 .wchip{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:999px;padding:4px 9px;font-family:var(--fb);font-size:.68rem;font-weight:600;cursor:pointer;line-height:1.2}
@@ -111,7 +111,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 <div class="hdr">
   <div class="hdr-l">
     <h1>Planificación · <em id="titleModelo">información</em></h1>
-    <p id="status">Plan de producción · Excel (24)</p>
+    <p id="status"></p>
   </div>
   <div class="hdr-r">
     <div class="kpi-bar">
@@ -34774,7 +34774,7 @@ function boot(){
   }
   var bf=document.getElementById('boot-fail'); if(bf) bf.remove();
   var n=nSem();
-  document.getElementById('status').textContent = 'v'+(D.version||'')+' · Excel (24) · '+n+' semanas · Planificación / Semana 2–'+n+' / Proyección / Almacén';
+  document.getElementById('status').textContent = '';
   var lbl=document.getElementById('k-plan-lbl'); if(lbl) lbl.textContent='Plan '+n+' sem';
   document.getElementById('footVer').textContent = D.version||'';
   fillFilters();
@@ -34806,7 +34806,6 @@ function fillModelos(){
   mods.forEach(function(m,i){
     html+='<button class="mbtn" data-m="'+esc(m)+'" onclick="toggleModelo(this.dataset.m)">'+esc(shortMod(m))+' <span class="mcnt" id="mcnt_'+i+'">0</span></button>';
   });
-  html+='<span class="mbar-hint">Clic para sumar varios</span>';
   bar.innerHTML=html;
   updateModeloCounts();
 }

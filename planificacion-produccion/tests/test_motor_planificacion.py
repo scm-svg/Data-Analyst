@@ -3037,7 +3037,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("var _modelos = [];", html)
         self.assertIn("function toggleModelo(m)", html)
         self.assertNotRegex(html, r"\b_modelo\b")
-        self.assertIn("Clic para sumar varios", html)
+        self.assertNotIn("Clic para sumar varios", html)
 
     def test_semana_encima_detalle_diario(self):
         html = self._html()
