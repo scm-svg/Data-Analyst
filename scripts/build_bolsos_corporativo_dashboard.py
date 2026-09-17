@@ -529,8 +529,8 @@ def patch_template(data: dict) -> str:
 
     corp_block = """
   <div class="card g1" style="margin-bottom:14px;border-color:#5b6af766">
-    <h3>📋 Pedido corporativo · 2.800 canastas navideñas</h3>
-    <div class="sub">Planes desde <strong>taller + tránsito</strong> · stock en tienda se mantiene para presencia · días sobre inventario total de red</div>
+    <h3>📋 Pedido corporativo · 2.800 und</h3>
+    <div class="sub">Asignación desde <strong>taller + tránsito</strong> · stock tienda intacto · cobertura sobre inventario total de red</div>
     <div id="corpPlansGrid"></div>
   </div>"""
     html = html.replace(
@@ -596,22 +596,29 @@ def patch_template(data: dict) -> str:
     html = re.sub(r"var DATA=\{.*?\};", f"var DATA={data_json};", html, count=1, flags=re.S)
 
     corp_fn = """
+function corpCobertura(d){
+  if(d==null||isNaN(d))return'—';
+  var m=Math.round(d/30*10)/10;
+  return d+' d <span style="color:var(--mu2);font-weight:500">(~'+m+' m)</span>';
+}
 function renderCorporatePlans(){
   var el=document.getElementById('corpPlansGrid');if(!el||!DATA.corporate_plans)return;
-  var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:8px">';
+  var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:8px">';
   DATA.corporate_plans.forEach(function(p,idx){
     var col=idx===0?'#5b6af7':idx===1?'#10b981':'#f59e0b';
+    var dmin=p.dias_min,dpro=p.dias_prom;
     h+='<div style="background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:14px;border-top:3px solid '+col+'">';
     h+='<div style="font-family:var(--fh);font-weight:800;font-size:0.82rem;margin-bottom:6px">'+p.nombre+'</div>';
-    h+='<div style="font-size:0.68rem;color:var(--mu);margin-bottom:10px">Total <strong style="color:var(--tx)">'+p.total+' und</strong> · mín '+p.dias_min+' d · prom '+p.dias_prom+' d</div>';
-    h+='<table class="ct" style="font-size:0.72rem"><thead><tr><th>Modelo</th><th>Pedido</th><th>Inv. total post</th><th>Días red</th></tr></thead><tbody>';
+    h+='<div style="font-size:0.68rem;color:var(--mu);margin-bottom:10px">Total pedido <strong style="color:var(--tx)">'+p.total+' und</strong> · cobertura mín. '+corpCobertura(dmin)+' · prom. '+corpCobertura(dpro)+'</div>';
+    h+='<div style="overflow-x:auto"><table class="ct" style="font-size:0.68rem;min-width:100%"><thead><tr><th>Modelo</th><th>Taller+Tránsito</th><th>Rot. und/mes</th><th>Pedido</th><th>Inv. post red</th><th>Cobertura</th></tr></thead><tbody>';
     p.rows.forEach(function(r){
       var dc=r.dias_inventario<60?'#ef4444':r.dias_inventario<90?'#f59e0b':'#10b981';
-      h+='<tr><td>'+r.modelo.replace('DRY BAG 30L','Dry 30L').replace('CAVAPACK 35L','Cavapack').replace('MAXI TOTE','Maxi Tote')+'</td><td style="font-weight:700">'+r.qty_pedido+'</td><td>'+r.stock_post+'</td><td style="font-weight:800;color:'+dc+'">'+r.dias_inventario+'</td></tr>';
+      var nm=r.modelo.replace('DRY BAG 30L','Dry 30L').replace('CAVAPACK 35L','Cavapack').replace('MAXI TOTE','Maxi Tote');
+      h+='<tr><td style="white-space:nowrap">'+nm+'</td><td style="font-weight:700;color:#22d3ee">'+(r.pool_corporativo!=null?r.pool_corporativo:'—')+'</td><td style="color:#a5b4fc">'+(r.v_mes_adj!=null?Math.round(r.v_mes_adj*10)/10:'—')+'</td><td style="font-weight:700">'+r.qty_pedido+'</td><td>'+r.stock_post+'</td><td style="font-weight:800;color:'+dc+'">'+corpCobertura(r.dias_inventario)+'</td></tr>';
     });
-    h+='</tbody></table></div>';
+    h+='</tbody></table></div></div>';
   });
-  h+='</div><div style="margin-top:12px;font-size:0.68rem;color:var(--mu);line-height:1.5">Pedido sale de <strong>taller + tránsito</strong> (Maxi Tote tope '+(DATA.maxi_tote_pedido_max||700)+' und). Días = inventario total red (tiendas + remanente taller/tránsito) ÷ rotación ajustada (×'+(DATA.high_season_factor||1.25)+', VELA, Barquisimeto, Web≈Chacao).</div>';
+  h+='</div><div style="margin-top:12px;font-size:0.68rem;color:var(--mu);line-height:1.5"><strong>Taller+Tránsito</strong> = pool disponible para corporativo (sin tiendas). <strong>Rot. und/mes</strong> = consumo mensual ajustado (temporada alta ×'+(DATA.high_season_factor||1.25)+', VELA, Barquisimeto, Web≈Chacao). <strong>Cobertura</strong> = inventario total post-pedido ÷ rotación (días y meses ~30 d).</div>';
   el.innerHTML=h;
 }
 """
@@ -646,6 +653,10 @@ function renderCorporatePlans(){
         "var MICO={'DRY BAG 30L':'💧','CAVAPACK 35L':'🎒','MAXI TOTE':'👜'};",
         html,
         count=1,
+    )
+    html = html.replace(
+        "📋 Pedido corporativo · 2.800 canastas navideñas",
+        "📋 Pedido corporativo · 2.800 und",
     )
     return html
 
