@@ -19,6 +19,7 @@ HS = 1.25
 VELA_MULT = 1.5
 CORP_TOTAL = 2800
 TARGET_DAYS_DRY = 75
+MAXI_TOTE_PEDIDO_MAX = 700
 
 MODELS = ["DRY BAG 30L", "CAVAPACK 35L", "MAXI TOTE"]
 INCOMING = {"DRY BAG 30L": 2350, "CAVAPACK 35L": 1000, "MAXI TOTE": 0}
@@ -73,7 +74,18 @@ def norm_tienda(t: str) -> str:
         return "CERRO VERDE"
     if t == "TOLON":
         return "TOLON"
+    if t == "WEB":
+        return "WEB"
     return t.strip()
+
+
+def mes_key_sort(key: str) -> tuple[int, int]:
+    mes, year = key.split("-")
+    return (int(year), MES_MAP[mes.strip().upper()])
+
+
+def sort_mes_keys(keys: list[str]) -> list[str]:
+    return sorted(keys, key=mes_key_sort)
 
 
 def norm_inv_loc(u: str) -> str:
@@ -133,24 +145,39 @@ def stock_summary(inv: pd.DataFrame) -> dict:
 
 
 def calc_velocity(ventas: pd.DataFrame) -> tuple[dict, list[str]]:
+    hist_stores = RETAIL + ["WEB"]
     all_months = sorted(
-        ventas[ventas["tienda"].isin(RETAIL)]["ym"].dropna().unique()
+        ventas[ventas["tienda"].isin(hist_stores)]["ym"].dropna().unique()
     )
     complete = [m for m in all_months if m != "2026-09"]
     vel_months = complete[-6:]
     metrics = {}
     for model in MODELS:
-        sub = ventas[(ventas["modelo"] == model) & (ventas["tienda"].isin(RETAIL))]
-        monthly = sub.groupby("ym")["qty"].sum()
-        base = sum(monthly.get(m, 0) for m in vel_months) / len(vel_months)
-        grie_m = sub[sub["tienda"] == "GRIE"].groupby("ym")["qty"].sum()
-        vela_m = sub[sub["tienda"] == "VELA"].groupby("ym")["qty"].sum()
-        grie_avg = sum(grie_m.get(m, 0) for m in vel_months) / len(vel_months)
-        vela_avg = sum(vela_m.get(m, 0) for m in vel_months) / len(vel_months)
+        sub = ventas[(ventas["modelo"] == model) & (ventas["tienda"].isin(hist_stores))]
+        retail_sub = sub[sub["tienda"].isin(RETAIL)]
+        monthly_retail = retail_sub.groupby("ym")["qty"].sum()
+        base_retail = sum(monthly_retail.get(m, 0) for m in vel_months) / len(vel_months)
+
+        def store_avg(store: str) -> float:
+            s = sub[sub["tienda"] == store].groupby("ym")["qty"].sum()
+            return sum(s.get(m, 0) for m in vel_months) / len(vel_months)
+
+        grie_avg = store_avg("GRIE")
+        chacao_avg = store_avg("CHACAO")
+        tolón_avg = store_avg("TOLON")
+        vela_avg = store_avg("VELA")
+        web_avg = store_avg("WEB")
+
         vela_uplift = max(0.0, grie_avg * VELA_MULT - vela_avg)
-        v_mes_adj = (base + vela_uplift) * HS
+        web_uplift = web_avg  # Web repotenciado ≈ 1 Chacao adicional
+        barquisimeto_uplift = (grie_avg + chacao_avg + tolón_avg) / 3.0
+
+        base = base_retail + web_uplift + barquisimeto_uplift + vela_uplift
+        v_mes_adj = base * HS
         metrics[model] = {
-            "v_mes_base": round(float(base), 1),
+            "v_mes_base": round(float(base_retail), 1),
+            "web_uplift": round(float(web_uplift), 1),
+            "barquisimeto_uplift": round(float(barquisimeto_uplift), 1),
             "vela_uplift": round(float(vela_uplift), 1),
             "v_mes_adj": round(float(v_mes_adj), 1),
             "v_dia_adj": round(float(v_mes_adj / 30), 2),
@@ -158,16 +185,24 @@ def calc_velocity(ventas: pd.DataFrame) -> tuple[dict, list[str]]:
     return metrics, vel_months
 
 
-def max_available(stock: dict) -> dict:
-    return {m: stock[m]["total"] + INCOMING[m] for m in MODELS}
+def corp_available(stock: dict) -> dict:
+    """Unidades que puede consumir el pedido corporativo (taller + tránsito)."""
+    return {
+        "DRY BAG 30L": stock["DRY BAG 30L"]["taller"] + INCOMING["DRY BAG 30L"],
+        "CAVAPACK 35L": stock["CAVAPACK 35L"]["taller"] + INCOMING["CAVAPACK 35L"],
+        "MAXI TOTE": min(stock["MAXI TOTE"]["taller"], MAXI_TOTE_PEDIDO_MAX),
+    }
 
 
 def days_after(qty: dict, stock: dict, metrics: dict) -> dict:
+    """Días de inventario sobre red completa (tiendas intactas + remanente taller/tránsito)."""
     out = {}
     for m in MODELS:
-        pipe = stock[m]["total"] + INCOMING[m] - qty[m]
+        post = stock[m]["tienda"] + max(
+            0, stock[m]["taller"] + INCOMING[m] - qty[m]
+        )
         v = metrics[m]["v_mes_adj"]
-        out[m] = round(pipe / v * 30, 1) if v > 0 else None
+        out[m] = round(post / v * 30, 1) if v > 0 else None
     return out
 
 
@@ -179,11 +214,12 @@ def plan_is_feasible(qty: dict, avail: dict) -> bool:
 
 def optimize_plans(stock: dict, metrics: dict) -> tuple[dict, dict]:
     commercial = PLAN_COMERCIAL.copy()
-    avail = max_available(stock)
+    avail = corp_available(stock)
+    maxi_cap = min(MAXI_TOTE_PEDIDO_MAX, avail["MAXI TOTE"])
 
     best_b = None
     for dry in range(0, min(1500, avail["DRY BAG 30L"]) + 1, 25):
-        for maxi in range(700, min(avail["MAXI TOTE"], CORP_TOTAL) + 1, 25):
+        for maxi in range(400, maxi_cap + 1, 25):
             cava = CORP_TOTAL - dry - maxi
             if cava < 400 or cava > min(950, avail["CAVAPACK 35L"]):
                 continue
@@ -196,30 +232,32 @@ def optimize_plans(stock: dict, metrics: dict) -> tuple[dict, dict]:
                     best_b = (qty, days)
 
     if best_b is None:
-        qty = {"DRY BAG 30L": 1000, "CAVAPACK 35L": 968, "MAXI TOTE": 832}
+        qty = {"DRY BAG 30L": 1000, "CAVAPACK 35L": 950, "MAXI TOTE": maxi_cap}
+        if sum(qty.values()) != CORP_TOTAL:
+            qty["CAVAPACK 35L"] = CORP_TOTAL - qty["DRY BAG 30L"] - qty["MAXI TOTE"]
         best_b = (qty, days_after(qty, stock, metrics))
 
     best_c = None
     best_score = -1.0
-    for dry in range(200, min(1300, avail["DRY BAG 30L"]) + 1, 25):
-        for maxi in range(500, min(avail["MAXI TOTE"], 800) + 1, 25):
+    for dry in range(900, min(1350, avail["DRY BAG 30L"]) + 1, 25):
+        for maxi in range(500, min(651, maxi_cap) + 1, 25):
             cava = CORP_TOTAL - dry - maxi
-            if cava < 400 or cava > min(950, avail["CAVAPACK 35L"]):
+            if cava < 550 or cava > min(950, avail["CAVAPACK 35L"]):
                 continue
             qty = {"DRY BAG 30L": dry, "CAVAPACK 35L": cava, "MAXI TOTE": maxi}
             if not plan_is_feasible(qty, avail):
                 continue
             days = days_after(qty, stock, metrics)
             md = min(days.values())
-            if md < 0:
+            if md < 45:
                 continue
-            score = md + 0.25 * days["DRY BAG 30L"]
+            score = md + 0.15 * days["MAXI TOTE"]
             if score > best_score:
                 best_score = score
                 best_c = (qty, days)
 
     if best_c is None:
-        qty = {"DRY BAG 30L": 1150, "CAVAPACK 35L": 900, "MAXI TOTE": 750}
+        qty = {"DRY BAG 30L": 1250, "CAVAPACK 35L": 850, "MAXI TOTE": 600}
         best_c = (qty, days_after(qty, stock, metrics))
 
     plans = {
@@ -233,17 +271,15 @@ def optimize_plans(stock: dict, metrics: dict) -> tuple[dict, dict]:
     return plans, plan_days
 
 
-def allocate_sources(qty: int, stock: dict, incoming: int, taller: int) -> dict:
-    """Prioriza taller, luego tiendas, luego arribos de compra."""
-    from_taller = min(qty, taller)
+def allocate_sources(qty: int, stock_row: dict, incoming: int) -> dict:
+    """Pedido corporativo: solo taller + tránsito (arribo). Stock tienda no se toca."""
+    from_taller = min(qty, stock_row["taller"])
     rem = qty - from_taller
-    from_tienda = min(rem, stock["tienda"])
-    rem -= from_tienda
     from_incoming = min(rem, incoming)
     rem -= from_incoming
     return {
         "taller": from_taller,
-        "tiendas": from_tienda,
+        "tiendas": 0,
         "arribo_compra": from_incoming,
         "pendiente": rem,
     }
@@ -255,9 +291,14 @@ def build_data(ventas: pd.DataFrame, inv: pd.DataFrame) -> dict:
     plans, plan_days = optimize_plans(stock, metrics)
 
     v_retail = ventas[ventas["tienda"].isin(RETAIL)]
-    meses_order = sorted(v_retail["mes_key"].dropna().unique())
+    v_chart = ventas[ventas["modelo"].isin(MODELS)]
+    meses_order = sort_mes_keys(v_chart["mes_key"].dropna().unique().tolist())
     meses_und = (
-        v_retail.groupby("mes_key")["qty"].sum().reindex(meses_order, fill_value=0).astype(int).to_dict()
+        v_retail.groupby("mes_key")["qty"]
+        .sum()
+        .reindex(meses_order, fill_value=0)
+        .astype(int)
+        .to_dict()
     )
 
     raw_rows = []
@@ -317,21 +358,18 @@ def build_data(ventas: pd.DataFrame, inv: pd.DataFrame) -> dict:
     for name, qty_map in plans.items():
         rows = []
         for m in MODELS:
-            src = allocate_sources(
-                qty_map[m],
-                stock[m],
-                INCOMING[m],
-                stock[m]["taller"],
-            )
-            pipe = stock[m]["total"] + INCOMING[m]
-            rem = pipe - qty_map[m]
+            src = allocate_sources(qty_map[m], stock[m], INCOMING[m])
+            corp_pool = stock[m]["taller"] + INCOMING[m]
+            post_total = stock[m]["tienda"] + max(0, corp_pool - qty_map[m])
             rows.append(
                 {
                     "modelo": m,
                     "qty_pedido": qty_map[m],
-                    "stock_actual": stock[m]["total"],
+                    "stock_tiendas": stock[m]["tienda"],
+                    "stock_taller": stock[m]["taller"],
                     "arribo_compra": INCOMING[m],
-                    "stock_post": rem,
+                    "pool_corporativo": corp_pool,
+                    "stock_post": post_total,
                     "dias_inventario": plan_days[name][m],
                     "v_mes_adj": metrics[m]["v_mes_adj"],
                     "fuente_taller": src["taller"],
@@ -356,7 +394,9 @@ def build_data(ventas: pd.DataFrame, inv: pd.DataFrame) -> dict:
         "nombre": "Bolsos Playa · Pedido Corporativo Canastas",
         "periodo": "Oct 2025 — Sep 2026",
         "as_of": "2026-09-17",
-        "contexto": "Pedido 2.800 und · Temporada alta ×1.25 · VELA 1.5× GRIE",
+        "contexto": "Pedido 2.800 und · Temporada alta ×1.25 · VELA 1.5× GRIE · Barquisimeto prom(GRIE,Chacao,Tolón) · Web ≈ 1 Chacao",
+        "maxi_tote_pedido_max": MAXI_TOTE_PEDIDO_MAX,
+        "corp_pool": corp_available(stock),
         "high_season_factor": HS,
         "raw_rows": raw_rows,
         "inv_rows": inv_rows,
@@ -372,7 +412,8 @@ def build_data(ventas: pd.DataFrame, inv: pd.DataFrame) -> dict:
             "modelos": MODELS,
         },
         "all_stores": RETAIL,
-        "decision_exclude_stores": ["WEB", "PEDIDOS", "CORPORATIVO"],
+        "decision_exclude_stores": ["PEDIDOS", "CORPORATIVO"],
+        "new_store_barquisimeto_label": "Promedio GRIE + Chacao + Tolón",
         "es_parcial": True,
         "stock_total": sum(stock_by_modelo.values()),
         "total": int(v_retail["qty"].sum()),
@@ -396,10 +437,11 @@ def write_excel(data: dict, path: Path) -> None:
                     "Plan": plan["nombre"],
                     "Modelo": r["modelo"],
                     "Cant. pedido corporativo": r["qty_pedido"],
-                    "Stock actual (tiendas+taller)": r["stock_actual"],
-                    "Arribo compra estimado": r["arribo_compra"],
-                    "Stock disponible pre-pedido": r["stock_actual"] + r["arribo_compra"],
-                    "Stock remanente post-pedido": r["stock_post"],
+                    "Stock tiendas (no se toca)": r["stock_tiendas"],
+                    "Stock taller": r["stock_taller"],
+                    "Arribo compra (tránsito)": r["arribo_compra"],
+                    "Pool corporativo (taller+tránsito)": r["pool_corporativo"],
+                    "Inventario total post-pedido": r["stock_post"],
                     "Rotación mensual ajustada (und/mes)": r["v_mes_adj"],
                     "Días de inventario post-pedido": r["dias_inventario"],
                     "Fuente taller": r["fuente_taller"],
@@ -426,6 +468,10 @@ def write_excel(data: dict, path: Path) -> None:
         [
             {"Parámetro": "Temporada alta (factor)", "Valor": HS},
             {"Parámetro": "Proyección tienda VELA", "Valor": "1.5× velocidad GRIE"},
+            {"Parámetro": "Tienda nueva Barquisimeto", "Valor": "Promedio mensual GRIE + Chacao + Tolón"},
+            {"Parámetro": "Canal Web repotenciado", "Valor": "Equivalente a 1 Chacao adicional"},
+            {"Parámetro": "Pedido corporativo", "Valor": "Solo taller + tránsito (stock tienda intacto)"},
+            {"Parámetro": "Tope Maxi Tote pedido", "Valor": MAXI_TOTE_PEDIDO_MAX},
             {"Parámetro": "Meses base rotación", "Valor": ", ".join(data["velocity_months"])},
             {"Parámetro": "Pedido corporativo objetivo", "Valor": CORP_TOTAL},
             {"Parámetro": "Meta cobertura Dry 30L Plan B", "Valor": f"≥ {TARGET_DAYS_DRY} días"},
@@ -484,25 +530,72 @@ def patch_template(data: dict) -> str:
     corp_block = """
   <div class="card g1" style="margin-bottom:14px;border-color:#5b6af766">
     <h3>📋 Pedido corporativo · 2.800 canastas navideñas</h3>
-    <div class="sub">Comparativo de planes · días de inventario post-pedido (stock tiendas+taller + arribos compra − pedido)</div>
+    <div class="sub">Planes desde <strong>taller + tránsito</strong> · stock en tienda se mantiene para presencia · días sobre inventario total de red</div>
     <div id="corpPlansGrid"></div>
   </div>"""
     html = html.replace(
         '<div class="g2">\n    <div class="card" style="grid-column:1/-1">\n      <h3>🏭 Curva de Producción por Modelo</h3>',
         corp_block
-        + '\n  <div class="g2">\n    <div class="card" style="grid-column:1/-1">\n      <h3>🏭 Curva de Producción por Modelo</h3>',
+        + '\n  <div class="g2">\n    <div class="card" style="grid-column:1/-1">\n      <h3>🛒 Compra sugerida</h3>',
+    )
+    html = html.replace(
+        "Sugerencia proporcional por color y talla · Clic en color para detalle",
+        "Reposición sugerida por color · clic en color para detalle de talla",
     )
 
     html = html.replace(
         "CERRO VERDE excluida",
-        "Excluye WEB · PEDIDOS · CORPORATIVO del histórico retail",
+        "🆕 VELA 1.5× GRIE · Barquisimeto prom(GRIE+Chacao+Tolón) · Web ≈ 1 Chacao",
+    )
+
+    html = re.sub(
+        r'\s*<button class="tab"[^>]*onclick="st\(\'tallas\'\)"[^>]*>.*?</button>\s*',
+        "\n  ",
+        html,
+        count=1,
+        flags=re.S,
+    )
+    html = re.sub(
+        r'<div class="sec" id="sec-tallas">.*?</div>\s*\n<div class="sec" id="sec-tiendas">',
+        '<div class="sec" id="sec-tiendas">',
+        html,
+        count=1,
+        flags=re.S,
+    )
+    html = html.replace(
+        "var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];",
+        "var TABS=['resumen','colores','tiendas','inventario','decisiones'];",
+    )
+    html = html.replace(
+        "if(tx.indexOf('Talla')>=0)return'tallas';",
+        "",
+    )
+    html = html.replace(
+        "else if(n==='tallas')rTallas();",
+        "",
+    )
+
+    html = re.sub(
+        r"var NEW_STORES=\[[^\]]*\];",
+        "var NEW_STORES=['VELA','BARQUISIMETO'];",
+        html,
+        flags=re.S,
+    )
+    html = re.sub(
+        r"var NEW_STORE_CAPS=\{.*?\};",
+        "var NEW_STORE_CAPS={'VELA':{base:'GRIE',mult:1.5,label:'1.5× capacidad GRIE (La Grieta)'},'BARQUISIMETO':{base:'BARQUISIMETO',mult:1,label:'Promedio GRIE + Chacao + Tolón (tienda nueva)'}};",
+        html,
+        flags=re.S,
+    )
+    html = html.replace(
+        "function getNewStoreShare(store,realShares){\n  var cap=NEW_STORE_CAPS[store];if(!cap)return 0;\n  return(realShares[cap.base]||0)*cap.mult;\n}",
+        "function getNewStoreShare(store,realShares){\n  var cap=NEW_STORE_CAPS[store];if(!cap)return 0;\n  if(store==='BARQUISIMETO'){return((realShares['GRIE']||0)+(realShares['CHACAO']||0)+(realShares['TOLON']||0))/3;}\n  return(realShares[cap.base]||0)*cap.mult;\n}",
     )
 
     data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     html = re.sub(r"var DATA=\{.*?\};", f"var DATA={data_json};", html, count=1, flags=re.S)
 
-    if "function renderCorporatePlans" not in html:
-        inject = """
+    corp_fn = """
 function renderCorporatePlans(){
   var el=document.getElementById('corpPlansGrid');if(!el||!DATA.corporate_plans)return;
   var h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:8px">';
@@ -511,18 +604,32 @@ function renderCorporatePlans(){
     h+='<div style="background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:14px;border-top:3px solid '+col+'">';
     h+='<div style="font-family:var(--fh);font-weight:800;font-size:0.82rem;margin-bottom:6px">'+p.nombre+'</div>';
     h+='<div style="font-size:0.68rem;color:var(--mu);margin-bottom:10px">Total <strong style="color:var(--tx)">'+p.total+' und</strong> · mín '+p.dias_min+' d · prom '+p.dias_prom+' d</div>';
-    h+='<table class="ct" style="font-size:0.72rem"><thead><tr><th>Modelo</th><th>Pedido</th><th>Post stock</th><th>Días</th></tr></thead><tbody>';
+    h+='<table class="ct" style="font-size:0.72rem"><thead><tr><th>Modelo</th><th>Pedido</th><th>Inv. total post</th><th>Días red</th></tr></thead><tbody>';
     p.rows.forEach(function(r){
       var dc=r.dias_inventario<60?'#ef4444':r.dias_inventario<90?'#f59e0b':'#10b981';
       h+='<tr><td>'+r.modelo.replace('DRY BAG 30L','Dry 30L').replace('CAVAPACK 35L','Cavapack').replace('MAXI TOTE','Maxi Tote')+'</td><td style="font-weight:700">'+r.qty_pedido+'</td><td>'+r.stock_post+'</td><td style="font-weight:800;color:'+dc+'">'+r.dias_inventario+'</td></tr>';
     });
     h+='</tbody></table></div>';
   });
-  h+='</div><div style="margin-top:12px;font-size:0.68rem;color:var(--mu);line-height:1.5">Rotación ajustada = promedio retail últimos 6 meses completos + proyección VELA (1.5× GRIE) × factor temporada alta ('+(DATA.high_season_factor||1.25)+'). Arribos: Dry 30L 2.350 · Cavapack 1.000 · Maxi Tote solo stock taller.</div>';
+  h+='</div><div style="margin-top:12px;font-size:0.68rem;color:var(--mu);line-height:1.5">Pedido sale de <strong>taller + tránsito</strong> (Maxi Tote tope '+(DATA.maxi_tote_pedido_max||700)+' und). Días = inventario total red (tiendas + remanente taller/tránsito) ÷ rotación ajustada (×'+(DATA.high_season_factor||1.25)+', VELA, Barquisimeto, Web≈Chacao).</div>';
   el.innerHTML=h;
 }
 """
-        html = html.replace("function rDecisiones(){", inject + "\nfunction rDecisiones(){")
+    if "function renderCorporatePlans" in html:
+        html = re.sub(
+            r"function renderCorporatePlans\(\)\{.*?\n\}\n",
+            corp_fn.strip() + "\n",
+            html,
+            count=1,
+            flags=re.S,
+        )
+    else:
+        html = html.replace("function rDecisiones(){", corp_fn + "\nfunction rDecisiones(){")
+        html = html.replace(
+            "  renderReabast(allRows);\n}",
+            "  renderCorporatePlans();\n  renderReabast(allRows);\n}",
+        )
+    if "renderCorporatePlans();" not in html.split("function rDecisiones")[1][:800]:
         html = html.replace(
             "  renderReabast(allRows);\n}",
             "  renderCorporatePlans();\n  renderReabast(allRows);\n}",
