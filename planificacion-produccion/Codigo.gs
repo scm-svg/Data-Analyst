@@ -1,10 +1,22 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.32 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.33 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ESPECIAL EN TODAS LAS ASIGNADAS: un modelo de Por Hacer - Especial
+ *     con 2+ líneas (Running Tank en 1 y 2, Clásica Cab/DAMA en 3 y 4)
+ *     es prioridad 1 en CADA línea listada. Al llegar su Día de inicio
+ *     toma SÍ O SÍ todas las asignadas (desaloja a RIO u otro de peor
+ *     banda). No espera a que “una línea baste esta semana”. El faltante
+ *     se reparte entre esas líneas (la MO no se clava a una sola).
+ *     Dos Especiales que comparten líneas: el de más volumen / mejor
+ *     fecha usa ambas hasta terminar; el otro entra después. No desborda
+ *     a una línea que no esté en Linea de Produccion.
+ *   - ENCABEZADO PRODUCTO: si en Por Hacer la celda de Producto/Modelo
+ *     viene vacía (un espacio), se usa la columna siguiente a SKU o el
+ *     título de la fila 1. Ya no bloquea Generar Planificación.
  *   - RIO DAMA NO SUELTA L2: el lote de familia (color → género) ignora
  *     hermanos que aún no llegan a su Día de inicio. Antes RIO KIDS
  *     (Negro, Alta, inicio 29/09) hacía ceder a RIO DAMA en Semana 2
@@ -154,7 +166,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.32";
+var VERSION_SISTEMA = "5.9.33";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -472,6 +484,20 @@ function idxPorFragmento_(headers, fragmentos) {
       if (h.indexOf(fragmentos[f]) !== -1) return i;
     }
   }
+  return -1;
+}
+
+/** Producto/Modelo: si fila 2 viene vacía, mira fila 1 o la columna a la derecha de SKU. */
+function idxProductoEmbudo_(headers, filaTitulo) {
+  var i = idxPorFragmento_(headers, ["producto", "modelo"]);
+  if (i !== -1) return i;
+  if (filaTitulo && filaTitulo.length) {
+    i = idxPorFragmento_(filaTitulo, ["producto", "modelo"]);
+    if (i !== -1) return i;
+  }
+  var iSku = idxExacto_(headers, "SKU");
+  if (iSku === -1 && filaTitulo && filaTitulo.length) iSku = idxExacto_(filaTitulo, "SKU");
+  if (iSku !== -1 && iSku + 1 < headers.length) return iSku + 1;
   return -1;
 }
 
@@ -1072,7 +1098,8 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
   var headers = datos[1];
 
   var iSKU  = idxExacto_(headers, "SKU");
-  var iProd = idxPorFragmento_(headers, ["producto", "modelo"]);
+  if (iSKU === -1) iSKU = idxPorFragmento_(headers, ["sku"]);
+  var iProd = idxProductoEmbudo_(headers, datos[0]);
   var iGen  = idxPorFragmento_(headers, ["genero", "género"]);
   var iTal  = idxPorFragmento_(headers, ["talla"]);
   var iCol  = idxPorFragmento_(headers, ["color"]);
@@ -1546,7 +1573,7 @@ function generarPlanificacionSemanal_() {
     t.planificada += piezas;
     if (d < DIAS_LABORALES) t.planificadaSem1 += piezas;
     if (d > t.ultimoDia) t.ultimoDia = d;
-    t.lineaFija = lin;
+    if (!t.esEspecial) t.lineaFija = lin;
     return piezas;
   }
 
@@ -1656,8 +1683,10 @@ function generarPlanificacionSemanal_() {
       if (soloMinima && !t.esMinima) continue;
       if (colorRankFiltro !== undefined && colorRankFiltro !== null && rangoColor_(t.color) !== colorRankFiltro) continue;
       var clave = claveMO_(t);
-      if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
-      if (t.lineaFija && t.lineaFija !== lin) continue;
+      if (!t.esEspecial) {
+        if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
+        if (t.lineaFija && t.lineaFija !== lin) continue;
+      }
       if (elegiblesTarea_(t, overflow).indexOf(lin) === -1) continue;
       var avail = 1 - carga[lin][d];
       if (avail <= 0.001) return 0;
@@ -1667,7 +1696,7 @@ function generarPlanificacionSemanal_() {
       if (piezasCaben <= 0) return 0;
       var puestas = asignar_(t, lin, d, piezasCaben);
       if (puestas > 0) {
-        lineaPorMO[clave] = lin;
+        if (!t.esEspecial) lineaPorMO[clave] = lin;
         ultimoModeloLinea[lin] = mP.nombre;
         return puestas;
       }
@@ -1676,7 +1705,7 @@ function generarPlanificacionSemanal_() {
   }
 
   function producirModeloDia_(mP, lin, d, overflow) {
-    var explota = esUrgenteExplosivo_(mP, overflow, d);
+    var explota = esExplosivoHoy_(mP, overflow, d);
     while (carga[lin][d] < 0.999) {
       var soloMinima = restanteMinima_(mP) > 0;
       var rank = null;
@@ -1687,7 +1716,7 @@ function generarPlanificacionSemanal_() {
           if (tR.restante <= 0) continue;
           if (soloMinima && !tR.esMinima) continue;
           var claveR = claveMO_(tR);
-          var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+          var fijaR = tR.esEspecial ? null : (lineaPorMO[claveR] || tR.lineaFija);
           if (fijaR && fijaR !== lin) continue;
           if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
           rank = rangoColor_(tR.color);
@@ -1817,6 +1846,21 @@ function generarPlanificacionSemanal_() {
 
   function esUrgenteExplosivo_(m, overflow, d) {
     return esCandidatoExplosivo_(m, overflow) && enVentanaFechaEstimada_(m, d);
+  }
+
+  function esEspecialExplosivo_(m, overflow, dHoy) {
+    if (!m || !m.esEspecial) return false;
+    if (lineasModelo_(m, overflow).length < 2) return false;
+    return m.tareas.some(function (t) {
+      if (!(t.restante > 0)) return false;
+      if (dHoy < diaInicioEfectivo_(t)) return false;
+      if (dHoy < DIAS_LABORALES && (dHoy % DIAS_LABORALES) === t.diaNoLaborable) return false;
+      return true;
+    });
+  }
+
+  function esExplosivoHoy_(m, overflow, dHoy) {
+    return esEspecialExplosivo_(m, overflow, dHoy) || esUrgenteExplosivo_(m, overflow, dHoy);
   }
 
   function produjoAlgo_(t) {
@@ -2022,9 +2066,11 @@ function generarPlanificacionSemanal_() {
     return mO.tareas.some(function (t) {
       if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
       if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
-      var clave = claveMO_(t);
-      if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
-      if (t.lineaFija && t.lineaFija !== lin) return false;
+      if (!t.esEspecial) {
+        var clave = claveMO_(t);
+        if (lineaPorMO[clave] && lineaPorMO[clave] !== lin) return false;
+        if (t.lineaFija && t.lineaFija !== lin) return false;
+      }
       return elegiblesTarea_(t, overflow).indexOf(lin) !== -1;
     });
   }
@@ -2044,7 +2090,7 @@ function generarPlanificacionSemanal_() {
         return mO.tareas.some(function (t) {
           if (t.restante <= 0 || d < diaInicioEfectivo_(t)) return false;
           if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
-          if (t.lineaFija && t.lineaFija !== lin) return false;
+          if (!t.esEspecial && t.lineaFija && t.lineaFija !== lin) return false;
           return elegiblesTarea_(t, overflowL1).indexOf(lin) !== -1;
         });
       });
@@ -2073,6 +2119,18 @@ function generarPlanificacionSemanal_() {
     function ocupaPeorQue_(nomOcc, mNew, lin) {
       var mO = mapaModelos[nomOcc];
       if (!mO) return true;
+      if (esEspecialExplosivo_(mNew, overflowL1, d)) {
+        if (!modeloPuedeProducirHoyNom_(nomOcc, lin, d, overflowL1)) return true;
+        if (mO.esEspecial) {
+          if (mO.fechaMin !== mNew.fechaMin) return mNew.fechaMin < mO.fechaMin;
+          if (mO.prioMin !== mNew.prioMin) return mNew.prioMin < mO.prioMin;
+          var volO = mO.volumen || 0;
+          var volN = mNew.volumen || 0;
+          if (volO !== volN) return volN > volO;
+          return mNew.nombre < mO.nombre;
+        }
+        return true;
+      }
       if (esUrgenteExplosivo_(mNew, overflowL1, d)) {
         if (!modeloPuedeProducirHoyNom_(nomOcc, lin, d, overflowL1)) return true;
         if (familiaModelo_(mO) === familiaModelo_(mNew)) return true;
@@ -2099,7 +2157,7 @@ function generarPlanificacionSemanal_() {
         }
         return true;
       }
-      if (esUrgenteExplosivo_(m, overflowL1, d)) {
+      if (esExplosivoHoy_(m, overflowL1, d)) {
         var iF;
         for (iF = 0; iF < occ.length; iF++) {
           if (!ocupaPeorQue_(occ[iF], m, lin)) return false;
@@ -2156,6 +2214,13 @@ function generarPlanificacionSemanal_() {
 
     var vivos = listaModelos.filter(function (m) { return restanteModelo_(m) > 0; });
     vivos.forEach(function (m) {
+      if (esEspecialExplosivo_(m, overflowL1, d)) {
+        lineasModelo_(m, overflowL1).forEach(function (linEsp) {
+          if (!modeloPuedeProducirHoyNom_(m.nombre, linEsp, d, overflowL1)) return;
+          desalojarPara_(m, linEsp);
+        });
+        return;
+      }
       var ya = ["1", "2", "3", "4", "5"].some(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
@@ -2199,7 +2264,7 @@ function generarPlanificacionSemanal_() {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
       if (owned.length === 0) return;
-      var explota = esUrgenteExplosivo_(m, overflowL1, d);
+      var explota = esExplosivoHoy_(m, overflowL1, d);
       var capOwned = owned.reduce(function (s, lin) { return s + capRestanteSemana_(lin, d, capModelo_(m, lin)); }, 0);
       if (!explota && restanteModelo_(m) <= capOwned + 0.001) return;
       var candidatas = explota ? lineasModelo_(m, overflowL1) : lineasLibresDe_(m);
@@ -2214,10 +2279,11 @@ function generarPlanificacionSemanal_() {
         }
         capOwned += capRestanteSemana_(lin, d, capModelo_(m, lin));
       });
-      if (explota) liberarMosSinProducir_(m);
+      if (explota && !m.esEspecial) liberarMosSinProducir_(m);
     });
 
     vivos.forEach(function (m) {
+      if (m.esEspecial) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
         return ocupante[lin].indexOf(m.nombre) !== -1;
       });
@@ -2278,7 +2344,7 @@ function generarPlanificacionSemanal_() {
         var yaOtra = ["1", "2", "3", "4", "5"].some(function (l2) {
           return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
         });
-        if (yaOtra) continue;
+        if (yaOtra && !esEspecialExplosivo_(mC, overflow, d)) continue;
         if (paraParalelo && famRef && familiaModelo_(mC) === famRef) continue;
         if (String(lin) === "5" && paraParalelo && esExclusivoLinea5_(mC)) continue;
         if (debeEsperarHermano_(mC, overflow)) continue;
@@ -2565,12 +2631,13 @@ function generarPlanificacionSemanal_() {
     "✅ Planificación v" + VERSION_SISTEMA + " generada\n\n" +
     "• Capacidad diaria: columna Cap Produccion por Dia (Por Hacer N / Especial O).\n" +
     "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas. Color, género y prioridad de otros quedan atrás para ese producto (un Especial que sí produzca ese día no se toca). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
+    "• Especial con 2+ líneas: prioridad 1 en cada asignada desde su Día de inicio (Running Tank 1 y 2, Clásica 3 y 4). El faltante se reparte entre esas líneas.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez (no en paralelo). Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos), salvo Secuencia=No: ese modelo es el único ocupante. Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
-    "• Especial: solo Linea de Produccion (si la celda viene vacía, 1). No desborda a L1.\n" +
+    "• Especial: prioridad 1 en TODAS las Linea de Produccion asignadas (2+ líneas = las toma sí o sí al llegar Día de inicio). Si la celda viene vacía, 1. No desborda a L1.\n" +
     "• Apoyo L1 50%: " + ((cfg.apoyoL1 && cfg.apoyoL1.activo)
       ? ("sí, desde semana " + cfg.apoyoL1.desdeSemana + " el modelo de L2 produce también en L1 a media cap.")
       : "no. Al generar puedes activarlo y elegir la semana.") + "\n" +
@@ -3469,7 +3536,7 @@ function actualizarModelosPriorizacion_() {
   function procesarModelos(datos, tipo) {
     if (!datos || datos.length < 3) return;
     var headers = datos[1];
-    var iProd = idxPorFragmento_(headers, ["modelo", "producto"]);
+    var iProd = idxProductoEmbudo_(headers, datos[0]);
     var iGen = idxPorFragmento_(headers, ["genero", "género"]);
     var iCant = idxPorFragmento_(headers, ["cantidad solicitada"]);
     var iFalt = idxPorFragmento_(headers, ["faltante"]);

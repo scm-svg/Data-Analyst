@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.32 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.33 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -786,7 +786,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.28: Secuencia=No en L5 es ocupante exclusivo."""
+    """Motor v5.9.33: Especial con 2+ líneas toma todas las asignadas."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -920,11 +920,12 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
             return False
-        mo = t.get("mo") or t["sku"]
-        if mo in linea_por_mo and linea_por_mo[mo] != lin:
-            return False
-        if t.get("lineaFija") and t["lineaFija"] != lin:
-            return False
+        if not t.get("esEspecial"):
+            mo = t.get("mo") or t["sku"]
+            if mo in linea_por_mo and linea_por_mo[mo] != lin:
+                return False
+            if t.get("lineaFija") and t["lineaFija"] != lin:
+                return False
         return lin in elegibles(t, overflow)
 
     def modelo_puede(m, d, lin, overflow):
@@ -959,6 +960,13 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if lin not in seen:
                     seen.append(lin)
         return seen
+
+    def es_especial_explosivo(m, overflow, d_hoy):
+        if not m or not m.get("esEspecial"):
+            return False
+        if len(lineas_modelo(m, overflow)) < 2:
+            return False
+        return any(tarea_viva_hoy(t, d_hoy) for t in m["tareas"])
 
     def es_exclusivo_linea5(m):
         return bool(m and m.get("secuenciaNo") and not m.get("esEspecial"))
@@ -1183,8 +1191,70 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if hermanos and len(ocupante[lin]) < max_ocupantes_ahora(lin, hermanos[0]):
                 ocupante[lin].append(hermanos[0]["nombre"])
 
+        def ocupa_peor_que(nom_occ, m_new, lin):
+            m_o = modelos.get(nom_occ)
+            if not m_o:
+                return True
+            if es_especial_explosivo(m_new, overflow, d):
+                if not modelo_puede(m_o, d, lin, overflow):
+                    return True
+                if m_o.get("esEspecial"):
+                    if m_o["fechaMin"] != m_new["fechaMin"]:
+                        return m_new["fechaMin"] < m_o["fechaMin"]
+                    if m_o["prioMin"] != m_new["prioMin"]:
+                        return m_new["prioMin"] < m_o["prioMin"]
+                    vol_o = sum(t["cantidad"] for t in m_o["tareas"])
+                    vol_n = sum(t["cantidad"] for t in m_new["tareas"])
+                    if vol_o != vol_n:
+                        return vol_n > vol_o
+                    return m_new["nombre"] < m_o["nombre"]
+                return True
+            if familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial"):
+                return False
+            b_o, b_n = banda_viva(m_o), banda_viva(m_new)
+            if b_o != b_n:
+                return b_o > b_n
+            if m_o["prioMin"] != m_new["prioMin"]:
+                return m_new["prioMin"] < m_o["prioMin"]
+            return False
+
+        def desalojar_para(m, lin):
+            if max_ocupantes_ahora(lin, m) > 1:
+                return False
+            occ = ocupante.get(lin) or []
+            if m["nombre"] in occ:
+                return True
+            if es_especial_explosivo(m, overflow, d):
+                for nom in occ:
+                    if not ocupa_peor_que(nom, m, lin):
+                        return False
+                ocupante[lin] = [m["nombre"]]
+                return True
+            if len(occ) < max_ocupantes_ahora(lin, m):
+                ocupante[lin].append(m["nombre"])
+                return True
+            worst_i = -1
+            for i_w, nom in enumerate(occ):
+                if ocupa_peor_que(nom, m, lin):
+                    worst_i = i_w
+                    break
+            if worst_i < 0:
+                return False
+            if es_exclusivo_linea5(m) and str(lin) == "5":
+                ocupante[lin] = [m["nombre"]]
+                return True
+            occ.pop(worst_i)
+            occ.append(m["nombre"])
+            ocupante[lin] = occ
+            return True
+
         vivos = [m for m in lista if restante_modelo(m) > 0]
         for m in vivos:
+            if es_especial_explosivo(m, overflow, d):
+                for lin in lineas_modelo(m, overflow):
+                    if modelo_puede(m, d, lin, overflow):
+                        desalojar_para(m, lin)
+                continue
             if any(m["nombre"] in (ocupante.get(lin) or []) for lin in ocupante):
                 continue
             if debe_esperar_lote_familia(m, overflow):
@@ -1211,41 +1281,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     carga[lin][d],
                     lin,
                 ))
-
-                def ocupa_peor_que(nom_occ, m_new):
-                    m_o = modelos.get(nom_occ)
-                    if not m_o:
-                        return True
-                    if familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial"):
-                        return False
-                    b_o, b_n = banda_viva(m_o), banda_viva(m_new)
-                    if b_o != b_n:
-                        return b_o > b_n
-                    if m_o["prioMin"] != m_new["prioMin"]:
-                        return m_new["prioMin"] < m_o["prioMin"]
-                    return False
-
                 for lin in cands:
-                    occ = ocupante.get(lin) or []
-                    if m["nombre"] in occ:
+                    if desalojar_para(m, lin):
                         break
-                    if len(occ) < max_ocupantes_ahora(lin, m):
-                        ocupante[lin].append(m["nombre"])
-                        break
-                    worst_i = -1
-                    for i_w, nom in enumerate(occ):
-                        if ocupa_peor_que(nom, m):
-                            worst_i = i_w
-                            break
-                    if worst_i < 0:
-                        continue
-                    if es_exclusivo_linea5(m) and str(lin) == "5":
-                        ocupante[lin] = [m["nombre"]]
-                        break
-                    occ.pop(worst_i)
-                    occ.append(m["nombre"])
-                    ocupante[lin] = occ
-                    break
                 continue
             fam = familia_modelo(m)
             libres.sort(key=lambda lin: (
@@ -1260,15 +1298,25 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             owned = [lin for lin, mods in ocupante.items() if m["nombre"] in mods]
             if not owned:
                 continue
+            explota = es_especial_explosivo(m, overflow, d)
             cap_owned = sum(cap_restante_semana(lin, d, cap_modelo(m, lin)) for lin in owned)
-            if restante_modelo(m) <= cap_owned + 1e-6:
+            if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                 continue
-            for lin in lineas_libres_de(m, overflow):
-                if hermano_sin_linea_puede_usar(m, lin, overflow):
+            candidatas = lineas_modelo(m, overflow) if explota else lineas_libres_de(m, overflow)
+            for lin in candidatas:
+                if m["nombre"] in (ocupante.get(lin) or []):
                     continue
-                ocupante[lin].append(m["nombre"])
+                if not explota and restante_modelo(m) <= cap_owned + 1e-6:
+                    break
+                if not explota and hermano_sin_linea_puede_usar(m, lin, overflow):
+                    continue
+                if explota:
+                    if not desalojar_para(m, lin):
+                        continue
+                else:
+                    ocupante[lin].append(m["nombre"])
                 cap_owned += cap_restante_semana(lin, d, cap_modelo(m, lin))
-                if restante_modelo(m) <= cap_owned + 1e-6:
+                if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
 
     def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None):
@@ -1282,10 +1330,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if color_rank is not None and rango_color(t.get("color")) != color_rank:
                 continue
             mo = t.get("mo") or t["sku"]
-            if mo in linea_por_mo:
-                t["lineaFija"] = linea_por_mo[mo]
-            if t.get("lineaFija") and t["lineaFija"] != lin:
-                continue
+            if not t.get("esEspecial"):
+                if mo in linea_por_mo:
+                    t["lineaFija"] = linea_por_mo[mo]
+                if t.get("lineaFija") and t["lineaFija"] != lin:
+                    continue
             if lin not in elegibles(t, overflow):
                 continue
             avail = 1.0 - carga[lin][d]
@@ -1297,8 +1346,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 piezas = min(piezas, max_lote)
             if piezas <= 0:
                 continue
-            t["lineaFija"] = lin
-            linea_por_mo[mo] = lin
+            if not t.get("esEspecial"):
+                t["lineaFija"] = lin
+                linea_por_mo[mo] = lin
             t["plan"][lin][d] += piezas
             carga[lin][d] += piezas / cap_lin
             t["restante"] -= piezas
@@ -1308,22 +1358,24 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         return 0
 
     def producir_modelo_dia(m, lin, d, overflow):
+        explota = es_especial_explosivo(m, overflow, d)
         while carga[lin][d] < 0.999:
             solo_minima = restante_minima(m) > 0
             rank = None
-            for t in m["tareas"]:
-                if t["restante"] <= 0:
-                    continue
-                if solo_minima and not t.get("esMinima"):
-                    continue
-                mo = t.get("mo") or t["sku"]
-                fija = linea_por_mo.get(mo) or t.get("lineaFija")
-                if fija and fija != lin:
-                    continue
-                if lin not in elegibles(t, overflow):
-                    continue
-                rank = rango_color(t.get("color"))
-                break
+            if not explota:
+                for t in m["tareas"]:
+                    if t["restante"] <= 0:
+                        continue
+                    if solo_minima and not t.get("esMinima"):
+                        continue
+                    mo = t.get("mo") or t["sku"]
+                    fija = None if t.get("esEspecial") else (linea_por_mo.get(mo) or t.get("lineaFija"))
+                    if fija and fija != lin:
+                        continue
+                    if lin not in elegibles(t, overflow):
+                        continue
+                    rank = rango_color(t.get("color"))
+                    break
             if producir_lote(m, lin, d, overflow, 0, solo_minima, rank) <= 0:
                 break
             if restante_minima(m) <= 0 and tuvo_minima(m):
@@ -1430,7 +1482,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 l2 != lin and m["nombre"] in (ocupante.get(l2) or [])
                 for l2 in ocupante
             )
-            if ya_otra:
+            if ya_otra and not es_especial_explosivo(m, overflow, d):
                 continue
             if para_paralelo and fam_ref and familia_modelo(m) == fam_ref:
                 continue
@@ -2024,6 +2076,92 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(d16.get("RIO CAB", 0), 0)
         carr = [t for t in out if t["modelo"].startswith("CARRERA")][0]
         self.assertEqual(carr["planificada"], 1200)
+
+    def test_especial_dos_lineas_toma_todas_aunque_una_baste(self):
+        """Excel 30: Running Tank Biomove (1, 2) produce en L1 y L2; no deja L2 a RIO."""
+        tareas = [
+            {"sku": "RT1", "modelo": "Running Tank Biomove Cab (Especial)", "mo": "PD-514",
+             "cantidad": 225, "cap": 70, "lineas": ["1", "2"], "color": "Blanco",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 1,
+             "fechaKey": 20260922, "solicitadaOrig": 225},
+            {"sku": "RD1", "modelo": "RIO DAMA", "mo": "MO-RD",
+             "cantidad": 800, "cap": 101, "lineas": ["2"], "color": "Lila",
+             "prioridadNum": 3, "esEspecial": False, "diaIngreso": 0,
+             "fechaKey": 20261030, "solicitadaOrig": 800},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        d0_1 = sum(t["plan"]["1"][0] for t in out)
+        d0_2 = defaultdict(int)
+        d1_1 = defaultdict(int)
+        d1_2 = defaultdict(int)
+        for t in out:
+            d0_2[t["modelo"]] += t["plan"]["2"][0]
+            d1_1[t["modelo"]] += t["plan"]["1"][1]
+            d1_2[t["modelo"]] += t["plan"]["2"][1]
+        self.assertEqual(d0_1, 0, "antes del Día de inicio no entra en L1")
+        self.assertGreater(d0_2["RIO DAMA"], 0)
+        self.assertEqual(d1_1["Running Tank Biomove Cab (Especial)"], 70)
+        self.assertEqual(d1_2["Running Tank Biomove Cab (Especial)"], 70)
+        self.assertEqual(d1_2.get("RIO DAMA", 0), 0)
+        self.assertEqual(sum(t["planificada"] for t in out if "Biomove" in t["modelo"]), 225)
+        lineas_rt = set()
+        for t in out:
+            if "Biomove" not in t["modelo"]:
+                continue
+            for lin, arr in t["plan"].items():
+                if sum(arr) > 0:
+                    lineas_rt.add(lin)
+        self.assertEqual(lineas_rt, {"1", "2"})
+
+    def test_especial_dos_lineas_compartidas_el_de_mas_volumen_usa_ambas(self):
+        """Excel 30: Clásica Cab y DAMA en 3 y 4. Cab (más volumen) toma las dos; DAMA entra al terminar."""
+        tareas = [
+            {"sku": "CC1", "modelo": "Clásica Cab (Especial)", "mo": "PD-505",
+             "cantidad": 325, "cap": 80, "lineas": ["3", "4"], "color": "Blanco",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 0,
+             "fechaKey": 20260928, "solicitadaOrig": 325},
+            {"sku": "CD1", "modelo": "Clásica DAMA (Especial)", "mo": "PD-500",
+             "cantidad": 235, "cap": 80, "lineas": ["3", "4"], "color": "Blanco",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 0,
+             "fechaKey": 20260928, "solicitadaOrig": 235},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        d0_3 = defaultdict(int)
+        d0_4 = defaultdict(int)
+        for t in out:
+            d0_3[t["modelo"]] += t["plan"]["3"][0]
+            d0_4[t["modelo"]] += t["plan"]["4"][0]
+        self.assertEqual(d0_3["Clásica Cab (Especial)"], 80)
+        self.assertEqual(d0_4["Clásica Cab (Especial)"], 80)
+        self.assertEqual(d0_3.get("Clásica DAMA (Especial)", 0), 0)
+        self.assertEqual(d0_4.get("Clásica DAMA (Especial)", 0), 0)
+        self.assertEqual(sum(t["planificada"] for t in out if "Cab" in t["modelo"]), 325)
+        self.assertEqual(sum(t["planificada"] for t in out if "DAMA" in t["modelo"]), 235)
+        dama_l3 = sum(sum(t["plan"]["3"]) for t in out if "DAMA" in t["modelo"])
+        dama_l4 = sum(sum(t["plan"]["4"]) for t in out if "DAMA" in t["modelo"])
+        self.assertGreater(dama_l3, 0)
+        self.assertGreater(dama_l4, 0)
+        dama_dias = []
+        for d in range(10):
+            if any(t["plan"]["3"][d] > 0 or t["plan"]["4"][d] > 0
+                   for t in out if "DAMA" in t["modelo"]):
+                dama_dias.append(d)
+        self.assertTrue(dama_dias, "DAMA debe entrar después de Cab")
+        self.assertGreaterEqual(min(dama_dias), 2)
+
+    def test_especial_una_linea_no_desborda(self):
+        """Mafe DAMA solo en L2 no se va a L1 aunque L1 esté libre."""
+        tareas = [
+            {"sku": "MF1", "modelo": "Mafe DAMA (Especial)", "mo": "PD-509",
+             "cantidad": 215, "cap": 90, "lineas": ["2"], "color": "Blanco",
+             "prioridadNum": 0, "esEspecial": True, "diaIngreso": 0,
+             "fechaKey": 20260928, "solicitadaOrig": 215},
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        en_l1 = sum(sum(t["plan"]["1"]) for t in out)
+        en_l2 = sum(sum(t["plan"]["2"]) for t in out)
+        self.assertEqual(en_l1, 0)
+        self.assertEqual(en_l2, 215)
 
     def test_urgente_dia_inicio_desaloja_media_misma_linea(self):
         """Excel (9): MAR KIDS Urgente con Día de inicio futuro cede L4 a RIO CAB hasta esa fecha; luego entra."""
@@ -3161,7 +3299,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.32"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.33"', gs)
 
     def test_cache_json_se_parte_y_rearma(self):
         path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
