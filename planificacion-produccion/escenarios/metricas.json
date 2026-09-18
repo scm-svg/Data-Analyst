@@ -1,0 +1,5579 @@
+{
+ "limite": "2026-10-09",
+ "dias_post_costura": 3,
+ "corte_costura": "2026-10-06",
+ "pedido": [
+  {
+   "modelo": "Clásica DAMA",
+   "piezas": 235,
+   "skus": 5,
+   "cap": 80
+  },
+  {
+   "modelo": "Clásica Cab",
+   "piezas": 325,
+   "skus": 4,
+   "cap": 80
+  },
+  {
+   "modelo": "Mafe DAMA",
+   "piezas": 215,
+   "skus": 5,
+   "cap": 90
+  },
+  {
+   "modelo": "Running Tank Biomove Cab",
+   "piezas": 225,
+   "skus": 4,
+   "cap": 70
+  }
+ ],
+ "base": {
+  "uso": {
+   "piezas": {
+    "1": 250,
+    "2": 1515,
+    "3": 1837,
+    "4": 1485,
+    "5": 600
+   },
+   "dias_ocupados": {
+    "1": 5,
+    "2": 15,
+    "3": 15,
+    "4": 15,
+    "5": 15
+   },
+   "dias_posibles": 15,
+   "por_semana": {
+    "S2": {
+     "2": 505,
+     "3": 597,
+     "4": 475,
+     "5": 200
+    },
+    "S3": {
+     "2": 505,
+     "3": 620,
+     "4": 505,
+     "5": 200
+    },
+    "S4": {
+     "1": 250,
+     "2": 505,
+     "3": 620,
+     "4": 505,
+     "5": 200
+    }
+   }
+  },
+  "linea1_s3": {
+   "piezas": 0,
+   "modelos": []
+  },
+  "termino": {
+   "MOTION LOOP CLASICA KIDS": "2026-09-18",
+   "MOTION LOOP MAFE DAMA": "2026-09-18",
+   "VESTIDO ARYNA DAMA": "2026-09-22",
+   "SHORT PLAYA CAB": "2026-09-28",
+   "SHORT SPORT CAB": "2026-10-21",
+   "SHORT SPORT R1 CAB": "2026-10-05",
+   "RIO CAB": "2026-10-12",
+   "RIO DAMA": "2026-10-15",
+   "MAR KIDS": "2026-10-08",
+   "SHORT SPORT R1 DAMA": "2026-10-08",
+   "MAR NS KIDS": "2026-10-12",
+   "LITE PANT DAMA": "2026-12-11",
+   "RIO NS CAB": "2026-10-23",
+   "RIO NS DAMA": "2026-10-20",
+   "BASIC LINE OVERSIZED CAB": "2026-10-29",
+   "BASIC LINE CROP TEE DAMA": "2026-11-02",
+   "RIO KIDS": "2026-10-16"
+  },
+  "almacen": [
+   {
+    "mos": 8.0,
+    "modelo": "MOTION LOOP CLASICA KIDS",
+    "cantidad": 29.0,
+    "salida": "2026-09-18",
+    "entrada": "2026-09-24"
+   },
+   {
+    "mos": 4.0,
+    "modelo": "MOTION LOOP MAFE DAMA",
+    "cantidad": 67.0,
+    "salida": "2026-09-18",
+    "entrada": "2026-09-24"
+   },
+   {
+    "mos": 15.0,
+    "modelo": "VESTIDO ARYNA DAMA",
+    "cantidad": 192.0,
+    "salida": "2026-09-22",
+    "entrada": "2026-09-28"
+   },
+   {
+    "mos": 25.0,
+    "modelo": "SHORT PLAYA CAB",
+    "cantidad": 100.0,
+    "salida": "2026-09-28",
+    "entrada": "2026-10-02"
+   },
+   {
+    "mos": 3.0,
+    "modelo": "SHORT SPORT R1 CAB",
+    "cantidad": 69.0,
+    "salida": "2026-10-05",
+    "entrada": "2026-10-09"
+   },
+   {
+    "mos": 87.0,
+    "modelo": "MAR KIDS",
+    "cantidad": 1608.0,
+    "salida": "2026-10-08",
+    "entrada": "2026-10-14"
+   },
+   {
+    "mos": 4.0,
+    "modelo": "SHORT SPORT R1 DAMA",
+    "cantidad": 131.0,
+    "salida": "2026-10-08",
+    "entrada": "2026-10-14"
+   },
+   {
+    "mos": 32.0,
+    "modelo": "MAR NS KIDS",
+    "cantidad": 195.0,
+    "salida": "2026-10-12",
+    "entrada": "2026-10-16"
+   },
+   {
+    "mos": 49.0,
+    "modelo": "RIO CAB",
+    "cantidad": 1381.0,
+    "salida": "2026-10-12",
+    "entrada": "2026-10-16"
+   },
+   {
+    "mos": 46.0,
+    "modelo": "RIO DAMA",
+    "cantidad": 1122.0,
+    "salida": "2026-10-15",
+    "entrada": "2026-10-21"
+   },
+   {
+    "mos": 77.0,
+    "modelo": "RIO KIDS",
+    "cantidad": 1368.0,
+    "salida": "2026-10-16",
+    "entrada": "2026-10-22"
+   },
+   {
+    "mos": 35.0,
+    "modelo": "RIO NS DAMA",
+    "cantidad": 817.0,
+    "salida": "2026-10-20",
+    "entrada": "2026-10-26"
+   },
+   {
+    "mos": 16.0,
+    "modelo": "SHORT SPORT CAB",
+    "cantidad": 610.0,
+    "salida": "2026-10-21",
+    "entrada": "2026-10-27"
+   },
+   {
+    "mos": 30.0,
+    "modelo": "RIO NS CAB",
+    "cantidad": 939.0,
+    "salida": "2026-10-23",
+    "entrada": "2026-10-29"
+   },
+   {
+    "mos": 11.0,
+    "modelo": "BASIC LINE OVERSIZED CAB",
+    "cantidad": 412.0,
+    "salida": "2026-10-29",
+    "entrada": "2026-11-04"
+   },
+   {
+    "mos": 14.0,
+    "modelo": "BASIC LINE CROP TEE DAMA",
+    "cantidad": 357.0,
+    "salida": "2026-11-02",
+    "entrada": "2026-11-06"
+   },
+   {
+    "mos": 10.0,
+    "modelo": "LITE PANT DAMA",
+    "cantidad": 945.0,
+    "salida": "2026-12-11",
+    "entrada": "2026-12-17"
+   }
+  ],
+  "semanas": {
+   "S1": {
+    "fechas": [
+     "2026-09-14",
+     "2026-09-15",
+     "2026-09-16",
+     "2026-09-17",
+     "2026-09-18"
+    ],
+    "filas": [
+     {
+      "linea": "1",
+      "modelo": "MOTION LOOP MAFE DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       67
+      ],
+      "total": 67
+     },
+     {
+      "linea": "2",
+      "modelo": "RIO DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       73
+      ],
+      "total": 73
+     },
+     {
+      "linea": "2",
+      "modelo": "MOTION LOOP CLASICA KIDS",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       29
+      ],
+      "total": 29
+     },
+     {
+      "linea": "3",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       101
+      ],
+      "total": 101
+     },
+     {
+      "linea": "4",
+      "modelo": "VESTIDO ARYNA DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       80
+      ],
+      "total": 80
+     }
+    ]
+   },
+   "S2": {
+    "fechas": [
+     "2026-09-21",
+     "2026-09-22",
+     "2026-09-23",
+     "2026-09-24",
+     "2026-09-25"
+    ],
+    "filas": [
+     {
+      "linea": "2",
+      "modelo": "RIO DAMA",
+      "especial": false,
+      "dias": [
+       101,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 505
+     },
+     {
+      "linea": "3",
+      "modelo": "MAR KIDS",
+      "especial": false,
+      "dias": [
+       0,
+       124,
+       124,
+       124,
+       124
+      ],
+      "total": 496
+     },
+     {
+      "linea": "3",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       101,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 101
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       0,
+       60,
+       101,
+       101,
+       101
+      ],
+      "total": 363
+     },
+     {
+      "linea": "4",
+      "modelo": "VESTIDO ARYNA DAMA",
+      "especial": false,
+      "dias": [
+       80,
+       32,
+       0,
+       0,
+       0
+      ],
+      "total": 112
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT PLAYA CAB",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       40,
+       40
+      ],
+      "total": 80
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT CAB",
+      "especial": false,
+      "dias": [
+       20,
+       20,
+       20,
+       0,
+       0
+      ],
+      "total": 60
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT R1 DAMA",
+      "especial": false,
+      "dias": [
+       20,
+       20,
+       20,
+       0,
+       0
+      ],
+      "total": 60
+     }
+    ]
+   },
+   "S3": {
+    "fechas": [
+     "2026-09-28",
+     "2026-09-29",
+     "2026-09-30",
+     "2026-10-01",
+     "2026-10-02"
+    ],
+    "filas": [
+     {
+      "linea": "2",
+      "modelo": "RIO KIDS",
+      "especial": false,
+      "dias": [
+       0,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 404
+     },
+     {
+      "linea": "2",
+      "modelo": "RIO DAMA",
+      "especial": false,
+      "dias": [
+       101,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 101
+     },
+     {
+      "linea": "3",
+      "modelo": "MAR KIDS",
+      "especial": false,
+      "dias": [
+       124,
+       124,
+       124,
+       124,
+       124
+      ],
+      "total": 620
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       101,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 505
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT CAB",
+      "especial": false,
+      "dias": [
+       20,
+       22,
+       20,
+       20,
+       23
+      ],
+      "total": 105
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT R1 CAB",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       20,
+       20,
+       17
+      ],
+      "total": 57
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT PLAYA CAB",
+      "especial": false,
+      "dias": [
+       20,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 20
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT R1 DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       18,
+       0,
+       0,
+       0
+      ],
+      "total": 18
+     }
+    ]
+   },
+   "S4": {
+    "fechas": [
+     "2026-10-05",
+     "2026-10-06",
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-09"
+    ],
+    "filas": [
+     {
+      "linea": "1",
+      "modelo": "RIO KIDS",
+      "especial": false,
+      "dias": [
+       50,
+       50,
+       50,
+       50,
+       50
+      ],
+      "total": 250
+     },
+     {
+      "linea": "2",
+      "modelo": "RIO KIDS",
+      "especial": false,
+      "dias": [
+       101,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 505
+     },
+     {
+      "linea": "3",
+      "modelo": "MAR KIDS",
+      "especial": false,
+      "dias": [
+       124,
+       124,
+       124,
+       120,
+       0
+      ],
+      "total": 492
+     },
+     {
+      "linea": "3",
+      "modelo": "MAR NS KIDS",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       4,
+       124
+      ],
+      "total": 128
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       101,
+       101,
+       94,
+       0,
+       0
+      ],
+      "total": 296
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO NS DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       7,
+       101,
+       41
+      ],
+      "total": 149
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO NS CAB",
+      "especial": false,
+      "dias": [
+       0,
+       0,
+       0,
+       0,
+       60
+      ],
+      "total": 60
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT CAB",
+      "especial": false,
+      "dias": [
+       28,
+       22,
+       20,
+       25,
+       40
+      ],
+      "total": 135
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT R1 DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       18,
+       20,
+       15,
+       0
+      ],
+      "total": 53
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT R1 CAB",
+      "especial": false,
+      "dias": [
+       12,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 12
+     }
+    ]
+   },
+   "S5": {
+    "fechas": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-15",
+     "2026-10-16"
+    ],
+    "filas": [
+     {
+      "linea": "1",
+      "modelo": "RIO DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       50,
+       50,
+       50,
+       0
+      ],
+      "total": 150
+     },
+     {
+      "linea": "1",
+      "modelo": "RIO KIDS",
+      "especial": false,
+      "dias": [
+       50,
+       0,
+       0,
+       0,
+       48
+      ],
+      "total": 98
+     },
+     {
+      "linea": "2",
+      "modelo": "RIO DAMA",
+      "especial": false,
+      "dias": [
+       0,
+       101,
+       101,
+       91,
+       0
+      ],
+      "total": 293
+     },
+     {
+      "linea": "2",
+      "modelo": "RIO KIDS",
+      "especial": false,
+      "dias": [
+       101,
+       0,
+       0,
+       10,
+       0
+      ],
+      "total": 111
+     },
+     {
+      "linea": "3",
+      "modelo": "RIO NS CAB",
+      "especial": false,
+      "dias": [
+       31,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 435
+     },
+     {
+      "linea": "3",
+      "modelo": "MAR NS KIDS",
+      "especial": false,
+      "dias": [
+       67,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 67
+     },
+     {
+      "linea": "3",
+      "modelo": "RIO CAB",
+      "especial": false,
+      "dias": [
+       15,
+       0,
+       0,
+       0,
+       0
+      ],
+      "total": 15
+     },
+     {
+      "linea": "4",
+      "modelo": "RIO NS DAMA",
+      "especial": false,
+      "dias": [
+       101,
+       101,
+       101,
+       101,
+       101
+      ],
+      "total": 505
+     },
+     {
+      "linea": "5",
+      "modelo": "SHORT SPORT CAB",
+      "especial": false,
+      "dias": [
+       40,
+       40,
+       40,
+       40,
+       40
+      ],
+      "total": 200
+     }
+    ]
+   }
+  }
+ },
+ "escenarios": {
+  "A": {
+   "id": "A",
+   "descripcion": "Todo el pedido entra por la Línea 4 cuando estén cortadas y sublimadas todas las piezas.",
+   "lineas": [
+    "4"
+   ],
+   "pedido": {
+    "modelos": [
+     {
+      "modelo": "Clásica Cab",
+      "piezas": 325,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-09-29",
+      "fin": "2026-10-05",
+      "entrega": "2026-10-08",
+      "holgura": 1
+     },
+     {
+      "modelo": "Clásica DAMA",
+      "piezas": 235,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-10-05",
+      "fin": "2026-10-07",
+      "entrega": "2026-10-12",
+      "holgura": -1
+     },
+     {
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 225,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-10-08",
+      "fin": "2026-10-13",
+      "entrega": "2026-10-16",
+      "holgura": -5
+     },
+     {
+      "modelo": "Mafe DAMA",
+      "piezas": 215,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-10-13",
+      "fin": "2026-10-15",
+      "entrega": "2026-10-20",
+      "holgura": -7
+     }
+    ],
+    "pzas_tarde": 520,
+    "pzas_a_tiempo": 480,
+    "pct_a_tiempo": 48,
+    "piezas": 1000,
+    "inicio": "2026-09-29",
+    "fin": "2026-10-15",
+    "entrega": "2026-10-20",
+    "holgura": -7,
+    "a_tiempo": false,
+    "por_linea": {
+     "4": 1000
+    },
+    "dias_costura": 13,
+    "calendario": [
+     {
+      "fecha": "2026-09-29",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-01",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-02",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-05",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 5
+     },
+     {
+      "fecha": "2026-10-05",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 75
+     },
+     {
+      "fecha": "2026-10-06",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-07",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-08",
+      "linea": "4",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-10-09",
+      "linea": "4",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-10-12",
+      "linea": "4",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-10-13",
+      "linea": "4",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 15
+     },
+     {
+      "fecha": "2026-10-13",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-10-14",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-10-15",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 55
+     }
+    ]
+   },
+   "impacto": {
+    "filas": [
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-11-10",
+      "dias": 15,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-16"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-11-09",
+      "dias": 11,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-22",
+      "dias": 8,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-28"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-09",
+      "dias": 7,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-09",
+      "dias": 5,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "LITE PANT DAMA",
+      "piezas": 945.0,
+      "fin_base": "2026-12-11",
+      "fin_esc": "2026-12-11",
+      "dias": 0,
+      "almacen_base": "2026-12-17",
+      "almacen_esc": "2026-12-17"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-12",
+      "dias": 0,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-16"
+     },
+     {
+      "modelo": "MOTION LOOP CLASICA KIDS",
+      "piezas": 29.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "MOTION LOOP MAFE DAMA",
+      "piezas": 67.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "SHORT PLAYA CAB",
+      "piezas": 100.0,
+      "fin_base": "2026-09-28",
+      "fin_esc": "2026-09-28",
+      "dias": 0,
+      "almacen_base": "2026-10-02",
+      "almacen_esc": "2026-10-02"
+     },
+     {
+      "modelo": "SHORT SPORT CAB",
+      "piezas": 610.0,
+      "fin_base": "2026-10-21",
+      "fin_esc": "2026-10-21",
+      "dias": 0,
+      "almacen_base": "2026-10-27",
+      "almacen_esc": "2026-10-27"
+     },
+     {
+      "modelo": "SHORT SPORT R1 CAB",
+      "piezas": 69.0,
+      "fin_base": "2026-10-05",
+      "fin_esc": "2026-10-05",
+      "dias": 0,
+      "almacen_base": "2026-10-09",
+      "almacen_esc": "2026-10-09"
+     },
+     {
+      "modelo": "SHORT SPORT R1 DAMA",
+      "piezas": 131.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "VESTIDO ARYNA DAMA",
+      "piezas": 192.0,
+      "fin_base": "2026-09-22",
+      "fin_esc": "2026-09-22",
+      "dias": 0,
+      "almacen_base": "2026-09-28",
+      "almacen_esc": "2026-09-28"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-13",
+      "dias": -2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-19"
+     },
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-12",
+      "dias": -4,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-16"
+     }
+    ],
+    "aplazados": [
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-11-10",
+      "dias": 15,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-16"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-11-09",
+      "dias": 11,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-22",
+      "dias": 8,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-28"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-09",
+      "dias": 7,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-09",
+      "dias": 5,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-13"
+     }
+    ],
+    "adelantados": [
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-13",
+      "dias": -2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-19"
+     },
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-12",
+      "dias": -4,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-16"
+     }
+    ],
+    "n_aplazados": 5,
+    "piezas_aplazadas": 3906,
+    "max_dias": 15,
+    "suma_dias": 46
+   },
+   "uso": {
+    "piezas": {
+     "1": 750,
+     "2": 1515,
+     "3": 1837,
+     "4": 1276,
+     "5": 600
+    },
+    "dias_ocupados": {
+     "1": 15,
+     "2": 15,
+     "3": 15,
+     "4": 15,
+     "5": 15
+    },
+    "dias_posibles": 15,
+    "por_semana": {
+     "S2": {
+      "1": 250,
+      "2": 505,
+      "3": 597,
+      "4": 475,
+      "5": 200
+     },
+     "S3": {
+      "1": 250,
+      "2": 505,
+      "3": 620,
+      "4": 421,
+      "5": 200
+     },
+     "S4": {
+      "1": 250,
+      "2": 505,
+      "3": 620,
+      "4": 380,
+      "5": 200
+     }
+    }
+   },
+   "linea1_s3": {
+    "piezas": 250,
+    "modelos": [
+     "RIO DAMA",
+     "RIO KIDS"
+    ]
+   },
+   "ocupacion_pedido": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 13,
+    "5": 0
+   },
+   "semanas_afectadas": [
+    {
+     "semana": "S3",
+     "desde": "2026-09-28",
+     "hasta": "2026-10-02"
+    },
+    {
+     "semana": "S4",
+     "desde": "2026-10-05",
+     "hasta": "2026-10-09"
+    },
+    {
+     "semana": "S5",
+     "desde": "2026-10-12",
+     "hasta": "2026-10-16"
+    }
+   ],
+   "semanas": {
+    "S1": {
+     "fechas": [
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "MOTION LOOP MAFE DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        67
+       ],
+       "total": 67
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        73
+       ],
+       "total": 73
+      },
+      {
+       "linea": "2",
+       "modelo": "MOTION LOOP CLASICA KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        29
+       ],
+       "total": 29
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        101
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        80
+       ],
+       "total": 80
+      }
+     ]
+    },
+    "S2": {
+     "fechas": [
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 250
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 496
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        60,
+        101,
+        101,
+        101
+       ],
+       "total": 363
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        80,
+        32,
+        0,
+        0,
+        0
+       ],
+       "total": 112
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        40,
+        40
+       ],
+       "total": 80
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      }
+     ]
+    },
+    "S3": {
+     "fechas": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 200
+      },
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        50,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 50
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 404
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 620
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        80,
+        80,
+        80,
+        80
+       ],
+       "total": 320
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        22,
+        20,
+        20,
+        23
+       ],
+       "total": 105
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        20,
+        20,
+        17
+       ],
+       "total": 57
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        20,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 20
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        0,
+        0,
+        0
+       ],
+       "total": 18
+      }
+     ]
+    },
+    "S4": {
+     "fechas": [
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 250
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        120,
+        0
+       ],
+       "total": 492
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        4,
+        124
+       ],
+       "total": 128
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        75,
+        80,
+        80,
+        0,
+        0
+       ],
+       "total": 235
+      },
+      {
+       "linea": "4",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        0,
+        70,
+        70
+       ],
+       "total": 140
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        5,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 5
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        28,
+        22,
+        20,
+        25,
+        40
+       ],
+       "total": 135
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        20,
+        15,
+        0
+       ],
+       "total": 53
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        12,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 12
+      }
+     ]
+    },
+    "S5": {
+     "fechas": [
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        42,
+        0,
+        0,
+        0
+       ],
+       "total": 42
+      },
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        9,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 9
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        46,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 450
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        67,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 67
+      },
+      {
+       "linea": "4",
+       "modelo": "Mafe DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        90,
+        55,
+        0
+       ],
+       "total": 215
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO NS DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        39,
+        101
+       ],
+       "total": 140
+      },
+      {
+       "linea": "4",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        70,
+        15,
+        0,
+        0,
+        0
+       ],
+       "total": 85
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "total": 200
+      }
+     ]
+    }
+   },
+   "config": [
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "4",
+     "inicio": "2026-09-29"
+    }
+   ]
+  },
+  "B": {
+   "id": "B",
+   "descripcion": "Running Tank arranca antes por Líneas 1 y 2. El resto entra por Línea 4.",
+   "lineas": [
+    "1",
+    "2",
+    "4"
+   ],
+   "pedido": {
+    "modelos": [
+     {
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 225,
+      "lineas": [
+       "1",
+       "2"
+      ],
+      "inicio": "2026-09-22",
+      "fin": "2026-09-23",
+      "entrega": "2026-09-28",
+      "holgura": 9
+     },
+     {
+      "modelo": "Clásica Cab",
+      "piezas": 325,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-09-28",
+      "fin": "2026-10-02",
+      "entrega": "2026-10-07",
+      "holgura": 2
+     },
+     {
+      "modelo": "Clásica DAMA",
+      "piezas": 235,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-10-02",
+      "fin": "2026-10-06",
+      "entrega": "2026-10-09",
+      "holgura": 0
+     },
+     {
+      "modelo": "Mafe DAMA",
+      "piezas": 215,
+      "lineas": [
+       "4"
+      ],
+      "inicio": "2026-10-07",
+      "fin": "2026-10-09",
+      "entrega": "2026-10-14",
+      "holgura": -3
+     }
+    ],
+    "pzas_tarde": 215,
+    "pzas_a_tiempo": 785,
+    "pct_a_tiempo": 78,
+    "piezas": 1000,
+    "inicio": "2026-09-22",
+    "fin": "2026-10-09",
+    "entrega": "2026-10-14",
+    "holgura": -3,
+    "a_tiempo": false,
+    "por_linea": {
+     "1": 140,
+     "2": 85,
+     "4": 775
+    },
+    "dias_costura": 12,
+    "calendario": [
+     {
+      "fecha": "2026-09-22",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-22",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 15
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-01",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-02",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 5
+     },
+     {
+      "fecha": "2026-10-02",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 75
+     },
+     {
+      "fecha": "2026-10-05",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-06",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-07",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-10-08",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-10-09",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 35
+     }
+    ]
+   },
+   "impacto": {
+    "filas": [
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-22",
+      "dias": 8,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-28"
+     },
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-10-29",
+      "dias": 7,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-04"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-06",
+      "dias": 6,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-12"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-06",
+      "dias": 4,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-12"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-10-28",
+      "dias": 3,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-03"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-19",
+      "dias": 2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "LITE PANT DAMA",
+      "piezas": 945.0,
+      "fin_base": "2026-12-11",
+      "fin_esc": "2026-12-11",
+      "dias": 0,
+      "almacen_base": "2026-12-17",
+      "almacen_esc": "2026-12-17"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-12",
+      "dias": 0,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-16"
+     },
+     {
+      "modelo": "MOTION LOOP CLASICA KIDS",
+      "piezas": 29.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "MOTION LOOP MAFE DAMA",
+      "piezas": 67.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "SHORT PLAYA CAB",
+      "piezas": 100.0,
+      "fin_base": "2026-09-28",
+      "fin_esc": "2026-09-28",
+      "dias": 0,
+      "almacen_base": "2026-10-02",
+      "almacen_esc": "2026-10-02"
+     },
+     {
+      "modelo": "SHORT SPORT CAB",
+      "piezas": 610.0,
+      "fin_base": "2026-10-21",
+      "fin_esc": "2026-10-21",
+      "dias": 0,
+      "almacen_base": "2026-10-27",
+      "almacen_esc": "2026-10-27"
+     },
+     {
+      "modelo": "SHORT SPORT R1 CAB",
+      "piezas": 69.0,
+      "fin_base": "2026-10-05",
+      "fin_esc": "2026-10-05",
+      "dias": 0,
+      "almacen_base": "2026-10-09",
+      "almacen_esc": "2026-10-09"
+     },
+     {
+      "modelo": "SHORT SPORT R1 DAMA",
+      "piezas": 131.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "VESTIDO ARYNA DAMA",
+      "piezas": 192.0,
+      "fin_base": "2026-09-22",
+      "fin_esc": "2026-09-22",
+      "dias": 0,
+      "almacen_base": "2026-09-28",
+      "almacen_esc": "2026-09-28"
+     },
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-13",
+      "dias": -3,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-19"
+     }
+    ],
+    "aplazados": [
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-22",
+      "dias": 8,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-28"
+     },
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-10-29",
+      "dias": 7,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-04"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-06",
+      "dias": 6,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-12"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-06",
+      "dias": 4,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-12"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-10-28",
+      "dias": 3,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-03"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-19",
+      "dias": 2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-23"
+     }
+    ],
+    "adelantados": [
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-13",
+      "dias": -3,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-19"
+     }
+    ],
+    "n_aplazados": 6,
+    "piezas_aplazadas": 5028,
+    "max_dias": 8,
+    "suma_dias": 30
+   },
+   "uso": {
+    "piezas": {
+     "1": 390,
+     "2": 1477,
+     "3": 1837,
+     "4": 1311,
+     "5": 600
+    },
+    "dias_ocupados": {
+     "1": 7,
+     "2": 15,
+     "3": 15,
+     "4": 15,
+     "5": 15
+    },
+    "dias_posibles": 15,
+    "por_semana": {
+     "S2": {
+      "1": 140,
+      "2": 467,
+      "3": 597,
+      "4": 475,
+      "5": 200
+     },
+     "S3": {
+      "2": 505,
+      "3": 620,
+      "4": 400,
+      "5": 200
+     },
+     "S4": {
+      "1": 250,
+      "2": 505,
+      "3": 620,
+      "4": 436,
+      "5": 200
+     }
+    }
+   },
+   "linea1_s3": {
+    "piezas": 0,
+    "modelos": []
+   },
+   "ocupacion_pedido": {
+    "1": 2,
+    "2": 2,
+    "3": 0,
+    "4": 10,
+    "5": 0
+   },
+   "semanas_afectadas": [
+    {
+     "semana": "S2",
+     "desde": "2026-09-21",
+     "hasta": "2026-09-25"
+    },
+    {
+     "semana": "S3",
+     "desde": "2026-09-28",
+     "hasta": "2026-10-02"
+    },
+    {
+     "semana": "S4",
+     "desde": "2026-10-05",
+     "hasta": "2026-10-09"
+    }
+   ],
+   "semanas": {
+    "S1": {
+     "fechas": [
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "MOTION LOOP MAFE DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        67
+       ],
+       "total": 67
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        73
+       ],
+       "total": 73
+      },
+      {
+       "linea": "2",
+       "modelo": "MOTION LOOP CLASICA KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        29
+       ],
+       "total": 29
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        101
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        80
+       ],
+       "total": 80
+      }
+     ]
+    },
+    "S2": {
+     "fechas": [
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        70,
+        0,
+        0
+       ],
+       "total": 140
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        79,
+        101,
+        101
+       ],
+       "total": 382
+      },
+      {
+       "linea": "2",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        15,
+        0,
+        0
+       ],
+       "total": 85
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 496
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        60,
+        101,
+        101,
+        101
+       ],
+       "total": 363
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        80,
+        32,
+        0,
+        0,
+        0
+       ],
+       "total": 112
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        40,
+        40
+       ],
+       "total": 80
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      }
+     ]
+    },
+    "S3": {
+     "fechas": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02"
+     ],
+     "filas": [
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 404
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 620
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        80,
+        80,
+        5
+       ],
+       "total": 325
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        75
+       ],
+       "total": 75
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        22,
+        20,
+        20,
+        23
+       ],
+       "total": 105
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        20,
+        20,
+        17
+       ],
+       "total": 57
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        20,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 20
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        0,
+        0,
+        0
+       ],
+       "total": 18
+      }
+     ]
+    },
+    "S4": {
+     "fechas": [
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 250
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        120,
+        0
+       ],
+       "total": 492
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        4,
+        124
+       ],
+       "total": 128
+      },
+      {
+       "linea": "4",
+       "modelo": "Mafe DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        90,
+        90,
+        35
+       ],
+       "total": 215
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        0,
+        0,
+        0
+       ],
+       "total": 160
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        61
+       ],
+       "total": 61
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        28,
+        22,
+        20,
+        25,
+        40
+       ],
+       "total": 135
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        20,
+        15,
+        0
+       ],
+       "total": 53
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        12,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 12
+      }
+     ]
+    },
+    "S5": {
+     "fechas": [
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        50,
+        50,
+        50
+       ],
+       "total": 150
+      },
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        0,
+        0,
+        0
+       ],
+       "total": 100
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        93,
+        101,
+        101,
+        101
+       ],
+       "total": 396
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        8,
+        0,
+        0,
+        0
+       ],
+       "total": 109
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO NS DAMA",
+       "especial": false,
+       "dias": [
+        46,
+        99,
+        43,
+        50,
+        0
+       ],
+       "total": 238
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO NS CAB",
+       "especial": false,
+       "dias": [
+        0,
+        2,
+        58,
+        51,
+        101
+       ],
+       "total": 212
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        67,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 67
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "total": 200
+      }
+     ]
+    }
+   },
+   "config": [
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    }
+   ]
+  },
+  "C": {
+   "id": "C",
+   "descripcion": "Running Tank arranca antes por Líneas 1 y 2. El resto entra por Líneas 3 y 4.",
+   "lineas": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "pedido": {
+    "modelos": [
+     {
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 225,
+      "lineas": [
+       "1",
+       "2"
+      ],
+      "inicio": "2026-09-22",
+      "fin": "2026-09-23",
+      "entrega": "2026-09-28",
+      "holgura": 9
+     },
+     {
+      "modelo": "Clásica Cab",
+      "piezas": 325,
+      "lineas": [
+       "3",
+       "4"
+      ],
+      "inicio": "2026-09-28",
+      "fin": "2026-09-30",
+      "entrega": "2026-10-05",
+      "holgura": 4
+     },
+     {
+      "modelo": "Clásica DAMA",
+      "piezas": 235,
+      "lineas": [
+       "3",
+       "4"
+      ],
+      "inicio": "2026-09-30",
+      "fin": "2026-10-01",
+      "entrega": "2026-10-06",
+      "holgura": 3
+     },
+     {
+      "modelo": "Mafe DAMA",
+      "piezas": 215,
+      "lineas": [
+       "3",
+       "4"
+      ],
+      "inicio": "2026-10-01",
+      "fin": "2026-10-02",
+      "entrega": "2026-10-07",
+      "holgura": 2
+     }
+    ],
+    "pzas_tarde": 0,
+    "pzas_a_tiempo": 1000,
+    "pct_a_tiempo": 100,
+    "piezas": 1000,
+    "inicio": "2026-09-22",
+    "fin": "2026-10-02",
+    "entrega": "2026-10-07",
+    "holgura": 2,
+    "a_tiempo": true,
+    "por_linea": {
+     "1": 140,
+     "2": 85,
+     "3": 410,
+     "4": 365
+    },
+    "dias_costura": 7,
+    "calendario": [
+     {
+      "fecha": "2026-09-22",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-22",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 15
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 5
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "3",
+      "modelo": "Clásica DAMA",
+      "piezas": 75
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-01",
+      "linea": "3",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-01",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-10-02",
+      "linea": "3",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-10-02",
+      "linea": "4",
+      "modelo": "Mafe DAMA",
+      "piezas": 35
+     }
+    ]
+   },
+   "impacto": {
+    "filas": [
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-09",
+      "dias": 5,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-15",
+      "dias": 5,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-21"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-19",
+      "dias": 5,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-19",
+      "dias": 5,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-10-30",
+      "dias": 5,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-05"
+     },
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-10-27",
+      "dias": 5,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-02"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-04",
+      "dias": 4,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-10"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-19",
+      "dias": 2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "LITE PANT DAMA",
+      "piezas": 945.0,
+      "fin_base": "2026-12-11",
+      "fin_esc": "2026-12-11",
+      "dias": 0,
+      "almacen_base": "2026-12-17",
+      "almacen_esc": "2026-12-17"
+     },
+     {
+      "modelo": "MOTION LOOP CLASICA KIDS",
+      "piezas": 29.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "MOTION LOOP MAFE DAMA",
+      "piezas": 67.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "SHORT PLAYA CAB",
+      "piezas": 100.0,
+      "fin_base": "2026-09-28",
+      "fin_esc": "2026-09-28",
+      "dias": 0,
+      "almacen_base": "2026-10-02",
+      "almacen_esc": "2026-10-02"
+     },
+     {
+      "modelo": "SHORT SPORT CAB",
+      "piezas": 610.0,
+      "fin_base": "2026-10-21",
+      "fin_esc": "2026-10-21",
+      "dias": 0,
+      "almacen_base": "2026-10-27",
+      "almacen_esc": "2026-10-27"
+     },
+     {
+      "modelo": "SHORT SPORT R1 CAB",
+      "piezas": 69.0,
+      "fin_base": "2026-10-05",
+      "fin_esc": "2026-10-05",
+      "dias": 0,
+      "almacen_base": "2026-10-09",
+      "almacen_esc": "2026-10-09"
+     },
+     {
+      "modelo": "SHORT SPORT R1 DAMA",
+      "piezas": 131.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "VESTIDO ARYNA DAMA",
+      "piezas": 192.0,
+      "fin_base": "2026-09-22",
+      "fin_esc": "2026-09-22",
+      "dias": 0,
+      "almacen_base": "2026-09-28",
+      "almacen_esc": "2026-09-28"
+     },
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-13",
+      "dias": -3,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-19"
+     }
+    ],
+    "aplazados": [
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-09",
+      "dias": 5,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-13"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-15",
+      "dias": 5,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-21"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-19",
+      "dias": 5,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-19",
+      "dias": 5,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-23"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-10-30",
+      "dias": 5,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-05"
+     },
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-10-27",
+      "dias": 5,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-02"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-04",
+      "dias": 4,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-10"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-19",
+      "dias": 2,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-23"
+     }
+    ],
+    "adelantados": [
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-13",
+      "dias": -3,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-19"
+     }
+    ],
+    "n_aplazados": 8,
+    "piezas_aplazadas": 6831,
+    "max_dias": 5,
+    "suma_dias": 36
+   },
+   "uso": {
+    "piezas": {
+     "1": 390,
+     "2": 1477,
+     "3": 1627,
+     "4": 1406,
+     "5": 600
+    },
+    "dias_ocupados": {
+     "1": 7,
+     "2": 15,
+     "3": 15,
+     "4": 15,
+     "5": 15
+    },
+    "dias_posibles": 15,
+    "por_semana": {
+     "S2": {
+      "1": 140,
+      "2": 467,
+      "3": 597,
+      "4": 475,
+      "5": 200
+     },
+     "S3": {
+      "2": 505,
+      "3": 410,
+      "4": 426,
+      "5": 200
+     },
+     "S4": {
+      "1": 250,
+      "2": 505,
+      "3": 620,
+      "4": 505,
+      "5": 200
+     }
+    }
+   },
+   "linea1_s3": {
+    "piezas": 0,
+    "modelos": []
+   },
+   "ocupacion_pedido": {
+    "1": 2,
+    "2": 2,
+    "3": 5,
+    "4": 5,
+    "5": 0
+   },
+   "semanas_afectadas": [
+    {
+     "semana": "S2",
+     "desde": "2026-09-21",
+     "hasta": "2026-09-25"
+    },
+    {
+     "semana": "S3",
+     "desde": "2026-09-28",
+     "hasta": "2026-10-02"
+    }
+   ],
+   "semanas": {
+    "S1": {
+     "fechas": [
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "MOTION LOOP MAFE DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        67
+       ],
+       "total": 67
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        73
+       ],
+       "total": 73
+      },
+      {
+       "linea": "2",
+       "modelo": "MOTION LOOP CLASICA KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        29
+       ],
+       "total": 29
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        101
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        80
+       ],
+       "total": 80
+      }
+     ]
+    },
+    "S2": {
+     "fechas": [
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        70,
+        0,
+        0
+       ],
+       "total": 140
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        79,
+        101,
+        101
+       ],
+       "total": 382
+      },
+      {
+       "linea": "2",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        15,
+        0,
+        0
+       ],
+       "total": 85
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 496
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        60,
+        101,
+        101,
+        101
+       ],
+       "total": 363
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        80,
+        32,
+        0,
+        0,
+        0
+       ],
+       "total": 112
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        40,
+        40
+       ],
+       "total": 80
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      }
+     ]
+    },
+    "S3": {
+     "fechas": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02"
+     ],
+     "filas": [
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 404
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "3",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        5,
+        0,
+        0
+       ],
+       "total": 165
+      },
+      {
+       "linea": "3",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        75,
+        80,
+        0
+       ],
+       "total": 155
+      },
+      {
+       "linea": "3",
+       "modelo": "Mafe DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        90
+       ],
+       "total": 90
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        0,
+        0,
+        0
+       ],
+       "total": 160
+      },
+      {
+       "linea": "4",
+       "modelo": "Mafe DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        0,
+        90,
+        35
+       ],
+       "total": 125
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        80,
+        0,
+        0
+       ],
+       "total": 80
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        61
+       ],
+       "total": 61
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        22,
+        20,
+        20,
+        23
+       ],
+       "total": 105
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        20,
+        20,
+        17
+       ],
+       "total": 57
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        20,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 20
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        0,
+        0,
+        0
+       ],
+       "total": 18
+      }
+     ]
+    },
+    "S4": {
+     "fechas": [
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 250
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 620
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        28,
+        22,
+        20,
+        25,
+        40
+       ],
+       "total": 135
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        20,
+        15,
+        0
+       ],
+       "total": 53
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        12,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 12
+      }
+     ]
+    },
+    "S5": {
+     "fechas": [
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        50,
+        50,
+        50
+       ],
+       "total": 150
+      },
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        0,
+        0,
+        0
+       ],
+       "total": 100
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        93,
+        101,
+        101,
+        101
+       ],
+       "total": 396
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        8,
+        0,
+        0,
+        0
+       ],
+       "total": 109
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        120,
+        0
+       ],
+       "total": 492
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        4,
+        124
+       ],
+       "total": 128
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        33,
+        0,
+        0
+       ],
+       "total": 235
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO NS DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        68,
+        77,
+        65
+       ],
+       "total": 210
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO NS CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        24,
+        36
+       ],
+       "total": 60
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "total": 200
+      }
+     ]
+    }
+   },
+   "config": [
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    }
+   ]
+  },
+  "D": {
+   "id": "D",
+   "descripcion": "Running Tank arranca antes por Líneas 1 y 2. El resto entra por Líneas 2, 3 y 4.",
+   "lineas": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "pedido": {
+    "modelos": [
+     {
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 225,
+      "lineas": [
+       "1",
+       "2"
+      ],
+      "inicio": "2026-09-22",
+      "fin": "2026-09-23",
+      "entrega": "2026-09-28",
+      "holgura": 9
+     },
+     {
+      "modelo": "Mafe DAMA",
+      "piezas": 215,
+      "lineas": [
+       "2"
+      ],
+      "inicio": "2026-09-28",
+      "fin": "2026-09-30",
+      "entrega": "2026-10-05",
+      "holgura": 4
+     },
+     {
+      "modelo": "Clásica Cab",
+      "piezas": 325,
+      "lineas": [
+       "3",
+       "4"
+      ],
+      "inicio": "2026-09-28",
+      "fin": "2026-09-30",
+      "entrega": "2026-10-05",
+      "holgura": 4
+     },
+     {
+      "modelo": "Clásica DAMA",
+      "piezas": 235,
+      "lineas": [
+       "3",
+       "4"
+      ],
+      "inicio": "2026-09-30",
+      "fin": "2026-10-01",
+      "entrega": "2026-10-06",
+      "holgura": 3
+     }
+    ],
+    "pzas_tarde": 0,
+    "pzas_a_tiempo": 1000,
+    "pct_a_tiempo": 100,
+    "piezas": 1000,
+    "inicio": "2026-09-22",
+    "fin": "2026-10-01",
+    "entrega": "2026-10-06",
+    "holgura": 3,
+    "a_tiempo": true,
+    "por_linea": {
+     "1": 140,
+     "2": 300,
+     "3": 320,
+     "4": 240
+    },
+    "dias_costura": 6,
+    "calendario": [
+     {
+      "fecha": "2026-09-22",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-22",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "1",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 70
+     },
+     {
+      "fecha": "2026-09-23",
+      "linea": "2",
+      "modelo": "Running Tank Biomove Cab",
+      "piezas": 15
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "2",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-28",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "2",
+      "modelo": "Mafe DAMA",
+      "piezas": 90
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-29",
+      "linea": "4",
+      "modelo": "Clásica Cab",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "2",
+      "modelo": "Mafe DAMA",
+      "piezas": 35
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "3",
+      "modelo": "Clásica Cab",
+      "piezas": 5
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "3",
+      "modelo": "Clásica DAMA",
+      "piezas": 75
+     },
+     {
+      "fecha": "2026-09-30",
+      "linea": "4",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     },
+     {
+      "fecha": "2026-10-01",
+      "linea": "3",
+      "modelo": "Clásica DAMA",
+      "piezas": 80
+     }
+    ]
+   },
+   "impacto": {
+    "filas": [
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-11-05",
+      "dias": 12,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-11"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-11-04",
+      "dias": 8,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-10"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-14",
+      "dias": 4,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-20"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-16",
+      "dias": 4,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-22"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-16",
+      "dias": 4,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-22"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-03",
+      "dias": 3,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-09"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-20",
+      "dias": 3,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-26"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-04",
+      "dias": 2,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-10"
+     },
+     {
+      "modelo": "LITE PANT DAMA",
+      "piezas": 945.0,
+      "fin_base": "2026-12-11",
+      "fin_esc": "2026-12-11",
+      "dias": 0,
+      "almacen_base": "2026-12-17",
+      "almacen_esc": "2026-12-17"
+     },
+     {
+      "modelo": "MOTION LOOP CLASICA KIDS",
+      "piezas": 29.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "MOTION LOOP MAFE DAMA",
+      "piezas": 67.0,
+      "fin_base": "2026-09-18",
+      "fin_esc": "2026-09-18",
+      "dias": 0,
+      "almacen_base": "2026-09-24",
+      "almacen_esc": "2026-09-24"
+     },
+     {
+      "modelo": "SHORT PLAYA CAB",
+      "piezas": 100.0,
+      "fin_base": "2026-09-28",
+      "fin_esc": "2026-09-28",
+      "dias": 0,
+      "almacen_base": "2026-10-02",
+      "almacen_esc": "2026-10-02"
+     },
+     {
+      "modelo": "SHORT SPORT CAB",
+      "piezas": 610.0,
+      "fin_base": "2026-10-21",
+      "fin_esc": "2026-10-21",
+      "dias": 0,
+      "almacen_base": "2026-10-27",
+      "almacen_esc": "2026-10-27"
+     },
+     {
+      "modelo": "SHORT SPORT R1 CAB",
+      "piezas": 69.0,
+      "fin_base": "2026-10-05",
+      "fin_esc": "2026-10-05",
+      "dias": 0,
+      "almacen_base": "2026-10-09",
+      "almacen_esc": "2026-10-09"
+     },
+     {
+      "modelo": "SHORT SPORT R1 DAMA",
+      "piezas": 131.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-08",
+      "dias": 0,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-14"
+     },
+     {
+      "modelo": "VESTIDO ARYNA DAMA",
+      "piezas": 192.0,
+      "fin_base": "2026-09-22",
+      "fin_esc": "2026-09-22",
+      "dias": 0,
+      "almacen_base": "2026-09-28",
+      "almacen_esc": "2026-09-28"
+     },
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-14",
+      "dias": -2,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-20"
+     }
+    ],
+    "aplazados": [
+     {
+      "modelo": "RIO NS DAMA",
+      "piezas": 817.0,
+      "fin_base": "2026-10-20",
+      "fin_esc": "2026-11-05",
+      "dias": 12,
+      "almacen_base": "2026-10-26",
+      "almacen_esc": "2026-11-11"
+     },
+     {
+      "modelo": "RIO NS CAB",
+      "piezas": 939.0,
+      "fin_base": "2026-10-23",
+      "fin_esc": "2026-11-04",
+      "dias": 8,
+      "almacen_base": "2026-10-29",
+      "almacen_esc": "2026-11-10"
+     },
+     {
+      "modelo": "MAR KIDS",
+      "piezas": 1608.0,
+      "fin_base": "2026-10-08",
+      "fin_esc": "2026-10-14",
+      "dias": 4,
+      "almacen_base": "2026-10-14",
+      "almacen_esc": "2026-10-20"
+     },
+     {
+      "modelo": "MAR NS KIDS",
+      "piezas": 195.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-16",
+      "dias": 4,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-22"
+     },
+     {
+      "modelo": "RIO CAB",
+      "piezas": 1381.0,
+      "fin_base": "2026-10-12",
+      "fin_esc": "2026-10-16",
+      "dias": 4,
+      "almacen_base": "2026-10-16",
+      "almacen_esc": "2026-10-22"
+     },
+     {
+      "modelo": "BASIC LINE OVERSIZED CAB",
+      "piezas": 412.0,
+      "fin_base": "2026-10-29",
+      "fin_esc": "2026-11-03",
+      "dias": 3,
+      "almacen_base": "2026-11-04",
+      "almacen_esc": "2026-11-09"
+     },
+     {
+      "modelo": "RIO DAMA",
+      "piezas": 1122.0,
+      "fin_base": "2026-10-15",
+      "fin_esc": "2026-10-20",
+      "dias": 3,
+      "almacen_base": "2026-10-21",
+      "almacen_esc": "2026-10-26"
+     },
+     {
+      "modelo": "BASIC LINE CROP TEE DAMA",
+      "piezas": 357.0,
+      "fin_base": "2026-11-02",
+      "fin_esc": "2026-11-04",
+      "dias": 2,
+      "almacen_base": "2026-11-06",
+      "almacen_esc": "2026-11-10"
+     }
+    ],
+    "adelantados": [
+     {
+      "modelo": "RIO KIDS",
+      "piezas": 1368.0,
+      "fin_base": "2026-10-16",
+      "fin_esc": "2026-10-14",
+      "dias": -2,
+      "almacen_base": "2026-10-22",
+      "almacen_esc": "2026-10-20"
+     }
+    ],
+    "n_aplazados": 8,
+    "piezas_aplazadas": 6831,
+    "max_dias": 12,
+    "suma_dias": 40
+   },
+   "uso": {
+    "piezas": {
+     "1": 390,
+     "2": 1450,
+     "3": 1661,
+     "4": 1422,
+     "5": 600
+    },
+    "dias_ocupados": {
+     "1": 7,
+     "2": 15,
+     "3": 15,
+     "4": 15,
+     "5": 15
+    },
+    "dias_posibles": 15,
+    "por_semana": {
+     "S2": {
+      "1": 140,
+      "2": 467,
+      "3": 597,
+      "4": 475,
+      "5": 200
+     },
+     "S3": {
+      "2": 478,
+      "3": 444,
+      "4": 442,
+      "5": 200
+     },
+     "S4": {
+      "1": 250,
+      "2": 505,
+      "3": 620,
+      "4": 505,
+      "5": 200
+     }
+    }
+   },
+   "linea1_s3": {
+    "piezas": 0,
+    "modelos": []
+   },
+   "ocupacion_pedido": {
+    "1": 2,
+    "2": 5,
+    "3": 4,
+    "4": 3,
+    "5": 0
+   },
+   "semanas_afectadas": [
+    {
+     "semana": "S2",
+     "desde": "2026-09-21",
+     "hasta": "2026-09-25"
+    },
+    {
+     "semana": "S3",
+     "desde": "2026-09-28",
+     "hasta": "2026-10-02"
+    }
+   ],
+   "semanas": {
+    "S1": {
+     "fechas": [
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "MOTION LOOP MAFE DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        67
+       ],
+       "total": 67
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        73
+       ],
+       "total": 73
+      },
+      {
+       "linea": "2",
+       "modelo": "MOTION LOOP CLASICA KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        29
+       ],
+       "total": 29
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        101
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        80
+       ],
+       "total": 80
+      }
+     ]
+    },
+    "S2": {
+     "fechas": [
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        70,
+        0,
+        0
+       ],
+       "total": 140
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        79,
+        101,
+        101
+       ],
+       "total": 382
+      },
+      {
+       "linea": "2",
+       "modelo": "Running Tank Biomove Cab (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        70,
+        15,
+        0,
+        0
+       ],
+       "total": 85
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 496
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 101
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        60,
+        101,
+        101,
+        101
+       ],
+       "total": 363
+      },
+      {
+       "linea": "4",
+       "modelo": "VESTIDO ARYNA DAMA",
+       "especial": false,
+       "dias": [
+        80,
+        32,
+        0,
+        0,
+        0
+       ],
+       "total": 112
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        40,
+        40
+       ],
+       "total": 80
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        20,
+        20,
+        20,
+        0,
+        0
+       ],
+       "total": 60
+      }
+     ]
+    },
+    "S3": {
+     "fechas": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02"
+     ],
+     "filas": [
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        61,
+        101,
+        101
+       ],
+       "total": 263
+      },
+      {
+       "linea": "2",
+       "modelo": "Mafe DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        90,
+        90,
+        35,
+        0,
+        0
+       ],
+       "total": 215
+      },
+      {
+       "linea": "3",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        5,
+        0,
+        0
+       ],
+       "total": 165
+      },
+      {
+       "linea": "3",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        75,
+        80,
+        0
+       ],
+       "total": 155
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        124
+       ],
+       "total": 124
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        101,
+        101
+       ],
+       "total": 202
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica Cab (Especial)",
+       "especial": true,
+       "dias": [
+        80,
+        80,
+        0,
+        0,
+        0
+       ],
+       "total": 160
+      },
+      {
+       "linea": "4",
+       "modelo": "Clásica DAMA (Especial)",
+       "especial": true,
+       "dias": [
+        0,
+        0,
+        80,
+        0,
+        0
+       ],
+       "total": 80
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        20,
+        22,
+        20,
+        20,
+        23
+       ],
+       "total": 105
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        20,
+        20,
+        17
+       ],
+       "total": 57
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT PLAYA CAB",
+       "especial": false,
+       "dias": [
+        20,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 20
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        0,
+        0,
+        0
+       ],
+       "total": 18
+      }
+     ]
+    },
+    "S4": {
+     "fechas": [
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        50,
+        50,
+        50
+       ],
+       "total": 250
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        124,
+        124,
+        124
+       ],
+       "total": 620
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        101,
+        101,
+        101
+       ],
+       "total": 505
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        28,
+        22,
+        20,
+        25,
+        40
+       ],
+       "total": 135
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        18,
+        20,
+        15,
+        0
+       ],
+       "total": 53
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT R1 CAB",
+       "especial": false,
+       "dias": [
+        12,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 12
+      }
+     ]
+    },
+    "S5": {
+     "fechas": [
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16"
+     ],
+     "filas": [
+      {
+       "linea": "1",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        50,
+        50,
+        48,
+        0,
+        0
+       ],
+       "total": 148
+      },
+      {
+       "linea": "1",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        50,
+        50
+       ],
+       "total": 100
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        101,
+        101,
+        101
+       ],
+       "total": 303
+      },
+      {
+       "linea": "2",
+       "modelo": "RIO KIDS",
+       "especial": false,
+       "dias": [
+        101,
+        101,
+        0,
+        0,
+        0
+       ],
+       "total": 202
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR KIDS",
+       "especial": false,
+       "dias": [
+        124,
+        124,
+        120,
+        0,
+        0
+       ],
+       "total": 368
+      },
+      {
+       "linea": "3",
+       "modelo": "MAR NS KIDS",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        4,
+        124,
+        67
+       ],
+       "total": 195
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO NS DAMA",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        31
+       ],
+       "total": 31
+      },
+      {
+       "linea": "3",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        0,
+        0,
+        15
+       ],
+       "total": 15
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO NS DAMA",
+       "especial": false,
+       "dias": [
+        7,
+        101,
+        41,
+        89,
+        0
+       ],
+       "total": 238
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO NS CAB",
+       "especial": false,
+       "dias": [
+        0,
+        0,
+        60,
+        12,
+        101
+       ],
+       "total": 173
+      },
+      {
+       "linea": "4",
+       "modelo": "RIO CAB",
+       "especial": false,
+       "dias": [
+        94,
+        0,
+        0,
+        0,
+        0
+       ],
+       "total": 94
+      },
+      {
+       "linea": "5",
+       "modelo": "SHORT SPORT CAB",
+       "especial": false,
+       "dias": [
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "total": 200
+      }
+     ]
+    }
+   },
+   "config": [
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica DAMA",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Clásica Cab",
+     "lineas": "3, 4",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "2",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "2",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "2",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "2",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Mafe DAMA",
+     "lineas": "2",
+     "inicio": "2026-09-28"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    },
+    {
+     "modelo": "Running Tank Biomove Cab",
+     "lineas": "1 , 2",
+     "inicio": "2026-09-22"
+    }
+   ]
+  }
+ },
+ "pedido_total": 1000
+}
