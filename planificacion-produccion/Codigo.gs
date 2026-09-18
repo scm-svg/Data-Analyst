@@ -2124,8 +2124,8 @@ function generarPlanificacionSemanal_() {
         if (mO.esEspecial) {
           if (mO.fechaMin !== mNew.fechaMin) return mNew.fechaMin < mO.fechaMin;
           if (mO.prioMin !== mNew.prioMin) return mNew.prioMin < mO.prioMin;
-          var volO = restanteModelo_(mO);
-          var volN = restanteModelo_(mNew);
+          var volO = mO.volumen || 0;
+          var volN = mNew.volumen || 0;
           if (volO !== volN) return volN > volO;
           return mNew.nombre < mO.nombre;
         }
@@ -2344,7 +2344,7 @@ function generarPlanificacionSemanal_() {
         var yaOtra = ["1", "2", "3", "4", "5"].some(function (l2) {
           return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
         });
-        if (yaOtra) continue;
+        if (yaOtra && !esEspecialExplosivo_(mC, overflow, d)) continue;
         if (paraParalelo && famRef && familiaModelo_(mC) === famRef) continue;
         if (String(lin) === "5" && paraParalelo && esExclusivoLinea5_(mC)) continue;
         if (debeEsperarHermano_(mC, overflow)) continue;

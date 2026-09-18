@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.32 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.33 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1203,7 +1203,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                         return m_new["fechaMin"] < m_o["fechaMin"]
                     if m_o["prioMin"] != m_new["prioMin"]:
                         return m_new["prioMin"] < m_o["prioMin"]
-                    vol_o, vol_n = restante_modelo(m_o), restante_modelo(m_new)
+                    vol_o = sum(t["cantidad"] for t in m_o["tareas"])
+                    vol_n = sum(t["cantidad"] for t in m_new["tareas"])
                     if vol_o != vol_n:
                         return vol_n > vol_o
                     return m_new["nombre"] < m_o["nombre"]
@@ -1481,7 +1482,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 l2 != lin and m["nombre"] in (ocupante.get(l2) or [])
                 for l2 in ocupante
             )
-            if ya_otra:
+            if ya_otra and not es_especial_explosivo(m, overflow, d):
                 continue
             if para_paralelo and fam_ref and familia_modelo(m) == fam_ref:
                 continue
@@ -2136,6 +2137,10 @@ class TestLineasExclusivas(unittest.TestCase):
         self.assertEqual(d0_4.get("Clásica DAMA (Especial)", 0), 0)
         self.assertEqual(sum(t["planificada"] for t in out if "Cab" in t["modelo"]), 325)
         self.assertEqual(sum(t["planificada"] for t in out if "DAMA" in t["modelo"]), 235)
+        dama_l3 = sum(sum(t["plan"]["3"]) for t in out if "DAMA" in t["modelo"])
+        dama_l4 = sum(sum(t["plan"]["4"]) for t in out if "DAMA" in t["modelo"])
+        self.assertGreater(dama_l3, 0)
+        self.assertGreater(dama_l4, 0)
         dama_dias = []
         for d in range(10):
             if any(t["plan"]["3"][d] > 0 or t["plan"]["4"][d] > 0
@@ -3294,7 +3299,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.32"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.33"', gs)
 
     def test_cache_json_se_parte_y_rearma(self):
         path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
