@@ -1,10 +1,17 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.31 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.32 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - RIO DAMA NO SUELTA L2: el lote de familia (color → género) ignora
+ *     hermanos que aún no llegan a su Día de inicio. Antes RIO KIDS
+ *     (Negro, Alta, inicio 29/09) hacía ceder a RIO DAMA en Semana 2
+ *     y la Línea 2 quedaba vacía hasta que KIDS podía entrar. El
+ *     ocupante sigue en su línea si el lote de familia no puede
+ *     producir hoy. Al llegar el Día de inicio del hermano, la
+ *     secuencia Negro → Blanco → Marino y CAB → DAMA → KIDS sigue.
  *   - DASHBOARD WEB COMPARTIDO: el menú 🔄 Actualizar Dashboard publica
  *     un snapshot en la hoja oculta _DashboardCache. doGet y el enlace
  *     de la app web sirven ese snapshot (el URL no cambia). Impresión
@@ -147,7 +154,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.31";
+var VERSION_SISTEMA = "5.9.32";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1846,6 +1853,13 @@ function generarPlanificacionSemanal_() {
     return false;
   }
 
+  function tareaVivaHoy_(t) {
+    if (!t || !(t.restante > 0)) return false;
+    if (d < diaInicioEfectivo_(t)) return false;
+    if (d < DIAS_LABORALES && (d % DIAS_LABORALES) === t.diaNoLaborable) return false;
+    return true;
+  }
+
   function loteFamiliaActivo_(fam, overflow) {
     if (!fam) return null;
     var best = null;
@@ -1856,7 +1870,7 @@ function generarPlanificacionSemanal_() {
       var soloMin = restanteMinima_(mL) > 0;
       for (var tL = 0; tL < mL.tareas.length; tL++) {
         var tF = mL.tareas[tL];
-        if (tF.restante <= 0) continue;
+        if (!tareaVivaHoy_(tF)) continue;
         if (soloMin && !tF.esMinima) continue;
         var rank = rangoColor_(tF.color);
         var g = ordenGenero_(mL.genero);
@@ -1896,6 +1910,7 @@ function generarPlanificacionSemanal_() {
       if (h.nombre === m.nombre || familiaModelo_(h) !== fam) continue;
       if (h.esEspecial || restanteModelo_(h) <= 0) continue;
       if (lineasDondeEsta_(h.nombre).length > 0) continue;
+      if (!modeloPuedeProducirHoyNom_(h.nombre, lin, d, overflow)) continue;
       if (lineasModelo_(h, overflow).indexOf(lin) !== -1) return true;
     }
     return false;
@@ -1905,7 +1920,7 @@ function generarPlanificacionSemanal_() {
     var best = 99;
     var soloMin = restanteMinima_(m) > 0;
     m.tareas.forEach(function (t) {
-      if (t.restante <= 0) return;
+      if (!tareaVivaHoy_(t)) return;
       if (soloMin && !t.esMinima) return;
       var r = rangoColor_(t.color);
       if (r < best) best = r;
@@ -1925,6 +1940,7 @@ function generarPlanificacionSemanal_() {
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
     if (lineasDondeEsta_(lote.modelo).length > 0) return false;
+    if (!lote.m.tareas.some(function (tLote) { return tareaVivaHoy_(tLote); })) return false;
     if (m.secuenciaNo) {
       return lote.colorRank < colorRankVivo_(m);
     }
@@ -1964,6 +1980,7 @@ function generarPlanificacionSemanal_() {
     if (!lote || lote.modelo === m.nombre) return false;
     if (lote.m && lote.m.esEspecial) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
+    if (!lote.m.tareas.some(function (tLote) { return tareaVivaHoy_(tLote); })) return false;
     if (m.secuenciaNo) {
       if (lote.colorRank < colorRankVivo_(m)) {
         return lineasDondeEsta_(lote.modelo).length === 0;
