@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.32 — códigos listos para pegar
+# Planificación de Producción v5.9.33 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,7 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se guardan en la hoja oculta `_ImpresionChecks` (clave `semana|SKU|MO`). Quedan en la hoja, no en el navegador de cada persona, para seguimiento por orden.
 
-Esta versión incluye el motor **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -39,8 +39,10 @@ Hoja: `Priorizacion - SKUs`. Columnas (fila 2): SKU, Producto, Genero, Color, Ta
 
 Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar a la línea, salen primero (todo su faltante). Después sigue la distribución habitual (colores núcleo y el resto). Se refleja en `Proyeccion - SKUS` y `Entrada de Almacen - Skus`.
 
-## Motor v5.9.32 (base 5.9.31 + lote de familia solo con quien ya puede producir)
+## Motor v5.9.33 (base 5.9.32 + Especial en todas las líneas asignadas)
 
+- **Especial en todas las asignadas:** un modelo de `Por Hacer - Especial` con 2+ líneas (Running Tank Biomove en `1, 2`; Clásica Cab/DAMA en `3, 4`) es **prioridad 1** en cada línea listada. Al llegar su **Día de inicio** toma **sí o sí** todas esas líneas (desaloja a RIO u otro de peor banda). Ya no se queda en una sola porque “alcanza la semana”. El faltante se reparte entre las asignadas (la MO no se clava a una). Dos Especiales que comparten líneas: el de más volumen (o mejor fecha) usa ambas hasta terminar; el otro entra después. **No** desborda a una línea que no esté en `Linea de Produccion`.
+- **Encabezado Producto:** si en `Por Hacer` la celda de Producto/Modelo de la fila 2 viene vacía, se usa la columna siguiente a SKU o el título de la fila 1. Generar Planificación ya no se bloquea por eso.
 - **RIO DAMA no suelta L2:** el lote de familia (Negro → Blanco → Marino, CAB → DAMA → KIDS) **ignora** hermanos que todavía no llegan a su Día de inicio. Si RIO KIDS está en la misma línea pero arranca el 29/09, RIO DAMA sigue en Línea 2 en la semana 2. Al llegar ese día, la secuencia de color/género vuelve a aplicar. El apoyo 50% de L1 no deja a DAMA como ocupante fantasma de una L2 vacía.
 - **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** persiste checks por MO en `_ImpresionChecks`.
 - **Urgente en fecha estimada:** un modelo Urgente/mínima con 2+ líneas toma **sí o sí** todas las asignadas el día de Fecha de Salida Estimada y el hábil anterior. Fuera de esa ventana, la segunda línea solo si está libre.
@@ -67,7 +69,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Urgente** después de Especial y de la cantidad mínima, luego la fecha de salida más próxima. Un modelo Urgente con dos líneas (ej. `2, 4`) usa las dos.
 - **Líneas 1-4:** un modelo a la vez (**no en paralelo**). Si el modelo termina o no puede seguir, el **sobrante del mismo día** pasa al siguiente de la cola.
 - **Línea 5** es la única que puede trabajar **dos familias** en paralelo. Si va un modelo solo, usa su cap del día (típico 40). Si hay dos familias, se turnan en lotes de 5. El mismo producto en distinto género **no** corre en paralelo: va en secuencia por color y género. Si el modelo tiene **Secuencia=No**, L5 no admite segundo ocupante.
-- **Especial:** se respeta `Linea de Produccion`. Si la celda viene vacía, se usa 1 (dato faltante, no desborde). Si L1 queda libre, **no** se redirigen ahí modelos/cantidades de otras líneas. Al llegar **Día de inicio**, el Especial (y cualquier modelo de mejor prioridad en L1-4) desaloja al ocupante peor y entra ese día. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
+- **Especial:** se respeta `Linea de Produccion`. Si hay **2 o más** líneas, el modelo las usa **todas** (prioridad 1) desde su Día de inicio. Si la celda viene vacía, se usa 1 (dato faltante, no desborde). Si L1 queda libre, **no** se redirigen ahí modelos/cantidades de otras líneas. Al llegar **Día de inicio**, el Especial (y cualquier modelo de mejor prioridad en L1-4) desaloja al ocupante peor y entra ese día. `Fecha de Salida Estimada` en `Por Hacer - Especial` ordena esos modelos.
 - **Priorización:** al actualizar, se eliminan modelos con faltante total 0.
 
 ## Proyección
