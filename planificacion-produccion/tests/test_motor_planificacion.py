@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.31 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.32 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -560,6 +560,17 @@ def dia_inicio_efectivo(t):
     return t.get("diaIngreso") or 0
 
 
+def tarea_viva_hoy(t, d):
+    """True si la tarea aún tiene piezas y ya llegó su Día de inicio (hoy)."""
+    if not t or (t.get("restante") if t.get("restante") is not None else t.get("cantidad") or 0) <= 0:
+        return False
+    if d < dia_inicio_efectivo(t):
+        return False
+    if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
+        return False
+    return True
+
+
 def clave_sku(s):
     return norm(s).upper()
 
@@ -833,6 +844,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     carga = {lin: [0.0] * total_dias for lin in caps_lineas}
     linea_por_mo = {}
     ultimo_modelo = {lin: "" for lin in caps_lineas}
+    dia_ctx = {"d": 0}
 
     def restante_modelo(m):
         return sum(t["restante"] for t in m["tareas"])
@@ -980,6 +992,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def lote_familia_activo(fam, overflow):
         if not fam:
             return None
+        d = dia_ctx["d"]
         best = None
         for m in lista:
             if familia_modelo(m) != fam or restante_modelo(m) <= 0:
@@ -988,7 +1001,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             solo_min = restante_minima(m) > 0
             for t in m["tareas"]:
-                if t["restante"] <= 0:
+                if not tarea_viva_hoy(t, d):
                     continue
                 if solo_min and not t.get("esMinima"):
                     continue
@@ -1034,6 +1047,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             if lineas_donde_esta(h["nombre"]):
                 continue
+            if not modelo_puede(h, dia_ctx["d"], lin, overflow):
+                continue
             if lin in lineas_modelo(h, overflow):
                 return True
         return False
@@ -1041,8 +1056,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def color_rank_vivo(m):
         best = 99
         solo_min = restante_minima(m) > 0
+        d = dia_ctx["d"]
         for t in m["tareas"]:
-            if t["restante"] <= 0:
+            if not tarea_viva_hoy(t, d):
                 continue
             if solo_min and not t.get("esMinima"):
                 continue
@@ -1070,6 +1086,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if lineas_donde_esta(lote["modelo"]):
             return False
+        if not any(tarea_viva_hoy(t, dia_ctx["d"]) for t in lote["m"]["tareas"]):
+            return False
         if m.get("secuenciaNo"):
             return lote["colorRank"] < color_rank_vivo(m)
         libres_lote = lineas_libres_para_modelo(lote["m"], overflow)
@@ -1092,6 +1110,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if lote["m"].get("esEspecial"):
             return False
         if not comparten_lineas(m, lote["m"], overflow):
+            return False
+        if not any(tarea_viva_hoy(t, dia_ctx["d"]) for t in lote["m"]["tareas"]):
             return False
         if m.get("secuenciaNo"):
             if lote["colorRank"] < color_rank_vivo(m):
@@ -1474,6 +1494,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     ocupante = {lin: [] for lin in caps_lineas}
     for d in range(total_dias):
+        dia_ctx["d"] = d
         refrescar_cola()
         overflow = not nativos_linea1_pendientes(d)
         reclamar_lineas(d, ocupante, overflow)
@@ -1519,6 +1540,12 @@ class TestColorYPrioridad(unittest.TestCase):
         self.assertEqual(prioridad_num("URGENT"), 5)
         self.assertEqual(prioridad_num("Alta"), 2)
         self.assertEqual(prioridad_num(""), 5)
+
+    def test_tarea_viva_hoy_respeta_dia_inicio(self):
+        t = {"restante": 10, "diaIngreso": 7, "diaNoLaborable": -1}
+        self.assertFalse(tarea_viva_hoy(t, 6))
+        self.assertTrue(tarea_viva_hoy(t, 7))
+        self.assertFalse(tarea_viva_hoy({"restante": 0, "diaIngreso": 0}, 0))
 
 
 class TestCantidadMinima(unittest.TestCase):
@@ -2538,6 +2565,42 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(d0c.get("RIO CAB", 0), 130)
         self.assertEqual(d0d.get("RIO DAMA", 0), 130)
 
+    def test_no_detiene_linea_por_hermano_con_dia_inicio_futuro(self):
+        """Excel 26: RIO DAMA en L2 no cede a RIO KIDS (Negro, Alta) antes de su Día de inicio."""
+        tareas = [
+            self._t("D", "RIO DAMA", "Lila", 910, ["2"], fechaKey=20261015, prioridadNum=3, cap=130),
+            self._t("K", "RIO KIDS", "Negro", 800, ["2"], fechaKey=20261101, prioridadNum=2,
+                    diaIngreso=7, cap=130),
+            self._t("C", "RIO CAB", "Blanco", 400, ["3"], fechaKey=20261030, prioridadNum=3, cap=130),
+        ]
+        out = planificar(tareas, {}, total_dias=12)
+        for d in range(7):
+            l2 = self._por_dia_linea(out, "2", d)
+            self.assertEqual(l2, {"RIO DAMA": 130}, "día %s L2=%s (no debe vaciarse)" % (d, l2))
+        l2_7 = self._por_dia_linea(out, "2", 7)
+        self.assertEqual(l2_7, {"RIO KIDS": 130}, l2_7)
+
+    def test_rio_dama_l2_sigue_con_apoyo_l1_hasta_que_kids_entra(self):
+        """Excel 26 + apoyo L1: DAMA llena L2 martes-viernes de semana 2; el apoyo no deja la línea fantasma."""
+        tareas = [
+            self._t("D", "RIO DAMA", "Lila", 1200, ["2"], fechaKey=20261015, prioridadNum=3,
+                    diaIngreso=4, cap=101),
+            self._t("K", "RIO KIDS", "Negro", 800, ["2"], fechaKey=20261101, prioridadNum=2,
+                    diaIngreso=11, cap=101),
+            self._t("C", "RIO CAB", "Blanco", 500, ["3"], fechaKey=20261030, prioridadNum=3,
+                    diaIngreso=4, cap=101),
+        ]
+        out = planificar(tareas, {}, total_dias=15, apoyo_l1={"activo": True, "desde_semana": 2})
+        # Semana 2 = días 5-9: L2 no puede quedar vacía
+        for d in range(5, 10):
+            l2 = self._por_dia_linea(out, "2", d)
+            self.assertTrue(l2.get("RIO DAMA", 0) > 0, "semana 2 día %s L2=%s" % (d, l2))
+            self.assertNotIn("RIO KIDS", l2, l2)
+        # Apoyo L1 también sigue a DAMA esos días
+        for d in range(5, 10):
+            l1 = self._por_dia_linea(out, "1", d)
+            self.assertTrue(l1.get("RIO DAMA", 0) > 0, "apoyo L1 día %s=%s" % (d, l1))
+
     def test_secuencia_genero_una_linea_ignora_fecha(self):
         """Aunque DAMA tenga mejor fecha, CAB del mismo color sale primero en la línea compartida."""
         tareas = [
@@ -3097,8 +3160,8 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn('var HOJA_IMP_CHECKS = "_ImpresionChecks"', gs)
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
-        self.assertIn("esUrgenteExplosivo_", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.31"', gs)
+        self.assertIn("function tareaVivaHoy_(", gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.32"', gs)
 
     def test_cache_json_se_parte_y_rearma(self):
         path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
