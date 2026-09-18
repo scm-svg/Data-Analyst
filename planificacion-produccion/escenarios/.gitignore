@@ -1,0 +1,4 @@
+# Los libros de origen pesan ~2,5 MB cada uno y no se versionan.
+*.xlsx
+# Volcado intermedio de los Excel; se regenera con extraer_datos.py.
+data.json
