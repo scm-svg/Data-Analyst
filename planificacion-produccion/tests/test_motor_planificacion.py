@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.34 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.35 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -3254,6 +3254,21 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn('class="wchip', html)
         self.assertIn("function setSemana(k)", html)
         self.assertIn("Detalle diario", html)
+        self.assertIn("function tipDia(", html)
+        self.assertIn("Variantes de la semana, por orden", html)
+        self.assertIn('id="sku-tip"', html)
+
+    def test_almacen_producida_chips_y_calendario(self):
+        html = self._html()
+        self.assertIn("Cantidad producida", html)
+        self.assertIn('id="cAlmPie"', html)
+        self.assertIn('id="cAlmQuin"', html)
+        self.assertIn("function setAlmSem(", html)
+        self.assertIn("Calendario de ingresos a almacén", html)
+        self.assertIn("Esperado por recibir", html)
+        self.assertIn("Ya producido", html)
+        self.assertIn("window.togAlmCal", html)
+        self.assertIn("labels:['Producido','Por producir']", html)
 
     def test_pendientes_mix_incluye_sin_planificar(self):
         html = self._html()
@@ -3305,7 +3320,11 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.34"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.35"', gs)
+        self.assertIn("function moCerradaDash_(", gs)
+        self.assertIn("function aplicarProducidaAlmacen_(", gs)
+        self.assertIn("s.producida = ord.abiertas[key] || 0;", gs)
+        self.assertIn("aplicarProducidaAlmacen_(ss, resp);", gs)
         self.assertIn("function claveCheckImp_(mo, sku)", gs)
         self.assertIn("function elegirChecksImp_(filas)", gs)
         i_cache = gs.find("function guardarCacheDashboard_")
