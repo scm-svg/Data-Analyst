@@ -248,8 +248,14 @@ tr:hover td { background:rgba(37,99,235,.03); }
 .s5-dual th { font-size:.68rem; }
 .s5-dual td { font-size:.8rem; vertical-align:top; }
 .s5-dual td:first-child { font-weight:800; color:var(--accent); width:88px; }
-.s5-checklist td:first-child { width:28%; font-weight:600; }
+.s5-checklist td:first-child { width:22%; font-weight:600; }
+.s5-checklist td:nth-child(2) { width:14%; }
 .s5-tag { display:inline-block; font-size:.65rem; font-weight:800; padding:2px 8px; border-radius:999px; background:#e0e7ff; color:#3730a3; margin-right:4px; }
+.s5-tag--log { background:#dbeafe; color:#1e40af; }
+.s5-tag--tt { background:#fce7f3; color:#9d174d; }
+.s5-tag--both { background:#d1fae5; color:#065f46; }
+.s5-zones td:first-child { font-weight:700; color:var(--accent); width:26%; }
+.s5-zones td { font-size:.8rem; vertical-align:top; }
 </style>
 </head>
 <body>
@@ -926,8 +932,21 @@ tr:hover td { background:rgba(37,99,235,.03); }
       <div class="s5-pillar">
         <div class="s5-num">2S</div>
         <h5>Seiton — Ordenar</h5>
-        <p><strong>Físico:</strong> Misma lógica que clasificar: <em>lugar fijo por tipo de tela</em>, estantería/zona de insumos por categoría, consumibles por tipo con etiqueta visible. Hablador = identidad del rollo.</p>
-        <p><strong>Odoo:</strong> Ubicaciones espejo del piso (Materia Prima, Por auditar, Preproducción, consumibles, destino Tienda/Taller). Cada movimiento va de A → B sin ambigüedad.</p>
+        <p><strong>Físico (zonas del manual):</strong></p>
+        <ul>
+          <li><strong>Plegadora + recepción MP</strong> — solo rollos en revisión o recién ingresados; nunca mezclados con stock aprobado.</li>
+          <li><strong>Secciones de almacén por tipo de tela</strong> — cada familia en su pasillo/estante fijo; hablador = identidad del rollo.</li>
+          <li><strong>Área de rechazo</strong> — rollos no conformes aislados hasta devolución o disposición.</li>
+          <li><strong>Zona insumos MP (Etiquetado)</strong> — hang tag, TPU, tinta, cordones, etc. agrupados por categoría, separados de tela.</li>
+          <li><strong>Almacén de consumibles</strong> — por tipo de consumible; cajas Tienda vs entrega Taller identificadas antes del despacho.</li>
+        </ul>
+        <p><strong>Odoo (ubicaciones espejo):</strong></p>
+        <ul>
+          <li><code>TH/Por Auditar Tela</code> ↔ plegadora/recepción (lote en QA).</li>
+          <li><code>TH/Existencia Materia Prima</code> (Materia Prima) ↔ secciones por tipo de tela + zona insumos.</li>
+          <li><code>TH/Existencia MP → Preproducción</code> — despacho por OT + PC (1.ª etapa manufactura).</li>
+          <li>Recepción consumibles (PO) → stock almacén; salida objetivo hacia ubicaciones de <strong>Tienda</strong> / <strong>Taller</strong> cuando migre el picking en Odoo.</li>
+        </ul>
       </div>
       <div class="s5-pillar">
         <div class="s5-num">3S</div>
@@ -943,7 +962,63 @@ tr:hover td { background:rgba(37,99,235,.03); }
       <div class="s5-pillar">
         <div class="s5-num">5S</div>
         <h5>Shitsuke — Sostener</h5>
-        <p>Auditoría periódica (mensual recomendada): muestra de rollos, ubicaciones, una OT en Validación y un despacho de consumibles. Responsable: Supervisor + Operadores.</p>
+        <p>Auditoría periódica (mensual recomendada): alternar muestras por alcance — <span class="s5-tag s5-tag--log">Logística</span> (MP/consumibles en planta) y <span class="s5-tag s5-tag--tt">Tiendas / Taller</span> (recepción y orden del consumible en destino). Responsable: Supervisor + Operadores en planta; responsable de tienda/taller en destino.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>🗺️ Mapa rápido: zona física ↔ ubicación Odoo</h4>
+      <p style="font-size:.82rem;color:var(--muted);margin:8px 0 12px">Referencia operativa para auditorías Seiton: lo que se ve en piso debe coincidir con el stock por ubicación en Odoo.</p>
+      <div class="table-wrap">
+        <table class="s5-zones">
+          <thead>
+            <tr><th>Zona física</th><th>Qué va ahí</th><th>Ubicación Odoo (TH)</th><th>Alcance auditoría</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Plegadora / recepción tela</td>
+              <td>Rollos en tendido y QA; hoja o formulario de recepción</td>
+              <td><code>Por Auditar Tela</code></td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+            </tr>
+            <tr>
+              <td>Sección por tipo de tela</td>
+              <td>Rollos aprobados con hablador; mismo tipo junto</td>
+              <td><code>Existencia Materia Prima</code></td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+            </tr>
+            <tr>
+              <td>Área de rechazo</td>
+              <td>Rollos no conformes; sin mezclar con aprobados</td>
+              <td>Traslado / devolución según manual (no stock usable)</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+            </tr>
+            <tr>
+              <td>Zona insumos MP</td>
+              <td>Insumos Etiquetado por categoría</td>
+              <td><code>Existencia MP</code> (misma lógica de existencia)</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+            </tr>
+            <tr>
+              <td>Almacén consumibles</td>
+              <td>Stock por tipo; preparación de cajas a enviar</td>
+              <td>Entrada por recepción de compra (PO)</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+            </tr>
+            <tr>
+              <td>Preproducción (piso manufactura)</td>
+              <td>Material despachado para OT</td>
+              <td><code>Preproducción</code> (traslado OT + PC)</td>
+              <td><span class="s5-tag s5-tag--both">Logística + Manufactura</span></td>
+            </tr>
+            <tr>
+              <td>Tienda / Taller (destino)</td>
+              <td>Consumibles recibidos; estantería local ordenada por tipo</td>
+              <td>Salida / ubicación destino (objetivo en Odoo; hoy Sheets en tránsito)</td>
+              <td><span class="s5-tag s5-tag--tt">Tiendas / Taller</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -987,36 +1062,54 @@ tr:hover td { background:rgba(37,99,235,.03); }
 
     <div class="card" style="margin-top:18px">
       <h4>✅ Checklist de auditoría 5S (muestra mensual)</h4>
+      <p style="font-size:.82rem;color:var(--muted);margin:8px 0 12px">Marcar alcance en cada ítem: auditar en planta (<span class="s5-tag s5-tag--log">Logística</span>), en destino (<span class="s5-tag s5-tag--tt">Tiendas / Taller</span>) o ambos. Columnas Piso/Odoo: Sí / No / N/A.</p>
       <div class="table-wrap" style="margin-top:12px">
         <table class="s5-checklist">
           <thead>
-            <tr><th>Ítem</th><th>Piso — ¿Cumple?</th><th>Odoo — ¿Cumple?</th></tr>
+            <tr><th>Ítem</th><th>Alcance</th><th>Piso — ¿Cumple?</th><th>Odoo — ¿Cumple?</th></tr>
           </thead>
           <tbody>
             <tr>
               <td>Clasificación por tipo</td>
-              <td>Telas del mismo tipo juntas; insumos en su zona; consumibles por tipo</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+              <td>Telas del mismo tipo en su sección; insumos en zona MP; consumibles por tipo en almacén</td>
               <td>Categorías/SKU y ubicaciones reflejan esas familias</td>
             </tr>
             <tr>
               <td>Orden y señalización</td>
-              <td>Habladores legibles; área de rechazo separada; rutas de picking claras</td>
-              <td>Stock por ubicación coincide con conteo en muestra aleatoria</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+              <td>Habladores legibles; área de rechazo separada; rutas de picking desde sección correcta</td>
+              <td>Muestra aleatoria: stock en <code>Por Auditar</code> / <code>Existencia MP</code> coincide con piso</td>
             </tr>
             <tr>
               <td>Estado listo (Seiso)</td>
-              <td>Sin material mezclado ni sin identificar en pasillo de recepción</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+              <td>Plegadora/recepción sin rollos aprobados mezclados; consumibles identificados antes de envío</td>
               <td>Recepciones y traslados del día confirmados o en revisión del Supervisor</td>
             </tr>
             <tr>
-              <td>Estandarización</td>
-              <td>Equipo sigue pasos del manual en la muestra auditada</td>
-              <td>OT revisada: tela descontada por ola; insumos listos para Validación</td>
+              <td>Estandarización despacho MP</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+              <td>Picking desde la sección del tipo de tela/insumo auditado</td>
+              <td>OT + PC: <code>Existencia MP → Preproducción</code> alineado al SKU despachado</td>
             </tr>
             <tr>
-              <td>Consumibles</td>
-              <td>Despacho Tienda/Taller con documentación de la solicitud</td>
-              <td>Entrada en Odoo; salida registrada (Sheets hoy → Odoo objetivo)</td>
+              <td>Consumibles — almacén origen</td>
+              <td><span class="s5-tag s5-tag--log">Logística</span></td>
+              <td>Cajas Tienda vs Taller separadas y etiquetadas</td>
+              <td>Entrada por PO registrada; salida documentada (Sheets hoy → Odoo objetivo)</td>
+            </tr>
+            <tr>
+              <td>Consumibles — recepción en destino</td>
+              <td><span class="s5-tag s5-tag--tt">Tiendas / Taller</span></td>
+              <td>Material recibido coincide con solicitud; ubicado por tipo en estantería local</td>
+              <td>Cuando aplique: movimiento destino en Odoo; si no, registro Sheets alineado al envío</td>
+            </tr>
+            <tr>
+              <td>Validación manufactura (muestra OT)</td>
+              <td><span class="s5-tag s5-tag--both">Logística + Mfg.</span></td>
+              <td>N/A en piso de almacén (verificar coherencia con despachos previos)</td>
+              <td>Tela por ola; insumos pendientes de aprobación en etapa Validación</td>
             </tr>
           </tbody>
         </table>
