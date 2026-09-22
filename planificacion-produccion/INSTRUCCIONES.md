@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.34 — códigos listos para pegar
+# Planificación de Producción v5.9.36 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,19 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Dashboard · Almacén (5.9.36)
+
+Después de pegar los dos archivos, corre **🔄 Actualizar Dashboard** para publicar Cantidad producida. El enlace de la app web no cambia.
+
+- **Cantidad producida** en Entrada de almacén es `Cantida Producida` de `Por Hacer` y `Por Hacer - Especial`: piezas que ya salieron de costura y están en remate o validación.
+- Si la MO **no está en el plan** porque el Faltante ya es 0 (ya se produjo todo), **igual entra** a la tabla y a los gráficos, marcada **Ya producida**.
+- La orden y el SKU **salen de la tabla** cuando el MO STATUS es Hecho, Cerrada o Cancelada, o cuando esa orden ya no está en esas pestañas.
+- Arriba de la tabla: torta **producido vs por producir**, y barras **quincenales** de lo esperado por recibir frente a lo ya producido. La quincena usa la fecha esperada de entrada a almacén.
+- Los chips de semana filtran los modelos que ingresarían esa semana (lunes de la fecha de entrada).
+- El calendario de ingresos lista piezas por modelo y semana de entrada. Clic en el modelo abre los SKUs.
+- En **Calendario → Detalle diario**, al pasar el cursor sobre un modelo se ven las variantes (SKU, color, talla y cantidad de la semana) agrupadas por orden.
 
 ## Priorizacion — columna H (Secuencia)
 

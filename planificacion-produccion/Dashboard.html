@@ -84,7 +84,10 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .dayhead .dn{display:block;font-family:var(--fh);font-size:.84rem;font-weight:800;color:var(--tx);letter-spacing:.2px;line-height:1.15}
 .dayhead .dd{display:block;margin-top:4px;font-family:var(--fh);font-size:.78rem;font-weight:700;color:var(--ac)}
 body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-color:#c5caf5}
-.pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem}
+.pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem;cursor:default}
+.sku-tip{position:fixed;z-index:40;display:none;max-width:360px;max-height:280px;overflow:auto;background:var(--surf);color:var(--tx);border:1px solid var(--ac);border-radius:10px;padding:8px 10px;font-size:.72rem;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none}
+.sku-tip b{font-family:var(--fh);display:block;margin-bottom:2px}
+.sku-tip .mo{color:var(--ac);font-weight:700;margin-top:6px}
 .tl{width:100%;border-collapse:separate;border-spacing:0}
 .tl th,.tl td{padding:8px 6px;border-bottom:1px solid var(--brd);text-align:center;min-width:70px}
 .tl th{font-size:.62rem;color:var(--mu);text-transform:uppercase;position:sticky;top:0;background:var(--surf);z-index:2}
@@ -180,6 +183,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
   <div id="sec-imp" class="sec"></div>
 </div>
 <div class="footer">Planificación de producción · v<span id="footVer"></span> · App Script (mismo enlace para todos)</div>
+<div id="sku-tip" class="sku-tip"></div>
 <script>
 var DATA = null;
 var D = null;
@@ -294,6 +298,7 @@ function startUi(){
     document.getElementById('status').textContent='No hay datos para dibujar.';
     return;
   }
+  fusionarProducidaAlm();
   var bf=document.getElementById('boot-fail'); if(bf) bf.remove();
   var n=nSem();
   var st=document.getElementById('status');
@@ -530,6 +535,7 @@ function renderCal(){
     return '<tr><td><span class="chip '+linCls(l)+'">'+l+'</span> Línea '+l+'</td>'+tds+'<td class="num">'+fmtN(tot)+'</td></tr>';
   }).join('');
 
+  var wiSel=keys.indexOf(sel);
   var fechas=(D.fechasDias&&D.fechasDias[sel])||[];
   var byLin={};
   cargaFiltrada(sel).forEach(function(c){
@@ -545,7 +551,9 @@ function renderCal(){
     gridHtml+='<div class="daycell"><span class="chip '+linCls(l)+'">'+l+'</span></div>';
     DIAS.forEach(function(d){
       var items=(byLin[l]||[]).filter(function(c){ return (c.dias&&c.dias[d])>0; });
-      var bits=items.map(function(c){ return '<span class="pill">'+esc(shortMod(c.modelo))+' · '+fmtN(c.dias[d])+'</span>'; }).join(' ');
+      var bits=items.map(function(c){
+        return '<span class="pill" data-m="'+esc(c.modelo)+'" data-wi="'+wiSel+'" data-q="'+(Number(c.dias[d])||0)+'" onmouseenter="tipDia(event,this)" onmouseleave="tipDiaOff()">'+esc(shortMod(c.modelo))+' · '+fmtN(c.dias[d])+'</span>';
+      }).join(' ');
       var sum=items.reduce(function(a,c){ return a+(c.dias[d]||0); },0);
       gridHtml+='<div class="daycell">'+(sum? '<b>'+fmtN(sum)+' pzas</b>':'')+(bits||'<span class="sub">—</span>')+'</div>';
     });
@@ -624,7 +632,8 @@ window.togSku=function(id, wi, mi){
 function moPorSku(){
   if(window._moPorSku) return window._moPorSku;
   var map={};
-  (D.almacenSku||[]).forEach(function(s){ if(s.sku && s.mo) map[s.sku]=String(s.mo); });
+  (D.backlog||[]).forEach(function(b){ if(b.sku && b.mo) map[b.sku]=String(b.mo); });
+  (D.almacenSku||[]).forEach(function(s){ if(s.sku && s.mo && !s.cerrada) map[s.sku]=String(s.mo); });
   (D.pendientes||[]).forEach(function(p){ if(p.sku && p.mo && !map[p.sku]) map[p.sku]=String(p.mo); });
   window._moPorSku=map;
   return map;
@@ -673,6 +682,7 @@ var _impSaved = {};
 var _impMeta = {};
 var _impDirty = false;
 var _impGuardando = false;
+var _almSem = 0;
 function impKey(sku, mo){
   var m=String(mo||'').trim().toUpperCase();
   var s=String(sku||'').trim().toUpperCase();
@@ -997,40 +1007,387 @@ function renderPend(){
   }, {responsive:true, maintainAspectRatio:false, animation:false, plugins:{legend:{position:'bottom', labels:{color:'#7a7b95', font:{family:'DM Sans', size:11}}}}});
 }
 
+function htmlTipDia(modelo, wi, diaQty){
+  var filas=filasImpRaw(modelo, wi);
+  var h='<b>'+esc(shortMod(modelo))+'</b>';
+  h+='<span class="sub">'+fmtN(diaQty)+' pzas este día. Variantes de la semana, por orden.</span>';
+  if(!filas.length){
+    h+='<div class="sub">Sin desglose de SKU para esta semana.</div>';
+    return h;
+  }
+  var mo=null;
+  filas.forEach(function(f){
+    if(f.mo!==mo){
+      mo=f.mo;
+      h+='<div class="mo">MO '+esc(mo||'—')+'</div>';
+    }
+    h+='<div>'+esc(f.sku)+' · '+esc([f.color,f.talla].filter(Boolean).join(' '))+' · '+fmtN(f.cant)+'</div>';
+  });
+  return h;
+}
+function tipDia(ev, el){
+  var tip=document.getElementById('sku-tip');
+  if(!tip || !el) return;
+  tip.innerHTML=htmlTipDia(el.getAttribute('data-m')||'', Number(el.getAttribute('data-wi'))||0, Number(el.getAttribute('data-q'))||0);
+  tip.style.display='block';
+  var x=ev.clientX+14, y=ev.clientY+16;
+  var r=tip.getBoundingClientRect();
+  if(x+r.width>window.innerWidth-8) x=Math.max(8, window.innerWidth-r.width-8);
+  if(y+r.height>window.innerHeight-8) y=Math.max(8, ev.clientY-r.height-10);
+  tip.style.left=x+'px';
+  tip.style.top=y+'px';
+}
+window.tipDia=tipDia;
+window.tipDiaOff=function(){
+  var tip=document.getElementById('sku-tip');
+  if(tip) tip.style.display='none';
+};
+
+function parseFechaAlm(s){
+  var m=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(!m) return null;
+  var y=Number(m[3]); if(y<100) y+=2000;
+  var d=new Date(y, Number(m[2])-1, Number(m[1]));
+  return isNaN(d.getTime())?null:d;
+}
+function lunesMs(d){
+  var x=new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var dow=(x.getDay()+6)%7;
+  x.setDate(x.getDate()-dow);
+  x.setHours(0,0,0,0);
+  return x.getTime();
+}
+function lunesEntrada(fecha){
+  var d=parseFechaAlm(fecha);
+  return d?lunesMs(d):0;
+}
+function fmtDM(ms){
+  var d=new Date(ms);
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2);
+}
+function normModAlm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function claveAlmCli(mo, sku){
+  var m=String(mo==null?'':mo).trim().toUpperCase();
+  if(/\.0+$/.test(m)) m=m.replace(/\.0+$/,'');
+  var mm=m.match(/^0*([0-9]+)(.*)$/);
+  if(mm) m=mm[1]+mm[2];
+  if(/\.0+$/.test(m)) m=m.replace(/\.0+$/,'');
+  return m+'||'+String(sku||'').trim().toUpperCase();
+}
+function esYaProdAlm(s){
+  return !!(s && (s.yaProducida || s.estado==='Ya producida' || String(s.entradaAlmacen||'')==='Ya producida'));
+}
+function msBacklogAlm(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number'){
+    if(v>20000 && v<80000) return Math.round((v-25569)*86400*1000);
+    if(v>1e11) return v;
+  }
+  return 0;
+}
+function addBusDaysCli(ms, days){
+  if(!(ms>0)) return 0;
+  var d=new Date(ms);
+  var added=0;
+  while(added<days){
+    d.setDate(d.getDate()+1);
+    var dow=d.getDay();
+    if(dow!==0 && dow!==6) added++;
+  }
+  return d.getTime();
+}
+function fmtMsAlm(ms){
+  if(!(ms>0)) return '';
+  var d=new Date(ms);
+  if(isNaN(d.getTime())) return '';
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+}
+function fusionarProducidaAlm(){
+  if(!D || D._almProdFusionada) return;
+  D._almProdFusionada=1;
+  D.almacenSku=D.almacenSku||[];
+  D.almacenModelo=D.almacenModelo||[];
+  var seen={};
+  D.almacenSku.forEach(function(s){
+    seen[claveAlmCli(s.mo,s.sku)]=s;
+    if(s.sku) seen['SKU||'+String(s.sku).trim().toUpperCase()]=s;
+  });
+  (D.backlog||[]).forEach(function(b){
+    var prod=Number(b.producida)||0;
+    if(!(prod>0)) return;
+    var key=claveAlmCli(b.mo,b.sku);
+    var sku=String(b.sku||'').trim().toUpperCase();
+    var s=seen[key]||seen['SKU||'+sku];
+    var ya=!(Number(b.faltante)>0) && prod>0;
+    var ms=msBacklogAlm(b.fechaSalida);
+    var salida=fmtMsAlm(ms);
+    var entrada=fmtMsAlm(addBusDaysCli(ms, (D.supuestos&&D.supuestos.leadTimeAlmacenDias)||4));
+    if(s){
+      if(!(Number(s.producida)>0)) s.producida=prod;
+      if(b.modelo) s.modelo=b.modelo;
+      if(ya){ s.yaProducida=true; s.estado='Ya producida'; }
+      return;
+    }
+    var row={
+      mo:b.mo, sku:b.sku, producto:b.detalle||b.modelo||'', modelo:b.modelo||'',
+      cantidad:Number(b.solicitada)||prod, producida:prod,
+      salidaCostura:salida, entradaAlmacen:entrada||(ya?'Ya producida':''),
+      recepcionado:0, faltantes:Number(b.faltante)||0,
+      cerrada:false, yaProducida:ya, estado:ya?'Ya producida':'', inyectada:true
+    };
+    row.inyectadaCli=true;
+    D.almacenSku.push(row);
+    seen[key]=row;
+    if(sku) seen['SKU||'+sku]=row;
+  });
+  var have={};
+  D.almacenModelo.forEach(function(m){ if(m&&m.modelo) have[m.modelo]=m; });
+  Object.keys(have).forEach(function(k){ have[k].producida=0; });
+  D.almacenSku.forEach(function(s){
+    if(s.cerrada||!s.modelo) return;
+    var m=have[s.modelo];
+    if(!m){
+      m={mos:0,modelo:s.modelo,cantidad:0,producida:0,salidaCostura:s.salidaCostura||'',entradaAlmacen:s.entradaAlmacen||'',recepcionado:0,faltantes:0};
+      D.almacenModelo.push(m);
+      have[s.modelo]=m;
+    }
+    m.producida += Number(s.producida)||0;
+    if(s.inyectadaCli){
+      m.cantidad = (Number(m.cantidad)||0)+(Number(s.cantidad)||0);
+      if(s.yaProducida) m.yaProducida=true;
+    }
+  });
+}
+function skusDeModeloAlm(modelo, incluirCerradas){
+  var set={};
+  (D.proySku||[]).forEach(function(s){ if(s.modelo===modelo) set[s.sku]=1; });
+  var alvo=normModAlm(modelo);
+  return (D.almacenSku||[]).filter(function(s){
+    if(!incluirCerradas && s.cerrada) return false;
+    if(normModAlm(s.modelo)===alvo) return true;
+    if(set[s.sku]) return true;
+    return String(s.producto||'').toLowerCase().indexOf(alvo)!==-1;
+  });
+}
+function modeloAlmVisible(m){
+  if(!matchQ(m.modelo) || !matchModelo(m.modelo)) return false;
+  var todas=skusDeModeloAlm(m.modelo, true);
+  if(todas.length && !todas.some(function(s){ return !s.cerrada; })) return false;
+  return true;
+}
+function skusAbiertosModelo(m){
+  return skusDeModeloAlm(m.modelo, false);
+}
+function quincenaId(msLunes){
+  var base=new Date(2024,0,1).getTime();
+  var days=Math.round((msLunes-base)/86400000);
+  return Math.floor(days/14);
+}
+
 function renderAlm(){
   var el=document.getElementById('sec-alm');
-  var mods=(D.almacenModelo||[]).filter(function(m){ return matchQ(m.modelo) && matchModelo(m.modelo); });
-  var skus=D.almacenSku||[];
-  var html='<div class="card"><h3>Entrada de almacén</h3><p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Clic en el modelo para ver SKUs.</p>';
-  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Cantidad</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
-  mods.forEach(function(m,i){
-    html+='<tr class="tr-exp" onclick="togAlm('+i+')"><td><span class="chev">▸</span></td><td class="left">'+esc(m.modelo)+'</td><td class="num">'+fmtN(m.mos)+'</td><td class="num">'+fmtN(m.cantidad)+'</td><td>'+esc(m.salidaCostura)+'</td><td>'+esc(m.entradaAlmacen)+'</td></tr>';
-    html+='<tr id="alm-'+i+'" style="display:none"><td colspan="6" class="sku-row"></td></tr>';
+  var mods=(D.almacenModelo||[]).filter(modeloAlmVisible);
+  var abiertos=[];
+  mods.forEach(function(m){ skusAbiertosModelo(m).forEach(function(s){ abiertos.push(s); }); });
+  var plan=abiertos.reduce(function(a,s){ return a+(Number(s.cantidad)||0); },0);
+  var prod=abiertos.reduce(function(a,s){ return a+(Number(s.producida)||0); },0);
+  var porProd=Math.max(0, plan-prod);
+
+  var quin={};
+  abiertos.forEach(function(s){
+    var ms=lunesEntrada(s.entradaAlmacen);
+    if(!ms) return;
+    var id=quincenaId(ms);
+    if(!quin[id]) quin[id]={id:id, ini:ms, fin:ms, esperado:0, producido:0};
+    var q=quin[id];
+    if(ms<q.ini) q.ini=ms;
+    if(ms>q.fin) q.fin=ms;
+    q.esperado += Number(s.cantidad)||0;
+    q.producido += Number(s.producida)||0;
+  });
+  var quins=Object.keys(quin).map(function(k){ return quin[k]; }).sort(function(a,b){ return a.ini-b.ini; });
+
+  var ALM_YAPROD=-1;
+  var semanas={};
+  abiertos.forEach(function(s){
+    var ms=lunesEntrada(s.entradaAlmacen);
+    if(ms) semanas[ms]=1;
+    else if(esYaProdAlm(s)) semanas[ALM_YAPROD]=1;
+  });
+  mods.forEach(function(m){
+    if(skusAbiertosModelo(m).length) return;
+    var ms=lunesEntrada(m.entradaAlmacen);
+    if(ms) semanas[ms]=1;
+    else if(esYaProdAlm(m)) semanas[ALM_YAPROD]=1;
+  });
+  var sems=Object.keys(semanas).map(Number).sort(function(a,b){ return a-b; });
+
+  var wbar='<div class="wbar"><span class="wbar-lbl">Entrada</span>';
+  wbar+='<button type="button" class="wchip'+(_almSem?'':' active')+'" onclick="setAlmSem(0)">Todas</button>';
+  sems.forEach(function(ms){
+    var lbl=ms===ALM_YAPROD?'Ya producida':fmtDM(ms);
+    wbar+='<button type="button" class="wchip'+(_almSem===ms?' active':'')+'" onclick="setAlmSem('+ms+')">'+lbl+'</button>';
+  });
+  wbar+='</div>';
+
+  function entraEnChip(s){
+    if(!_almSem) return true;
+    if(_almSem===ALM_YAPROD) return esYaProdAlm(s) && !lunesEntrada(s.entradaAlmacen);
+    return lunesEntrada(s.entradaAlmacen)===_almSem;
+  }
+  var modsTabla=mods.filter(function(m){
+    var sk=skusAbiertosModelo(m).filter(entraEnChip);
+    if(sk.length) return true;
+    if(skusAbiertosModelo(m).length) return false;
+    if(!_almSem) return true;
+    return lunesEntrada(m.entradaAlmacen)===_almSem;
+  });
+
+  var html='<div class="g2">';
+  html+='<div class="card"><h3>Planificado vs producido</h3><p class="sub">Planificado '+fmtN(plan)+' · ya salió de costura '+fmtN(prod)+'. Lo producido está en remate o validación, a punto de entrar.</p><div class="cw"><canvas id="cAlmPie"></canvas></div></div>';
+  html+='<div class="card"><h3>Entrada quincenal</h3><p class="sub">Por fecha esperada de entrada a almacén: lo que se espera recibir y lo que ya se produjo.</p><div class="cw t"><canvas id="cAlmQuin"></canvas></div></div>';
+  html+='</div>';
+
+  html+='<div class="card"><h3>Entrada de almacén</h3>';
+  html+='<p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Cantidad producida = Cantida Producida de Por Hacer, también si la MO ya se completó y no entró al plan. Esas se marcan Ya producida. La orden sale de esta tabla cuando se cierra.</p>';
+  html+=wbar;
+  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Cantidad</th><th>Cantidad producida</th><th>Estado</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
+  if(!modsTabla.length){
+    html+='<tr><td colspan="8" class="sub">No hay ingresos en esta semana.</td></tr>';
+  }
+  modsTabla.forEach(function(m,i){
+    var sk=skusAbiertosModelo(m).filter(entraEnChip);
+    var cant=sk.length?sk.reduce(function(a,s){ return a+(Number(s.cantidad)||0); },0):(Number(m.cantidad)||0);
+    var pr=sk.reduce(function(a,s){ return a+(Number(s.producida)||0); },0);
+    var mos=sk.length?Object.keys(sk.reduce(function(o,s){ if(s.mo) o[s.mo]=1; return o; },{})).length:(Number(m.mos)||0);
+    var nYa=sk.filter(esYaProdAlm).length;
+    var est=(!sk.length && esYaProdAlm(m)) || (sk.length && nYa===sk.length)
+      ? '<span class="badge b-ok">Ya producida</span>'
+      : (nYa?'<span class="badge b-ok">Ya producida</span>':'');
+    html+='<tr class="tr-exp" onclick="togAlm('+i+')"><td><span class="chev">▸</span></td><td class="left">'+esc(m.modelo)+'</td><td class="num">'+fmtN(mos)+'</td><td class="num">'+fmtN(cant)+'</td><td class="num">'+fmtN(pr)+'</td><td>'+est+'</td><td>'+esc(m.salidaCostura)+'</td><td>'+esc(m.entradaAlmacen)+'</td></tr>';
+    html+='<tr id="alm-'+i+'" style="display:none"><td colspan="8" class="sku-row"></td></tr>';
   });
   html+='</tbody></table></div></div>';
+
+  var maxCal=1;
+  var cal=mods.map(function(m){
+    var sk=skusAbiertosModelo(m);
+    var por={};
+    sems.forEach(function(ms){ por[ms]=0; });
+    sk.forEach(function(s){
+      var ms=lunesEntrada(s.entradaAlmacen);
+      if(!ms && esYaProdAlm(s)) ms=ALM_YAPROD;
+      if(!ms) return;
+      por[ms]=(por[ms]||0)+(Number(s.cantidad)||0);
+    });
+    if(!sk.length){
+      var msM=lunesEntrada(m.entradaAlmacen);
+      if(msM) por[msM]=(por[msM]||0)+(Number(m.cantidad)||0);
+    }
+    var tot=0;
+    sems.forEach(function(ms){ tot+=por[ms]||0; if((por[ms]||0)>maxCal) maxCal=por[ms]; });
+    return {modelo:m.modelo, por:por, tot:tot, skus:sk};
+  }).filter(function(r){ return r.tot>0; });
+
+  html+='<div class="card"><h3>Calendario de ingresos a almacén</h3><p class="sub">Piezas esperadas por modelo y semana de entrada a almacén. Clic en el modelo para ver SKUs.</p>';
+  html+='<div class="ctwrap"><table class="ct"><thead><tr><th class="left">Modelo</th>';
+  sems.forEach(function(ms){ html+='<th>'+(ms===ALM_YAPROD?'Ya producida':fmtDM(ms))+'</th>'; });
+  html+='<th>Total</th></tr></thead><tbody>';
+  cal.forEach(function(r,i){
+    html+='<tr class="tr-exp" onclick="togAlmCal('+i+')"><td class="left"><span class="chev">▸</span> '+esc(r.modelo)+'</td>';
+    sems.forEach(function(ms){
+      var v=r.por[ms]||0;
+      var a=v/maxCal;
+      var bg='rgba(91,106,247,'+(v?(0.15+a*0.7):0.04)+')';
+      html+='<td><div class="heat" style="background:'+bg+'">'+(v?fmtN(v):'—')+'</div></td>';
+    });
+    html+='<td class="num">'+fmtN(r.tot)+'</td></tr>';
+    html+='<tr id="almcal-'+i+'" style="display:none"><td colspan="'+(sems.length+2)+'" class="sku-row"></td></tr>';
+  });
+  if(cal.length){
+    html+='<tr><td class="left"><b>Total</b></td>';
+    sems.forEach(function(ms){
+      var v=cal.reduce(function(a,r){ return a+(r.por[ms]||0); },0);
+      html+='<td class="num">'+fmtN(v)+'</td>';
+    });
+    html+='<td class="num">'+fmtN(cal.reduce(function(a,r){ return a+r.tot; },0))+'</td></tr>';
+  } else {
+    html+='<tr><td colspan="'+(sems.length+2)+'" class="sub">Sin fechas de entrada a almacén.</td></tr>';
+  }
+  html+='</tbody></table></div></div>';
+
   el.innerHTML=html;
-  window._almMods=mods;
-  window._almSkus=skus;
+  window._almMods=modsTabla;
+  window._almCal=cal;
+  window._almSems=sems;
+
+  mc('cAlmPie','pie',{
+    labels:['Producido','Por producir'],
+    datasets:[{data:[prod, porProd], backgroundColor:['#4caf76','#5b6af7'], borderWidth:0}]
+  }, {responsive:true, maintainAspectRatio:false, animation:false, plugins:{legend:{position:'bottom', labels:{color:'#7a7b95', font:{family:'DM Sans', size:11}}}, tooltip:{callbacks:{label:function(c){ return c.label+': '+fmtN(c.parsed); }}}}});
+
+  var optsQ=bo(false);
+  optsQ.plugins.legend.display=true;
+  mc('cAlmQuin','bar',{
+    labels:quins.map(function(q){
+      var ini=new Date(2024,0,1); ini.setDate(ini.getDate()+q.id*14);
+      var fin=new Date(2024,0,1); fin.setDate(fin.getDate()+q.id*14+13);
+      return fmtDM(ini.getTime())+'–'+fmtDM(fin.getTime());
+    }),
+    datasets:[
+      {label:'Esperado por recibir', data:quins.map(function(q){ return q.esperado; }), backgroundColor:'#5b6af7', borderRadius:6},
+      {label:'Ya producido', data:quins.map(function(q){ return q.producido; }), backgroundColor:'#4caf76', borderRadius:6}
+    ]
+  }, optsQ);
 }
+function setAlmSem(ms){
+  _almSem=Number(ms)||0;
+  renderAlm();
+}
+window.setAlmSem=setAlmSem;
 window.togAlm=function(i){
   var row=document.getElementById('alm-'+i); if(!row) return;
   if(row.style.display!=='none'){ row.style.display='none'; return; }
-  var m=window._almMods[i].modelo;
-  var parts=skusDeModeloAlm(m);
-  var h='<table class="ct ct-mid"><thead><tr><th>MO</th><th class="left">SKU</th><th class="left">Producto</th><th>Cant.</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
-  parts.forEach(function(s){ h+='<tr><td>'+esc(s.mo)+'</td><td class="left">'+esc(s.sku)+'</td><td class="left">'+esc(s.producto)+'</td><td class="num">'+fmtN(s.cantidad)+'</td><td>'+esc(s.salidaCostura)+'</td><td>'+esc(s.entradaAlmacen)+'</td></tr>'; });
+  var m=window._almMods[i];
+  if(!m) return;
+  var parts=skusAbiertosModelo(m).filter(function(s){
+    if(!_almSem) return true;
+    return lunesEntrada(s.entradaAlmacen)===_almSem;
+  });
+  var h='<table class="ct ct-mid"><thead><tr><th>MO</th><th class="left">SKU</th><th class="left">Producto</th><th>Cant.</th><th>Cantidad producida</th><th>Estado</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
+  if(!parts.length) h+='<tr><td colspan="8" class="sub">Sin SKUs abiertos en esta semana.</td></tr>';
+  parts.forEach(function(s){
+    var est=esYaProdAlm(s)?'<span class="badge b-ok">Ya producida</span>':'';
+    h+='<tr><td>'+esc(s.mo)+'</td><td class="left">'+esc(s.sku)+'</td><td class="left">'+esc(s.producto)+'</td><td class="num">'+fmtN(s.cantidad)+'</td><td class="num">'+fmtN(s.producida)+'</td><td>'+est+'</td><td>'+esc(s.salidaCostura)+'</td><td>'+esc(s.entradaAlmacen)+'</td></tr>';
+  });
   h+='</tbody></table>';
-  row.children[0].innerHTML=h||'<span class="sub">Sin SKUs</span>';
+  row.children[0].innerHTML=h;
   row.style.display='table-row';
 };
-function skusDeModeloAlm(modelo){
-  var set={};
-  (D.proySku||[]).forEach(function(s){ if(s.modelo===modelo) set[s.sku]=1; });
-  return (D.almacenSku||[]).filter(function(s){
-    if(set[s.sku]) return true;
-    return String(s.producto||'').toLowerCase().indexOf(String(modelo||'').toLowerCase())!==-1;
+window.togAlmCal=function(i){
+  var row=document.getElementById('almcal-'+i); if(!row) return;
+  if(row.style.display!=='none'){ row.style.display='none'; return; }
+  var rec=(window._almCal||[])[i];
+  var sems=window._almSems||[];
+  if(!rec) return;
+  var h='<table class="ct ct-mid"><thead><tr><th>MO</th><th class="left">SKU</th>';
+  sems.forEach(function(ms){ h+='<th>'+(ms===-1?'Ya producida':fmtDM(ms))+'</th>'; });
+  h+='<th>Cant.</th><th>Producida</th></tr></thead><tbody>';
+  if(!rec.skus.length) h+='<tr><td colspan="'+(sems.length+4)+'" class="sub">Sin SKUs abiertos.</td></tr>';
+  rec.skus.forEach(function(s){
+    var msS=lunesEntrada(s.entradaAlmacen);
+    if(!msS && esYaProdAlm(s)) msS=-1;
+    h+='<tr><td>'+esc(s.mo)+'</td><td class="left">'+esc(s.sku)+'</td>';
+    sems.forEach(function(ms){
+      var v=msS===ms?(Number(s.cantidad)||0):0;
+      h+='<td class="num">'+(v?fmtN(v):'')+'</td>';
+    });
+    h+='<td class="num">'+fmtN(s.cantidad)+'</td><td class="num">'+fmtN(s.producida)+'</td></tr>';
   });
-}
+  h+='</tbody></table>';
+  row.children[0].innerHTML=h;
+  row.style.display='table-row';
+};
 
 function renderSup(){
   var s=D.supuestos||{};
@@ -1102,8 +1459,11 @@ function exportCSV(){
     });
     downloadCSV('planificacion-pendientes.csv', rows);
   } else if(_tab==='alm'){
-    var rows=[['MO','SKU','Producto','Modelo','Cantidad','Sale costura','Entra almacen']];
-    (D.almacenSku||[]).forEach(function(s){ rows.push([s.mo,s.sku,s.producto,s.modelo,s.cantidad,s.salidaCostura,s.entradaAlmacen]); });
+    var rows=[['MO','SKU','Producto','Modelo','Cantidad','Cantidad producida','Estado','Sale costura','Entra almacen']];
+    (D.almacenSku||[]).forEach(function(s){
+      if(s.cerrada) return;
+      rows.push([s.mo,s.sku,s.producto,s.modelo,s.cantidad,s.producida||0,s.estado||(s.yaProducida?'Ya producida':''),s.salidaCostura,s.entradaAlmacen]);
+    });
     downloadCSV('planificacion-almacen.csv', rows);
   } else if(_tab==='sup'){
     var rows=[['Modelo','Cap pzas/dia']];

@@ -1,10 +1,27 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.34 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.36 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ALMACÉN YA PRODUCIDA: Cantidad producida y el gráfico Producido
+ *     leen Cantida Producida de Por Hacer y Por Hacer - Especial. Si la
+ *     MO no entró al plan porque el Faltante ya es 0, igual se lista
+ *     como Ya producida (sigue abierta: Confirmada / En Progreso).
+ *     Hecho, Cerrada o Cancelada, o que ya no está en esas pestañas,
+ *     sale de Entrada de almacén.
+ *   - ALMACÉN EN EL DASHBOARD: la tabla Entrada de almacén lleva
+ *     Cantidad producida (Cantida Producida de Por Hacer y Por Hacer -
+ *     Especial): piezas que ya salieron de costura y están en remate
+ *     o validación, a punto de entrar. Si la orden está Hecho, Cerrada
+ *     o Cancelada, o ya no está en esas pestañas, el SKU sale de la
+ *     tabla. Arriba: torta planificado vs producido y barras quincenales
+ *     de lo esperado por recibir vs lo ya producido, según la fecha
+ *     esperada de entrada a almacén. Chips de semana por esa fecha y
+ *     calendario de ingresos por modelo (drill-down a SKU). En
+ *     Calendario → Detalle diario, el cursor sobre un modelo muestra
+ *     las variantes / SKUs de la semana por orden.
  *   - CHECKS DE IMPRESIÓN DIGITAL: el botón Guardar de esa pestaña
  *     escribe en _ImpresionChecks la clave M|MO|SKU (sin semana).
  *     Si la orden cambia de semana o de fila al regenerar el plan,
@@ -174,7 +191,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.34";
+var VERSION_SISTEMA = "5.9.36";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -4474,9 +4491,280 @@ function supuestosDashboard_(capsModelo) {
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo.",
-    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar."
+    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
+    "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0: se marca Ya producida. Una orden Hecho, Cerrada o Cancelada, o que ya no está en esas pestañas, sale de Entrada de almacén."
     ]
   };
+}
+
+function moCerradaDash_(status) {
+  var s = quitarTildes_(normLow_(status));
+  return s === "hecho" || s === "cerrada" || s === "cerrado" || s === "cancelada" || s === "cancelado";
+}
+
+function claveOrdenAlm_(mo, sku) {
+  var m = claveLookupMO_(mo);
+  if (/\.0+$/.test(m)) m = m.replace(/\.0+$/, "");
+  return m + "||" + normUp_(sku);
+}
+
+function modeloAlmDeFila_(producto, genero, esEspecial) {
+  var m = norm_(producto);
+  var g = norm_(genero);
+  if (g && g !== "--") m += (m ? " " : "") + g;
+  if (esEspecial) m += " (Especial)";
+  return m;
+}
+
+function detalleAlmDeFila_(producto, genero, color, talla, esEspecial) {
+  var parts = [norm_(producto)];
+  if (norm_(genero) && norm_(genero) !== "--") parts.push(norm_(genero));
+  if (norm_(color) && norm_(color) !== "--") parts.push(norm_(color));
+  if (norm_(talla) && norm_(talla) !== "--") parts.push(norm_(talla));
+  var d = parts.join(" - ");
+  if (esEspecial) d += " (Especial)";
+  return d;
+}
+
+function msFechaAlm_(v) {
+  var k = claveFecha_(v);
+  if (!isFinite(k) || k === Infinity) return 0;
+  return k;
+}
+
+function recOrdenAlm_(ord, mo, sku) {
+  var key = claveOrdenAlm_(mo, sku);
+  var i;
+  for (i = 0; i < (ord.filas || []).length; i++) {
+    if (ord.filas[i].key === key) return ord.filas[i];
+  }
+  var skuUp = normUp_(sku);
+  for (i = 0; i < (ord.filas || []).length; i++) {
+    if (ord.filas[i].sku === skuUp) return ord.filas[i];
+  }
+  return null;
+}
+
+function fechasInyectadasAlm_(tz, msSalida) {
+  if (!(msSalida > 0)) return { salida: "", entrada: "" };
+  var msEnt = addBusinessDays_(msSalida, DIAS_ENTRADA_ALMACEN);
+  return {
+    salida: formatoFecha_({ tz: tz }, msSalida),
+    entrada: (msEnt !== Infinity && msEnt && isFinite(msEnt.getTime()))
+      ? formatoFecha_({ tz: tz }, msEnt.getTime())
+      : ""
+  };
+}
+
+/** Cantida Producida y estatus de Por Hacer / Por Hacer - Especial, por MO+SKU. */
+function leerOrdenesVivasDashboard_(ss) {
+  var abiertas = {};
+  var cerradas = {};
+  var skuAbierta = {};
+  var skuVista = {};
+  var filas = [];
+  function acum(hoja, esEspecial) {
+    if (!hoja) return;
+    var data = hoja.getDataRange().getValues();
+    var det = encontrarFilaEncabezado_(data, ["sku"], 6);
+    if (det.fila === -1) return;
+    var h = det.celdas;
+    var iSku = h.indexOf("sku");
+    var iMo = h.indexOf("mo");
+    var iProd = h.findIndex(function (x) { return x.indexOf("producida") !== -1; });
+    var iStatus = h.findIndex(function (x) { return x.indexOf("mo status") !== -1; });
+    var iCant = h.findIndex(function (x) { return x.indexOf("cantidad solicitada") !== -1; });
+    var iFalt = h.indexOf("faltante");
+    var iMod = h.indexOf("producto") !== -1 ? h.indexOf("producto") : h.indexOf("modelo");
+    var iGen = h.indexOf("genero") !== -1 ? h.indexOf("genero") : h.indexOf("género");
+    var iCol = h.indexOf("color");
+    var iTal = h.indexOf("talla");
+    var iFec = h.findIndex(function (x) {
+      return x.indexOf("fecha de salida") !== -1 || x.indexOf("fecha salida") !== -1;
+    });
+    var i;
+    for (i = det.fila + 1; i < data.length; i++) {
+      var sku = iSku !== -1 ? normUp_(data[i][iSku]) : "";
+      if (!sku) continue;
+      skuVista[sku] = true;
+      var moRaw = iMo !== -1 ? data[i][iMo] : "";
+      var mo = claveLookupMO_(moRaw);
+      if (/\.0+$/.test(mo)) mo = mo.replace(/\.0+$/, "");
+      var key = mo + "||" + sku;
+      var st = iStatus !== -1 ? data[i][iStatus] : "";
+      if (moCerradaDash_(st) || (esEspecial && esEspecialHecho_(st))) {
+        cerradas[key] = true;
+        continue;
+      }
+      var prod = iProd !== -1 ? (Number(data[i][iProd]) || 0) : 0;
+      var sol = iCant !== -1 ? (Number(data[i][iCant]) || 0) : 0;
+      var hayFalt = iFalt !== -1 && data[i][iFalt] !== "";
+      var falt = faltanteEfectivo_(sol, prod, hayFalt ? data[i][iFalt] : "", iProd !== -1, hayFalt);
+      var producto = iMod !== -1 ? norm_(data[i][iMod]) : "";
+      var genero = iGen !== -1 ? norm_(data[i][iGen]) : "";
+      filas.push({
+        key: key,
+        mo: mo,
+        moRaw: norm_(moRaw),
+        sku: sku,
+        producida: prod,
+        solicitada: sol,
+        faltante: falt,
+        modelo: modeloAlmDeFila_(producto, genero, esEspecial),
+        producto: detalleAlmDeFila_(
+          producto,
+          genero,
+          iCol !== -1 ? data[i][iCol] : "",
+          iTal !== -1 ? data[i][iTal] : "",
+          esEspecial
+        ),
+        fechaSalidaMs: iFec !== -1 ? msFechaAlm_(data[i][iFec]) : 0,
+        esEspecial: !!esEspecial
+      });
+      abiertas[key] = (abiertas[key] || 0) + prod;
+      skuAbierta[sku] = (skuAbierta[sku] || 0) + prod;
+    }
+  }
+  acum(ss.getSheetByName("Por Hacer"), false);
+  acum(ss.getSheetByName("Por Hacer - Especial"), true);
+  return { abiertas: abiertas, cerradas: cerradas, skuAbierta: skuAbierta, skuVista: skuVista, filas: filas };
+}
+
+function consolidarAlmacenModelo_(resp) {
+  var byMod = {};
+  (resp.almacenModelo || []).forEach(function (m) {
+    if (!m || !m.modelo) return;
+    byMod[m.modelo] = m;
+    if (m.producida == null) m.producida = 0;
+  });
+  (resp.almacenSku || []).forEach(function (s) {
+    if (!s || s.cerrada || !s.modelo) return;
+    var m = byMod[s.modelo];
+    if (!m) {
+      m = {
+        mos: 0,
+        modelo: s.modelo,
+        cantidad: 0,
+        producida: 0,
+        salidaCostura: s.salidaCostura || "",
+        entradaAlmacen: s.entradaAlmacen || "",
+        recepcionado: 0,
+        faltantes: 0
+      };
+      byMod[s.modelo] = m;
+      if (!resp.almacenModelo) resp.almacenModelo = [];
+      resp.almacenModelo.push(m);
+    }
+    m.producida = (Number(m.producida) || 0) + (Number(s.producida) || 0);
+    if (s.inyectada) {
+      m.cantidad = (Number(m.cantidad) || 0) + (Number(s.cantidad) || 0);
+      m.faltantes = (Number(m.faltantes) || 0) + (Number(s.faltantes) || 0);
+      if (!m.salidaCostura && s.salidaCostura) m.salidaCostura = s.salidaCostura;
+      if (!m.entradaAlmacen && s.entradaAlmacen) m.entradaAlmacen = s.entradaAlmacen;
+    }
+    if (s.yaProducida) m.yaProducida = true;
+  });
+}
+
+function aplicarProducidaAlmacen_(ss, resp) {
+  var ord = leerOrdenesVivasDashboard_(ss);
+  var tz = ss.getSpreadsheetTimeZone();
+  var seen = {};
+
+  function marcarVisto_(mo, sku) {
+    seen[claveOrdenAlm_(mo, sku)] = true;
+    if (normUp_(sku)) seen["SKU||" + normUp_(sku)] = true;
+  }
+
+  (resp.almacenSku || []).forEach(function (s) {
+    var sku = normUp_(s.sku);
+    var key = claveOrdenAlm_(s.mo, s.sku);
+    marcarVisto_(s.mo, s.sku);
+    if (ord.cerradas[key]) {
+      s.cerrada = true;
+      s.producida = 0;
+      s.yaProducida = false;
+      return;
+    }
+    var rec = recOrdenAlm_(ord, s.mo, s.sku);
+    if (rec) {
+      s.cerrada = false;
+      s.producida = rec.producida || 0;
+      if (rec.modelo) s.modelo = rec.modelo;
+      s.yaProducida = rec.faltante <= 0 && rec.producida > 0;
+      if (s.yaProducida) s.estado = "Ya producida";
+      return;
+    }
+    if (ord.abiertas.hasOwnProperty(key)) {
+      s.cerrada = false;
+      s.producida = ord.abiertas[key] || 0;
+      s.yaProducida = s.producida > 0 && (Number(s.cantidad) || 0) > 0 && s.producida >= (Number(s.cantidad) || 0);
+      if (s.yaProducida) s.estado = "Ya producida";
+      return;
+    }
+    if (ord.skuAbierta.hasOwnProperty(sku)) {
+      s.cerrada = false;
+      s.producida = ord.skuAbierta[sku] || 0;
+      s.yaProducida = s.producida > 0 && (Number(s.cantidad) || 0) > 0 && s.producida >= (Number(s.cantidad) || 0);
+      if (s.yaProducida) s.estado = "Ya producida";
+      return;
+    }
+    if (ord.skuVista[sku]) {
+      s.cerrada = false;
+      s.producida = 0;
+      s.yaProducida = false;
+      return;
+    }
+    s.cerrada = true;
+    s.producida = 0;
+    s.yaProducida = false;
+  });
+
+  function inyectarRec_(rec) {
+    if (!rec || !rec.sku) return;
+    if (ord.cerradas[rec.key]) return;
+    if (!(rec.producida > 0)) return;
+    if (seen[rec.key] || seen["SKU||" + rec.sku]) return;
+    var ya = !(rec.faltante > 0) && rec.producida > 0;
+    var fec = fechasInyectadasAlm_(tz, rec.fechaSalidaMs);
+    resp.almacenSku.push({
+      mo: rec.moRaw || rec.mo || "",
+      sku: rec.sku,
+      producto: rec.producto || rec.modelo || "",
+      modelo: rec.modelo || "",
+      cantidad: rec.solicitada > 0 ? rec.solicitada : rec.producida,
+      producida: rec.producida,
+      salidaCostura: fec.salida,
+      entradaAlmacen: fec.entrada || (ya ? "Ya producida" : ""),
+      recepcionado: 0,
+      faltantes: rec.faltante > 0 ? rec.faltante : 0,
+      cerrada: false,
+      yaProducida: ya,
+      estado: ya ? "Ya producida" : "",
+      inyectada: true
+    });
+    seen[rec.key] = true;
+    seen["SKU||" + rec.sku] = true;
+  }
+
+  (ord.filas || []).forEach(inyectarRec_);
+  (resp.backlog || []).forEach(function (b) {
+    inyectarRec_({
+      key: claveOrdenAlm_(b.mo, b.sku),
+      mo: claveLookupMO_(b.mo),
+      moRaw: norm_(b.mo),
+      sku: normUp_(b.sku),
+      producida: Number(b.producida) || 0,
+      solicitada: Number(b.solicitada) || 0,
+      faltante: Number(b.faltante),
+      modelo: b.modelo || "",
+      producto: b.detalle || "",
+      fechaSalidaMs: (typeof b.fechaSalida === "number" && isFinite(b.fechaSalida) && b.fechaSalida > 1e11)
+        ? b.fechaSalida
+        : msFechaAlm_(b.fechaSalida)
+    });
+  });
+  consolidarAlmacenModelo_(resp);
 }
 
 function leerPendienteDashboard_(ss) {
@@ -4942,6 +5230,7 @@ function obtenerDatosDashboardCompleto() {
   var alm = leerAlmacenDashboard_(ss);
   resp.almacenModelo = alm.modelo;
   resp.almacenSku = alm.sku;
+  aplicarProducidaAlmacen_(ss, resp);
   var capsModelo = {};
   resp.proySku.forEach(function (s) {
     if (s.modelo && s.cap) capsModelo[s.modelo] = s.cap;
