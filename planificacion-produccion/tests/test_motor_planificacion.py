@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.36 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.37 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -3237,10 +3237,12 @@ class TestDashboardUx(unittest.TestCase):
         html = self._html()
         self.assertIn(">A Producir<", html)
         self.assertNotIn(">Almacén</div>", html)
-        self.assertIn("document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);", html)
-        self.assertIn("document.getElementById('k-alm').textContent=fmtN(alm);", html)
-        self.assertIn("var alm=(D.almacenModelo||[]).filter(function(m){ return matchModelo(m.modelo); })", html)
+        self.assertIn("document.getElementById('k-pend').textContent=fmtN(pend);", html)
+        self.assertIn("document.getElementById('k-alm').textContent=fmtN(aProd);", html)
+        self.assertIn("function backlogFiltrado()", html)
+        self.assertIn("var aProd=backlogFiltrado().reduce", html)
         self.assertNotIn("document.getElementById('k-alm').textContent=fmtN(r.vDes);", html)
+        self.assertNotIn("document.getElementById('k-pend').textContent=fmtN(r.vFue+r.vSinPlan);", html)
 
     def test_filtro_modelos_multiseleccion(self):
         html = self._html()
@@ -3268,10 +3270,14 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("Esperado por recibir", html)
         self.assertIn("Ya producido", html)
         self.assertIn("window.togAlmCal", html)
-        self.assertIn("labels:['Producido','Por producir']", html)
+        self.assertIn("labels:['Planificado','Producido']", html)
         self.assertIn("function fusionarProducidaAlm()", html)
         self.assertIn("Ya producida", html)
+        self.assertIn("Produccion Parcial", html)
         self.assertIn("function esYaProdAlm(", html)
+        self.assertIn("function estadoProdAlm(", html)
+        self.assertIn("function estadoModeloAlm(", html)
+        self.assertIn("badge b-yw", html)
 
     def test_pendientes_mix_incluye_sin_planificar(self):
         html = self._html()
@@ -3323,10 +3329,13 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.36"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.37"', gs)
+        self.assertIn("function estadoProdAlm_(", gs)
+        self.assertIn("function estadoModeloAlm_(", gs)
+        self.assertIn("Produccion Parcial", gs)
         self.assertIn("function moCerradaDash_(", gs)
         self.assertIn("function aplicarProducidaAlmacen_(", gs)
-        self.assertIn("s.producida = ord.abiertas[key] || 0;", gs)
+        self.assertIn("aplicarEstadoSkuAlm_(s, ord.abiertas[key] || 0, null, s.cantidad);", gs)
         self.assertIn("aplicarProducidaAlmacen_(ss, resp);", gs)
         self.assertIn("function consolidarAlmacenModelo_(", gs)
         self.assertIn("s.yaProducida", gs)
@@ -3407,6 +3416,60 @@ def clave_alm_cli(mo, sku):
     return m + "||" + str(sku or "").strip().upper()
 
 
+def estado_prod_alm(producida, faltante, solicitada=0):
+    prod = float(producida or 0)
+    if not (prod > 0):
+        return ""
+    if faltante is not None and faltante != "":
+        try:
+            falt = float(faltante)
+        except (TypeError, ValueError):
+            falt = None
+        if falt is not None:
+            return "Produccion Parcial" if falt > 0 else "Ya producida"
+    sol = float(solicitada or 0)
+    if sol > 0 and prod >= sol:
+        return "Ya producida"
+    return "Produccion Parcial"
+
+
+def estado_modelo_alm(skus, backlog=None, cantidad_modelo=0, producida_modelo=0):
+    rows = list(backlog or []) or list(skus or [])
+    if not rows:
+        return "Produccion Parcial" if float(producida_modelo or 0) > 0 else ""
+    n_ya = n_par = 0
+    sum_cant = 0
+    for r in rows:
+        est = r.get("estado") or estado_prod_alm(
+            r.get("producida"),
+            r.get("faltante") if r.get("faltante") is not None else r.get("faltantes"),
+            r.get("solicitada") if r.get("solicitada") is not None else r.get("cantidad"),
+        )
+        if est == "Ya producida":
+            n_ya += 1
+        elif est == "Produccion Parcial":
+            n_par += 1
+        sum_cant += float(r.get("solicitada") if r.get("solicitada") is not None else r.get("cantidad") or 0)
+    desglosado = True
+    if float(cantidad_modelo or 0) > 0 and sum_cant + 0.001 < float(cantidad_modelo):
+        desglosado = False
+    if desglosado and n_ya == len(rows):
+        return "Ya producida"
+    if n_ya + n_par > 0 or float(producida_modelo or 0) > 0:
+        return "Produccion Parcial"
+    return ""
+
+
+def kpis_encabezado(plan_12, faltante):
+    a_producir = float(faltante or 0)
+    plan = float(plan_12 or 0)
+    return {
+        "plan": plan,
+        "pendiente": max(0, a_producir - plan),
+        "a_producir": a_producir,
+    }
+
+
 def fusionar_producida_alm(almacen_sku, backlog):
     """Espejo de fusionarProducidaAlm / inyectarRec_ para órdenes ya producidas."""
     out = [dict(s) for s in (almacen_sku or [])]
@@ -3422,15 +3485,16 @@ def fusionar_producida_alm(almacen_sku, backlog):
         key = clave_alm_cli(b.get("mo"), b.get("sku"))
         sku = str(b.get("sku") or "").strip().upper()
         s = seen.get(key) or seen.get("SKU||" + sku)
-        ya = not (float(b.get("faltante") or 0) > 0) and prod > 0
+        est = estado_prod_alm(prod, b.get("faltante"), b.get("solicitada"))
+        ya = est == "Ya producida"
         if s:
             if not (float(s.get("producida") or 0) > 0):
                 s["producida"] = prod
             if b.get("modelo"):
                 s["modelo"] = b["modelo"]
-            if ya:
-                s["yaProducida"] = True
-                s["estado"] = "Ya producida"
+            s["faltantes"] = float(b.get("faltante") or 0)
+            s["estado"] = est
+            s["yaProducida"] = ya
             continue
         row = {
             "mo": b.get("mo"),
@@ -3441,7 +3505,7 @@ def fusionar_producida_alm(almacen_sku, backlog):
             "producida": prod,
             "cerrada": False,
             "yaProducida": ya,
-            "estado": "Ya producida" if ya else "",
+            "estado": est,
             "inyectada": True,
         }
         out.append(row)
@@ -3474,6 +3538,7 @@ class TestAlmacenYaProducida(unittest.TestCase):
         self.assertEqual(by["MARMICA43T2XL"]["producida"], 5)
         self.assertEqual(by["MARMICA43T2XL"]["modelo"], "MAR CAB")
         self.assertFalse(by["MARMICA43T2XL"].get("yaProducida"))
+        self.assertEqual(by["MARMICA43T2XL"]["estado"], "Produccion Parcial")
         self.assertEqual(by["MARMICA43TXL"]["producida"], 16)
         self.assertTrue(by["MARMICA43TXL"]["yaProducida"])
         self.assertEqual(by["MARMICA43TXL"]["estado"], "Ya producida")
@@ -3491,6 +3556,58 @@ class TestAlmacenYaProducida(unittest.TestCase):
         self.assertEqual(out[0]["producida"], 16)
         self.assertTrue(out[0]["yaProducida"])
         self.assertEqual(len(out), 1)
+
+
+class TestAlmacenEstadosYKpis(unittest.TestCase):
+    def test_sku_parcial_amarillo_completo_y_blanco(self):
+        self.assertEqual(estado_prod_alm(5, 3, 8), "Produccion Parcial")
+        self.assertEqual(estado_prod_alm(16, 0, 16), "Ya producida")
+        self.assertEqual(estado_prod_alm(0, 12, 12), "")
+        self.assertEqual(estado_prod_alm(0, 0, 0), "")
+
+    def test_modelo_no_ya_producida_si_desglose_incompleto(self):
+        skus = [
+            {"sku": "A", "producida": 16, "faltante": 0, "cantidad": 16},
+            {"sku": "B", "producida": 5, "faltante": 3, "cantidad": 8},
+            {"sku": "C", "producida": 0, "faltante": 12, "cantidad": 12},
+        ]
+        self.assertEqual(estado_modelo_alm(skus, skus, 36, 21), "Produccion Parcial")
+        todos = [
+            {"sku": "A", "producida": 10, "faltante": 0, "cantidad": 10},
+            {"sku": "B", "producida": 8, "faltante": 0, "cantidad": 8},
+        ]
+        self.assertEqual(estado_modelo_alm(todos, todos, 18, 18), "Ya producida")
+        sin_desglose = []
+        self.assertEqual(estado_modelo_alm(sin_desglose, [], 100, 40), "Produccion Parcial")
+        self.assertEqual(estado_modelo_alm(sin_desglose, [], 100, 0), "")
+        incompleto = [{"sku": "A", "producida": 10, "faltante": 0, "cantidad": 10}]
+        self.assertEqual(estado_modelo_alm(incompleto, incompleto, 100, 10), "Produccion Parcial")
+
+    def test_kpis_excel34_plan_pendiente_a_producir(self):
+        k = kpis_encabezado(14838, 15146)
+        self.assertEqual(k["plan"], 14838)
+        self.assertEqual(k["a_producir"], 15146)
+        self.assertEqual(k["pendiente"], 308)
+
+    def test_grafico_planificado_vs_producido_del_archivo(self):
+        backlog = [
+            {"solicitada": 17745, "producida": 3709, "faltante": 14036},
+            {"solicitada": 1110, "producida": 0, "faltante": 1110},
+        ]
+        planificado = sum(b["solicitada"] for b in backlog)
+        producido = sum(b["producida"] for b in backlog)
+        self.assertEqual(planificado, 18855)
+        self.assertEqual(producido, 3709)
+
+    def test_html_kpis_y_badge_parcial(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn("function backlogFiltrado()", html)
+        self.assertIn("Math.max(0, aProd-plan)", html)
+        self.assertIn("Cantidad Solicitada", html)
+        self.assertIn("Cantida Producida", html)
+        self.assertIn("badgeAlm(estadoDeFilaAlm(s))", html)
 
 
 if __name__ == "__main__":
