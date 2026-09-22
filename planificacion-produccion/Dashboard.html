@@ -602,7 +602,7 @@ function renderSalida(){
   var keys=weekKeys();
   var weekVals=keys.map(function(k){ return cargaFiltrada(k).reduce(function(a,c){ return a+(Number(c.total)||0); },0); });
   var html='<div class="card"><h3>Volumen por semana</h3><p class="sub">Total a fabricar según el plan (filtros aplicados).</p><div class="cw"><canvas id="cSalida"></canvas></div></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las cantidades de SKU salen del desglose semanal de Proyeccion - SKUS.</p>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las variantes se listan como salen de costura (prioridad SKU → Negro → Blanco → Marino → talla). Las cantidades salen de Proyeccion - SKUS.</p>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaFiltrada(k), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
@@ -626,13 +626,114 @@ function renderSalida(){
   }, bo(false));
 }
 window.tog=function(n){ n.classList.toggle('open'); var t=document.getElementById(n.getAttribute('data-open')); if(t) t.style.display=t.style.display==='none'?'block':'none'; };
+
+function rangoColorCli(color){
+  var c=String(color||'').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n').trim();
+  if(!c) return 50;
+  if(c==='negro' || c.indexOf('negro')===0) return 0;
+  if(c==='blanco' || c.indexOf('blanco')===0 || c==='ivory' || c==='blanco hueso') return 1;
+  if(c.indexOf('azul marino')===0 || c.indexOf('navy')===0 || c==='marino') return 2;
+  if(c.indexOf('negro')!==-1) return 3;
+  if(c.indexOf('blanco')!==-1 || c.indexOf('ivory')!==-1) return 4;
+  if(c.indexOf('marino')!==-1 || c.indexOf('navy')!==-1) return 5;
+  return 50;
+}
+function ordenTallaCli(talla){
+  var s=String(talla||'').toUpperCase().replace(/\s+/g,'');
+  var map={XXS:0,XS:1,S:2,M:3,L:4,XL:5,XXL:6,'2XL':6,XXXL:7,'3XL':7,XXXXL:8,'4XL':8};
+  if(map[s]!==undefined) return map[s];
+  var m=s.match(/(\d+)/);
+  if(m) return 20+Number(m[1]);
+  return 50;
+}
+function primerSemSku(s){
+  var w=s&&s.weeks;
+  if(w&&w.length){
+    for(var i=0;i<w.length;i++){ if((Number(w[i])||0)>0) return i; }
+  }
+  if(s&&s.diaInicio!=null && isFinite(s.diaInicio) && s.diaInicio>=0 && s.diaInicio<10000){
+    return Math.floor(Number(s.diaInicio)/5);
+  }
+  return 99;
+}
+function primerDiaSku(s){
+  if(s&&s.diaInicio!=null && isFinite(s.diaInicio) && s.diaInicio>=0 && s.diaInicio<10000){
+    return Number(s.diaInicio);
+  }
+  var d=(s&&s.skuDiario)||((D&&D.skuDiarioS1||{})[(s&&s.sku)||'']);
+  if(d){
+    var keys=['lunes','martes','miercoles','jueves','viernes'];
+    for(var i=0;i<keys.length;i++){ if((Number(d[keys[i]])||0)>0) return i; }
+  }
+  return 99;
+}
+function msSalidaSku(s){
+  if(s&&s.diaFinEstimado!=null && isFinite(s.diaFinEstimado) && s.diaFinEstimado>=0) return Number(s.diaFinEstimado);
+  if(s&&s.diaFin!=null && isFinite(s.diaFin) && s.diaFin>=0) return Number(s.diaFin);
+  var f=(s&&(s.termino||s.salidaCostura||s.salida))||'';
+  if(String(f).toLowerCase().indexOf('ya producida')!==-1) return 0;
+  var d=parseFechaAlm(f);
+  return d?d.getTime():Infinity;
+}
+function colorTallaDeProducto(producto, dest){
+  if(!dest) return dest;
+  var parts=String(producto||'').split(/\s*-\s*/);
+  if(parts.length>=3){
+    if(!dest.color) dest.color=parts[parts.length-2];
+    if(!dest.talla) dest.talla=parts[parts.length-1];
+  }
+  return dest;
+}
+function enriquecerSkuSalida(s){
+  if(!s) return s;
+  var sku=String(s.sku||'').trim().toUpperCase();
+  var p=null;
+  (D.proySku||[]).some(function(x){ if(String(x.sku||'').trim().toUpperCase()===sku){ p=x; return true; } return false; });
+  if(p){
+    if(!s.color) s.color=p.color;
+    if(!s.talla) s.talla=p.talla;
+    if(!s.weeks) s.weeks=p.weeks;
+    if(!s.termino) s.termino=p.termino;
+    if(s.esSkuPrio==null) s.esSkuPrio=p.esSkuPrio;
+    if(s.skuPrioOrden==null) s.skuPrioOrden=p.skuPrioOrden;
+    if(!s.skuDiario && p.skuDiario) s.skuDiario=p.skuDiario;
+  }
+  if(!s.color || !s.talla) colorTallaDeProducto(s.producto||s.detalle, s);
+  return s;
+}
+function cmpSkuSalidaProd(a, b){
+  var wa=primerSemSku(a), wb=primerSemSku(b);
+  if(wa!==wb) return wa-wb;
+  var da=primerDiaSku(a), db=primerDiaSku(b);
+  if(da!==db) return da-db;
+  var ta=msSalidaSku(a), tb=msSalidaSku(b);
+  if(ta!==tb) return ta-tb;
+  var pa=a.esSkuPrio?0:1, pb=b.esSkuPrio?0:1;
+  if(pa!==pb) return pa-pb;
+  if(a.esSkuPrio && b.esSkuPrio){
+    var oa=a.skuPrioOrden!=null?a.skuPrioOrden:0, ob=b.skuPrioOrden!=null?b.skuPrioOrden:0;
+    if(oa!==ob) return oa-ob;
+  }
+  var ra=rangoColorCli(a.color), rb=rangoColorCli(b.color);
+  if(ra!==rb) return ra-rb;
+  var xa=ordenTallaCli(a.talla), xb=ordenTallaCli(b.talla);
+  if(xa!==xb) return xa-xb;
+  var ca=Number(a.cant!=null?a.cant:(a.solicitada!=null?a.solicitada:a.cantidad))||0;
+  var cb=Number(b.cant!=null?b.cant:(b.solicitada!=null?b.solicitada:b.cantidad))||0;
+  if(cb!==ca) return cb-ca;
+  return String(a.sku||'').localeCompare(String(b.sku||''),'es');
+}
+function ordenarSkusSalida(arr){
+  return (arr||[]).map(enriquecerSkuSalida).sort(cmpSkuSalidaProd);
+}
+
 window.togSku=function(id, wi, mi){
   var row=document.getElementById(id);
   if(!row) return;
   if(row.style.display!=='none' && row.getAttribute('data-ok')){ row.style.display='none'; return; }
   var c=(window._salidaCarga[wi]||[])[mi]||{};
   var modelo=c.modelo;
-  var skus=(D.proySku||[]).filter(function(s){ return s.modelo===modelo && matchQ(s.sku+s.detalle) && (Number((s.weeks||[])[wi])||0)>0; });
+  var skus=ordenarSkusSalida((D.proySku||[]).filter(function(s){ return s.modelo===modelo && matchQ(s.sku+s.detalle) && (Number((s.weeks||[])[wi])||0)>0; }));
   if(!skus.length){ row.innerHTML='<td colspan="6" class="sub">Sin SKUs con cantidad en esta semana.</td>'; }
   else {
     var t='<td colspan="6"><table class="ct ct-mid"><thead><tr><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th><th>Meta</th></tr></thead><tbody>';
@@ -655,7 +756,7 @@ function moPorSku(){
 }
 function filasImpRaw(modelo, wi){
   var map=moPorSku();
-  return (D.proySku||[]).filter(function(s){
+  var rows=(D.proySku||[]).filter(function(s){
     return s.modelo===modelo && (Number((s.weeks||[])[wi])||0)>0;
   }).map(function(s){
     return {
@@ -665,12 +766,15 @@ function filasImpRaw(modelo, wi){
       color:s.color,
       talla:s.talla,
       cant:Number((s.weeks||[])[wi])||0,
-      meta:s.meta
+      meta:s.meta,
+      weeks:s.weeks,
+      termino:s.termino,
+      esSkuPrio:s.esSkuPrio,
+      skuPrioOrden:s.skuPrioOrden,
+      skuDiario:s.skuDiario
     };
-  }).sort(function(a,b){
-    var c=String(a.mo).localeCompare(String(b.mo),'es');
-    return c||String(a.sku).localeCompare(String(b.sku),'es');
   });
+  return ordenarSkusSalida(rows);
 }
 function filasImp(modelo, wi){
   return filasImpRaw(modelo, wi).filter(function(f){
@@ -832,7 +936,7 @@ function renderImp(){
   window._impCarga={};
   var keys=weekKeys();
   var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → MO / SKU. Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → SKU en orden de salida de costura (prioridad SKU → Negro → Blanco → Marino → talla). Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
   html+='<div class="note imp-leyenda">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaImp(k, wi), wi);
@@ -968,7 +1072,7 @@ function renderSeg(){
     return '<tr class="tr-exp" onclick="togSeg('+i+')"><td class="prod"><span class="chev">▸</span> '+esc(m)+'</td>'+cells+'</tr><tr id="seg-'+i+'" style="display:none"><td colspan="'+(keys.length+1)+'" class="sku-row"></td></tr>';
   }).join('');
   var legend=['1','2','3','4','5'].map(function(l){ return '<span class="chip '+linCls(l)+'">'+l+'</span> Línea '+l; }).join(' &nbsp; ');
-  el.innerHTML='<div class="card"><h3>Seguimiento de modelos y líneas</h3><p class="sub">Ordenados por el flujo del plan: primero quien arranca. Cada punto es la línea de esa semana. Clic en el modelo para ver SKUs.</p><div style="margin-bottom:10px;font-size:.75rem;color:var(--mu)">'+legend+'</div><div class="ctwrap"><table class="tl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div></div>';
+  el.innerHTML='<div class="card"><h3>Seguimiento de modelos y líneas</h3><p class="sub">Ordenados por el flujo del plan: primero quien arranca. Cada punto es la línea de esa semana. Clic en el modelo para ver SKUs en el orden de salida de costura.</p><div style="margin-bottom:10px;font-size:.75rem;color:var(--mu)">'+legend+'</div><div class="ctwrap"><table class="tl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div></div>';
   window._segMods=mods;
 }
 window.togSeg=function(i){
@@ -978,7 +1082,7 @@ window.togSeg=function(i){
   if(open){ row.style.display='none'; return; }
   var m=window._segMods[i];
   var keys=weekKeys();
-  var skus=(D.proySku||[]).filter(function(s){ return s.modelo===m && matchQ(s.sku+s.detalle); });
+  var skus=ordenarSkusSalida((D.proySku||[]).filter(function(s){ return s.modelo===m && matchQ(s.sku+s.detalle); }));
   var h='<table class="ct"><thead><tr><th>SKU</th>'+keys.map(function(k){ return '<th>'+k.replace('Semana','S')+'</th>'; }).join('')+'<th>Meta</th></tr></thead><tbody>';
   skus.forEach(function(s){
     h+='<tr><td>'+esc(s.sku)+' <span class="sub">'+esc(s.color)+' '+esc(s.talla)+'</span></td>';
@@ -1025,18 +1129,13 @@ function renderPend(){
 function htmlTipDia(modelo, wi, diaQty){
   var filas=filasImpRaw(modelo, wi);
   var h='<b>'+esc(shortMod(modelo))+'</b>';
-  h+='<span class="sub">'+fmtN(diaQty)+' pzas este día. Variantes de la semana, por orden.</span>';
+  h+='<span class="sub">'+fmtN(diaQty)+' pzas este día. Variantes de la semana, por salida de producción.</span>';
   if(!filas.length){
     h+='<div class="sub">Sin desglose de SKU para esta semana.</div>';
     return h;
   }
-  var mo=null;
   filas.forEach(function(f){
-    if(f.mo!==mo){
-      mo=f.mo;
-      h+='<div class="mo">MO '+esc(mo||'—')+'</div>';
-    }
-    h+='<div>'+esc(f.sku)+' · '+esc([f.color,f.talla].filter(Boolean).join(' '))+' · '+fmtN(f.cant)+'</div>';
+    h+='<div>'+esc(f.sku)+' · '+esc([f.color,f.talla].filter(Boolean).join(' '))+' · '+fmtN(f.cant)+(f.mo?' · MO '+esc(f.mo):'')+'</div>';
   });
   return h;
 }
@@ -1322,7 +1421,7 @@ function renderAlm(){
   html+='</div>';
 
   html+='<div class="card"><h3>Entrada de almacén</h3>';
-  html+='<p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Completo = Ya producida; con piezas hechas y faltante &gt; 0 = Produccion Parcial (amarillo); sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. La orden sale de esta tabla cuando se cierra.</p>';
+  html+='<p class="sub">Lead time: '+(D.supuestos&&D.supuestos.leadTimeAlmacenDias||4)+' días hábiles después de salir de costura. Completo = Ya producida; con piezas hechas y faltante &gt; 0 = Produccion Parcial (amarillo); sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. El drill-down lista los SKUs como salen de costura. La orden sale de esta tabla cuando se cierra.</p>';
   html+=wbar;
   html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Cantidad</th><th>Cantidad producida</th><th>Estado</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
   if(!modsTabla.length){
@@ -1359,7 +1458,7 @@ function renderAlm(){
     return {modelo:m.modelo, por:por, tot:tot, skus:sk};
   }).filter(function(r){ return r.tot>0; });
 
-  html+='<div class="card"><h3>Calendario de ingresos a almacén</h3><p class="sub">Piezas esperadas por modelo y semana de entrada a almacén. Clic en el modelo para ver SKUs.</p>';
+  html+='<div class="card"><h3>Calendario de ingresos a almacén</h3><p class="sub">Piezas esperadas por modelo y semana de entrada a almacén. Clic en el modelo para ver SKUs en el orden de salida de costura.</p>';
   html+='<div class="ctwrap"><table class="ct"><thead><tr><th class="left">Modelo</th>';
   sems.forEach(function(ms){ html+='<th>'+(ms===ALM_YAPROD?'Ya producida':fmtDM(ms))+'</th>'; });
   html+='<th>Total</th></tr></thead><tbody>';
@@ -1420,11 +1519,11 @@ window.togAlm=function(i){
   if(row.style.display!=='none'){ row.style.display='none'; return; }
   var m=window._almMods[i];
   if(!m) return;
-  var parts=skusAbiertosModelo(m).filter(function(s){
+  var parts=ordenarSkusSalida(skusAbiertosModelo(m).filter(function(s){
     if(!_almSem) return true;
     if(_almSem===-1) return esYaProdAlm(s) && !lunesEntrada(s.entradaAlmacen);
     return lunesEntrada(s.entradaAlmacen)===_almSem;
-  });
+  }));
   var h='<table class="ct ct-mid"><thead><tr><th>MO</th><th class="left">SKU</th><th class="left">Producto</th><th>Cant.</th><th>Cantidad producida</th><th>Estado</th><th>Sale costura</th><th>Entra almacén</th></tr></thead><tbody>';
   if(!parts.length) h+='<tr><td colspan="8" class="sub">Sin SKUs abiertos en esta semana.</td></tr>';
   parts.forEach(function(s){
@@ -1443,8 +1542,9 @@ window.togAlmCal=function(i){
   var h='<table class="ct ct-mid"><thead><tr><th>MO</th><th class="left">SKU</th>';
   sems.forEach(function(ms){ h+='<th>'+(ms===-1?'Ya producida':fmtDM(ms))+'</th>'; });
   h+='<th>Cant.</th><th>Producida</th></tr></thead><tbody>';
-  if(!rec.skus.length) h+='<tr><td colspan="'+(sems.length+4)+'" class="sub">Sin SKUs abiertos.</td></tr>';
-  rec.skus.forEach(function(s){
+  var skusCal=ordenarSkusSalida(rec.skus||[]);
+  if(!skusCal.length) h+='<tr><td colspan="'+(sems.length+4)+'" class="sub">Sin SKUs abiertos.</td></tr>';
+  skusCal.forEach(function(s){
     var msS=lunesEntrada(s.entradaAlmacen);
     if(!msS && esYaProdAlm(s)) msS=-1;
     h+='<tr><td>'+esc(s.mo)+'</td><td class="left">'+esc(s.sku)+'</td>';
@@ -1530,8 +1630,7 @@ function exportCSV(){
     downloadCSV('planificacion-pendientes.csv', rows);
   } else if(_tab==='alm'){
     var rows=[['MO','SKU','Producto','Modelo','Cantidad','Cantidad producida','Estado','Sale costura','Entra almacen']];
-    (D.almacenSku||[]).forEach(function(s){
-      if(s.cerrada) return;
+    ordenarSkusSalida((D.almacenSku||[]).filter(function(s){ return !s.cerrada; })).forEach(function(s){
       rows.push([s.mo,s.sku,s.producto,s.modelo,s.cantidad,s.producida||0,s.estado||estadoDeFilaAlm(s),s.salidaCostura,s.entradaAlmacen]);
     });
     downloadCSV('planificacion-almacen.csv', rows);

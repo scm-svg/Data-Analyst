@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.37 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.38 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -56,6 +56,68 @@ def rango_color(color):
     if "marino" in c or "navy" in c:
         return 5
     return 50
+
+
+def orden_talla(talla):
+    s = quitar_tildes(norm(talla)).upper().replace(" ", "")
+    mapa = {
+        "XXS": 0, "XS": 1, "S": 2, "M": 3, "L": 4, "XL": 5,
+        "XXL": 6, "2XL": 6, "XXXL": 7, "3XL": 7, "XXXXL": 8, "4XL": 8,
+    }
+    if s in mapa:
+        return mapa[s]
+    m = re.search(r"(\d+)", s)
+    if m:
+        return 20 + int(m.group(1))
+    return 50
+
+
+def primer_sem_sku(s):
+    weeks = s.get("weeks") or s.get("porSemana") or []
+    for i, v in enumerate(weeks):
+        if (v or 0) > 0:
+            return i
+    dia = s.get("diaInicio")
+    if dia is not None and 0 <= dia < 10000:
+        return int(dia) // DIAS_LABORALES
+    return 99
+
+
+def primer_dia_sku(s):
+    dia = s.get("diaInicio")
+    if dia is not None and 0 <= dia < 10000:
+        return int(dia)
+    d = s.get("skuDiario") or s.get("dias") or {}
+    for i, k in enumerate(("lunes", "martes", "miercoles", "jueves", "viernes")):
+        if (d.get(k) or 0) > 0:
+            return i
+    return 99
+
+
+def ms_salida_sku(s):
+    for key in ("diaFinEstimado", "diaFin"):
+        v = s.get(key)
+        if v is not None and v >= 0:
+            return v
+    return float("inf")
+
+
+def sku_salida_key(s):
+    return (
+        primer_sem_sku(s),
+        primer_dia_sku(s),
+        ms_salida_sku(s),
+        0 if s.get("esSkuPrio") else 1,
+        s.get("skuPrioOrden", 0) if s.get("esSkuPrio") else 0,
+        rango_color(s.get("color")),
+        orden_talla(s.get("talla")),
+        -(s.get("cant") if s.get("cant") is not None else s.get("solicitada", s.get("cantidad", 0)) or 0),
+        s.get("sku") or "",
+    )
+
+
+def ordenar_skus_salida(arr):
+    return sorted(arr, key=sku_salida_key)
 
 
 def es_token_genero(s):
@@ -3257,7 +3319,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("function setSemana(k)", html)
         self.assertIn("Detalle diario", html)
         self.assertIn("function tipDia(", html)
-        self.assertIn("Variantes de la semana, por orden", html)
+        self.assertIn("Variantes de la semana, por salida de producción", html)
         self.assertIn('id="sku-tip"', html)
 
     def test_almacen_producida_chips_y_calendario(self):
@@ -3329,7 +3391,9 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.37"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.38"', gs)
+        self.assertIn("function cmpSkuSalidaProduccion_(", gs)
+        self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
         self.assertIn("function estadoModeloAlm_(", gs)
         self.assertIn("Produccion Parcial", gs)
@@ -3608,6 +3672,67 @@ class TestAlmacenEstadosYKpis(unittest.TestCase):
         self.assertIn("Cantidad Solicitada", html)
         self.assertIn("Cantida Producida", html)
         self.assertIn("badgeAlm(estadoDeFilaAlm(s))", html)
+
+
+class TestSkuOrdenSalida(unittest.TestCase):
+    def test_color_nucleo_negro_blanco_marino(self):
+        rows = [
+            {"sku": "C", "color": "Azul Marino", "talla": "M", "weeks": [10]},
+            {"sku": "A", "color": "Rojo", "talla": "M", "weeks": [10]},
+            {"sku": "B", "color": "Negro", "talla": "M", "weeks": [10]},
+            {"sku": "D", "color": "Blanco", "talla": "M", "weeks": [10]},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["B", "D", "C", "A"])
+
+    def test_prio_sku_sale_primero(self):
+        rows = [
+            {"sku": "N", "color": "Negro", "talla": "M", "weeks": [8], "esSkuPrio": False},
+            {"sku": "P", "color": "Rojo", "talla": "S", "weeks": [8], "esSkuPrio": True, "skuPrioOrden": 0},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["P", "N"])
+
+    def test_arranca_antes_sale_antes(self):
+        rows = [
+            {"sku": "Tarde", "color": "Negro", "talla": "M", "weeks": [0, 0, 12]},
+            {"sku": "Temprano", "color": "Blanco", "talla": "M", "weeks": [12, 0, 0]},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["Temprano", "Tarde"])
+
+    def test_talla_y_fecha_salida(self):
+        rows = [
+            {"sku": "L", "color": "Negro", "talla": "L", "weeks": [5], "diaFin": 8},
+            {"sku": "S", "color": "Negro", "talla": "S", "weeks": [5], "diaFin": 3},
+            {"sku": "M", "color": "Negro", "talla": "M", "weeks": [5], "diaFin": 3},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["S", "M", "L"])
+
+    def test_html_todos_los_drilldowns_ordenan(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn("function ordenarSkusSalida(", html)
+        self.assertIn("function cmpSkuSalidaProd(", html)
+        self.assertIn("function rangoColorCli(", html)
+        self.assertIn("var skus=ordenarSkusSalida(", html)
+        self.assertIn("return ordenarSkusSalida(rows);", html)
+        self.assertIn("var parts=ordenarSkusSalida(", html)
+        self.assertIn("var skusCal=ordenarSkusSalida(", html)
+        self.assertIn("por salida de producción", html)
+        self.assertIn("orden de salida de costura", html)
+        self.assertIn("prioridad SKU → Negro → Blanco → Marino", html)
+
+    def test_gs_publica_skus_ordenados(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn("resp.proySku = ordenarSkusPorSalidaEnLista_(resp.proySku);", gs)
+        self.assertIn("resp.almacenSku = ordenarSkusPorSalidaEnLista_(resp.almacenSku);", gs)
+        self.assertIn("return cmpSkuSalidaProduccion_(ia, ib);", gs)
+        self.assertIn("return cmpSkuSalidaProduccion_(a, b);", gs)
 
 
 if __name__ == "__main__":
