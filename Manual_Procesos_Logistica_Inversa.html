@@ -172,16 +172,18 @@ tr:hover td { background:rgba(13,148,136,.04); }
 .info-box .ico { font-size:1.1rem; flex-shrink:0; }
 .info-box.warn { background:var(--orange-bg); border-color:#fcd34d; color:#92400e; }
 
-/* Process map visual */
-.process-map { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0; }
-@media(max-width:768px){ .process-map { grid-template-columns:1fr; } }
-.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; }
+/* Process map visual — 3 nodos + flechas en una fila */
+.process-map { display:flex; align-items:stretch; gap:10px; margin:20px 0; }
+.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; flex:1; min-width:0; }
 .map-node:hover, .map-node.highlight { border-color:var(--accent); background:var(--accent-light); }
 .map-node .num { font-family:var(--font-head); font-size:2rem; font-weight:800; color:var(--accent); opacity:.3; }
 .map-node h4 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin:6px 0; }
 .map-node p { font-size:.76rem; color:var(--muted); }
-.map-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem; }
-@media(max-width:768px){ .map-arrow { transform:rotate(90deg); } }
+.map-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem; flex:0 0 28px; }
+@media(max-width:768px){
+  .process-map { flex-direction:column; }
+  .map-arrow { transform:rotate(90deg); min-height:28px; }
+}
 
 /* Footer */
 .footer { text-align:center; padding:24px; color:var(--muted); font-size:.78rem; border-top:1px solid var(--border); margin-top:40px; }
