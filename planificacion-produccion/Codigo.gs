@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.37 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.38 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - DRILL-DOWN SKU POR SALIDA: al abrir un modelo (Calendario,
+ *     Salida semanal, Seguimiento, Impresión Digital y Almacén) los
+ *     SKUs salen en el orden de producción: primero la semana/día
+ *     en que arrancan, luego Priorizacion - SKUs, Negro → Blanco →
+ *     Marino y la talla. Ya no se listan por MO ni alfabético.
  *   - ALMACÉN ESTADOS Y KPIs: Produccion Parcial (amarillo) si hay
  *     piezas hechas pero aún falta. En blanco si producida = 0.
  *     Ya producida solo cuando el SKU está completo y, en el modelo,
@@ -29,7 +34,7 @@
  *     esperada de entrada a almacén. Chips de semana por esa fecha y
  *     calendario de ingresos por modelo (drill-down a SKU). En
  *     Calendario → Detalle diario, el cursor sobre un modelo muestra
- *     las variantes / SKUs de la semana por orden.
+ *     las variantes / SKUs de la semana por salida de producción.
  *   - CHECKS DE IMPRESIÓN DIGITAL: el botón Guardar de esa pestaña
  *     escribe en _ImpresionChecks la clave M|MO|SKU (sin semana).
  *     Si la orden cambia de semana o de fila al regenerar el plan,
@@ -199,7 +204,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.37";
+var VERSION_SISTEMA = "5.9.38";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -988,6 +993,107 @@ function cmpTareasDentroModelo_(a, b) {
   var cb = b.restante !== undefined ? b.restante : b.cantidad;
   if (cb !== ca) return cb - ca;
   return String(a.sku).localeCompare(String(b.sku));
+}
+
+/** Talla de prenda: XXS→4XL, o número (2, 4, 12, T16). */
+function ordenTalla_(talla) {
+  var s = quitarTildes_(normUp_(talla)).replace(/\s+/g, "");
+  var map = {
+    XXS: 0, XS: 1, S: 2, M: 3, L: 4, XL: 5,
+    XXL: 6, "2XL": 6, XXXL: 7, "3XL": 7, XXXXL: 8, "4XL": 8
+  };
+  if (map[s] !== undefined) return map[s];
+  var m = s.match(/(\d+)/);
+  if (m) return 20 + Number(m[1]);
+  return 50;
+}
+
+function primerSemDeSku_(s) {
+  var w = s.weeks || s.porSemana;
+  if (w && w.length) {
+    var i;
+    for (i = 0; i < w.length; i++) {
+      if ((Number(w[i]) || 0) > 0) return i;
+    }
+  }
+  if (s.diaInicio !== undefined && s.diaInicio >= 0 && isFinite(s.diaInicio) && s.diaInicio < 10000) {
+    return Math.floor(s.diaInicio / DIAS_LABORALES);
+  }
+  return 99;
+}
+
+function primerDiaDeSku_(s) {
+  if (s.diaInicio !== undefined && s.diaInicio >= 0 && isFinite(s.diaInicio) && s.diaInicio < 10000) {
+    return Number(s.diaInicio);
+  }
+  var d = s.skuDiario || s.dias;
+  if (d) {
+    var keys = ["lunes", "martes", "miercoles", "jueves", "viernes"];
+    var i;
+    for (i = 0; i < keys.length; i++) {
+      if ((Number(d[keys[i]]) || 0) > 0) return i;
+    }
+  }
+  return 99;
+}
+
+function msSalidaDeSku_(s) {
+  if (s.diaFinEstimado !== undefined && s.diaFinEstimado >= 0 && isFinite(s.diaFinEstimado)) {
+    return Number(s.diaFinEstimado);
+  }
+  if (s.diaFin !== undefined && s.diaFin >= 0 && isFinite(s.diaFin)) {
+    return Number(s.diaFin);
+  }
+  var f = s.termino || s.salidaCostura || s.salida || "";
+  if (quitarTildes_(normLow_(f)).indexOf("ya producida") !== -1) return 0;
+  var k = claveFecha_(f);
+  return isFinite(k) ? k : Infinity;
+}
+
+/** Orden en que el SKU sale de costura: semana/día, prio SKU, color, talla. */
+function cmpSkuSalidaProduccion_(a, b) {
+  var wa = primerSemDeSku_(a), wb = primerSemDeSku_(b);
+  if (wa !== wb) return wa - wb;
+  var da = primerDiaDeSku_(a), db = primerDiaDeSku_(b);
+  if (da !== db) return da - db;
+  var ta = msSalidaDeSku_(a), tb = msSalidaDeSku_(b);
+  if (ta !== tb) return ta - tb;
+  var pa = a.esSkuPrio ? 0 : 1, pb = b.esSkuPrio ? 0 : 1;
+  if (pa !== pb) return pa - pb;
+  if (a.esSkuPrio && b.esSkuPrio) {
+    var oa = a.skuPrioOrden !== undefined ? a.skuPrioOrden : 0;
+    var ob = b.skuPrioOrden !== undefined ? b.skuPrioOrden : 0;
+    if (oa !== ob) return oa - ob;
+  }
+  var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
+  if (ra !== rb) return ra - rb;
+  var cn = String(a.color || "").localeCompare(String(b.color || ""), "es");
+  if (cn) return cn;
+  var xa = ordenTalla_(a.talla), xb = ordenTalla_(b.talla);
+  if (xa !== xb) return xa - xb;
+  var ca = Number(a.cant != null ? a.cant : (a.solicitada != null ? a.solicitada : a.cantidad)) || 0;
+  var cb = Number(b.cant != null ? b.cant : (b.solicitada != null ? b.solicitada : b.cantidad)) || 0;
+  if (cb !== ca) return cb - ca;
+  return String(a.sku || "").localeCompare(String(b.sku || ""));
+}
+
+function ordenarSkusPorSalidaEnLista_(arr) {
+  var groups = {};
+  var order = [];
+  (arr || []).forEach(function (s) {
+    var k = s.modelo || "";
+    if (!groups[k]) {
+      groups[k] = [];
+      order.push(k);
+    }
+    groups[k].push(s);
+  });
+  var out = [];
+  order.forEach(function (k) {
+    groups[k].sort(cmpSkuSalidaProduccion_);
+    groups[k].forEach(function (s) { out.push(s); });
+  });
+  return out;
 }
 
 function expandirTareasPorMinima_(tareas, mapaMinimas, mapaMinimasSku) {
@@ -2518,7 +2624,7 @@ function generarPlanificacionSemanal_() {
         lineas: t.lineas, esEspecial: t.esEspecial,
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
         fechaObj: t.fechaKey, porSemana: [], restante: 0, ultimoDia: -1,
-        diaFinEstimado: -1, lineaAsignada: t.lineaFija || "",
+        diaInicio: 9999, diaFinEstimado: -1, lineaAsignada: t.lineaFija || "",
         minima: (mapaMinimasSku[claveSku_(t.sku)] || {}).min || 0,
         esSkuPrio: !!t.esSkuPrio,
         skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
@@ -2552,6 +2658,7 @@ function generarPlanificacionSemanal_() {
         var indexSemana = Math.floor(d / DIAS_LABORALES);
         im.porSemana[indexSemana] += arr[d];
         isku.porSemana[indexSemana] += arr[d];
+        if ((arr[d] || 0) > 0 && d < isku.diaInicio) isku.diaInicio = d;
       }
       if (totalLinea <= 0) continue;
       lineasUsadasTarea.push(lin);
@@ -3261,22 +3368,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     var ma = idxModelo.hasOwnProperty(ia.modelo) ? idxModelo[ia.modelo] : 9999;
     var mb = idxModelo.hasOwnProperty(ib.modelo) ? idxModelo[ib.modelo] : 9999;
     if (ma !== mb) return ma - mb;
-    var pa = ia.esSkuPrio ? 0 : 1, pb = ib.esSkuPrio ? 0 : 1;
-    if (pa !== pb) return pa - pb;
-    if (ia.esSkuPrio && ib.esSkuPrio) {
-      var oa = ia.skuPrioOrden !== undefined ? ia.skuPrioOrden : 0;
-      var ob = ib.skuPrioOrden !== undefined ? ib.skuPrioOrden : 0;
-      if (oa !== ob) return oa - ob;
-    }
-    var aPlan = (ia.porSemana[0] || 0) > 0, bPlan = (ib.porSemana[0] || 0) > 0;
-    if (aPlan !== bPlan) return aPlan ? -1 : 1;
-    if (ia.fechaObj !== ib.fechaObj) return ia.fechaObj - ib.fechaObj;
-    if (ia.prioMin !== ib.prioMin) return ia.prioMin - ib.prioMin;
-    var ra = rangoColor_(ia.color), rb = rangoColor_(ib.color);
-    if (ra !== rb) return ra - rb;
-    if (ib.solicitada !== ia.solicitada) return ib.solicitada - ia.solicitada;
-    if (ib.restante !== ia.restante) return ib.restante - ia.restante;
-    return String(ia.sku).localeCompare(String(ib.sku));
+    return cmpSkuSalidaProduccion_(ia, ib);
   });
 
   var filasProySku = [];
@@ -3415,8 +3507,9 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     if (!agrupadoSku[key]) {
       agrupadoSku[key] = {
         mo: moClave, sku: t.sku, producto: t.detalleAlmacen,
+        modelo: t.modelo, color: t.color, talla: t.talla,
         cantidad: t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal,
-        diaFin: -1, prioMin: t.prioridadNum,
+        diaFin: -1, diaInicio: 9999, prioMin: t.prioridadNum,
         esSkuPrio: !!t.esSkuPrio, skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
       };
     }
@@ -3425,6 +3518,17 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     var dFin = t.ultimoDia;
     if (t.restante > 0 && t.cap > 0) dFin = (totalDias - 1) + Math.ceil(t.restante / t.cap);
     if (dFin > agrupadoSku[key].diaFin) agrupadoSku[key].diaFin = dFin;
+    if (t.plan) {
+      var linIni, dIni;
+      for (linIni in t.plan) {
+        var arrIni = t.plan[linIni] || [];
+        for (dIni = 0; dIni < arrIni.length; dIni++) {
+          if ((arrIni[dIni] || 0) > 0 && dIni < agrupadoSku[key].diaInicio) {
+            agrupadoSku[key].diaInicio = dIni;
+          }
+        }
+      }
+    }
   });
 
   var listAlmacenModelo = [];
@@ -3471,12 +3575,10 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
   }
 
   listAlmacenSku.sort(function (a, b) {
-    if (a.diaFin !== b.diaFin) return a.diaFin - b.diaFin;
-    var pa = a.esSkuPrio ? 0 : 1, pb = b.esSkuPrio ? 0 : 1;
-    if (pa !== pb) return pa - pb;
-    if (a.skuPrioOrden !== b.skuPrioOrden) return a.skuPrioOrden - b.skuPrioOrden;
-    if (a.prioMin !== b.prioMin) return a.prioMin - b.prioMin;
-    return a.sku.localeCompare(b.sku);
+    var ma = String(a.modelo || a.producto || "");
+    var mb = String(b.modelo || b.producto || "");
+    if (ma !== mb) return ma.localeCompare(mb);
+    return cmpSkuSalidaProduccion_(a, b);
   });
 
   var arrSku = [];
@@ -4500,7 +4602,8 @@ function supuestosDashboard_(capsModelo) {
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
-    "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida."
+    "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
+    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan como salen de costura: semana/día de arranque, SKUs de Priorizacion - SKUs, Negro → Blanco → Marino y talla."
     ]
   };
 }
@@ -5307,9 +5410,24 @@ function obtenerDatosDashboardCompleto() {
   resp.almacenSku = alm.sku;
   aplicarProducidaAlmacen_(ss, resp);
   var capsModelo = {};
+  var proyPorSku = {};
   resp.proySku.forEach(function (s) {
     if (s.modelo && s.cap) capsModelo[s.modelo] = s.cap;
+    var diario = (resp.skuDiarioS1 || {})[s.sku];
+    if (diario) s.skuDiario = diario;
+    if (s.sku) proyPorSku[normUp_(s.sku)] = s;
   });
+  (resp.almacenSku || []).forEach(function (s) {
+    var p = s && s.sku ? proyPorSku[normUp_(s.sku)] : null;
+    if (!p) return;
+    if (!s.color) s.color = p.color;
+    if (!s.talla) s.talla = p.talla;
+    if (!s.weeks) s.weeks = p.weeks;
+    if (!s.termino) s.termino = p.termino;
+    if (p.skuDiario && !s.skuDiario) s.skuDiario = p.skuDiario;
+  });
+  resp.proySku = ordenarSkusPorSalidaEnLista_(resp.proySku);
+  resp.almacenSku = ordenarSkusPorSalidaEnLista_(resp.almacenSku);
   resp.supuestos = supuestosDashboard_(capsModelo);
   resp.modelosSinPlanificar = leerModelosSinPlanificar_(ss, resp);
   resp.version = VERSION_SISTEMA;
