@@ -235,6 +235,21 @@ tr:hover td { background:rgba(37,99,235,.03); }
 .gap-card { background:linear-gradient(135deg,#fef2f2,#fff7ed); border:1px solid #fecaca; border-radius:var(--radius); padding:18px; margin-bottom:18px; }
 .gap-card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; color:#991b1b; margin-bottom:8px; }
 .gap-card p { font-size:.84rem; color:#7f1d1d; }
+
+/* 5S */
+.s5-intro { background:linear-gradient(135deg,#eff6ff,#f0fdf4); border:1px solid #bfdbfe; border-radius:var(--radius); padding:18px 20px; margin-bottom:22px; font-size:.88rem; color:#1e3a5f; }
+.s5-pillars { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-bottom:24px; }
+.s5-pillar { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+.s5-pillar .s5-num { font-family:var(--font-head); font-size:1.5rem; font-weight:800; color:var(--accent); opacity:.35; line-height:1; }
+.s5-pillar h5 { font-family:var(--font-head); font-size:.88rem; font-weight:800; margin:6px 0 8px; }
+.s5-pillar p { font-size:.8rem; color:var(--muted); margin-bottom:8px; }
+.s5-pillar ul { font-size:.78rem; color:var(--muted); padding-left:16px; margin:0; }
+.s5-pillar li { margin-bottom:4px; }
+.s5-dual th { font-size:.68rem; }
+.s5-dual td { font-size:.8rem; vertical-align:top; }
+.s5-dual td:first-child { font-weight:800; color:var(--accent); width:88px; }
+.s5-checklist td:first-child { width:28%; font-weight:600; }
+.s5-tag { display:inline-block; font-size:.65rem; font-weight:800; padding:2px 8px; border-radius:999px; background:#e0e7ff; color:#3730a3; margin-right:4px; }
 </style>
 </head>
 <body>
@@ -256,6 +271,7 @@ tr:hover td { background:rgba(37,99,235,.03); }
     <button class="main-tab" data-panel="registros">📊 Registros</button>
     <button class="main-tab" data-panel="recomendaciones">💡 Recomendaciones</button>
     <button class="main-tab" data-panel="analisis">⚡ Análisis / Automatización</button>
+    <button class="main-tab" data-panel="cinco-s">📐 Metodología 5S</button>
   </nav>
 </header>
 
@@ -292,6 +308,12 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <div class="icon">⚡</div>
         <h3>Análisis y Automatización</h3>
         <p>Consumibles (inventario/descuentos) y validaciones MP para agilizar PT.</p>
+        <span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('cinco-s')" style="border-top:4px solid #059669">
+        <div class="icon">📐</div>
+        <h3>Metodología 5S</h3>
+        <p>Orden en planta y en Odoo: clasificar por tipo (tela, insumos, consumibles).</p>
         <span class="arrow">→</span>
       </div>
     </div>
@@ -742,6 +764,12 @@ tr:hover td { background:rgba(37,99,235,.03); }
         <h5>Etiquetas con código de barras / QR en habladores</h5>
         <p>Reemplazar habladores manuales por etiquetas impresas desde Odoo con código de barras del lote, peso y tipo de tela. Escaneo en despacho y devolución para actualización instantánea.</p>
       </div>
+
+      <div class="rec-card priority-med">
+        <div class="rec-tag">🟠 Enfoque transversal</div>
+        <h5>Alinear mejoras con metodología 5S (físico + Odoo)</h5>
+        <p>Las iniciativas de Odoo, consumibles y validación MP encajan en <strong>clasificar, ordenar y estandarizar</strong> tanto el almacén como el ERP. Ver pestaña <a href="#" onclick="goTo('cinco-s');return false;" style="color:var(--accent);font-weight:700">Metodología 5S</a> para la matriz por proceso y checklist de auditoría.</p>
+      </div>
     </div>
   </section>
 
@@ -877,6 +905,128 @@ tr:hover td { background:rgba(37,99,235,.03); }
       </div>
     </div>
 
+  </section>
+
+  <!-- METODOLOGÍA 5S -->
+  <section class="panel" id="cinco-s">
+    <h2 class="section-title">Metodología 5S — Proceso físico y Odoo</h2>
+    <p class="section-sub">Orden y estandarización en almacén y en sistema, con la misma lógica: tela, insumos y consumibles <strong>clasificados y ubicados por tipo</strong>.</p>
+
+    <div class="s5-intro">
+      <strong>Doble capa:</strong> cada S se aplica en <span class="s5-tag">PISO</span> (ubicaciones, habladores, picking) y en <span class="s5-tag">ODOO</span> (ubicaciones virtuales, SKU, traslados, OT). Lo que se ve en planta debe coincidir con lo registrado en el ERP.
+    </div>
+
+    <div class="s5-pillars">
+      <div class="s5-pillar">
+        <div class="s5-num">1S</div>
+        <h5>Seiri — Clasificar</h5>
+        <p><strong>Físico:</strong> Agrupar por familia — <em>telas del mismo tipo juntas</em>, <em>insumos (hang tag, TPU, tinta, cordones, etc.) en su zona</em>, <em>consumibles clasificados por tipo</em>. Separar aprobado / rechazo / obsoleto.</p>
+        <p><strong>Odoo:</strong> Un producto = un SKU claro; retirar registros duplicados (Sheets donde Odoo ya cubre el movimiento); categorías de producto alineadas a esas familias.</p>
+      </div>
+      <div class="s5-pillar">
+        <div class="s5-num">2S</div>
+        <h5>Seiton — Ordenar</h5>
+        <p><strong>Físico:</strong> Misma lógica que clasificar: <em>lugar fijo por tipo de tela</em>, estantería/zona de insumos por categoría, consumibles por tipo con etiqueta visible. Hablador = identidad del rollo.</p>
+        <p><strong>Odoo:</strong> Ubicaciones espejo del piso (Materia Prima, Por auditar, Preproducción, consumibles, destino Tienda/Taller). Cada movimiento va de A → B sin ambigüedad.</p>
+      </div>
+      <div class="s5-pillar">
+        <div class="s5-num">3S</div>
+        <h5>Seiso — Limpiar / dejar listo</h5>
+        <p><strong>Físico:</strong> Plegadora y zona de recepción ordenadas; sin mezclar rollos aprobados con rechazados; cajas de consumibles identificadas antes del envío.</p>
+        <p><strong>Odoo:</strong> Cerrar lo iniciado: recepciones confirmadas, traslados revisados por el Supervisor, OT con componentes en estado coherente antes de Validación — <em>sin operaciones abiertas que no correspondan al inventario real</em>.</p>
+      </div>
+      <div class="s5-pillar">
+        <div class="s5-num">4S</div>
+        <h5>Seiketsu — Estandarizar</h5>
+        <p><strong>Físico + Odoo:</strong> Mismos pasos del manual para todos (recepción, despacho, devolución, consumibles). Tela por ola en OT; insumos en Validación; consumibles con el mismo flujo cuando migren a Odoo.</p>
+      </div>
+      <div class="s5-pillar">
+        <div class="s5-num">5S</div>
+        <h5>Shitsuke — Sostener</h5>
+        <p>Auditoría periódica (mensual recomendada): muestra de rollos, ubicaciones, una OT en Validación y un despacho de consumibles. Responsable: Supervisor + Operadores.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>📋 Matriz 5S por macroproceso (físico | Odoo)</h4>
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="s5-dual">
+          <thead>
+            <tr><th>Proceso</th><th>Seiri / Seiton (clasificar y ordenar por tipo)</th><th>Seiso / Seiketsu</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Recepción tela</td>
+              <td><strong>Físico:</strong> Ubicar por tipo de tela tras QA.<br><strong>Odoo:</strong> Lote en Por auditar → traslado auditado a Materia Prima.</td>
+              <td>Zona plegadora lista; hoja/ formulario QA completo; rechazos solo en área de rechazo.</td>
+            </tr>
+            <tr>
+              <td>Despacho MP</td>
+              <td><strong>Físico:</strong> Picking desde la sección del tipo de tela / insumo correcto.<br><strong>Odoo:</strong> OT + PC alineados al SKU despachado.</td>
+              <td>Entrega física = registro (Sheets + Odoo) el mismo día.</td>
+            </tr>
+            <tr>
+              <td>Insumos Etiquetado</td>
+              <td><strong>Físico:</strong> Insumos agrupados por categoría (no mezclados con tela).<br><strong>Odoo:</strong> Mismo SKU y ubicación lógica en despacho.</td>
+              <td>Validación en manufactura con MP aprobada antes de PT.</td>
+            </tr>
+            <tr>
+              <td>Consumibles</td>
+              <td><strong>Físico:</strong> Almacén por tipo de consumible; cajas Tienda vs entrega Taller identificadas.<br><strong>Odoo:</strong> Entrada por PO; pendiente picking y descuento por destino.</td>
+              <td>Objetivo: un solo registro de salida en Odoo al confirmar envío.</td>
+            </tr>
+            <tr>
+              <td>Requisición compra</td>
+              <td><strong>Odoo:</strong> SKU/categoría coherente con familia (tela / insumo / consumible).</td>
+              <td>Aprobaciones con justificación; recepción cierra el ciclo de compra.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h4>✅ Checklist de auditoría 5S (muestra mensual)</h4>
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="s5-checklist">
+          <thead>
+            <tr><th>Ítem</th><th>Piso — ¿Cumple?</th><th>Odoo — ¿Cumple?</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Clasificación por tipo</td>
+              <td>Telas del mismo tipo juntas; insumos en su zona; consumibles por tipo</td>
+              <td>Categorías/SKU y ubicaciones reflejan esas familias</td>
+            </tr>
+            <tr>
+              <td>Orden y señalización</td>
+              <td>Habladores legibles; área de rechazo separada; rutas de picking claras</td>
+              <td>Stock por ubicación coincide con conteo en muestra aleatoria</td>
+            </tr>
+            <tr>
+              <td>Estado listo (Seiso)</td>
+              <td>Sin material mezclado ni sin identificar en pasillo de recepción</td>
+              <td>Recepciones y traslados del día confirmados o en revisión del Supervisor</td>
+            </tr>
+            <tr>
+              <td>Estandarización</td>
+              <td>Equipo sigue pasos del manual en la muestra auditada</td>
+              <td>OT revisada: tela descontada por ola; insumos listos para Validación</td>
+            </tr>
+            <tr>
+              <td>Consumibles</td>
+              <td>Despacho Tienda/Taller con documentación de la solicitud</td>
+              <td>Entrada en Odoo; salida registrada (Sheets hoy → Odoo objetivo)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="info-box" style="margin-top:18px">
+      <span class="ico">🔗</span>
+      <span>Esta pestaña complementa <strong>Recomendaciones</strong> (Odoo consumibles, validación MP) y <strong>Análisis / Automatización</strong>. Las 5S dan el marco de orden; las otras pestañas detallan las acciones técnicas.</span>
+    </div>
   </section>
 
 </main>
