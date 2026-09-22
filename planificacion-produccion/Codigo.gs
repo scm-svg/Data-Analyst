@@ -1067,6 +1067,8 @@ function cmpSkuSalidaProduccion_(a, b) {
   }
   var ra = rangoColor_(a.color), rb = rangoColor_(b.color);
   if (ra !== rb) return ra - rb;
+  var cn = String(a.color || "").localeCompare(String(b.color || ""), "es");
+  if (cn) return cn;
   var xa = ordenTalla_(a.talla), xb = ordenTalla_(b.talla);
   if (xa !== xb) return xa - xb;
   var ca = Number(a.cant != null ? a.cant : (a.solicitada != null ? a.solicitada : a.cantidad)) || 0;

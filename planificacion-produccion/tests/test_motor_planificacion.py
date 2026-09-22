@@ -110,6 +110,7 @@ def sku_salida_key(s):
         0 if s.get("esSkuPrio") else 1,
         s.get("skuPrioOrden", 0) if s.get("esSkuPrio") else 0,
         rango_color(s.get("color")),
+        s.get("color") or "",
         orden_talla(s.get("talla")),
         -(s.get("cant") if s.get("cant") is not None else s.get("solicitada", s.get("cantidad", 0)) or 0),
         s.get("sku") or "",
@@ -3700,6 +3701,16 @@ class TestSkuOrdenSalida(unittest.TestCase):
         ]
         out = [s["sku"] for s in ordenar_skus_salida(rows)]
         self.assertEqual(out, ["Temprano", "Tarde"])
+
+    def test_mismo_rango_mantiene_color_junto(self):
+        rows = [
+            {"sku": "R8", "color": "Rojo", "talla": "8", "weeks": [4]},
+            {"sku": "T8", "color": "Turquesa", "talla": "8", "weeks": [4]},
+            {"sku": "R12", "color": "Rojo", "talla": "12", "weeks": [6]},
+            {"sku": "T12", "color": "Turquesa", "talla": "12", "weeks": [6]},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["R8", "R12", "T8", "T12"])
 
     def test_talla_y_fecha_salida(self):
         rows = [
