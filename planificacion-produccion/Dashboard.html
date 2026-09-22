@@ -115,6 +115,13 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .imp-chk input:indeterminate:after{content:'';position:absolute;left:3px;top:6px;width:8px;height:2px;background:#fff;border:none;transform:none}
 .imp-chk span{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
 .imp-chk.ok span{color:var(--ac);font-weight:700}
+.imp-savebar{position:sticky;top:0;z-index:5;background:var(--surf);border:1px solid var(--brd);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.imp-savebar button{background:var(--s3);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:8px 16px;font-family:var(--fh);font-weight:800;font-size:.78rem;cursor:pointer}
+.imp-savebar button.dirty{background:var(--ac);color:#fff;border-color:var(--ac)}
+.imp-savebar button:disabled{opacity:.5;cursor:default}
+.imp-save-msg{font-size:.75rem;color:var(--mu)}
+.imp-save-msg.dirty{color:var(--yw);font-weight:700}
+.imp-save-msg.ok{color:var(--gr)}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 @media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}}
 @media(max-width:780px){.g2,.g3,.cal-grid{grid-template-columns:1fr}.content,.fbar,.tabs,.hdr,.ebar,.mbar{padding-left:16px;padding-right:16px}}
@@ -275,8 +282,8 @@ function onDashPayload(resp){
   window._publicadoEn=resp.publicadoEn||'';
   if(hayGas()){
     google.script.run
-      .withSuccessHandler(function(stChecks){ _impChecks=stChecks||{}; startUi(); })
-      .withFailureHandler(function(){ _impChecks={}; startUi(); })
+      .withSuccessHandler(function(stChecks){ aplicarChecksServidor_(stChecks); startUi(); })
+      .withFailureHandler(function(){ aplicarChecksServidor_({}); startUi(); })
       .leerChecksImpresion();
     return;
   }
@@ -662,28 +669,97 @@ function mosUnicas(filas){
   return Object.keys(set).length;
 }
 var _impChecks = {};
-function impKey(wi, sku, mo){ return String(wi)+'|'+String(sku||'')+'|'+String(mo||''); }
-function impLoad(){
-  if(hayGas()) return _impChecks||{};
-  try{ return JSON.parse(localStorage.getItem('dash-impdig-checks')||'{}'); }catch(e){ return {}; }
+var _impSaved = {};
+var _impMeta = {};
+var _impDirty = false;
+var _impGuardando = false;
+function impKey(sku, mo){
+  var m=String(mo||'').trim().toUpperCase();
+  var s=String(sku||'').trim().toUpperCase();
+  if(m) return 'M|'+m+'|'+s;
+  return 'S|'+s;
 }
+function recordarOrdenImp_(f, wi){
+  var k=impKey(f.sku, f.mo);
+  _impMeta[k]={sku:String(f.sku||'').trim().toUpperCase(), mo:String(f.mo||'').trim().toUpperCase(), semana:String(wi)};
+  return k;
+}
+function clonarChecks_(st){
+  var o={};
+  st=st||{};
+  Object.keys(st).forEach(function(k){ if(st[k]) o[k]=1; });
+  return o;
+}
+function checksIguales_(a, b){
+  a=a||{}; b=b||{};
+  var ka=Object.keys(a), kb=Object.keys(b);
+  if(ka.length!==kb.length) return false;
+  for(var i=0;i<ka.length;i++) if(!b[ka[i]]) return false;
+  return true;
+}
+function aplicarChecksServidor_(st){
+  _impSaved=clonarChecks_(st);
+  _impChecks=clonarChecks_(st);
+  _impDirty=false;
+  _impGuardando=false;
+}
+function impLoad(){ return _impChecks||{}; }
 function impSave(st){
   _impChecks=st||{};
-  try{ localStorage.setItem('dash-impdig-checks', JSON.stringify(_impChecks)); }catch(e){}
+  _impDirty=!checksIguales_(_impChecks, _impSaved);
+  pintarEstadoGuardarImp_();
 }
-function persistCheckItems(items){
-  if(!hayGas() || !items || !items.length) return;
+function pintarEstadoGuardarImp_(extra){
+  var btn=document.getElementById('btn-guardar-imp');
+  var msg=document.getElementById('imp-save-msg');
+  if(btn){
+    btn.disabled=!!_impGuardando || !_impDirty;
+    btn.classList.toggle('dirty', !!_impDirty && !_impGuardando);
+    btn.textContent=_impGuardando?'Guardando…':'Guardar';
+  }
+  if(msg){
+    var t=extra||'';
+    if(!t){
+      if(_impGuardando) t='Enviando los checks a Planificación de Producción…';
+      else if(_impDirty) t='Hay checks sin guardar. Si sales del dashboard, estos cambios no quedan en la hoja.';
+    }
+    msg.textContent=t;
+    msg.className='imp-save-msg'+(_impDirty||_impGuardando?' dirty':' ok');
+  }
+}
+function itemsParaGuardarImp_(){
+  var items=[], seen={};
+  function add(k, on){
+    if(!k || seen[k]) return;
+    seen[k]=1;
+    var meta=_impMeta[k]||{};
+    var mo=meta.mo||'';
+    var sku=meta.sku||'';
+    if(!mo && !sku){
+      if(k.indexOf('M|')===0){
+        var rest=k.substring(2), i=rest.indexOf('|');
+        mo=i===-1?rest:rest.substring(0,i);
+        sku=i===-1?'':rest.substring(i+1);
+      } else if(k.indexOf('S|')===0){
+        sku=k.substring(2);
+      }
+    }
+    items.push({clave:k, mo:mo, sku:sku, semana:meta.semana!=null?String(meta.semana):'', listo:!!on});
+  }
+  Object.keys(_impChecks).forEach(function(k){ add(k, true); });
+  Object.keys(_impSaved).forEach(function(k){ if(!_impChecks[k]) add(k, false); });
+  return items;
+}
+function persistCheckItems(items, alOk, alErr){
   google.script.run
-    .withFailureHandler(function(err){
-      var st=document.getElementById('status');
-      if(st){ st.textContent='No se pudieron guardar los checks: '+err; st.style.color='var(--rd)'; }
-    })
+    .withSuccessHandler(function(res){ if(alOk) alOk(res); })
+    .withFailureHandler(function(err){ if(alErr) alErr(err); })
     .guardarChecksImpresion(items);
 }
 function keysImpModelo(wi, mi){
   var c=(window._impCarga[wi]||[])[mi];
   if(!c) return [];
-  return filasImp(c.modelo, wi).map(function(f){ return impKey(wi, f.sku, f.mo); });
+  return filasImp(c.modelo, wi).map(function(f){ return recordarOrdenImp_(f, wi); });
 }
 function keysImpSemana(wi){
   var keys=[], carga=window._impCarga[wi]||[];
@@ -694,7 +770,6 @@ function setImpKeys(keys, on){
   var st=impLoad();
   keys.forEach(function(k){ if(on) st[k]=1; else delete st[k]; });
   impSave(st);
-  persistCheckItems(keys.map(function(k){ return {clave:k, listo:!!on}; }));
 }
 function estadoKeys(keys){
   var st=impLoad(), n=keys.length, ok=0;
@@ -731,7 +806,8 @@ function renderImp(){
   if(!el) return;
   window._impCarga={};
   var keys=weekKeys();
-  var html='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan de producción. Drill-down semana → modelo → MO / SKU. Marca el check cuando el logotipo esté listo (se guarda por orden, para todo el equipo).</p>';
+  var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span></div>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → MO / SKU. Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
   html+='<div class="note imp-leyenda">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaImp(k, wi), wi);
@@ -740,7 +816,7 @@ function renderImp(){
     var filasSem=[];
     carga.forEach(function(c){ filasSem=filasSem.concat(filasImp(c.modelo, wi)); });
     var nMos=mosUnicas(filasSem);
-    var est=estadoKeys(filasSem.map(function(f){ return impKey(wi, f.sku, f.mo); }));
+    var est=estadoKeys(filasSem.map(function(f){ return recordarOrdenImp_(f, wi); }));
     html+='<div class="note expand imp-week'+(est.all?' imp-done':'')+'" data-open="impw'+wi+'" onclick="tog(this)"><span class="imp-meta">'+(k)+' · '+(D.fechasSemanas[k]||'')+' · <b>'+fmtN(tot)+'</b> pzas · '+carga.length+' modelos · '+fmtN(nMos)+' MOs</span>';
     html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Semana cubierta" onclick="event.stopPropagation()"><input type="checkbox" data-imp-week="'+wi+'" '+(est.all?'checked ':'')+'onchange="chkImpSemana(event,'+wi+')"><span>Listo</span></label></div>';
     html+='<div id="impw'+wi+'" style="display:none;margin:0 0 12px 8px">';
@@ -749,7 +825,7 @@ function renderImp(){
       var id='impw'+wi+'m'+mi;
       var filas=filasImp(c.modelo, wi);
       var nMo=mosUnicas(filas);
-      var estM=estadoKeys(filas.map(function(f){ return impKey(wi, f.sku, f.mo); }));
+      var estM=estadoKeys(filas.map(function(f){ return recordarOrdenImp_(f, wi); }));
       html+='<tr class="tr-exp" onclick="togImpSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td>';
       html+='<td class="left">'+esc(c.modelo)+'</td><td>'+chipsLineas(c.lineas)+'</td><td class="num">'+fmtN(nMo)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td>';
       html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'" title="Modelo listo"><input type="checkbox" data-imp-mod="'+wi+','+mi+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,'+wi+','+mi+')"></label></td></tr>';
@@ -761,6 +837,7 @@ function renderImp(){
   html+='</div>';
   el.innerHTML=html;
   syncImpChecks();
+  pintarEstadoGuardarImp_();
 }
 window.togImpSku=function(id, wi, mi){
   var row=document.getElementById(id);
@@ -772,7 +849,7 @@ window.togImpSku=function(id, wi, mi){
   else {
     var t='<td colspan="7"><table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th><th>Logo</th></tr></thead><tbody>';
     filas.forEach(function(f){
-      var key=impKey(wi, f.sku, f.mo);
+      var key=recordarOrdenImp_(f, wi);
       var on=!!impLoad()[key];
       t+='<tr><td class="left">'+esc(f.mo||'—')+'</td>';
       t+='<td class="left">'+esc(f.sku)+'</td><td class="left">'+esc(f.detalle)+'</td><td>'+esc(f.color)+'</td><td>'+esc(f.talla)+'</td><td class="num">'+fmtN(f.cant)+'</td>';
@@ -791,8 +868,31 @@ window.chkImpSku=function(ev, wi, el){
   var st=impLoad();
   if(el.checked) st[key]=1; else delete st[key];
   impSave(st);
-  persistCheckItems([{clave:key, listo:!!el.checked}]);
   syncImpChecks();
+};
+window.guardarImpresion=function(){
+  if(_impGuardando || !_impDirty) return;
+  var msg=document.getElementById('imp-save-msg');
+  if(!hayGas()){
+    if(msg){ msg.textContent='Abre el dashboard desde el enlace de la hoja para guardar en Planificación de Producción.'; msg.className='imp-save-msg dirty'; }
+    return;
+  }
+  var items=itemsParaGuardarImp_();
+  _impGuardando=true;
+  pintarEstadoGuardarImp_();
+  persistCheckItems(items, function(res){
+    _impGuardando=false;
+    if(!res || res.success===false){
+      pintarEstadoGuardarImp_('No se pudo guardar'+(res&&res.error?': '+res.error:'')+'.');
+      return;
+    }
+    _impSaved=clonarChecks_(_impChecks);
+    _impDirty=false;
+    pintarEstadoGuardarImp_('Guardado en Planificación de Producción. '+(res.registros!=null?res.registros+' órdenes en el registro.':''));
+  }, function(err){
+    _impGuardando=false;
+    pintarEstadoGuardarImp_('No se pudo guardar: '+(err&&err.message?err.message:err));
+  });
 };
 window.chkImpModelo=function(ev, wi, mi){
   if(ev) ev.stopPropagation();
@@ -987,7 +1087,7 @@ function exportCSV(){
     keys.forEach(function(k, wi){
       agruparCarga(cargaImp(k, wi), wi).forEach(function(c){
         filasImp(c.modelo, wi).forEach(function(f){
-          rows.push([k, D.fechasSemanas[k]||'', (c.lineas||[]).join('/'), c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(wi, f.sku, f.mo)]?'SI':'NO']);
+          rows.push([k, D.fechasSemanas[k]||'', (c.lineas||[]).join('/'), c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(f.sku, f.mo)]?'SI':'NO']);
         });
       });
     });
@@ -1045,6 +1145,13 @@ document.querySelectorAll('.tab').forEach(function(b){
     if(b) b.click();
   }
 })();
+window.addEventListener('beforeunload', function(e){
+  if(!_impDirty) return;
+  var aviso='Hay checks de Impresión Digital sin guardar. Pulsa Guardar para no perderlos.';
+  e.preventDefault();
+  e.returnValue=aviso;
+  return aviso;
+});
 try { boot(); } catch (e) {
   var st=document.getElementById('status');
   if(st){ st.textContent='Error al dibujar el dashboard: '+e.message; st.style.color='var(--rd)'; }

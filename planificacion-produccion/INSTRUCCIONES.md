@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.33 — códigos listos para pegar
+# Planificación de Producción v5.9.34 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -12,9 +12,9 @@ En el editor de **Google Apps Script** del archivo de Planificación:
 
 El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas ya calculadas (`Planificacion`, `Semana 2–12`, `Proyeccion`, almacén, pendientes) y las deja en la hoja oculta `_DashboardCache`. El enlace de la app web no cambia.
 
-Los checks de **Impresión Digital** se guardan en la hoja oculta `_ImpresionChecks` (clave `semana|SKU|MO`). Quedan en la hoja, no en el navegador de cada persona, para seguimiento por orden.
+Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
 
 ## Priorizacion — columna H (Secuencia)
 
@@ -44,7 +44,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Especial en todas las asignadas:** un modelo de `Por Hacer - Especial` con 2+ líneas (Running Tank Biomove en `1, 2`; Clásica Cab/DAMA en `3, 4`) es **prioridad 1** en cada línea listada. Al llegar su **Día de inicio** toma **sí o sí** todas esas líneas (desaloja a RIO u otro de peor banda). Ya no se queda en una sola porque “alcanza la semana”. El faltante se reparte entre las asignadas (la MO no se clava a una). Dos Especiales que comparten líneas: el de más volumen (o mejor fecha) usa ambas hasta terminar; el otro entra después. **No** desborda a una línea que no esté en `Linea de Produccion`.
 - **Encabezado Producto:** si en `Por Hacer` la celda de Producto/Modelo de la fila 2 viene vacía, se usa la columna siguiente a SKU o el título de la fila 1. Generar Planificación ya no se bloquea por eso.
 - **RIO DAMA no suelta L2:** el lote de familia (Negro → Blanco → Marino, CAB → DAMA → KIDS) **ignora** hermanos que todavía no llegan a su Día de inicio. Si RIO KIDS está en la misma línea pero arranca el 29/09, RIO DAMA sigue en Línea 2 en la semana 2. Al llegar ese día, la secuencia de color/género vuelve a aplicar. El apoyo 50% de L1 no deja a DAMA como ocupante fantasma de una L2 vacía.
-- **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** persiste checks por MO en `_ImpresionChecks`.
+- **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** guarda los checks con el botón **Guardar**, por MO+SKU, en `_ImpresionChecks`. Actualizar el dashboard no los borra.
 - **Urgente en fecha estimada:** un modelo Urgente/mínima con 2+ líneas toma **sí o sí** todas las asignadas el día de Fecha de Salida Estimada y el hábil anterior. Fuera de esa ventana, la segunda línea solo si está libre.
 - **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo y no espera/cede por color o género de la familia mientras corre ahí. En L1–4, `No` sigue saltando solo el orden de género (el lote de color se mantiene).
 - **Horizonte 12 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 12 semanas (la actual + 11), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 11` y `Semana 12` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 10`. El menú **Ver Pestañas** las incluye.

@@ -1,10 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.33 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.34 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CHECKS DE IMPRESIÓN DIGITAL: el botón Guardar de esa pestaña
+ *     escribe en _ImpresionChecks la clave M|MO|SKU (sin semana).
+ *     Si la orden cambia de semana o de fila al regenerar el plan,
+ *     el logo listo sigue. Las claves viejas semana|SKU|MO se leen
+ *     igual y se reescriben al guardar. Actualizar Dashboard no borra
+ *     esa hoja. Los checks no se envían al marcar: hay que pulsar
+ *     Guardar. Si hay cambios sin guardar y el usuario sale, el
+ *     navegador avisa.
  *   - ESPECIAL EN TODAS LAS ASIGNADAS: un modelo de Por Hacer - Especial
  *     con 2+ líneas (Running Tank en 1 y 2, Clásica Cab/DAMA en 3 y 4)
  *     es prioridad 1 en CADA línea listada. Al llegar su Día de inicio
@@ -27,8 +35,8 @@
  *   - DASHBOARD WEB COMPARTIDO: el menú 🔄 Actualizar Dashboard publica
  *     un snapshot en la hoja oculta _DashboardCache. doGet y el enlace
  *     de la app web sirven ese snapshot (el URL no cambia). Impresión
- *     Digital guarda los checks por MO+SKU+semana en _ImpresionChecks
- *     para que todo el mundo vea el mismo seguimiento por orden.
+ *     Digital guarda los checks por MO+SKU (botón Guardar) en
+ *     _ImpresionChecks. La semana no forma parte de la clave.
  *   - URGENTE EN FECHA ESTIMADA (base 5.9.28): un modelo Urgente/mínima
  *     con 2+ líneas (COTTON KIDS en 2 y 4) NO explota el día que entra.
  *     El día de Fecha de Salida Estimada y el hábil anterior toma
@@ -166,7 +174,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.33";
+var VERSION_SISTEMA = "5.9.34";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -4466,7 +4474,7 @@ function supuestosDashboard_(capsModelo) {
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo.",
-    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se conservan por MO."
+    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar."
     ]
   };
 }
@@ -5145,7 +5153,7 @@ function actualizarDashboardInformacion_() {
     "✅ Dashboard actualizado (v" + VERSION_SISTEMA + ")\n\n" +
     "El enlace de la app web (Implementar → Implementaciones) muestra ahora este snapshot.\n" +
     "No hace falta volver a desplegar: el URL se mantiene.\n\n" +
-    "Los checks de Impresión Digital se conservan por MO en la hoja oculta '" + HOJA_IMP_CHECKS + "'.\n\n" +
+    "Los checks de Impresión Digital siguen en la hoja oculta '" + HOJA_IMP_CHECKS + "' (clave MO+SKU, sin semana). Actualizar el dashboard no los borra.\n\n" +
     "Publicado: " + parsed.publicadoEn
   );
 }
@@ -5174,25 +5182,103 @@ function asegurarHojaImpChecks_(ss) {
   ]);
 }
 
+function listoEsSiImp_(v) {
+  var s = quitarTildes_(String(v == null ? "" : v).trim().toUpperCase());
+  return s === "SI" || s === "TRUE" || s === "1";
+}
+
+/** Identidad del logo: MO + SKU. La semana no entra, porque el plan la mueve. */
+function claveCheckImp_(mo, sku) {
+  var m = normUp_(mo);
+  var s = normUp_(sku);
+  if (m) return "M|" + m + "|" + s;
+  return "S|" + s;
+}
+
+function esClaveNuevaImp_(clave) {
+  var c = String(clave || "");
+  return c.indexOf("M|") === 0 || c.indexOf("S|") === 0;
+}
+
+function partesClaveImp_(clave) {
+  var c = String(clave || "");
+  if (c.indexOf("M|") === 0) {
+    var rest = c.substring(2);
+    var i = rest.indexOf("|");
+    if (i === -1) return { mo: rest, sku: "" };
+    return { mo: rest.substring(0, i), sku: rest.substring(i + 1) };
+  }
+  if (c.indexOf("S|") === 0) return { mo: "", sku: c.substring(2) };
+  return { mo: "", sku: "" };
+}
+
+/** Lee clave nueva M|MO|SKU o la vieja semana|SKU|MO y devuelve la estable. */
+function resolverClaveImp_(clave, sku, mo) {
+  var c = String(clave || "").trim();
+  if (esClaveNuevaImp_(c)) return c;
+  var parts = c.split("|");
+  if (parts.length >= 3 && /^\d+$/.test(parts[0])) {
+    return claveCheckImp_(parts.slice(2).join("|"), parts[1]);
+  }
+  if (norm_(mo) !== "" || norm_(sku) !== "") return claveCheckImp_(mo, sku);
+  return "";
+}
+
+function msCheckImp_(v) {
+  if (Object.prototype.toString.call(v) === "[object Date]" && !isNaN(v.getTime())) return v.getTime();
+  var n = Number(v);
+  if (isFinite(n) && n > 20000 && n < 80000) return Math.round((n - 25569) * 86400 * 1000);
+  return 0;
+}
+
+function ganaCheckImp_(rec, cur) {
+  if (rec.nuevo && !cur.nuevo) return true;
+  if (!rec.nuevo && cur.nuevo) return false;
+  if (rec.ts > cur.ts) return true;
+  if (rec.ts < cur.ts) return false;
+  return rec.listo === "SI" && cur.listo !== "SI";
+}
+
+function elegirChecksImp_(filas) {
+  var best = {};
+  var i;
+  for (i = 0; i < (filas || []).length; i++) {
+    var row = filas[i] || [];
+    var claveRaw = String(row[0] || "").trim();
+    if (!claveRaw || claveRaw === "CLAVE") continue;
+    var estable = resolverClaveImp_(claveRaw, row[1], row[2]);
+    if (!estable) continue;
+    var partes = partesClaveImp_(estable);
+    var rec = {
+      clave: estable,
+      sku: normUp_(row[1]) || partes.sku,
+      mo: normUp_(row[2]) || partes.mo,
+      semana: row[3] == null ? "" : String(row[3]),
+      listo: listoEsSiImp_(row[4]) ? "SI" : "NO",
+      ts: msCheckImp_(row[5]),
+      actualizado: row[5] || "",
+      nuevo: esClaveNuevaImp_(claveRaw)
+    };
+    if (!best[estable] || ganaCheckImp_(rec, best[estable])) best[estable] = rec;
+  }
+  var listos = {};
+  for (var k in best) {
+    if (best.hasOwnProperty(k) && best[k].listo === "SI") listos[k] = 1;
+  }
+  return { registros: best, listos: listos };
+}
+
 function leerChecksImpresion() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var hoja = ss.getSheetByName(HOJA_IMP_CHECKS);
-  var out = {};
-  if (!hoja || hoja.getLastRow() < 2) return out;
+  if (!hoja || hoja.getLastRow() < 2) return {};
   var n = hoja.getLastRow() - 1;
-  var datos = hoja.getRange(2, 1, n, 5).getValues();
-  var i;
-  for (i = 0; i < datos.length; i++) {
-    var clave = String(datos[i][0] || "").trim();
-    if (!clave || clave === "CLAVE") continue;
-    var listo = String(datos[i][4] || "").trim().toUpperCase();
-    if (listo === "SI" || listo === "TRUE" || listo === "1") out[clave] = 1;
-  }
-  return out;
+  var datos = hoja.getRange(2, 1, n, 6).getValues();
+  return elegirChecksImp_(datos).listos;
 }
 
 function guardarChecksImpresion(items) {
-  if (!items) return { success: false };
+  if (!items) return { success: false, error: "vacio" };
   if (Object.prototype.toString.call(items) !== "[object Array]") items = [items];
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(30000)) return { success: false, error: "lock" };
@@ -5200,42 +5286,53 @@ function guardarChecksImpresion(items) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var hoja = asegurarHojaImpChecks_(ss);
     var last = hoja.getLastRow();
-    var map = {};
-    if (last >= 2) {
-      var claves = hoja.getRange(2, 1, last - 1, 1).getValues();
-      var i;
-      for (i = 0; i < claves.length; i++) {
-        var k0 = String(claves[i][0] || "").trim();
-        if (k0) map[k0] = i + 2;
-      }
-    }
+    var filas = [];
+    if (last >= 2) filas = hoja.getRange(2, 1, last - 1, 6).getValues();
+    var best = elegirChecksImp_(filas).registros;
     var now = new Date();
-    var nuevas = [];
+    var nowMs = now.getTime();
+    var guardados = 0;
     var j;
     for (j = 0; j < items.length; j++) {
       var it = items[j] || {};
-      var clave = String(it.clave || "").trim();
-      if (!clave) continue;
-      var parts = clave.split("|");
-      var semana = parts[0] || "";
-      var sku = parts[1] || "";
-      var mo = parts[2] || "";
-      var listo = it.listo ? "SI" : "NO";
-      var fila = [clave, sku, mo, semana, listo, now];
-      if (map[clave]) {
-        hoja.getRange(map[clave], 1, 1, 6).setValues([fila]);
-      } else {
-        nuevas.push(fila);
-        map[clave] = true;
-      }
+      var mo = it.mo != null ? it.mo : "";
+      var sku = it.sku != null ? it.sku : "";
+      var estable = (norm_(mo) !== "" || norm_(sku) !== "")
+        ? claveCheckImp_(mo, sku)
+        : resolverClaveImp_(it.clave, sku, mo);
+      if (!estable) continue;
+      var partes = partesClaveImp_(estable);
+      var prev = best[estable] || {};
+      var semana = (it.semana != null && String(it.semana) !== "")
+        ? String(it.semana)
+        : (prev.semana || "");
+      best[estable] = {
+        clave: estable,
+        sku: normUp_(sku) || prev.sku || partes.sku,
+        mo: normUp_(mo) || prev.mo || partes.mo,
+        semana: semana,
+        listo: it.listo ? "SI" : "NO",
+        ts: nowMs,
+        actualizado: now,
+        nuevo: true
+      };
+      guardados++;
     }
-    if (nuevas.length) {
-      var dest = hoja.getLastRow() + 1;
-      hoja.getRange(dest, 1, nuevas.length, 6).setNumberFormat("@");
-      hoja.getRange(dest, 1, nuevas.length, 6).setValues(nuevas);
-      hoja.getRange(dest, 6, nuevas.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    var out = [];
+    for (var k in best) {
+      if (!best.hasOwnProperty(k)) continue;
+      var r = best[k];
+      out.push([r.clave, r.sku, r.mo, r.semana, r.listo, r.actualizado || now]);
     }
-    return { success: true };
+    var maxR = hoja.getMaxRows();
+    if (maxR > 1) hoja.getRange(2, 1, maxR - 1, 6).clearContent();
+    if (out.length) {
+      hoja.getRange(2, 1, out.length, 6).setNumberFormat("@");
+      hoja.getRange(2, 1, out.length, 6).setValues(out);
+      hoja.getRange(2, 6, out.length, 1).setNumberFormat("dd/mm/yyyy hh:mm");
+    }
+    try { hoja.hideSheet(); } catch (eHideImp) {}
+    return { success: true, guardados: guardados, registros: out.length };
   } finally {
     lock.releaseLock();
   }

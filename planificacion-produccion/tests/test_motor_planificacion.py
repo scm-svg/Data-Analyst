@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.33 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.34 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -3266,7 +3266,11 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn('data-tab="imp"', html)
         self.assertIn("Impresión Digital", html)
         self.assertIn("function renderImp()", html)
-        self.assertIn("dash-impdig-checks", html)
+        self.assertIn('id="btn-guardar-imp"', html)
+        self.assertIn("window.guardarImpresion=function()", html)
+        self.assertIn("beforeunload", html)
+        self.assertIn("Hay checks de Impresión Digital sin guardar", html)
+        self.assertIn("Si la orden cambia de semana, el check se mantiene", html)
         self.assertIn("<th class=\"left\">MO</th>", html)
         self.assertIn("window.chkImpSku", html)
         self.assertIn("window.chkImpModelo", html)
@@ -3282,7 +3286,9 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("persistCheckItems", html)
         self.assertIn("guardarChecksImpresion", html)
         self.assertIn("leerDashboardPublicado", html)
-        self.assertIn("se guarda por orden, para todo el equipo", html)
+        self.assertIn("por orden (MO + SKU)", html)
+        self.assertNotIn("function impKey(wi, sku, mo)", html)
+        self.assertNotIn("dash-impdig-checks", html)
         self.assertNotIn('id="dash-data"', html)
         self.assertLess(len(html), 200_000)
 
@@ -3299,7 +3305,14 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.33"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.34"', gs)
+        self.assertIn("function claveCheckImp_(mo, sku)", gs)
+        self.assertIn("function elegirChecksImp_(filas)", gs)
+        i_cache = gs.find("function guardarCacheDashboard_")
+        j_cache = gs.find("function leerCacheDashboard_")
+        cuerpo_cache = gs[i_cache:j_cache]
+        self.assertIn("HOJA_DASH_CACHE", cuerpo_cache)
+        self.assertNotIn("HOJA_IMP_CHECKS", cuerpo_cache)
 
     def test_cache_json_se_parte_y_rearma(self):
         path = os.path.join(os.path.dirname(__file__), "..", "dashboard-data.json")
@@ -3318,13 +3331,43 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("semanas", parsed["data"])
 
     def test_clave_check_impresion_por_orden(self):
-        def imp_key(wi, sku, mo):
-            return str(wi) + "|" + str(sku or "") + "|" + str(mo or "")
-        k = imp_key(0, "SKU-1", "PD-001")
-        self.assertEqual(k, "0|SKU-1|PD-001")
-        st = {k: 1}
-        self.assertTrue(st[imp_key(0, "SKU-1", "PD-001")])
-        self.assertNotIn(imp_key(1, "SKU-1", "PD-001"), st)
+        html = self._html()
+        gs = self._gs()
+        self.assertIn("function impKey(sku, mo)", html)
+        self.assertIn("return 'M|'+m+'|'+s;", html)
+        self.assertIn('return "M|" + m + "|" + s;', gs)
+        self.assertIn('if (parts.length >= 3 && /^\\d+$/.test(parts[0]))', gs)
+        sku_i = html.find("window.chkImpSku=function")
+        guard_i = html.find("window.guardarImpresion=function")
+        self.assertLess(sku_i, guard_i)
+        self.assertNotIn("persistCheckItems", html[sku_i:guard_i])
+        set_i = html.find("function setImpKeys")
+        est_i = html.find("function estadoKeys")
+        self.assertNotIn("persistCheckItems", html[set_i:est_i])
+        self.assertNotIn("guardarChecksImpresion", html[set_i:est_i])
+
+        def clave(mo, sku):
+            m = str(mo or "").strip().upper()
+            s = str(sku or "").strip().upper()
+            return ("M|" + m + "|" + s) if m else ("S|" + s)
+
+        def resolver(clave_raw, sku, mo):
+            c = str(clave_raw or "").strip()
+            if c.startswith("M|") or c.startswith("S|"):
+                return c
+            parts = c.split("|")
+            if len(parts) >= 3 and parts[0].isdigit():
+                return clave("|".join(parts[2:]), parts[1])
+            if str(mo or "").strip() or str(sku or "").strip():
+                return clave(mo, sku)
+            return ""
+
+        k = clave("00393", "VARBADA12TXS")
+        self.assertEqual(k, "M|00393|VARBADA12TXS")
+        self.assertEqual(resolver("0|VARBADA12TXS|00393", "VARBADA12TXS", "00393"), k)
+        self.assertEqual(resolver("9|VARBADA12TXS|00393", "VARBADA12TXS", "00393"), k)
+        self.assertEqual(resolver("5|MAR-058|PD-182", "MAR-058", "PD-182"), "M|PD-182|MAR-058")
+        self.assertNotEqual(clave("00393", "VARBADA12TXS"), clave("00394", "VARBADA12TXS"))
 
 
 if __name__ == "__main__":
