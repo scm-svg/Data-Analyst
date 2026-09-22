@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.35 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.36 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -3269,6 +3269,9 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("Ya producido", html)
         self.assertIn("window.togAlmCal", html)
         self.assertIn("labels:['Producido','Por producir']", html)
+        self.assertIn("function fusionarProducidaAlm()", html)
+        self.assertIn("Ya producida", html)
+        self.assertIn("function esYaProdAlm(", html)
 
     def test_pendientes_mix_incluye_sin_planificar(self):
         html = self._html()
@@ -3320,11 +3323,14 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.35"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.36"', gs)
         self.assertIn("function moCerradaDash_(", gs)
         self.assertIn("function aplicarProducidaAlmacen_(", gs)
         self.assertIn("s.producida = ord.abiertas[key] || 0;", gs)
         self.assertIn("aplicarProducidaAlmacen_(ss, resp);", gs)
+        self.assertIn("function consolidarAlmacenModelo_(", gs)
+        self.assertIn("s.yaProducida", gs)
+        self.assertIn("inyectada: true", gs)
         self.assertIn("function claveCheckImp_(mo, sku)", gs)
         self.assertIn("function elegirChecksImp_(filas)", gs)
         i_cache = gs.find("function guardarCacheDashboard_")
@@ -3387,6 +3393,104 @@ class TestDashboardUx(unittest.TestCase):
         self.assertEqual(resolver("9|VARBADA12TXS|00393", "VARBADA12TXS", "00393"), k)
         self.assertEqual(resolver("5|MAR-058|PD-182", "MAR-058", "PD-182"), "M|PD-182|MAR-058")
         self.assertNotEqual(clave("00393", "VARBADA12TXS"), clave("00394", "VARBADA12TXS"))
+
+
+def clave_alm_cli(mo, sku):
+    m = str(mo or "").strip().upper()
+    if m.endswith(".0"):
+        m = m[:-2]
+    mm = re.match(r"^0*([0-9]+)(.*)$", m)
+    if mm:
+        m = mm.group(1) + mm.group(2)
+    if re.search(r"\.0+$", m):
+        m = re.sub(r"\.0+$", "", m)
+    return m + "||" + str(sku or "").strip().upper()
+
+
+def fusionar_producida_alm(almacen_sku, backlog):
+    """Espejo de fusionarProducidaAlm / inyectarRec_ para órdenes ya producidas."""
+    out = [dict(s) for s in (almacen_sku or [])]
+    seen = {}
+    for s in out:
+        seen[clave_alm_cli(s.get("mo"), s.get("sku"))] = s
+        if s.get("sku"):
+            seen["SKU||" + str(s.get("sku")).strip().upper()] = s
+    for b in backlog or []:
+        prod = float(b.get("producida") or 0)
+        if prod <= 0:
+            continue
+        key = clave_alm_cli(b.get("mo"), b.get("sku"))
+        sku = str(b.get("sku") or "").strip().upper()
+        s = seen.get(key) or seen.get("SKU||" + sku)
+        ya = not (float(b.get("faltante") or 0) > 0) and prod > 0
+        if s:
+            if not (float(s.get("producida") or 0) > 0):
+                s["producida"] = prod
+            if b.get("modelo"):
+                s["modelo"] = b["modelo"]
+            if ya:
+                s["yaProducida"] = True
+                s["estado"] = "Ya producida"
+            continue
+        row = {
+            "mo": b.get("mo"),
+            "sku": b.get("sku"),
+            "producto": b.get("detalle") or b.get("modelo") or "",
+            "modelo": b.get("modelo") or "",
+            "cantidad": float(b.get("solicitada") or prod),
+            "producida": prod,
+            "cerrada": False,
+            "yaProducida": ya,
+            "estado": "Ya producida" if ya else "",
+            "inyectada": True,
+        }
+        out.append(row)
+        seen[key] = row
+        if sku:
+            seen["SKU||" + sku] = row
+    return out
+
+
+class TestAlmacenYaProducida(unittest.TestCase):
+    def test_adjunta_producida_de_por_hacer_e_inyecta_faltante_cero(self):
+        sku_plan = [
+            {"mo": "00460", "sku": "MARMICA43T2XL", "producto": "MAR - CAB", "modelo": "MAR",
+             "cantidad": 3, "producida": 0, "cerrada": False},
+            {"mo": "01188", "sku": "MLMMJDA12TL", "producto": "MOTION LOOP MAFE", "modelo": "MOTION LOOP MAFE",
+             "cantidad": 24, "producida": 0, "cerrada": False},
+        ]
+        backlog = [
+            {"mo": "00460", "sku": "MARMICA43T2XL", "modelo": "MAR CAB", "detalle": "MAR-CAB",
+             "solicitada": 8, "producida": 5, "faltante": 3},
+            {"mo": "00459", "sku": "MARMICA43TXL", "modelo": "MAR CAB", "detalle": "MAR-CAB",
+             "solicitada": 16, "producida": 16, "faltante": 0},
+            {"mo": "00471", "sku": "MARMICA16TS", "modelo": "MAR CAB", "detalle": "MAR-CAB",
+             "solicitada": 12, "producida": 12, "faltante": 0},
+            {"mo": "01188", "sku": "MLMMJDA12TL", "modelo": "MOTION LOOP MAFE DAMA",
+             "detalle": "ML-DAMA", "solicitada": 24, "producida": 0, "faltante": 24},
+        ]
+        out = fusionar_producida_alm(sku_plan, backlog)
+        by = {s["sku"]: s for s in out}
+        self.assertEqual(by["MARMICA43T2XL"]["producida"], 5)
+        self.assertEqual(by["MARMICA43T2XL"]["modelo"], "MAR CAB")
+        self.assertFalse(by["MARMICA43T2XL"].get("yaProducida"))
+        self.assertEqual(by["MARMICA43TXL"]["producida"], 16)
+        self.assertTrue(by["MARMICA43TXL"]["yaProducida"])
+        self.assertEqual(by["MARMICA43TXL"]["estado"], "Ya producida")
+        self.assertTrue(by["MARMICA43TXL"]["inyectada"])
+        self.assertEqual(by["MARMICA16TS"]["producida"], 12)
+        self.assertTrue(by["MARMICA16TS"]["yaProducida"])
+        self.assertEqual(by["MLMMJDA12TL"]["producida"], 0)
+        self.assertEqual(sum(s["producida"] for s in out), 33)
+
+    def test_mo_con_ceros_y_decimal_cruza_igual(self):
+        sku_plan = [{"mo": "00459", "sku": "MARMICA43TXL", "cantidad": 16, "producida": 0}]
+        backlog = [{"mo": "459.0", "sku": "MARMICA43TXL", "modelo": "MAR CAB",
+                    "solicitada": 16, "producida": 16, "faltante": 0}]
+        out = fusionar_producida_alm(sku_plan, backlog)
+        self.assertEqual(out[0]["producida"], 16)
+        self.assertTrue(out[0]["yaProducida"])
+        self.assertEqual(len(out), 1)
 
 
 if __name__ == "__main__":
