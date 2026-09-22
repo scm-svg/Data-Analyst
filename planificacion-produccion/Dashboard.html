@@ -722,7 +722,6 @@ function pintarEstadoGuardarImp_(extra){
     if(!t){
       if(_impGuardando) t='Enviando los checks a Planificación de Producción…';
       else if(_impDirty) t='Hay checks sin guardar. Si sales del dashboard, estos cambios no quedan en la hoja.';
-      else t='Los logos listos quedan guardados por orden. Si la MO cambia de semana, el check se mantiene.';
     }
     msg.textContent=t;
     msg.className='imp-save-msg'+(_impDirty||_impGuardando?' dirty':' ok');
