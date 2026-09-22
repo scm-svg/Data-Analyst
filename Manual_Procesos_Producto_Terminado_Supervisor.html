@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOMOS CUADRO — SOP Supervisor Producto Terminado</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f6fb; --surface: #fff; --surface2: #f0f3fa; --border: #e2e8f0;
+  --text: #1e293b; --muted: #64748b; --accent: #2563eb; --accent-light: #dbeafe;
+  --green: #059669; --green-bg: #d1fae5; --orange: #d97706; --orange-bg: #fef3c7;
+  --purple: #7c3aed; --purple-bg: #ede9fe; --red: #dc2626; --shadow: 0 1px 3px rgba(15,23,42,.08), 0 4px 16px rgba(15,23,42,.06);
+  --radius: 14px; --font-head: 'Plus Jakarta Sans', sans-serif; --font-body: 'Inter', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font-body); background:var(--bg); color:var(--text); line-height:1.6; }
+.header { background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%); color:#fff; padding:28px 32px 20px; box-shadow:0 4px 24px rgba(37,99,235,.25); }
+.brand-tag { font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-bottom:4px; }
+.header h1 { font-family:var(--font-head); font-size:1.65rem; font-weight:800; }
+.header p { font-size:.88rem; opacity:.85; margin-top:6px; max-width:720px; }
+.meta-chip { display:inline-block; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:5px 14px; font-size:.75rem; font-weight:600; margin:12px 8px 0 0; }
+.container { max-width:1100px; margin:0 auto; padding:28px 24px 60px; }
+.section-title { font-family:var(--font-head); font-size:1.3rem; font-weight:800; margin:28px 0 6px; }
+.section-sub { color:var(--muted); font-size:.88rem; margin-bottom:20px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:18px; }
+.card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:12px; }
+.info-box { background:var(--accent-light); border:1px solid #93c5fd; border-radius:12px; padding:14px 18px; font-size:.84rem; color:#1e40af; margin-bottom:20px; }
+.steps { display:flex; flex-direction:column; gap:0; }
+.step { display:grid; grid-template-columns:44px 1fr; gap:0 16px; position:relative; padding-bottom:18px; }
+.step:not(:last-child)::before { content:''; position:absolute; left:21px; top:44px; bottom:0; width:2px; background:var(--border); }
+.step-num { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:800; background:var(--accent-light); color:var(--accent); z-index:1; }
+.step-body { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+.step-body h5 { font-family:var(--font-head); font-size:.88rem; font-weight:700; margin-bottom:4px; }
+.step-body p { font-size:.82rem; color:var(--muted); }
+.badge { display:inline-block; font-size:.7rem; font-weight:700; padding:3px 10px; border-radius:999px; margin-top:8px; }
+.badge.supervisor { background:#dbeafe; color:#1d4ed8; }
+.badge.produccion { background:#d1fae5; color:#065f46; }
+.badge.logistica { background:#ede9fe; color:#5b21b6; }
+.process-map { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-items:stretch; margin:16px 0; }
+@media(max-width:900px){ .process-map { grid-template-columns:1fr; } }
+.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; font-size:.78rem; }
+.map-node strong { display:block; font-family:var(--font-head); margin-bottom:4px; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th { background:var(--surface2); color:var(--muted); font-size:.7rem; text-transform:uppercase; padding:10px 12px; text-align:left; border-bottom:2px solid var(--border); }
+td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.flow { font-family:ui-monospace, monospace; font-size:.78rem; background:#0f172a; color:#e2e8f0; padding:18px; border-radius:12px; line-height:1.5; overflow-x:auto; white-space:pre; }
+.footer { text-align:center; padding:24px; color:var(--muted); font-size:.78rem; border-top:1px solid var(--border); margin-top:32px; }
+a.dl { display:inline-flex; align-items:center; gap:8px; background:#fff; color:var(--accent); font-weight:700; font-size:.85rem; padding:10px 18px; border-radius:10px; text-decoration:none; margin-top:8px; }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="brand-tag">SOMOS CUADRO · Producto Terminado</div>
+  <h1>SOP — Supervisor de Producto Terminado</h1>
+  <p>Manufacturado &amp; Equipamiento · Validación en Odoo, trazabilidad MP→PT e interfaz con Logística e Inventarios.</p>
+  <span class="meta-chip">Código SOP-PT-001</span>
+  <span class="meta-chip">Versión 1.0 · Sep 2026</span>
+  <span class="meta-chip">Base: Manual Logística e Inventarios</span>
+</header>
+
+<main class="container">
+  <div class="info-box">
+    <strong>Propósito:</strong> Este dashboard resume el procedimiento operativo estándar del supervisor de PT. El documento formal para auditoría y capacitación es el archivo Word <em>SOP_Supervisor_Producto_Terminado_Manufacturado_Equipamiento.docx</em> (misma estructura que SOP Logística).
+  </div>
+
+  <h2 class="section-title">Mapa PT en la cadena Somos Cuadro</h2>
+  <p class="section-sub">Extiende el mapa del manual de Logística (Requisición → Recepción → Despacho MP) hacia manufactura y validación.</p>
+  <div class="process-map">
+    <div class="map-node"><strong>MP en piso</strong>Preproducción · OT + trazos Audaces</div>
+    <div class="map-node"><strong>1.ª etapa</strong>Traslado por ola · descuento tela</div>
+    <div class="map-node"><strong>Manufactura</strong>Confección / equipamiento</div>
+    <div class="map-node"><strong>Validación</strong>Aprobar MP · validar PT</div>
+    <div class="map-node"><strong>Despacho</strong>Logística · tiendas</div>
+  </div>
+
+  <h2 class="section-title">Fases del procedimiento (7)</h2>
+  <p class="section-sub">Alineado al SOP Word — responsabilidades del supervisor de PT.</p>
+
+  <div class="card">
+    <div class="steps">
+      <div class="step"><div class="step-num">I</div><div class="step-body"><h5>Planificación OT y desbloqueo</h5><p>Validar SKUs/variantes vs Odoo y web; coordinar entrega MP con Supervisor Logística; frenar OT con variantes inexistentes.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+      <div class="step"><div class="step-num">II</div><div class="step-body"><h5>Recepción en piso</h5><p>Auditar entrega física vs picking; Sheets MP + traslado Odoo (TH/Existencia MP → Preproducción).</p><span class="badge logistica">Interfaz Logística</span></div></div>
+      <div class="step"><div class="step-num">III</div><div class="step-body"><h5>Manufactura en proceso</h5><p>Seguimiento OT, etiquetado, equipamiento (seriales/accesorios), 5S en zona PT.</p><span class="badge produccion">Supervisa Producción</span></div></div>
+      <div class="step"><div class="step-num">IV</div><div class="step-body"><h5>Pre-validación / banderas</h5><p>Cruce insumos pendientes vs reservas Odoo; alertas de stock; priorización OT críticas (Tolón, Valencia AM).</p><span class="badge supervisor">Supervisor PT</span></div></div>
+      <div class="step"><div class="step-num">V</div><div class="step-body"><h5>Validación e ingreso PT</h5><p>Aprobar MP consumida (obligatorio); validar OT; ingreso a ubicación teórica; cruce SKU final. Bloqueo si traslados MP sin auditar.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+      <div class="step"><div class="step-num">VI</div><div class="step-body"><h5>Calidad y entrega a Logística</h5><p>Muestreo QA PT; empaque alineado a despacho; stock apto vs cuarentena; handoff a reabastecimiento tiendas.</p><span class="badge logistica">Handoff Logística</span></div></div>
+      <div class="step"><div class="step-num">VII</div><div class="step-body"><h5>Inventario cíclico PT</h5><p>Conciliación Odoo, reservas, layout y nuevas ubicaciones lógicas PT/equipamiento.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Punto crítico — MP y Producto Terminado</h2>
+  <p class="section-sub">Extraído del manual Logística (Análisis / Automatización).</p>
+  <div class="card">
+    <h4>Descuentos en la orden de manufactura</h4>
+    <ul style="margin-left:18px;font-size:.84rem;color:var(--muted);">
+      <li><strong>Tela (1.ª etapa):</strong> traslado por ola vinculado a OT — descuento al inicio.</li>
+      <li><strong>Insumos (Validación):</strong> hang tag, TPU, tinta, cordones — descuento en última etapa.</li>
+      <li><strong>Regla de oro:</strong> sin aprobar MP consumida en Validación, <em>no</em> se valida ni ingresa PT a ubicación teórica.</li>
+    </ul>
+  </div>
+
+  <h2 class="section-title">Matriz de atribuciones (resumen)</h2>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table>
+      <thead><tr><th>Proceso</th><th>Supervisor PT (directo)</th><th>Delegado / supervisado</th></tr></thead>
+      <tbody>
+        <tr><td>Validación OT / SKUs</td><td>Cruce catálogo Odoo · web</td><td>Operadores confección</td></tr>
+        <tr><td>MP en manufactura</td><td>Auditoría traslados · pre-validación</td><td>Registro Sheets · picking MP</td></tr>
+        <tr><td>Validación PT</td><td>Aprobar MP · validar · ingreso teórico</td><td>Presentación unidades terminadas</td></tr>
+        <tr><td>Contingencias</td><td>Priorización OT · reasignación</td><td>Reporte faltantes anaquel</td></tr>
+        <tr><td>Inventario cíclico PT</td><td>Conciliación Odoo · ubicaciones</td><td>Conteo ciego 5S</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title">Flujo documental</h2>
+  <div class="card"><div class="flow">[Requisición → QA → MP Odoo]
+        ↓
+[OT + Audaces → MP Preproducción]
+        ↓
+[Etapa 1: descuento TELA por ola]
+        ↓
+[Manufactura / Equipamiento]
+        ↓
+[Pre-validación insumos + MP]
+        ↓
+[Validación: Aprobar MP → Validar PT → Ubicación teórica]
+        ↓
+[QA PT] → [Logística: reabastecimiento tiendas]
+        ↓
+[Inventario cíclico PT semanal]</div></div>
+
+  <div class="footer">Somos Cuadro · SOP Supervisor Producto Terminado (Manufacturado &amp; Equipamiento) · Complemento visual del manual Logística e Inventarios</div>
+</main>
+</body>
+</html>
