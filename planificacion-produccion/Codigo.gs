@@ -1,10 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.36 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.37 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ALMACÉN ESTADOS Y KPIs: Produccion Parcial (amarillo) si hay
+ *     piezas hechas pero aún falta. En blanco si producida = 0.
+ *     Ya producida solo cuando el SKU está completo y, en el modelo,
+ *     cuando TODOS los SKUs del desglose lo están. El encabezado
+ *     Plan 12 sem = plan del horizonte; Pendiente = lo que quedó
+ *     fuera; A producir = Faltante de Por Hacer. El gráfico
+ *     Planificado vs producido usa Cantidad Solicitada y Cantida
+ *     Producida del archivo.
  *   - ALMACÉN YA PRODUCIDA: Cantidad producida y el gráfico Producido
  *     leen Cantida Producida de Por Hacer y Por Hacer - Especial. Si la
  *     MO no entró al plan porque el Faltante ya es 0, igual se lista
@@ -191,7 +199,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.36";
+var VERSION_SISTEMA = "5.9.37";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -4492,7 +4500,7 @@ function supuestosDashboard_(capsModelo) {
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez. Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
-    "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0: se marca Ya producida. Una orden Hecho, Cerrada o Cancelada, o que ya no está en esas pestañas, sale de Entrada de almacén."
+    "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida."
     ]
   };
 }
@@ -4506,6 +4514,54 @@ function claveOrdenAlm_(mo, sku) {
   var m = claveLookupMO_(mo);
   if (/\.0+$/.test(m)) m = m.replace(/\.0+$/, "");
   return m + "||" + normUp_(sku);
+}
+
+/** SKU: Ya producida / Produccion Parcial / blanco. Sin producción no hay estado. */
+function estadoProdAlm_(producida, faltante, solicitada) {
+  var prod = Number(producida) || 0;
+  if (!(prod > 0)) return "";
+  if (faltante !== "" && faltante !== null && faltante !== undefined) {
+    var falt = Number(faltante);
+    if (!isNaN(falt)) return falt > 0 ? "Produccion Parcial" : "Ya producida";
+  }
+  var sol = Number(solicitada) || 0;
+  if (sol > 0 && prod >= sol) return "Ya producida";
+  return "Produccion Parcial";
+}
+
+function aplicarEstadoSkuAlm_(s, producida, faltante, solicitada) {
+  s.producida = Number(producida) || 0;
+  s.estado = estadoProdAlm_(s.producida, faltante, solicitada != null ? solicitada : s.cantidad);
+  s.yaProducida = s.estado === "Ya producida";
+  if (s.estado !== "Ya producida" && String(s.entradaAlmacen || "") === "Ya producida") {
+    s.entradaAlmacen = "";
+  }
+  return s.estado;
+}
+
+function estadoModeloAlm_(skus, backlog, cantidadModelo, producidaModelo) {
+  var rows = (backlog && backlog.length) ? backlog : (skus || []);
+  if (!rows.length) {
+    return (Number(producidaModelo) || 0) > 0 ? "Produccion Parcial" : "";
+  }
+  var nYa = 0, nPar = 0, sumCant = 0, i, r, est, prod;
+  for (i = 0; i < rows.length; i++) {
+    r = rows[i];
+    prod = Number(r.producida) || 0;
+    est = r.estado || estadoProdAlm_(
+      prod,
+      r.faltante != null ? r.faltante : r.faltantes,
+      r.solicitada != null ? r.solicitada : r.cantidad
+    );
+    if (est === "Ya producida") nYa++;
+    else if (est === "Produccion Parcial") nPar++;
+    sumCant += Number(r.solicitada != null ? r.solicitada : r.cantidad) || 0;
+  }
+  var desglosado = true;
+  if (Number(cantidadModelo) > 0 && sumCant + 0.001 < Number(cantidadModelo)) desglosado = false;
+  if (desglosado && nYa === rows.length) return "Ya producida";
+  if (nYa + nPar > 0 || (Number(producidaModelo) || 0) > 0) return "Produccion Parcial";
+  return "";
 }
 
 function modeloAlmDeFila_(producto, genero, esEspecial) {
@@ -4635,8 +4691,11 @@ function consolidarAlmacenModelo_(resp) {
   (resp.almacenModelo || []).forEach(function (m) {
     if (!m || !m.modelo) return;
     byMod[m.modelo] = m;
-    if (m.producida == null) m.producida = 0;
+    m.producida = 0;
+    m.yaProducida = false;
+    m.estado = "";
   });
+  var skusPorMod = {};
   (resp.almacenSku || []).forEach(function (s) {
     if (!s || s.cerrada || !s.modelo) return;
     var m = byMod[s.modelo];
@@ -4655,6 +4714,8 @@ function consolidarAlmacenModelo_(resp) {
       if (!resp.almacenModelo) resp.almacenModelo = [];
       resp.almacenModelo.push(m);
     }
+    if (!skusPorMod[s.modelo]) skusPorMod[s.modelo] = [];
+    skusPorMod[s.modelo].push(s);
     m.producida = (Number(m.producida) || 0) + (Number(s.producida) || 0);
     if (s.inyectada) {
       m.cantidad = (Number(m.cantidad) || 0) + (Number(s.cantidad) || 0);
@@ -4662,7 +4723,25 @@ function consolidarAlmacenModelo_(resp) {
       if (!m.salidaCostura && s.salidaCostura) m.salidaCostura = s.salidaCostura;
       if (!m.entradaAlmacen && s.entradaAlmacen) m.entradaAlmacen = s.entradaAlmacen;
     }
-    if (s.yaProducida) m.yaProducida = true;
+  });
+  var backPorMod = {};
+  (resp.backlog || []).forEach(function (b) {
+    if (!b || !b.modelo) return;
+    if (!backPorMod[b.modelo]) backPorMod[b.modelo] = [];
+    backPorMod[b.modelo].push(b);
+  });
+  Object.keys(byMod).forEach(function (nom) {
+    var m = byMod[nom];
+    m.estado = estadoModeloAlm_(
+      skusPorMod[nom] || [],
+      backPorMod[nom] || [],
+      m.cantidad,
+      m.producida
+    );
+    m.yaProducida = m.estado === "Ya producida";
+    if (m.estado !== "Ya producida" && String(m.entradaAlmacen || "") === "Ya producida") {
+      m.entradaAlmacen = "";
+    }
   });
 }
 
@@ -4682,42 +4761,37 @@ function aplicarProducidaAlmacen_(ss, resp) {
     marcarVisto_(s.mo, s.sku);
     if (ord.cerradas[key]) {
       s.cerrada = true;
-      s.producida = 0;
-      s.yaProducida = false;
+      aplicarEstadoSkuAlm_(s, 0, 1, s.cantidad);
       return;
     }
     var rec = recOrdenAlm_(ord, s.mo, s.sku);
     if (rec) {
       s.cerrada = false;
-      s.producida = rec.producida || 0;
       if (rec.modelo) s.modelo = rec.modelo;
-      s.yaProducida = rec.faltante <= 0 && rec.producida > 0;
-      if (s.yaProducida) s.estado = "Ya producida";
+      s.faltantes = rec.faltante > 0 ? rec.faltante : 0;
+      aplicarEstadoSkuAlm_(s, rec.producida || 0, rec.faltante, rec.solicitada || s.cantidad);
+      if (s.yaProducida && !s.entradaAlmacen) s.entradaAlmacen = "Ya producida";
       return;
     }
     if (ord.abiertas.hasOwnProperty(key)) {
       s.cerrada = false;
-      s.producida = ord.abiertas[key] || 0;
-      s.yaProducida = s.producida > 0 && (Number(s.cantidad) || 0) > 0 && s.producida >= (Number(s.cantidad) || 0);
-      if (s.yaProducida) s.estado = "Ya producida";
+      aplicarEstadoSkuAlm_(s, ord.abiertas[key] || 0, null, s.cantidad);
+      if (s.yaProducida && !s.entradaAlmacen) s.entradaAlmacen = "Ya producida";
       return;
     }
     if (ord.skuAbierta.hasOwnProperty(sku)) {
       s.cerrada = false;
-      s.producida = ord.skuAbierta[sku] || 0;
-      s.yaProducida = s.producida > 0 && (Number(s.cantidad) || 0) > 0 && s.producida >= (Number(s.cantidad) || 0);
-      if (s.yaProducida) s.estado = "Ya producida";
+      aplicarEstadoSkuAlm_(s, ord.skuAbierta[sku] || 0, null, s.cantidad);
+      if (s.yaProducida && !s.entradaAlmacen) s.entradaAlmacen = "Ya producida";
       return;
     }
     if (ord.skuVista[sku]) {
       s.cerrada = false;
-      s.producida = 0;
-      s.yaProducida = false;
+      aplicarEstadoSkuAlm_(s, 0, 1, s.cantidad);
       return;
     }
     s.cerrada = true;
-    s.producida = 0;
-    s.yaProducida = false;
+    aplicarEstadoSkuAlm_(s, 0, 1, s.cantidad);
   });
 
   function inyectarRec_(rec) {
@@ -4725,7 +4799,8 @@ function aplicarProducidaAlmacen_(ss, resp) {
     if (ord.cerradas[rec.key]) return;
     if (!(rec.producida > 0)) return;
     if (seen[rec.key] || seen["SKU||" + rec.sku]) return;
-    var ya = !(rec.faltante > 0) && rec.producida > 0;
+    var est = estadoProdAlm_(rec.producida, rec.faltante, rec.solicitada);
+    var ya = est === "Ya producida";
     var fec = fechasInyectadasAlm_(tz, rec.fechaSalidaMs);
     resp.almacenSku.push({
       mo: rec.moRaw || rec.mo || "",
@@ -4740,7 +4815,7 @@ function aplicarProducidaAlmacen_(ss, resp) {
       faltantes: rec.faltante > 0 ? rec.faltante : 0,
       cerrada: false,
       yaProducida: ya,
-      estado: ya ? "Ya producida" : "",
+      estado: est,
       inyectada: true
     });
     seen[rec.key] = true;
