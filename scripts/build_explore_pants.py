@@ -7,6 +7,7 @@ import json
 import math
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -1665,32 +1666,84 @@ def export_excel(data: dict, path: Path) -> None:
             ws.write(row, 2, 1, pct)
             row += 2
 
-        # ── Cantidades por Colores (total) ──
+        # ── Cantidades por Colores (total + desglose género) ──
+        by_gc: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for p in data["production_plan"]:
+            by_gc[p["color"]][p["genero"]] += p["produce_min"]
+
         ws = wb.add_worksheet("Cantidades por Colores")
         row = 0
         ws.write(row, 0, "EXPLORE PANTS — UNIDADES A PRODUCIR POR COLOR (TOTAL)", title)
+        row += 1
+        ws.write(row, 0, f"Generado: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         row += 2
         ws.write_row(
-            row, 0,
-            ["Color", "Und a producir", "% producción", "% compra tela", "Kg tela comprada"],
+            row,
+            0,
+            [
+                "Color",
+                "Und CAB",
+                "Und DAMA",
+                "Und KIDS",
+                "Und total",
+                "% producción",
+                "% compra tela",
+                "Kg tela comprada",
+            ],
             hdr,
         )
         row += 1
         explore_total = sum(summary[g]["produce"] for g in summary)
         for color in COLORES_PRODUCCION:
-            und = color_targets.get(color, 0)
+            und_c = by_gc[color].get("CAB", 0)
+            und_d = by_gc[color].get("DAMA", 0)
+            und_k = by_gc[color].get("KIDS", 0)
+            und = und_c + und_d + und_k
             kg = TELA_KG_EXISTENCIA[color]
             ws.write(row, 0, color)
-            ws.write(row, 1, und, num)
-            ws.write(row, 2, und / explore_total if explore_total else 0, pct2)
-            ws.write(row, 3, kg / TELA_KG_TOTAL if TELA_KG_TOTAL else 0, pct2)
-            ws.write(row, 4, kg, dec)
+            ws.write(row, 1, und_c, num)
+            ws.write(row, 2, und_d, num)
+            ws.write(row, 3, und_k, num)
+            ws.write(row, 4, und, num)
+            ws.write(row, 5, und / explore_total if explore_total else 0, pct2)
+            ws.write(row, 6, kg / TELA_KG_TOTAL if TELA_KG_TOTAL else 0, pct2)
+            ws.write(row, 7, kg, dec)
             row += 1
         ws.write(row, 0, "TOTAL", bold)
-        ws.write(row, 1, explore_total, num)
-        ws.write(row, 2, 1, pct)
-        ws.write(row, 3, 1, pct)
-        ws.write(row, 4, TELA_KG_TOTAL, dec)
+        ws.write(row, 1, summary["CAB"]["produce"], num)
+        ws.write(row, 2, summary["DAMA"]["produce"], num)
+        ws.write(row, 3, summary["KIDS"]["produce"], num)
+        ws.write(row, 4, explore_total, num)
+        ws.write(row, 5, 1, pct)
+        ws.write(row, 6, 1, pct)
+        ws.write(row, 7, TELA_KG_TOTAL, dec)
+        row += 2
+        ws.write(row, 0, "KIDS Kaki (referencia rápida)", section)
+        row += 1
+        ws.write_row(
+            row,
+            0,
+            ["KIDS · Kaki", by_gc["Kaki"].get("KIDS", 0), "und · tallas 2–12 · sin 14"],
+        )
+
+        # ── KIDS — matriz color × talla (incl. Kaki) ──
+        ws = wb.add_worksheet("KIDS Color x Talla")
+        row = 0
+        ws.write(row, 0, "EXPLORE PANTS — KIDS (COLOR × TALLA)", title)
+        row += 2
+        rd_k = rango["KIDS"]
+        tallas_k = sort_tallas(
+            "KIDS",
+            list({t["talla"] for cr in rd_k["color_rows"] for t in cr["tallas"]}),
+        )
+        ws.write_row(row, 0, ["Color / Talla"] + tallas_k + ["Total"], hdr)
+        row += 1
+        for cr in rd_k["color_rows"]:
+            by_min = {t["talla"]: t["produce_min"] for t in cr["tallas"]}
+            ws.write_row(row, 0, [cr["color"]] + [by_min.get(t, 0) for t in tallas_k] + [cr["min"]])
+            row += 1
+        ws.write(row, 0, "TOTAL KIDS", bold)
+        ws.write(row, len(tallas_k) + 1, summary["KIDS"]["produce"], num)
 
         # ── Rango MÍN / MÁX por género ──
         ws = wb.add_worksheet("Rango Min Max")
