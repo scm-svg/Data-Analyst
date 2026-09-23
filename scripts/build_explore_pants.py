@@ -83,6 +83,7 @@ FABRIC_TRIM_ORDER: list[tuple[str, str]] = [
 KIDS_GRIS_MIN_UNITS = 48
 KIDS_FULL_CURVE_IDEAL_FACTOR = 0.82
 KIDS_TALLA_WEIGHT_MIN_SALES = 30  # bajo esto, curva talla del género (dashboard)
+KIDS_KAKI_MIN_TALLAS = 6  # presencia mínima en tallas 2–12
 
 # ── Fuente de verdad: justificación compra tela (Explore Pants) ──
 PRODUCE_TOTAL = 2900  # meta Explore Pants con tela en almacén
@@ -516,6 +517,8 @@ def gc_fill_priority(df: pd.DataFrame, genero: str, color: str) -> float:
         base += 50_000
     if genero == "KIDS" and color == "Gris Oscuro":
         base += 20_000
+    if genero == "KIDS" and color == "Kaki":
+        base += 45_000
     return base
 
 
@@ -602,6 +605,8 @@ def protect_kids_curve_colors(
     gc: dict[tuple[str, str], int],
     df: pd.DataFrame,
     kg_budget: dict[str, float],
+    *,
+    kaki_floor: int = 0,
 ) -> dict[tuple[str, str], int]:
     """Gris/Azul KIDS: presencia en todas las tallas + peso cercano al ranking ventas."""
     g_targets = gender_targets(df)
@@ -612,6 +617,11 @@ def protect_kids_curve_colors(
 
     cab_order = sales_color_order(df, "CAB")
 
+    def donor_ok(donor: str) -> bool:
+        if donor == "Kaki":
+            return gc.get(("KIDS", "Kaki"), 0) > kaki_floor
+        return True
+
     for color in KIDS_FULL_CURVE_COLORS:
         key = ("KIDS", color)
         floor = kids_full_curve_floor(color, ideal, n_tallas)
@@ -619,7 +629,7 @@ def protect_kids_curve_colors(
             moved = False
             if color == "Gris Oscuro":
                 for kid_donor in donors:
-                    if kid_donor == color:
+                    if kid_donor == color or not donor_ok(kid_donor):
                         continue
                     if gc.get(("KIDS", kid_donor), 0) <= 1:
                         continue
@@ -630,7 +640,7 @@ def protect_kids_curve_colors(
                         break
             else:
                 for kid_donor in donors:
-                    if kid_donor == color:
+                    if kid_donor == color or not donor_ok(kid_donor):
                         continue
                     kd = ("KIDS", kid_donor)
                     if gc.get(kd, 0) <= n_tallas and kid_donor not in KIDS_FULL_CURVE_COLORS:
@@ -884,20 +894,21 @@ def allocate_tallas_for_color(
     if genero == "CAB":
         t_weights = {t: w * (CAB_2XL_BOOST if t == "2XL" else 1.0) for t, w in t_weights.items()}
 
-    if genero == "KIDS" and color in KIDS_FULL_CURVE_COLORS:
-        tallas = [t for t in KIDS_STD_TALLAS if t not in PRODUCTION_EXCLUDE_TALLAS.get("KIDS", set())]
-        for t in tallas:
+    kids_tallas = [t for t in KIDS_STD_TALLAS if t not in PRODUCTION_EXCLUDE_TALLAS.get("KIDS", set())]
+    if genero == "KIDS" and color in (KIDS_FULL_CURVE_COLORS | {"Kaki"}):
+        for t in kids_tallas:
             t_weights.setdefault(t, t_weights.get(t, 0) or 1.0)
-        n_floor = len(tallas)
+        n_floor = len(kids_tallas)
         if c_target <= 0:
             return []
         if c_target < n_floor:
-            weights = {t: t_weights.get(t, 1.0) for t in tallas}
-            alloc = allocate_by_weights(weights, c_target)
+            alloc = allocate_by_weights({t: t_weights.get(t, 1.0) for t in kids_tallas}, c_target)
         else:
-            floor = {t: 1 for t in tallas}
-            extra = allocate_by_weights({t: t_weights.get(t, 1.0) for t in tallas}, c_target - n_floor)
-            alloc = {t: floor[t] + extra.get(t, 0) for t in tallas}
+            floor = {t: 1 for t in kids_tallas}
+            extra = allocate_by_weights(
+                {t: t_weights.get(t, 1.0) for t in kids_tallas}, c_target - n_floor
+            )
+            alloc = {t: floor[t] + extra.get(t, 0) for t in kids_tallas}
     else:
         tallas = sort_tallas(genero, list(t_weights.keys()))
         alloc = allocate_by_weights({t: t_weights.get(t, 0) for t in tallas}, c_target)
@@ -1059,6 +1070,72 @@ def find_plan_entry(plan: list, genero: str, color: str) -> dict | None:
     return None
 
 
+def kids_color_units_target(df: pd.DataFrame, color: str, kids_target: int) -> int:
+    gdf = df[df["genero"] == "KIDS"]
+    sales = float(gdf[gdf["prod_color"] == color]["v"].sum())
+    total = float(gdf["v"].sum()) or 1.0
+    return int(round(kids_target * sales / total))
+
+
+def reserve_kaki_kg_for_kids(
+    adult_plan: list,
+    explore_budget: dict[str, float],
+    kaki_kids_units: int,
+) -> list:
+    """Recorta Kaki CAB/DAMA hasta dejar kg para KIDS Kaki (dashboard)."""
+    need_kg = kaki_kids_units * TELA_CONSUMO["KIDS"] + 0.08
+    plan = [dict(p, tallas=[dict(t) for t in p["tallas"]]) for p in adult_plan]
+    toggle = 0
+    for _ in range(15_000):
+        used = kg_explore_by_color_plan(plan).get("Kaki", 0.0)
+        slack = explore_budget.get("Kaki", 0.0) - used
+        if slack + 0.001 >= need_kg:
+            break
+        order = [("CAB", "Kaki"), ("DAMA", "Kaki")] if toggle % 2 == 0 else [("DAMA", "Kaki"), ("CAB", "Kaki")]
+        toggle += 1
+        removed = False
+        for genero, color in order:
+            entry = find_plan_entry(plan, genero, color)
+            if entry and remove_one_from_plan_entry(entry):
+                removed = True
+                break
+        if not removed:
+            break
+    return plan
+
+
+def protect_kids_kaki(
+    gc: dict[tuple[str, str], int],
+    df: pd.DataFrame,
+    kg_slack: dict[str, float],
+    floor: int,
+) -> dict[tuple[str, str], int]:
+    if floor <= 0:
+        return gc
+    order = sales_color_order(df, "KIDS")
+    donors = list(reversed(order))
+    while gc.get(("KIDS", "Kaki"), 0) < floor:
+        moved = False
+        for donor in donors:
+            if donor == "Kaki":
+                continue
+            if gc.get(("KIDS", donor), 0) <= 1:
+                continue
+            trial = dict(gc)
+            trial[("KIDS", "Kaki")] = trial.get(("KIDS", "Kaki"), 0) + 1
+            trial[("KIDS", donor)] -= 1
+            need_k = trial[("KIDS", "Kaki")] * TELA_CONSUMO["KIDS"]
+            if need_k <= kg_slack.get("Kaki", 0.0) + 0.02 and all(
+                trial.get(("KIDS", c), 0) >= 0 for c in COLORES_PRODUCCION
+            ):
+                gc = trial
+                moved = True
+                break
+        if not moved:
+            break
+    return gc
+
+
 def balance_plan_to_explore_budget(plan: list, explore_budget: dict[str, float]) -> list:
     """Recorta und (prioridad Kaki CAB/DAMA) hasta kg Explore ≤ presupuesto por color."""
     plan = [dict(p, tallas=[dict(t) for t in p["tallas"]]) for p in plan]
@@ -1098,18 +1175,36 @@ def fit_kids_gc_to_slack(
     kg_slack: dict[str, float],
 ) -> dict[tuple[str, str], int]:
     """Asigna und KIDS (incl. Kaki) respetando kg restante por color tras CAB/DAMA."""
-    gc: dict[tuple[str, str], int] = {}
-    ideal = ideal_gc_floats(df, {"KIDS": kids_target, "CAB": 0, "DAMA": 0})
-    weights = {c: ideal.get(("KIDS", c), 0.0) for c in COLORES_PRODUCCION}
-    allocated = allocate_by_weights(weights, kids_target)
+    kaki_floor = max(
+        KIDS_KAKI_MIN_TALLAS,
+        kids_color_units_target(df, "Kaki", kids_target),
+    )
+    kaki_cap = int(kg_slack.get("Kaki", 0.0) / TELA_CONSUMO["KIDS"])
+    kaki_floor = min(kaki_floor, kaki_cap)
+    rest_target = max(0, kids_target - kaki_floor)
+
+    gc: dict[tuple[str, str], int] = {("KIDS", c): 0 for c in COLORES_PRODUCCION}
+    gc[("KIDS", "Kaki")] = kaki_floor
+
+    ideal = ideal_gc_floats(df, {"KIDS": rest_target, "CAB": 0, "DAMA": 0})
+    weights = {
+        c: ideal.get(("KIDS", c), 0.0) for c in COLORES_PRODUCCION if c != "Kaki"
+    }
+    allocated = allocate_by_weights(weights, rest_target)
     for color in COLORES_PRODUCCION:
+        if color == "Kaki":
+            continue
         gc[("KIDS", color)] = allocated.get(color, 0)
 
     for _ in range(4000):
         over = False
         for color in COLORES_PRODUCCION:
             need = gc.get(("KIDS", color), 0) * TELA_CONSUMO["KIDS"]
-            if need > kg_slack.get(color, 0.0) + 0.001 and gc.get(("KIDS", color), 0) > 0:
+            floor = kaki_floor if color == "Kaki" else 0
+            if (
+                need > kg_slack.get(color, 0.0) + 0.001
+                and gc.get(("KIDS", color), 0) > floor
+            ):
                 gc[("KIDS", color)] -= 1
                 over = True
         if not over:
@@ -1130,8 +1225,9 @@ def fit_kids_gc_to_slack(
         gc[("KIDS", color)] = gc.get(("KIDS", color), 0) + 1
 
     for _ in range(3):
-        gc = protect_kids_curve_colors(gc, df, kg_slack)
+        gc = protect_kids_curve_colors(gc, df, kg_slack, kaki_floor=kaki_floor)
         gc = enforce_gender_color_ranking(gc, df, "KIDS", kg_slack)
+    gc = protect_kids_kaki(gc, df, kg_slack, kaki_floor)
 
     diff = kids_target - sum(gc.get(("KIDS", c), 0) for c in COLORES_PRODUCCION)
     for _ in range(abs(diff)):
@@ -1151,12 +1247,13 @@ def fit_kids_gc_to_slack(
             opts = [
                 (sales_weight_gc(df, "KIDS", c), c)
                 for c in COLORES_PRODUCCION
-                if gc.get(("KIDS", c), 0) > 0
+                if gc.get(("KIDS", c), 0) > (kaki_floor if c == "Kaki" else 0)
             ]
             if not opts:
                 break
             opts.sort()
             gc[("KIDS", opts[0][1])] -= 1
+    gc = protect_kids_kaki(gc, df, kg_slack, kaki_floor)
     return gc
 
 
@@ -1362,6 +1459,8 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     shares = store_weights(df.groupby("tienda")["v"].sum().to_dict())
     explore_budget, shorts_plan, _gc = solve_fabric_split(df)
     adult_plan = build_manual_adult_plan(df, shares)
+    kaki_kids_target = kids_color_units_target(df, "Kaki", KIDS_TARGET)
+    adult_plan = reserve_kaki_kg_for_kids(adult_plan, explore_budget, kaki_kids_target)
     kg_adult = kg_explore_by_color_plan(adult_plan)
     kg_slack = {
         c: max(0.0, explore_budget.get(c, 0.0) - kg_adult.get(c, 0.0)) for c in COLORES_PRODUCCION
