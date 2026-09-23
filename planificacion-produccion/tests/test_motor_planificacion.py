@@ -3962,26 +3962,29 @@ class TestLotesYDivision(unittest.TestCase):
         self.assertEqual(out[0].get("vuelta", 0), 0)
 
     def test_vueltas_producen_todas_las_variantes_antes_de_repetir(self):
+        """Cap 40: día 0 Negro v1, día 1 Rojo v1, día 2 Negro v2, día 3 Rojo v2."""
         tareas = [
-            {"sku": "N", "modelo": "MAR LOTE 1 KIDS", "mo": "2765", "cantidad": 80, "cap": 130,
+            {"sku": "N", "modelo": "MAR LOTE 1 KIDS", "mo": "2765", "cantidad": 80, "cap": 40,
              "lineas": ["3"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260922, "solicitadaOrig": 80, "talla": "10"},
-            {"sku": "R", "modelo": "MAR LOTE 1 KIDS", "mo": "2766", "cantidad": 80, "cap": 130,
+            {"sku": "R", "modelo": "MAR LOTE 1 KIDS", "mo": "2766", "cantidad": 80, "cap": 40,
              "lineas": ["3"], "color": "Rojo", "prioridadNum": 2, "esEspecial": False,
              "diaIngreso": 0, "fechaKey": 20260922, "solicitadaOrig": 80, "talla": "10"},
         ]
-        out = planificar(tareas, {}, total_dias=5, mapa_division={"MAR KIDS": "Si"})
-        orden = []
-        for d in range(5):
+        out = planificar(tareas, {}, total_dias=8, mapa_division={"MAR KIDS": "Si"})
+        por_dia = []
+        for d in range(8):
+            piezas = []
             for t in out:
-                if t["plan"]["3"][d] > 0:
-                    orden.append((d, t["sku"], t["vuelta"], t["plan"]["3"][d]))
-        skus_v1 = [x[1] for x in orden if x[2] == 1]
-        self.assertIn("N", skus_v1)
-        self.assertIn("R", skus_v1)
-        primer_v2 = next((i for i, x in enumerate(orden) if x[2] == 2), None)
-        self.assertIsNotNone(primer_v2)
-        self.assertTrue(all(x[2] == 1 for x in orden[:primer_v2]))
+                q = t["plan"]["3"][d]
+                if q:
+                    piezas.append((t["sku"], t["vuelta"], q))
+            if piezas:
+                por_dia.append(piezas)
+        self.assertEqual(por_dia[0], [("N", 1, 40)])
+        self.assertEqual(por_dia[1], [("R", 1, 40)])
+        self.assertEqual(por_dia[2], [("N", 2, 40)])
+        self.assertEqual(por_dia[3], [("R", 2, 40)])
         self.assertEqual(sum(t["planificada"] for t in out), 160)
 
     def test_mismo_sku_dos_lotes_no_se_juntan(self):
