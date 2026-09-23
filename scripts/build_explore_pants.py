@@ -49,22 +49,30 @@ PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
 KIDS_FULL_CURVE_COLORS = {"Gris Oscuro", "Azul Marino"}
 KIDS_STD_TALLAS = ["2", "4", "6", "8", "10", "12"]
 
-# CAB / DAMA — ajuste manual aprobado (color × talla)
+# CAB / DAMA / KIDS — matrices manuales (proporcionales al dashboard)
 MANUAL_CAB_DAMA_TALLAS: dict[str, dict[str, dict[str, int]]] = {
     "CAB": {
         "Negro": {"S": 41, "M": 102, "L": 103, "XL": 60, "2XL": 16},
-        "Kaki": {"S": 44, "M": 92, "L": 85, "XL": 51, "2XL": 11},
+        "Kaki": {"S": 44, "M": 74, "L": 75, "XL": 51, "2XL": 11},
         "Gris Oscuro": {"S": 46, "M": 87, "L": 94, "XL": 44, "2XL": 4},
         "Verde Militar": {"S": 9, "M": 25, "L": 26, "XL": 13, "2XL": 13},
-        "Azul Marino": {"S": 23, "M": 66, "L": 64, "XL": 35, "2XL": 35},
+        "Azul Marino": {"S": 30, "M": 66, "L": 70, "XL": 40, "2XL": 17},
     },
     "DAMA": {
         "Negro": {"XS": 45, "S": 83, "M": 94, "L": 55, "XL": 51},
-        "Kaki": {"XS": 38, "S": 86, "M": 104, "L": 63, "XL": 43},
+        "Kaki": {"XS": 38, "S": 76, "M": 87, "L": 63, "XL": 43},
         "Gris Oscuro": {"XS": 31, "S": 67, "M": 77, "L": 48, "XL": 41},
-        "Azul Marino": {"XS": 23, "S": 38, "M": 66, "L": 30, "XL": 34},
-        "Verde Militar": {"XS": 10, "S": 16, "M": 19, "L": 14, "XL": 10},
+        "Azul Marino": {"XS": 23, "S": 48, "M": 56, "L": 30, "XL": 34},
+        "Verde Militar": {"XS": 10, "S": 17, "M": 20, "L": 12, "XL": 10},
     },
+}
+
+MANUAL_KIDS_TALLAS: dict[str, dict[str, int]] = {
+    "Azul Marino": {"2": 16, "4": 28, "6": 20, "8": 38, "10": 44, "12": 59},
+    "Verde Militar": {"2": 5, "4": 8, "6": 11, "8": 14, "10": 14, "12": 19},
+    "Negro": {"2": 15, "4": 22, "6": 18, "8": 27, "10": 30, "12": 33},
+    "Gris Oscuro": {"2": 8, "4": 12, "6": 10, "8": 20, "10": 20, "12": 24},
+    "Kaki": {"2": 6, "4": 10, "6": 10, "8": 13, "10": 14, "12": 17},
 }
 
 # Al cuadrar kg Explore: recortar primero Kaki CAB/DAMA
@@ -1046,6 +1054,34 @@ def build_manual_adult_plan(df: pd.DataFrame, shares: dict[str, float]) -> list[
     return plan
 
 
+def build_manual_kids_plan(df: pd.DataFrame, shares: dict[str, float]) -> list[dict]:
+    plan: list[dict] = []
+    total_sales = float(df["v"].sum()) or 1.0
+    gdf = df[df["genero"] == "KIDS"]
+    g_sales = float(gdf["v"].sum()) or 1.0
+    for color in sales_color_order(df, "KIDS"):
+        tallas = MANUAL_KIDS_TALLAS.get(color)
+        if not tallas:
+            continue
+        talla_objs = talla_objs_from_counts("KIDS", tallas, shares)
+        cdf = gdf[gdf["prod_color"] == color]
+        c_sales = float(cdf["v"].sum())
+        c_min = sum(t["produce_min"] for t in talla_objs)
+        c_max = sum(t["produce_max"] for t in talla_objs)
+        plan.append({
+            "genero": "KIDS",
+            "color": color,
+            "color_pct": round(c_sales / g_sales * 100, 1),
+            "sales_pct": round(c_sales / total_sales * 100, 1),
+            "produce": c_min,
+            "produce_min": c_min,
+            "produce_max": c_max,
+            "tallas": sorted(talla_objs, key=lambda x: -x["produce_min"]),
+            "store_split": distribute_units(c_min, shares, ALL_DIST_STORES),
+        })
+    return plan
+
+
 def kg_explore_by_color_plan(plan: list) -> dict[str, float]:
     by: dict[str, float] = defaultdict(float)
     for p in plan:
@@ -1465,14 +1501,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     shares = store_weights(df.groupby("tienda")["v"].sum().to_dict())
     explore_budget, shorts_plan, _gc = solve_fabric_split(df)
     adult_plan = build_manual_adult_plan(df, shares)
-    kaki_kids_target = kids_kaki_units_target(df, KIDS_TARGET)
-    adult_plan = reserve_kaki_kg_for_kids(adult_plan, explore_budget, kaki_kids_target)
-    kg_adult = kg_explore_by_color_plan(adult_plan)
-    kg_slack = {
-        c: max(0.0, explore_budget.get(c, 0.0) - kg_adult.get(c, 0.0)) for c in COLORES_PRODUCCION
-    }
-    gc_kids = fit_kids_gc_to_slack(df, KIDS_TARGET, kg_slack)
-    kids_plan = build_kids_plan(df, shares, gc_kids)
+    kids_plan = build_manual_kids_plan(df, shares)
     plan = balance_plan_to_explore_budget(adult_plan + kids_plan, explore_budget)
     summary, rango = build_rango_summary_from_plan(df, plan, stock, shares)
     explore_tela = explore_tela_usage_rows(plan, explore_budget)
@@ -1485,7 +1514,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     data = {**template}
     data.update({
         "nombre": MODELO,
-        "method": "existencias_explore_shorts_r1",
+        "method": "matrices_manuales_dashboard",
         "tela_consumo_ref": TELA_CONSUMO,
         "kids_target": KIDS_TARGET,
         "kids_target_range": [KIDS_TARGET_MIN, KIDS_TARGET_MAX],
