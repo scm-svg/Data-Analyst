@@ -27,7 +27,8 @@ MODELO = "EXPLORE PANTS"
 TELA_NOMBRE = "Novaktex Repel"
 TELA_UNIDAD = "kg"
 TELA_SS = 0.20
-MAX_RANGE_PCT = 0.06
+# Rango producción MÍN / MÁX (temporada alta — ref. Short Playa)
+HIGH_SEASON_FACTOR = 1.2
 
 # Consumo referencial (tela ya comprada — NO define las und a producir)
 TELA_CONSUMO = {"CAB": 0.30, "DAMA": 0.25, "KIDS": 0.22}  # KIDS ligeramente sobre 0.20
@@ -39,8 +40,12 @@ KIDS_TARGET = 585  # centro del rango pedido
 
 PRODUCTION_EXCLUDE_TALLAS: dict[str, set[str]] = {
     "CAB": {"3XL"},
+    "DAMA": {"2XL"},
     "KIDS": {"1"},
 }
+
+KIDS_FULL_CURVE_COLORS = {"Gris Oscuro", "Azul Marino"}
+KIDS_STD_TALLAS = ["2", "4", "6", "8", "10", "12", "14"]
 
 # ── Fuente de verdad: justificación compra tela (Explore Pants) ──
 PRODUCE_TOTAL = 2900  # meta Explore Pants con tela en almacén
@@ -75,7 +80,7 @@ SHORTS_COLORES = ["Negro", "Gris Oscuro"]
 SHORTS_TARGET_MIN = 1500
 SHORTS_CONSUMO = {"CAB": 0.14, "DAMA": 0.12}
 SHORTS_GENEROS = ["CAB", "DAMA"]
-CAB_2XL_MIN = 8
+CAB_2XL_BOOST = 1.18  # refuerzo suave 2XL (no piso rígido)
 
 ORDEN1_ITEMS = [
     ("Gris Oscuro — TODO (Explore + Shorts)", 361.2, "CRÍTICA"),
@@ -145,7 +150,7 @@ def sort_tallas(genero: str, tallas: list[str]) -> list[str]:
 def min_max_qty(qty: int) -> tuple[int, int]:
     if qty <= 0:
         return 0, 0
-    return qty, int(math.ceil(qty * (1 + MAX_RANGE_PCT)))
+    return qty, int(math.ceil(qty * HIGH_SEASON_FACTOR))
 
 
 def allocate_by_weights(weights: dict, target: int) -> dict:
@@ -422,6 +427,9 @@ def fit_gc_to_budget(
             if not moved:
                 break
 
+    for genero in GENEROS:
+        gc = enforce_gender_color_ranking(gc, df, genero, kg_budget)
+
     return gc
 
 
@@ -456,6 +464,95 @@ def ideal_gc_floats(df: pd.DataFrame, g_targets: dict[str, int]) -> dict[tuple[s
                 gdf[gdf["prod_color"] == color]["v"].sum()
             ) / g_sales
     return gc
+
+
+def sales_color_order(df: pd.DataFrame, genero: str) -> list[str]:
+    gdf = df[df["genero"] == genero]
+    return sorted(
+        COLORES_PRODUCCION,
+        key=lambda c: -float(gdf[gdf["prod_color"] == c]["v"].sum()),
+    )
+
+
+def enforce_gender_color_ranking(
+    gc: dict[tuple[str, str], int],
+    df: pd.DataFrame,
+    genero: str,
+    kg_budget: dict[str, float],
+) -> dict[tuple[str, str], int]:
+    """Mantiene ranking de ventas por color dentro del género (sin romper kg)."""
+    order = sales_color_order(df, genero)
+    for _ in range(3000):
+        changed = False
+        for i in range(len(order) - 1):
+            hi, lo = order[i], order[i + 1]
+            if gc.get((genero, hi), 0) >= gc.get((genero, lo), 0):
+                continue
+            if gc.get((genero, lo), 0) <= 0:
+                continue
+            trial = dict(gc)
+            trial[(genero, lo)] -= 1
+            trial[(genero, hi)] = trial.get((genero, hi), 0) + 1
+            if all(
+                kg_needed_gc(trial, c) <= kg_budget.get(c, 0) + 0.02
+                for c in COLORES_PRODUCCION
+            ):
+                gc = trial
+                changed = True
+        if not changed:
+            break
+    return gc
+
+
+def allocate_tallas_for_color(
+    df: pd.DataFrame,
+    genero: str,
+    color: str,
+    c_target: int,
+    shares: dict[str, float],
+) -> list:
+    t_weights = sales_color_talla_weights(df, genero, color)
+    if not t_weights:
+        t_weights = sales_color_talla_weights(df, genero)
+
+    if genero == "CAB":
+        t_weights = {t: w * (CAB_2XL_BOOST if t == "2XL" else 1.0) for t, w in t_weights.items()}
+
+    if genero == "KIDS" and color in KIDS_FULL_CURVE_COLORS:
+        tallas = [t for t in KIDS_STD_TALLAS if t not in PRODUCTION_EXCLUDE_TALLAS.get("KIDS", set())]
+        for t in tallas:
+            t_weights.setdefault(t, 1.0)
+        n_floor = len(tallas)
+        if c_target <= 0:
+            return []
+        if c_target < n_floor:
+            weights = {t: t_weights.get(t, 1.0) for t in tallas}
+            alloc = allocate_by_weights(weights, c_target)
+        else:
+            floor = {t: 1 for t in tallas}
+            extra = allocate_by_weights({t: t_weights.get(t, 1.0) for t in tallas}, c_target - n_floor)
+            alloc = {t: floor[t] + extra.get(t, 0) for t in tallas}
+    else:
+        tallas = sort_tallas(genero, list(t_weights.keys()))
+        alloc = allocate_by_weights({t: t_weights.get(t, 0) for t in tallas}, c_target)
+
+    t_total_w = sum(t_weights.get(t, 0) for t in alloc.keys()) or 1.0
+    talla_objs = []
+    for talla in sort_tallas(genero, list(alloc.keys())):
+        qty = alloc.get(talla, 0)
+        if qty <= 0:
+            continue
+        pm, px = min_max_qty(qty)
+        talla_objs.append({
+            "talla": str(talla),
+            "produce": pm,
+            "produce_min": pm,
+            "produce_max": px,
+            "curve_pct": round(t_weights.get(talla, 0) / t_total_w * 100, 1),
+            "store_split": distribute_units(pm, shares, ALL_DIST_STORES),
+            "store_split_max": distribute_units(px, shares, ALL_DIST_STORES),
+        })
+    return talla_objs
 
 
 def production_totals_by_color(plan: list) -> dict[str, int]:
@@ -499,51 +596,6 @@ def tela_verification(plan: list, shorts: dict | None = None) -> list[dict]:
     return rows
 
 
-def apply_cab_2xl_floor(talla_objs: list, c_target: int, shares: dict[str, float]) -> list:
-    """Mínimo 8 und en 2XL por color CAB (surte tiendas)."""
-    by_t = {t["talla"]: t for t in talla_objs}
-    if "2XL" not in by_t:
-        by_t["2XL"] = {
-            "talla": "2XL",
-            "produce": 0,
-            "produce_min": 0,
-            "produce_max": 0,
-            "curve_pct": 0.0,
-            "store_split": distribute_units(0, shares, ALL_DIST_STORES),
-            "store_split_max": distribute_units(0, shares, ALL_DIST_STORES),
-        }
-        talla_objs = list(by_t.values())
-
-    t2 = by_t["2XL"]
-    need = max(0, CAB_2XL_MIN - t2["produce_min"])
-    if need <= 0:
-        return talla_objs
-
-    donors = sorted(
-        [t for t in talla_objs if t["talla"] != "2XL" and t["produce_min"] > 0],
-        key=lambda x: -x["produce_min"],
-    )
-    for _ in range(need):
-        if not donors:
-            break
-        d = donors[0]
-        if d["produce_min"] <= 0:
-            donors.pop(0)
-            continue
-        d["produce_min"] -= 1
-        d["produce"] = d["produce_min"]
-        d["produce_max"] = min_max_qty(d["produce_min"])[1]
-        d["store_split"] = distribute_units(d["produce_min"], shares, ALL_DIST_STORES)
-        d["store_split_max"] = distribute_units(d["produce_max"], shares, ALL_DIST_STORES)
-        t2["produce_min"] += 1
-        t2["produce"] = t2["produce_min"]
-        t2["produce_max"] = min_max_qty(t2["produce_min"])[1]
-        t2["store_split"] = distribute_units(t2["produce_min"], shares, ALL_DIST_STORES)
-        t2["store_split_max"] = distribute_units(t2["produce_max"], shares, ALL_DIST_STORES)
-
-    return [t for t in talla_objs if t["produce_min"] > 0]
-
-
 def stock_for_genero(stock: dict, genero: str) -> int:
     total = 0
     for k, v in stock.items():
@@ -568,35 +620,12 @@ def build_production_plan(
         color_rows = []
         talla_totals: dict = defaultdict(lambda: {"min": 0, "max": 0, "curve_pct": 0.0})
 
-        for color in COLORES_PRODUCCION:
+        for color in sales_color_order(df, genero):
             c_target = gc.get((genero, color), 0)
             if c_target <= 0:
                 continue
 
-            t_weights = sales_color_talla_weights(df, genero, color)
-            if not t_weights:
-                t_weights = sales_color_talla_weights(df, genero)
-            t_allocated = allocate_by_weights(t_weights, c_target)
-            t_total_w = sum(t_weights.values()) or 1.0
-
-            talla_objs = []
-            for talla in sort_tallas(genero, list(t_allocated.keys())):
-                qty = t_allocated.get(talla, 0)
-                if qty <= 0:
-                    continue
-                pm, px = min_max_qty(qty)
-                talla_objs.append({
-                    "talla": str(talla),
-                    "produce": pm,
-                    "produce_min": pm,
-                    "produce_max": px,
-                    "curve_pct": round(t_weights.get(talla, 0) / t_total_w * 100, 1),
-                    "store_split": distribute_units(pm, shares, ALL_DIST_STORES),
-                    "store_split_max": distribute_units(px, shares, ALL_DIST_STORES),
-                })
-
-            if genero == "CAB" and talla_objs:
-                talla_objs = apply_cab_2xl_floor(talla_objs, c_target, shares)
+            talla_objs = allocate_tallas_for_color(df, genero, color, c_target, shares)
 
             for t in talla_objs:
                 talla_totals[t["talla"]]["min"] += t["produce_min"]
@@ -648,8 +677,9 @@ def build_production_plan(
             "produce_max": g_prod_max,
             "stk": stock_for_genero(stock, genero),
         }
+        sales_order = {c: i for i, c in enumerate(sales_color_order(df, genero))}
         rango[genero] = {
-            "color_rows": sorted(color_rows, key=lambda x: x["min"], reverse=True),
+            "color_rows": sorted(color_rows, key=lambda x: sales_order.get(x["color"], 99)),
             "talla_totals": dict(talla_totals),
             "shares": shares,
         }
@@ -678,6 +708,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
         "kids_target": KIDS_TARGET,
         "kids_target_range": [KIDS_TARGET_MIN, KIDS_TARGET_MAX],
         "production_exclude_tallas": {g: sorted(t) for g, t in PRODUCTION_EXCLUDE_TALLAS.items()},
+        "high_season_factor": HIGH_SEASON_FACTOR,
         "shorts_r1": shorts_plan,
         "explore_kg_budget": explore_budget,
         "target_produce_min": {"TOTAL": explore_total, **{g: summary[g]["produce"] for g in summary}},
@@ -776,8 +807,9 @@ def export_excel(data: dict, path: Path) -> None:
             f"Stock actual dashboard: {j['stock_actual']:,} und",
             f"Tela en almacén (existencias): {TELA_KG_TOTAL:.1f} kg · uso total Explore + Shorts",
             f"Shorts R1: Negro/Gris · CAB {SHORTS_CONSUMO['CAB']} · DAMA {SHORTS_CONSUMO['DAMA']} kg/und",
-            "Color/talla Explore: ranking dashboard · CAB 2XL mín. 8 und por color",
-            f"KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und · CAB sin 3XL",
+            f"Rango producción ×{HIGH_SEASON_FACTOR} (MÍN/MÁX) · ranking color/talla dashboard",
+            f"KIDS {KIDS_TARGET_MIN:,}–{KIDS_TARGET_MAX:,} und · CAB sin 3XL · DAMA sin 2XL",
+            "KIDS Gris/Azul: presencia en todas las tallas (curva dashboard)",
             f"Consumo referencial: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und",
             "Gris (ventas) → Gris Oscuro (producción)",
         ]
@@ -869,6 +901,48 @@ def export_excel(data: dict, path: Path) -> None:
         ws.write(row, 2, 1, pct)
         ws.write(row, 3, 1, pct)
         ws.write(row, 4, TELA_KG_TOTAL, dec)
+
+        # ── Rango MÍN / MÁX por género ──
+        ws = wb.add_worksheet("Rango Min Max")
+        row = 0
+        ws.write(
+            row, 0,
+            f"RANGO DE PRODUCCIÓN MÍNIMO / MÁXIMO — EXPLORE PANTS (×{HIGH_SEASON_FACTOR})",
+            title,
+        )
+        row += 2
+        ws.write_row(row, 0, ["Género", "MÍNIMO", "MÁXIMO", "Rango"], hdr)
+        row += 1
+        tmin = tmax = 0
+        for g in ["CAB", "DAMA", "KIDS"]:
+            s = summary[g]
+            ws.write_row(row, 0, [GENDER_XL[g], s["produce"], s["produce_max"], s["produce_max"] - s["produce"]])
+            tmin += s["produce"]
+            tmax += s["produce_max"]
+            row += 1
+        ws.write_row(row, 0, ["TOTAL", tmin, tmax, tmax - tmin], bold)
+        row += 3
+        for genero in ["CAB", "DAMA", "KIDS"]:
+            rd = rango[genero]
+            ws.write(row, 0, f"{GENDER_XL[genero]} — COLOR × TALLA (MÍN)", section)
+            row += 1
+            tallas = sort_tallas(
+                genero,
+                list({t["talla"] for cr in rd["color_rows"] for t in cr["tallas"]}),
+            )
+            if not tallas:
+                continue
+            ws.write_row(row, 0, ["Color / Talla"] + tallas + ["Total Mín", "Total Máx"], hdr)
+            row += 1
+            for cr in rd["color_rows"]:
+                by_min = {t["talla"]: t["produce_min"] for t in cr["tallas"]}
+                by_max = {t["talla"]: t["produce_max"] for t in cr["tallas"]}
+                ws.write_row(
+                    row, 0,
+                    [cr["color"]] + [by_min.get(t, 0) for t in tallas] + [cr["min"], cr["max"]],
+                )
+                row += 1
+            row += 2
 
         # ── Producción por Talla ──
         ws = wb.add_worksheet("Producción por Talla")
@@ -1017,11 +1091,13 @@ def export_excel(data: dict, path: Path) -> None:
         lines = [
             f"1. Tela en almacén: {TELA_KG_TOTAL:.1f} kg — se usa completa (Explore + Shorts R1).",
             f"2. Explore Pants meta ~{PRODUCE_TOTAL:,} und · Shorts R1 ≥ {SHORTS_TARGET_MIN:,} und (Negro/Gris, CAB/DAMA).",
-            "3. COLOR/TALLA Explore: ranking dashboard; KIDS meta 585; CAB 2XL mín. 8 und por color.",
-            f"4. Shorts: CAB {SHORTS_CONSUMO['CAB']} kg/und · DAMA {SHORTS_CONSUMO['DAMA']} kg/und.",
-            f"5. Explore: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
-            "6. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
-            "7. Hoja 'Compra en 2 Órdenes': réplica del pedido de tela aprobado (referencia logística).",
+            f"3. Rango MÍN/MÁX Explore: factor temporada alta ×{HIGH_SEASON_FACTOR}.",
+            "4. COLOR: ranking ventas por género (ajustado a tela). TALLA: curva dashboard.",
+            "5. KIDS Gris/Azul: al menos 1 und por talla 2–14. CAB sin 3XL · DAMA sin 2XL.",
+            f"6. Shorts R1: CAB {SHORTS_CONSUMO['CAB']} · DAMA {SHORTS_CONSUMO['DAMA']} kg/und.",
+            f"7. Explore: CAB {TELA_CONSUMO['CAB']} · DAMA {TELA_CONSUMO['DAMA']} · KIDS {TELA_CONSUMO['KIDS']} kg/und.",
+            "8. Demanda Jul–Dic (2,228 und) y escenarios mensuales del archivo de justificación.",
+            "9. Hoja 'Compra en 2 Órdenes': réplica del pedido de tela aprobado (referencia logística).",
         ]
         for line in lines:
             ws.write(row, 0, line)
@@ -1050,12 +1126,10 @@ def main() -> None:
     print("Verificación tela existencias (delta kg):")
     for tr in data["justificacion"]["tela_verificacion"]:
         print(f"  {tr['color']}: {tr['delta_kg']:+.2f} kg (explore {tr['kg_explore']} + shorts {tr['kg_shorts']})")
-    cab_2xl = [
-        (p["color"], next((t["produce_min"] for t in p["tallas"] if t["talla"] == "2XL"), 0))
-        for p in data["production_plan"]
-        if p["genero"] == "CAB"
-    ]
-    print("CAB 2XL por color:", cab_2xl)
+    for g in ["CAB", "KIDS"]:
+        print(f"Ranking {g}:", [cr["color"] for cr in data["rango_data"][g]["color_rows"]])
+    kgr = next(p for p in data["production_plan"] if p["genero"]=="KIDS" and p["color"]=="Gris Oscuro")
+    print("KIDS Gris tallas:", {t["talla"]: t["produce_min"] for t in kgr["tallas"]})
 
 
 if __name__ == "__main__":
