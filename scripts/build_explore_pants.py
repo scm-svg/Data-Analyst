@@ -84,6 +84,8 @@ KIDS_GRIS_MIN_UNITS = 48
 KIDS_FULL_CURVE_IDEAL_FACTOR = 0.82
 KIDS_TALLA_WEIGHT_MIN_SALES = 30  # bajo esto, curva talla del género (dashboard)
 KIDS_KAKI_MIN_TALLAS = 6  # presencia mínima en tallas 2–12
+KIDS_KAKI_BOOST = 1.22  # un poco sobre % ventas dashboard
+KIDS_KAKI_EXTRA_UND = 10  # und adicionales vs reparto puro ventas
 
 # ── Fuente de verdad: justificación compra tela (Explore Pants) ──
 PRODUCE_TOTAL = 2900  # meta Explore Pants con tela en almacén
@@ -1077,6 +1079,12 @@ def kids_color_units_target(df: pd.DataFrame, color: str, kids_target: int) -> i
     return int(round(kids_target * sales / total))
 
 
+def kids_kaki_units_target(df: pd.DataFrame, kids_target: int) -> int:
+    base = kids_color_units_target(df, "Kaki", kids_target)
+    boosted = int(round(base * KIDS_KAKI_BOOST)) + KIDS_KAKI_EXTRA_UND
+    return max(boosted, KIDS_KAKI_MIN_TALLAS)
+
+
 def reserve_kaki_kg_for_kids(
     adult_plan: list,
     explore_budget: dict[str, float],
@@ -1175,10 +1183,7 @@ def fit_kids_gc_to_slack(
     kg_slack: dict[str, float],
 ) -> dict[tuple[str, str], int]:
     """Asigna und KIDS (incl. Kaki) respetando kg restante por color tras CAB/DAMA."""
-    kaki_floor = max(
-        KIDS_KAKI_MIN_TALLAS,
-        kids_color_units_target(df, "Kaki", kids_target),
-    )
+    kaki_floor = kids_kaki_units_target(df, kids_target)
     kaki_cap = int(kg_slack.get("Kaki", 0.0) / TELA_CONSUMO["KIDS"])
     kaki_floor = min(kaki_floor, kaki_cap)
     rest_target = max(0, kids_target - kaki_floor)
@@ -1459,7 +1464,7 @@ def build_data(template: dict, df: pd.DataFrame) -> dict:
     shares = store_weights(df.groupby("tienda")["v"].sum().to_dict())
     explore_budget, shorts_plan, _gc = solve_fabric_split(df)
     adult_plan = build_manual_adult_plan(df, shares)
-    kaki_kids_target = kids_color_units_target(df, "Kaki", KIDS_TARGET)
+    kaki_kids_target = kids_kaki_units_target(df, KIDS_TARGET)
     adult_plan = reserve_kaki_kg_for_kids(adult_plan, explore_budget, kaki_kids_target)
     kg_adult = kg_explore_by_color_plan(adult_plan)
     kg_slack = {
