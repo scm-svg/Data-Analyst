@@ -132,6 +132,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <button class="tab" onclick="st('tallas')">📐 Tallas</button>
   <button class="tab" onclick="st('tiendas')">🏪 Tiendas</button>
   <button class="tab" onclick="st('inventario')">📦 Inventario</button>
+  <button class="tab" onclick="st('produccion')">🏭 Producción</button>
   <button class="tab" onclick="st('decisiones')">💡 Decisiones</button>
 </div>
 <div class="content">
@@ -172,6 +173,16 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="tkpis" id="invKpis"></div>
   <div class="g1 card"><h3>📦 Inventario por Tienda</h3><div class="sub">Unidades disponibles en cada punto de venta y en taller (recién llegado, pendiente de distribuir) · clic en tienda para ver colores, clic en color para ver tallas</div><div id="invByStore" style="margin-top:10px"></div></div>
   <div class="g1 card"><h3>Color × Tienda (Inventario)</h3><div class="sub">Heatmap de stock disponible</div><div class="hmw" id="invColorTiendaHM"></div></div>
+</div>
+<div class="sec" id="sec-produccion">
+  <div class="g1 card">
+    <h3>Rango de producción MÍNIMO / MÁXIMO — Explore Pants</h3>
+    <div class="sub" id="prodSub">Cantidades sugeridas con factor temporada alta · curva talla dashboard · ranking color ventas (ajustado a tela)</div>
+    <div id="prodSummary" style="margin:12px 0"></div>
+    <div id="prodShortsNote" style="font-size:0.68rem;color:#f97316;margin-bottom:10px"></div>
+    <div id="prodTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div id="prodTables"></div>
+  </div>
 </div>
 <div class="sec" id="sec-decisiones">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:8px">
@@ -226,9 +237,9 @@ function ag2(rows,k1,k2){var m={};rows.forEach(function(r){if(!m[r[k1]])m[r[k1]]
 function af(){var f=gf();var active=f.tienda||f.genero||f.color||_per!=='all';document.getElementById('fBadge').style.display=active?'inline-block':'none';updateKPIs();rs(aTab());}
 function rf(){document.getElementById('fT').value='';document.getElementById('fG').value='';document.getElementById('fC').value='';setPer('all');}
 function aTab(){var t=document.querySelector('.tab.active');if(!t)return'resumen';var tx=t.textContent;if(tx.indexOf('Resumen')>=0)return'resumen';if(tx.indexOf('Color')>=0)return'colores';if(tx.indexOf('Talla')>=0)return'tallas';if(tx.indexOf('Inventario')>=0)return'inventario';if(tx.indexOf('Tienda')>=0)return'tiendas';return'decisiones';}
-var TABS=['resumen','colores','tallas','tiendas','inventario','decisiones'];
+var TABS=['resumen','colores','tallas','tiendas','inventario','produccion','decisiones'];
 function st(name){for(var i=0;i<TABS.length;i++){document.getElementById('sec-'+TABS[i]).classList.toggle('active',TABS[i]===name);document.querySelectorAll('.tab')[i].classList.toggle('active',TABS[i]===name);}rs(name);}
-function rs(n){if(n==='resumen')rResumen();else if(n==='colores')rColores();else if(n==='tallas')rTallas();else if(n==='tiendas')rTiendas();else if(n==='inventario')rInventario();else if(n==='decisiones')rDecisiones();setTimeout(addExpandBtns,120);}
+function rs(n){if(n==='resumen')rResumen();else if(n==='colores')rColores();else if(n==='tallas')rTallas();else if(n==='tiendas')rTiendas();else if(n==='inventario')rInventario();else if(n==='produccion')rProduccion();else if(n==='decisiones')rDecisiones();setTimeout(addExpandBtns,120);}
 function bRT(el,items,colorFn){if(!items.length){el.innerHTML='<div class="nodata">Sin datos</div>';return;}var h='<table class="rt"><thead><tr><th>#</th><th>Nombre</th><th style="min-width:70px">Barra</th><th>Und</th><th>%</th></tr></thead><tbody>';for(var i=0;i<items.length;i++){var x=items[i];h+='<tr><td><span class="rk">#'+(i+1)+'</span></td><td>'+(colorFn?'<span class="chip" style="background:'+colorFn(x.k)+'"></span>':'')+x.k+'</td><td><div class="rb"><div class="rf" style="width:'+Math.min(x.pct,100)+'%"></div></div></td><td class="rn">'+x.v.toLocaleString()+'</td><td class="rp">'+x.pct+'%</td></tr>';}h+='</tbody></table>';el.innerHTML=h;}
 
 // ══ KPIs REACTIVOS ══
@@ -516,6 +527,34 @@ function renderReabast(rows){
     });
     h+='</div></div>';
   });
+  el.innerHTML=h;
+}
+
+var _prodG='CAB';
+function setProdG(g){_prodG=g;rProduccion();}
+function rProduccion(){
+  var el=document.getElementById('prodTables'),sumEl=document.getElementById('prodSummary'),tabs=document.getElementById('prodTabs'),note=document.getElementById('prodShortsNote');
+  if(!el||!DATA.rango_data){if(el)el.innerHTML='<div class="nodata">Ejecute build_explore_pants.py para cargar el plan de producción.</div>';return;}
+  var fac=DATA.high_season_factor||1.2;
+  var sub=document.getElementById('prodSub');if(sub)sub.textContent='Factor temporada alta ×'+fac+' · KIDS Gris/Azul: presencia en tallas 2–14 · DAMA sin 2XL · CAB sin 3XL';
+  var ico={CAB:'👔',DAMA:'👗',KIDS:'👶'};
+  var gens=['CAB','DAMA','KIDS'].filter(function(g){return DATA.rango_data[g];});
+  if(gens.indexOf(_prodG)<0)_prodG=gens[0]||'CAB';
+  tabs.innerHTML=gens.map(function(g){var a=g===_prodG;return'<button onclick="setProdG(\''+g+'\')" style="background:'+(a?'var(--ac)':'var(--s2)')+';color:'+(a?'#fff':'var(--mu)')+';border:1px solid '+(a?'var(--ac)':'var(--brd)')+';border-radius:20px;padding:4px 14px;font-family:var(--fh);font-size:0.78rem;font-weight:700;cursor:pointer">'+(ico[g]||'')+' '+g+'</button>';}).join('');
+  var rows=gens.map(function(g){var rd=DATA.rango_data[g],mn=0,mx=0;(rd.color_rows||[]).forEach(function(cr){mn+=cr.min||0;mx+=cr.max||0;});return{g:g,mn:mn,mx:mx,r:mx-mn};});
+  sumEl.innerHTML='<table class="ct" style="max-width:520px"><thead><tr><th>Género</th><th>MÍN</th><th>MÁX</th><th>Rango</th></tr></thead><tbody>'+rows.map(function(r){return'<tr><td>'+(ico[r.g]||'')+' '+r.g+'</td><td><strong>'+r.mn.toLocaleString()+'</strong></td><td><strong>'+r.mx.toLocaleString()+'</strong></td><td>'+r.r.toLocaleString()+'</td></tr>';}).join('')+'<tr style="background:rgba(76,175,118,.12)"><td><strong>TOTAL Explore</strong></td><td><strong>'+rows.reduce(function(a,b){return a+b.mn;},0).toLocaleString()+'</strong></td><td><strong>'+rows.reduce(function(a,b){return a+b.mx;},0).toLocaleString()+'</strong></td><td>'+rows.reduce(function(a,b){return a+b.r;},0).toLocaleString()+'</td></tr></tbody></table>';
+  var sh=DATA.shorts_r1;if(note&&sh&&sh.total)note.textContent='Short Sport R1 (Negro/Gris, CAB+DAMA): '+sh.total.toLocaleString()+' und · '+sh.kg_total+' kg — el kg de Negro/Gris compartido explica que Gris Explore quede después en ranking CAB vs ventas.';
+  var rd=DATA.rango_data[_prodG],tOrder=_prodG==='KIDS'?['2','4','6','8','10','12','14']:['XS','S','M','L','XL','2XL','3XL'];
+  var h='<div style="overflow-x:auto">';
+  (rd.color_rows||[]).forEach(function(cr,idx){
+    var rank=idx+1;
+    h+='<div style="margin-bottom:16px;border:1px solid var(--brd);border-radius:10px;padding:10px 12px"><div style="font-family:var(--fh);font-weight:800;font-size:0.82rem;margin-bottom:6px"><span style="color:var(--mu);margin-right:6px">#'+rank+'</span><span style="width:10px;height:10px;border-radius:50%;background:'+cn(cr.color)+';display:inline-block;margin-right:6px"></span>'+cr.color+' <span style="color:var(--mu);font-weight:600;font-size:0.72rem">· ventas '+((cr.sales_pct||cr.pct)||0)+'%</span></div>';
+    h+='<table class="ct" style="font-size:0.72rem;min-width:480px"><thead><tr><th></th>'+tOrder.map(function(t){return'<th>'+t+'</th>';}).join('')+'<th>Total</th></tr></thead><tbody>';
+    var byMin={},byMax={};(cr.tallas||[]).forEach(function(t){byMin[t.talla]=t.produce_min;byMax[t.talla]=t.produce_max;});
+    h+='<tr style="background:rgba(76,175,118,.1)"><td><strong>MÍN</strong></td>'+tOrder.map(function(t){var v=byMin[t];return'<td>'+(v!=null?v:'—')+'</td>';}).join('')+'<td><strong>'+(cr.min||0)+'</strong></td></tr>';
+    h+='<tr style="background:rgba(249,115,22,.1)"><td><strong>MÁX</strong></td>'+tOrder.map(function(t){var v=byMax[t];return'<td>'+(v!=null?v:'—')+'</td>';}).join('')+'<td><strong>'+(cr.max||0)+'</strong></td></tr></tbody></table></div>';
+  });
+  h+='</div>';
   el.innerHTML=h;
 }
 
