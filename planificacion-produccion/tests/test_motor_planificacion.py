@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.38 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.39 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -102,23 +102,33 @@ def ms_salida_sku(s):
     return float("inf")
 
 
-def sku_salida_key(s):
+def sku_salida_key(s, vol_map=None):
     return (
         primer_sem_sku(s),
         primer_dia_sku(s),
         ms_salida_sku(s),
         0 if s.get("esSkuPrio") else 1,
         s.get("skuPrioOrden", 0) if s.get("esSkuPrio") else 0,
-        rango_color(s.get("color")),
-        s.get("color") or "",
+    ) + color_vol_key(s, vol_map) + (
         orden_talla(s.get("talla")),
-        -(s.get("cant") if s.get("cant") is not None else s.get("solicitada", s.get("cantidad", 0)) or 0),
+        -qty_sku(s),
         s.get("sku") or "",
     )
 
 
 def ordenar_skus_salida(arr):
-    return sorted(arr, key=sku_salida_key)
+    groups = defaultdict(list)
+    order = []
+    for s in arr or []:
+        k = s.get("modelo") or ""
+        if k not in groups:
+            order.append(k)
+        groups[k].append(s)
+    out = []
+    for k in order:
+        vol = vol_color_lista(groups[k])
+        out.extend(sorted(groups[k], key=lambda s: sku_salida_key(s, vol)))
+    return out
 
 
 def es_token_genero(s):
@@ -385,6 +395,118 @@ def clave_modelo_norm(s):
     return " ".join(quitar_tildes(norm(s)).lower().split())
 
 
+def modelo_sin_lote(modelo):
+    n = re.sub(r"\s*\(\s*especial\s*\)\s*$", "", norm(modelo), flags=re.I).strip()
+    if not n:
+        return ""
+    n = re.sub(r"\s+lote\s*#?\s*\d+\b", " ", n, flags=re.I)
+    return " ".join(n.split())
+
+
+def valor_mapa_modelo(mapa, modelo):
+    if not mapa or not modelo:
+        return None
+    if modelo in mapa:
+        return mapa[modelo]
+    alvo = clave_modelo_norm(modelo)
+    for k, v in mapa.items():
+        if clave_modelo_norm(k) == alvo:
+            return v
+    sin = modelo_sin_lote(modelo)
+    if sin and clave_modelo_norm(sin) != alvo:
+        if sin in mapa:
+            return mapa[sin]
+        alvo2 = clave_modelo_norm(sin)
+        for k, v in mapa.items():
+            if clave_modelo_norm(k) == alvo2:
+                return v
+            if clave_modelo_norm(modelo_sin_lote(k)) == alvo2:
+                return v
+    return None
+
+
+def es_division_si(val):
+    s = quitar_tildes(norm(val)).lower()
+    return s in ("si", "s", "yes", "1", "true")
+
+
+def division_de_modelo(mapa, modelo):
+    return es_division_si(valor_mapa_modelo(mapa, modelo))
+
+
+def clave_color_norm(color):
+    return quitar_tildes(norm(color)).lower()
+
+
+def qty_sku(s):
+    q = s.get("cant")
+    if q is None:
+        q = s.get("solicitada", s.get("cantidad", 0)) or 0
+    if not q and s.get("weeks"):
+        q = sum(s.get("weeks") or [])
+    return q
+
+
+def vol_color_lista(arr):
+    m = {}
+    for s in arr or []:
+        c = clave_color_norm(s.get("color"))
+        m[c] = m.get(c, 0) + qty_sku(s)
+    return m
+
+
+def anotar_vol_color(tareas):
+    por = defaultdict(lambda: defaultdict(int))
+    for t in tareas or []:
+        por[t.get("modelo")][clave_color_norm(t.get("color"))] += t.get("cantidad") or 0
+    for t in tareas or []:
+        t["volColor"] = por[t.get("modelo")][clave_color_norm(t.get("color"))]
+    return tareas
+
+
+def color_vol_key(s, vol_map=None):
+    r = rango_color(s.get("color"))
+    core = 0 if r <= 5 else 1
+    c = clave_color_norm(s.get("color"))
+    vol = (vol_map or {}).get(c, s.get("volColor") or 0)
+    return (core, r if core == 0 else 0, -vol if core == 1 else 0, s.get("color") or "")
+
+
+def prio_hay_vivo(modelos_unicos, modelo, tipo):
+    exact = modelo + "||" + tipo
+    if exact in modelos_unicos:
+        return True
+    alvo = clave_modelo_norm(modelo_sin_lote(modelo) or modelo)
+    for clave in modelos_unicos:
+        partes = str(clave).split("||")
+        if len(partes) < 2 or partes[1] != tipo:
+            continue
+        if clave_modelo_norm(partes[0]) == alvo:
+            return True
+        if clave_modelo_norm(modelo_sin_lote(partes[0])) == alvo:
+            return True
+    return False
+
+
+def prio_cubre_modelo(existentes, modelo, tipo):
+    if (modelo + "||" + tipo) in existentes:
+        return True
+    base = modelo_sin_lote(modelo)
+    return bool(base and (base + "||" + tipo) in existentes)
+
+
+def clave_lote_mo(sku, tipo, mo, modelo):
+    s = norm(sku).upper()
+    tp = norm(tipo) or "Producción"
+    m = clave_lookup_mo(mo)
+    if m:
+        return s + "||" + tp + "||MO:" + m
+    md = clave_modelo_norm(modelo or "")
+    if md:
+        return s + "||" + tp + "||MOD:" + md
+    return s + "||" + tp
+
+
 def es_secuencia_no(val):
     if val is True:
         return True
@@ -396,6 +518,8 @@ def secuencia_no_de_modelo(mapa, modelo):
         return False
     if es_secuencia_no(mapa.get(modelo)):
         return True
+    if es_secuencia_no(valor_mapa_modelo(mapa, modelo)):
+        return True
     alvo = clave_modelo_norm(modelo)
     for k, v in mapa.items():
         if clave_modelo_norm(k) == alvo and es_secuencia_no(v):
@@ -406,6 +530,9 @@ def secuencia_no_de_modelo(mapa, modelo):
 def minima_de_modelo(mapa, modelo):
     if not mapa:
         return 0
+    lookup = valor_mapa_modelo(mapa, modelo)
+    if lookup and lookup > 0:
+        return lookup
     if mapa.get(modelo, 0) > 0:
         return mapa[modelo]
     alvo = clave_modelo_norm(modelo)
@@ -675,11 +802,14 @@ def marcar_sku_prio(tareas, mapa_sku):
 
 
 def cmp_tareas_modelo(t):
+    vuelta = t.get("vuelta") or 0
     return (
         0 if t.get("esSkuPrio") else 1,
         t.get("skuPrioOrden", 9999) if t.get("esSkuPrio") else 0,
         0 if t.get("esMinima") else 1,
-        t.get("colorRank", rango_color(t.get("color"))),
+        0 if vuelta == 0 else vuelta,
+    ) + color_vol_key(t) + (
+        orden_talla(t.get("talla")),
         -(t.get("restante", t.get("cantidad", 0))),
         t.get("sku") or "",
     )
@@ -754,6 +884,33 @@ def expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku=None):
                 c["esMinima"] = False
                 out.append(c)
     marcar_sku_prio(out, mapa_minimas_sku)
+    return out
+
+
+def expandir_por_division(tareas, mapa_division=None):
+    mapa_division = mapa_division or {}
+    out = []
+    for t in tareas or []:
+        if t.get("esEspecial") or t.get("esMinima") or not division_de_modelo(mapa_division, t.get("modelo")):
+            t.setdefault("vuelta", 0)
+            out.append(t)
+            continue
+        qty = t.get("cantidad") or 0
+        if qty < 2:
+            t["vuelta"] = 1
+            out.append(t)
+            continue
+        v1 = int(math.ceil(qty / 2.0))
+        v2 = qty - v1
+        a = dict(t)
+        a["cantidad"] = v1
+        a["vuelta"] = 1
+        out.append(a)
+        if v2 > 0:
+            b = dict(t)
+            b["cantidad"] = v2
+            b["vuelta"] = 2
+            out.append(b)
     return out
 
 
@@ -848,14 +1005,17 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None):
-    """Motor v5.9.33: Especial con 2+ líneas toma todas las asignadas."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None):
+    """Motor v5.9.39: lotes, Division=Si y secuencia de color por volumen."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
+    mapa_division = mapa_division or {}
     apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
+    tareas = expandir_por_division(tareas, mapa_division)
+    anotar_vol_color(tareas)
     for t in tareas:
         t["restante"] = t["cantidad"]
         t["planificada"] = 0
@@ -870,6 +1030,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         t["lineas"] = [str(x) for x in t["lineas"]]
         t["familia"] = familia_de(t)
         t["genero"] = genero_de(t)
+        t.setdefault("vuelta", 0)
 
     modelos = {}
     orden = []
@@ -914,6 +1075,16 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def restante_minima(m):
         return sum(t["restante"] for t in m["tareas"] if t.get("esMinima"))
+
+    def restante_vuelta(m, v):
+        return sum(t["restante"] for t in m["tareas"] if (t.get("vuelta") or 0) == v)
+
+    def vuelta_activa(m):
+        if restante_vuelta(m, 1) > 0:
+            return 1
+        if restante_vuelta(m, 2) > 0:
+            return 2
+        return 0
 
     def tuvo_minima(m):
         return any(t.get("esMinima") for t in m["tareas"])
@@ -1382,13 +1553,15 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
 
-    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None):
+    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None, vuelta_filtro=0):
         for t in m["tareas"]:
             if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
                 continue
             if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
                 continue
             if solo_minima and not t.get("esMinima"):
+                continue
+            if (not solo_minima) and vuelta_filtro > 0 and (t.get("vuelta") or 0) not in (0, vuelta_filtro):
                 continue
             if color_rank is not None and rango_color(t.get("color")) != color_rank:
                 continue
@@ -1424,12 +1597,15 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         explota = es_especial_explosivo(m, overflow, d)
         while carga[lin][d] < 0.999:
             solo_minima = restante_minima(m) > 0
+            vuelta_filtro = 0 if solo_minima else vuelta_activa(m)
             rank = None
             if not explota:
                 for t in m["tareas"]:
                     if t["restante"] <= 0:
                         continue
                     if solo_minima and not t.get("esMinima"):
+                        continue
+                    if (not solo_minima) and vuelta_filtro > 0 and (t.get("vuelta") or 0) not in (0, vuelta_filtro):
                         continue
                     mo = t.get("mo") or t["sku"]
                     fija = None if t.get("esEspecial") else (linea_por_mo.get(mo) or t.get("lineaFija"))
@@ -1439,7 +1615,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                         continue
                     rank = rango_color(t.get("color"))
                     break
-            if producir_lote(m, lin, d, overflow, 0, solo_minima, rank) <= 0:
+            if producir_lote(m, lin, d, overflow, 0, solo_minima, rank, vuelta_filtro) <= 0:
                 break
             if restante_minima(m) <= 0 and tuvo_minima(m):
                 break
@@ -3392,7 +3568,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.38"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.39"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -3744,6 +3920,107 @@ class TestSkuOrdenSalida(unittest.TestCase):
         self.assertIn("resp.almacenSku = ordenarSkusPorSalidaEnLista_(resp.almacenSku);", gs)
         self.assertIn("return cmpSkuSalidaProduccion_(ia, ib);", gs)
         self.assertIn("return cmpSkuSalidaProduccion_(a, b);", gs)
+        self.assertIn("function expandirTareasPorDivision_", gs)
+        self.assertIn("function modeloSinLote_", gs)
+        self.assertIn("BLOQUEO DE LOTE", gs)
+        self.assertNotIn("BLOQUEO DE SKUs DUPLICADOS", gs)
+
+
+class TestLotesYDivision(unittest.TestCase):
+    def test_modelo_sin_lote_cruza_priorizacion(self):
+        self.assertEqual(modelo_sin_lote("MAR LOTE 1 KIDS"), "MAR KIDS")
+        self.assertEqual(modelo_sin_lote("MAR LOTE #2 CAB"), "MAR CAB")
+        self.assertEqual(modelo_sin_lote("RIO DAMA"), "RIO DAMA")
+        self.assertEqual(valor_mapa_modelo({"MAR KIDS": "si"}, "MAR LOTE 1 KIDS"), "si")
+        self.assertTrue(division_de_modelo({"MAR KIDS": "SI"}, "MAR LOTE 1 KIDS"))
+        self.assertFalse(division_de_modelo({"MAR KIDS": ""}, "MAR LOTE 1 KIDS"))
+        self.assertEqual(valor_mapa_modelo({"MAR KIDS": 2}, "MAR LOTE 1 KIDS"), 2)
+
+    def test_prio_conserva_base_si_por_hacer_tiene_lote(self):
+        vivos = {"MAR LOTE 1 KIDS||Producción"}
+        self.assertTrue(prio_hay_vivo(vivos, "MAR KIDS", "Producción"))
+        self.assertTrue(prio_cubre_modelo({"MAR KIDS||Producción"}, "MAR LOTE 1 KIDS", "Producción"))
+        self.assertFalse(prio_cubre_modelo({"RIO CAB||Producción"}, "MAR LOTE 1 KIDS", "Producción"))
+
+    def test_division_parte_mitad_impar_a_primera_vuelta(self):
+        tareas = [
+            {"sku": "N", "modelo": "MAR LOTE 1 KIDS", "color": "Negro", "cantidad": 101, "esEspecial": False},
+            {"sku": "R", "modelo": "MAR LOTE 1 KIDS", "color": "Rojo", "cantidad": 40, "esEspecial": False},
+        ]
+        out = expandir_por_division(tareas, {"MAR KIDS": "Si"})
+        v1 = [t for t in out if t["vuelta"] == 1]
+        v2 = [t for t in out if t["vuelta"] == 2]
+        self.assertEqual(sum(t["cantidad"] for t in v1), 51 + 20)
+        self.assertEqual(sum(t["cantidad"] for t in v2), 50 + 20)
+        self.assertEqual({t["sku"] for t in v1}, {"N", "R"})
+        self.assertEqual({t["sku"] for t in v2}, {"N", "R"})
+
+    def test_sin_division_no_parte(self):
+        t = {"sku": "N", "modelo": "RIO CAB", "color": "Negro", "cantidad": 80, "esEspecial": False}
+        out = expandir_por_division([t], {})
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].get("vuelta", 0), 0)
+
+    def test_vueltas_producen_todas_las_variantes_antes_de_repetir(self):
+        tareas = [
+            {"sku": "N", "modelo": "MAR LOTE 1 KIDS", "mo": "2765", "cantidad": 80, "cap": 130,
+             "lineas": ["3"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260922, "solicitadaOrig": 80, "talla": "10"},
+            {"sku": "R", "modelo": "MAR LOTE 1 KIDS", "mo": "2766", "cantidad": 80, "cap": 130,
+             "lineas": ["3"], "color": "Rojo", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 20260922, "solicitadaOrig": 80, "talla": "10"},
+        ]
+        out = planificar(tareas, {}, total_dias=5, mapa_division={"MAR KIDS": "Si"})
+        orden = []
+        for d in range(5):
+            for t in out:
+                if t["plan"]["3"][d] > 0:
+                    orden.append((d, t["sku"], t["vuelta"], t["plan"]["3"][d]))
+        skus_v1 = [x[1] for x in orden if x[2] == 1]
+        self.assertIn("N", skus_v1)
+        self.assertIn("R", skus_v1)
+        primer_v2 = next((i for i, x in enumerate(orden) if x[2] == 2), None)
+        self.assertIsNotNone(primer_v2)
+        self.assertTrue(all(x[2] == 1 for x in orden[:primer_v2]))
+        self.assertEqual(sum(t["planificada"] for t in out), 160)
+
+    def test_mismo_sku_dos_lotes_no_se_juntan(self):
+        tareas = [
+            {"sku": "MARMIKI01T10", "modelo": "MAR LOTE 1 KIDS", "mo": "02765", "cantidad": 60, "cap": 130,
+             "lineas": ["3"], "color": "Aguamarina", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 60},
+            {"sku": "MARMIKI01T10", "modelo": "MAR LOTE 2 KIDS", "mo": "02999", "cantidad": 40, "cap": 130,
+             "lineas": ["3"], "color": "Aguamarina", "prioridadNum": 3, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 2, "solicitadaOrig": 40},
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        self.assertEqual(len(out), 2)
+        self.assertEqual({t["mo"] for t in out}, {"02765", "02999"})
+        self.assertEqual({t["modelo"] for t in out}, {"MAR LOTE 1 KIDS", "MAR LOTE 2 KIDS"})
+        self.assertEqual(clave_lote_mo("MARMIKI01T10", "Producción", "02765", "MAR LOTE 1 KIDS"),
+                         clave_lote_mo("marmiki01t10", "Producción", "2765", "MAR LOTE 1 KIDS"))
+        self.assertNotEqual(
+            clave_lote_mo("MARMIKI01T10", "Producción", "02765", "MAR LOTE 1 KIDS"),
+            clave_lote_mo("MARMIKI01T10", "Producción", "02999", "MAR LOTE 2 KIDS"),
+        )
+
+    def test_resto_de_colores_por_volumen(self):
+        rows = [
+            {"sku": "V", "color": "Verde", "talla": "M", "weeks": [200], "modelo": "X"},
+            {"sku": "R", "color": "Rojo", "talla": "M", "weeks": [10], "modelo": "X"},
+            {"sku": "N", "color": "Negro", "talla": "M", "weeks": [5], "modelo": "X"},
+        ]
+        out = [s["sku"] for s in ordenar_skus_salida(rows)]
+        self.assertEqual(out, ["N", "V", "R"])
+
+    def test_gs_lee_columna_division(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn('idxPorFragmento_(headersPrio, ["division", "división"])', gs)
+        self.assertIn("mapaDivision[modP] = \"si\"", gs)
+        self.assertIn("expandirTareasPorDivision_(tareas, mapaDivision)", gs)
+        self.assertIn("claveLoteMO_", gs)
 
 
 if __name__ == "__main__":

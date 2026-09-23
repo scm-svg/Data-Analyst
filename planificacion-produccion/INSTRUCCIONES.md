@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.38 — códigos listos para pegar
+# Planificación de Producción v5.9.39 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,17 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Motor · Lotes, Division y secuencia (5.9.39)
+
+- **Mismo SKU, distinto lote:** ya no se bloquea repetir un SKU en `Por Hacer` / `Por Hacer - Especial`. La identidad es **MO + modelo**. El número de lote va en **Producto** (ej. `MAR LOTE 1` + género KIDS = `MAR LOTE 1 KIDS`). Cada lote tiene su propia prioridad, fecha, líneas y secuencia. Solo se revierte la celda si coinciden SKU + MO + modelo.
+- **Actualizar MOs** ya no pisa un lote con la MO de otro: la hoja `MO` guarda también **Modelo** y cruza por MO o por lote.
+- **Actualizar Priorización** conserva la fila base (`MAR KIDS`) aunque en Por Hacer el producto sea `MAR LOTE 1 KIDS`. Si más adelante agregas una fila exacta del lote, esa gana.
+- **Division (columna I):** escribe **Si** (vale `SI` / `Sí`) para partir las variantes a la **mitad** y producirlas en **vueltas**: primero todas las variantes al 50% (el impar va a la 1ª), en el orden de color/talla; después la otra mitad en el mismo orden. Vacío u otro valor = flujo normal. No aplica a Especial ni a la banda de cantidad mínima.
+- **Secuencia de color:** Negro → Blanco → Azul Marino, y el resto **por volumen del color en el modelo**. Ese orden es el del plan, `Proyeccion - SKUS` y Entrada de almacén.
+- **Géneros en una línea:** si RIO CAB y RIO DAMA (o MAR) comparten una línea, se sigue el color y se **alternan géneros** dentro de ese color (CAB → DAMA → KIDS). Si hay dos líneas libres, cada género toma una. Una MO regular **no se parte** entre líneas.
+- **Especial** sigue siendo la excepción: con 2+ líneas asignadas puede usarlas todas.
 
 ## Dashboard · Drill-down SKU por salida (5.9.38)
 
@@ -30,7 +40,7 @@ Criterio, el mismo del motor:
 
 1. Primero el SKU que **arranca antes** (semana y día con producción).
 2. SKUs de **Priorizacion - SKUs** (salen primero cuando el modelo entra a la línea).
-3. Color núcleo: **Negro → Blanco → Marino → resto**.
+3. Color núcleo: **Negro → Blanco → Marino**; el resto por **volumen del color** en el modelo.
 4. Talla (XS → S → M → L → XL, o número).
 5. Empate: más cantidad, luego el código SKU.
 
@@ -54,6 +64,17 @@ Después de pegar los dos archivos, corre **🔄 Actualizar Dashboard**. El enla
 - Los chips de semana filtran los modelos que ingresarían esa semana (lunes de la fecha de entrada).
 - El calendario de ingresos lista piezas por modelo y semana de entrada. Clic en el modelo abre los SKUs.
 - En **Calendario → Detalle diario**, al pasar el cursor sobre un modelo se ven las variantes (SKU, color, talla y cantidad de la semana) **por salida de producción**.
+
+## Priorizacion — columna I (Division)
+
+Encabezado en I2: `Division`.
+
+- Escribe **Si** en el modelo que debe salir en dos vueltas al 50% (todas las variantes primero a la mitad, luego el resto en el mismo orden).
+- Vacío, `No` u otro valor: producción continua, sin partir.
+- **Actualizar Priorización** conserva la columna I.
+- El cruce ignora el texto `LOTE n` del producto: `MAR KIDS` + `Si` aplica a `MAR LOTE 1 KIDS`.
+
+Ejemplo: `MAR KIDS` con `I=Si` y 80 Negro + 80 Rojo → 40 Negro, 40 Rojo, 40 Negro, 40 Rojo.
 
 ## Priorizacion — columna H (Secuencia)
 
