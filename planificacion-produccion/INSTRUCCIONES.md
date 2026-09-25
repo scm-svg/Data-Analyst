@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.42 — códigos listos para pegar
+# Planificación de Producción v5.9.43 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,11 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Actualizar MOs · asignar número a un SKU (5.9.43)
+
+Al escribir una MO en la hoja `MO` (o en `Por Hacer`) y pulsar **Actualizar MOs**, el cruce ya no exige que los dos lados tengan el mismo número. El mismo lote se reconoce por **SKU + tipo + modelo**. Se conserva la MO recién puesta y se copia a la otra lista. Si el SKU tiene dos lotes (`MAR LOTE 1` y `MAR LOTE 2`), cada uno sigue con su MO. Una fila que ya no está en Por Hacer sí se elimina como huérfana.
 
 ## Motor · Modelo a media estación en L1-4 (5.9.42)
 
@@ -38,7 +42,7 @@ Efecto:
 ## Motor · Lotes, Division y secuencia (5.9.39)
 
 - **Mismo SKU, distinto lote:** ya no se bloquea repetir un SKU en `Por Hacer` / `Por Hacer - Especial`. La identidad es **MO + modelo**. El número de lote va en **Producto** (ej. `MAR LOTE 1` + género KIDS = `MAR LOTE 1 KIDS`). Cada lote tiene su propia prioridad, fecha, líneas y secuencia. Solo se revierte la celda si coinciden SKU + MO + modelo.
-- **Actualizar MOs** ya no pisa un lote con la MO de otro: la hoja `MO` guarda también **Modelo** y cruza por MO o por lote.
+- **Actualizar MOs** ya no pisa un lote con la MO de otro: la hoja `MO` guarda también **Modelo** y cruza por MO o por lote. Asignar el número en un solo lado (hoja `MO` o Por Hacer) ya no borra la fila ni vacía la MO.
 - **Actualizar Priorización** conserva la fila base (`MAR KIDS`) aunque en Por Hacer el producto sea `MAR LOTE 1 KIDS`. Si más adelante agregas una fila exacta del lote, esa gana.
 - **Division (columna I):** escribe **Si** (vale `SI` / `Sí`) para partir las variantes a la **mitad** y producirlas en **vueltas**: primero todas las variantes al 50% (el impar va a la 1ª), en el orden de color/talla; después la otra mitad en el mismo orden. Vacío u otro valor = flujo normal. No aplica a Especial ni a la banda de cantidad mínima.
 - **Secuencia de color:** Negro → Blanco → Azul Marino, y el resto **por volumen del color en el modelo**. Ese orden es el del plan, `Proyeccion - SKUS` y Entrada de almacén.

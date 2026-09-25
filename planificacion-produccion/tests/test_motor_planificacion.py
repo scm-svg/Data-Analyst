@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.42 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.43 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -219,6 +219,8 @@ def clave_lookup_mo(mo):
     s = str("" if mo is None else mo).strip().upper()
     if not s:
         return ""
+    if re.match(r"^\d+\.0+$", s):
+        s = re.sub(r"\.0+$", "", s)
     m = re.match(r"^0*([0-9]+)(.*)$", s)
     if m:
         return m.group(1) + m.group(2)
@@ -622,6 +624,96 @@ def clave_lote_mo(sku, tipo, mo, modelo):
     if md:
         return s + "||" + tp + "||MOD:" + md
     return s + "||" + tp
+
+
+def resolver_clave_activa_mo(sku, tipo, mo, modelo, skus_activos, meta_activos=None):
+    """Cruza hoja MO con Por Hacer aunque solo un lado tenga el número."""
+    exact = clave_lote_mo(sku, tipo, mo, modelo)
+    if exact in skus_activos:
+        return exact
+    sin_mo = clave_lote_mo(sku, tipo, "", modelo)
+    if sin_mo in skus_activos:
+        return sin_mo
+    if not meta_activos:
+        return None
+    sku_n = norm(sku).upper()
+    tipo_n = norm(tipo) or "Producción"
+    alvo = clave_modelo_norm(modelo or "")
+    mo_b = clave_lookup_mo(mo)
+    hits = []
+    for k, m in meta_activos.items():
+        if norm(m.get("sku")).upper() != sku_n:
+            continue
+        if (norm(m.get("tipo")) or "Producción") != tipo_n:
+            continue
+        if alvo and clave_modelo_norm(m.get("modelo") or "") != alvo:
+            continue
+        mo_a = clave_lookup_mo(m.get("mo"))
+        if mo_b and mo_a and mo_b != mo_a:
+            continue
+        hits.append(k)
+    if len(hits) == 1:
+        return hits[0]
+    return None
+
+
+def marcar_lote_consumido(consumidos, sku, tipo, mo, modelo):
+    consumidos.add(clave_lote_mo(sku, tipo, mo, modelo))
+    consumidos.add(clave_lote_mo(sku, tipo, "", modelo))
+    if norm(mo):
+        consumidos.add(clave_lote_mo(sku, tipo, mo, ""))
+
+
+def sincronizar_filas_mo(filas_mo, activos_meta):
+    """Espejo de la fase 2 de actualizarMOs_: no borrar la MO recién asignada."""
+    skus_activos = {k: (v.get("cant") or 0) for k, v in activos_meta.items()}
+    filas_final = []
+    consumidos = set()
+    huerfanos = 0
+    for fila in filas_mo:
+        sku = norm(fila[0])
+        tipo = norm(fila[1]) or "Producción"
+        cant, mo, status, modelo = fila[2], fila[3], fila[4], fila[5]
+        if not sku:
+            continue
+        clave_b = clave_lote_mo(sku, tipo, mo, modelo)
+        if clave_b in consumidos:
+            continue
+        clave_act = resolver_clave_activa_mo(sku, tipo, mo, modelo, skus_activos, activos_meta)
+        if not clave_act:
+            huerfanos += 1
+            continue
+        if clave_act in consumidos:
+            continue
+        meta = activos_meta.get(clave_act) or {}
+        mo_final = norm(mo) or norm(meta.get("mo"))
+        modelo_final = norm(modelo) or norm(meta.get("modelo"))
+        filas_final.append([sku, tipo, cant, mo_final, status, modelo_final])
+        marcar_lote_consumido(consumidos, sku, tipo, mo_final, modelo_final)
+        marcar_lote_consumido(
+            consumidos,
+            meta.get("sku") or sku,
+            meta.get("tipo") or tipo,
+            meta.get("mo"),
+            meta.get("modelo"),
+        )
+        consumidos.add(clave_act)
+
+    nuevas = 0
+    for clave, meta in activos_meta.items():
+        if clave in consumidos:
+            continue
+        filas_final.append([
+            meta.get("sku") or "",
+            meta.get("tipo") or "Producción",
+            meta.get("cant") or skus_activos.get(clave, 0),
+            meta.get("mo") or "",
+            "",
+            meta.get("modelo") or "",
+        ])
+        marcar_lote_consumido(consumidos, meta.get("sku"), meta.get("tipo"), meta.get("mo"), meta.get("modelo"))
+        nuevas += 1
+    return {"filas": filas_final, "huerfanos": huerfanos, "nuevas": nuevas}
 
 
 def es_secuencia_no(val):
@@ -1123,7 +1215,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.42: lotes, Division=Si y paralelo L1-4; uno o dos modelos a media estación, cada uno con la cola."""
+    """Motor v5.9.43: lotes, Division=Si y paralelo L1-4; uno o dos modelos a media estación, cada uno con la cola."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -3760,7 +3852,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4216,6 +4308,96 @@ class TestLotesYDivision(unittest.TestCase):
         self.assertIn("mapaDivision[modP] = \"si\"", gs)
         self.assertIn("expandirTareasPorDivision_(tareas, mapaDivision)", gs)
         self.assertIn("claveLoteMO_", gs)
+        self.assertIn("resolverClaveActivaMO_", gs)
+        self.assertIn("marcarLoteConsumido_", gs)
+
+
+class TestActualizarMOsAsignacion(unittest.TestCase):
+    def _activo(self, sku, tipo, mo, modelo, cant=30):
+        clave = clave_lote_mo(sku, tipo, mo, modelo)
+        return clave, {
+            "sku": sku, "tipo": tipo, "mo": mo, "modelo": modelo, "cant": cant,
+        }
+
+    def test_asignar_mo_en_hoja_mo_no_se_borra(self):
+        clave_ph, meta = self._activo("MAR-061", "Producción", "", "MAR LOTE 1 CAB", 45)
+        out = sincronizar_filas_mo(
+            [["MAR-061", "Producción", 45, "03001", "Confirmada", "MAR LOTE 1 CAB"]],
+            {clave_ph: meta},
+        )
+        self.assertEqual(out["huerfanos"], 0)
+        self.assertEqual(out["nuevas"], 0)
+        self.assertEqual(len(out["filas"]), 1)
+        self.assertEqual(out["filas"][0][3], "03001")
+        self.assertEqual(out["filas"][0][5], "MAR LOTE 1 CAB")
+
+    def test_asignar_mo_en_por_hacer_se_conserva(self):
+        clave_ph, meta = self._activo("MAR-061", "Producción", "03001", "MAR LOTE 1 CAB", 45)
+        out = sincronizar_filas_mo(
+            [["MAR-061", "Producción", 45, "", "", "MAR LOTE 1 CAB"]],
+            {clave_ph: meta},
+        )
+        self.assertEqual(out["huerfanos"], 0)
+        self.assertEqual(out["nuevas"], 0)
+        self.assertEqual(out["filas"][0][3], "03001")
+
+    def test_lotes_distintos_mismo_sku_no_se_mezclan(self):
+        k1, m1 = self._activo("MARMIKI01T10", "Producción", "", "MAR LOTE 1 KIDS", 60)
+        k2, m2 = self._activo("MARMIKI01T10", "Producción", "02999", "MAR LOTE 2 KIDS", 40)
+        out = sincronizar_filas_mo(
+            [
+                ["MARMIKI01T10", "Producción", 60, "02765", "Confirmada", "MAR LOTE 1 KIDS"],
+                ["MARMIKI01T10", "Producción", 40, "02999", "Confirmada", "MAR LOTE 2 KIDS"],
+            ],
+            {k1: m1, k2: m2},
+        )
+        self.assertEqual(out["huerfanos"], 0)
+        self.assertEqual(out["nuevas"], 0)
+        mos = {f[3] for f in out["filas"]}
+        modelos = {f[5] for f in out["filas"]}
+        self.assertEqual(mos, {"02765", "02999"})
+        self.assertEqual(modelos, {"MAR LOTE 1 KIDS", "MAR LOTE 2 KIDS"})
+
+    def test_huerfana_real_si_ya_no_esta_en_por_hacer(self):
+        k1, m1 = self._activo("BACCCDA12TL", "Producción", "01331", "BASIC LINE CROP TEE DAMA", 30)
+        out = sincronizar_filas_mo(
+            [
+                ["BACCCDA12TL", "Producción", 30, "01331", "Confirmada", "BASIC LINE CROP TEE DAMA"],
+                ["SHOUNCA01TM", "Producción", 2, "02890", "Confirmada", "SHORT PLAYA CAB"],
+            ],
+            {k1: m1},
+        )
+        self.assertEqual(out["huerfanos"], 1)
+        self.assertEqual(len(out["filas"]), 1)
+        self.assertEqual(out["filas"][0][0], "BACCCDA12TL")
+
+    def test_sku_nuevo_solo_en_por_hacer(self):
+        k1, m1 = self._activo("NUEVO-01", "Producción", "", "RIO DAMA", 10)
+        out = sincronizar_filas_mo([], {k1: m1})
+        self.assertEqual(out["huerfanos"], 0)
+        self.assertEqual(out["nuevas"], 1)
+        self.assertEqual(out["filas"][0][0], "NUEVO-01")
+
+    def test_misma_mo_con_ceros_y_float_excel(self):
+        self.assertEqual(clave_lookup_mo("02890"), clave_lookup_mo(2890.0))
+        self.assertEqual(clave_lookup_mo("02890"), "2890")
+        clave_ph, meta = self._activo("SHOUNCA01TM", "Producción", 2890.0, "SHORT PLAYA CAB", 2)
+        out = sincronizar_filas_mo(
+            [["SHOUNCA01TM", "Producción", 2, "02890", "Confirmada", "SHORT PLAYA CAB"]],
+            {clave_ph: meta},
+        )
+        self.assertEqual(out["huerfanos"], 0)
+        self.assertEqual(out["nuevas"], 0)
+        self.assertEqual(out["filas"][0][3], "02890")
+
+    def test_gs_cruza_mo_asignada_sin_borrar(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn("function resolverClaveActivaMO_(", gs)
+        self.assertIn("marcarLoteConsumido_", gs)
+        self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4456,7 +4638,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
