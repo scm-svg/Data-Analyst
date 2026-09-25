@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.39 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.40 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -15,9 +15,11 @@ BANDA_RESTO = 3
 DIAS_LABORALES = 5
 DIAS_ENTRADA_ALMACEN = 4
 FRACCION_APOYO_L1 = 0.5
+FRACCION_PARCIAL_DEFAULT = 0.5
 DIAS_REMANENTE_CORTO_L2 = 2
 MAX_MODELOS_LINEA5 = 2
 MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
+MAX_MODELOS_L14_PARCIAL = 2
 LOTE_RUEDA_LINEA5 = 5
 CAP_POR_LINEA = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 SEMANAS_DEFAULT = 12
@@ -401,6 +403,51 @@ def modelo_sin_lote(modelo):
         return ""
     n = re.sub(r"\s+lote\s*#?\s*\d+\b", " ", n, flags=re.I)
     return " ".join(n.split())
+
+
+def es_linea_estandar(lin):
+    return str(lin) in ("1", "2", "3", "4")
+
+
+def parsear_fraccion_parcial(txt):
+    s = str("" if txt is None else txt).strip().replace("%", "").replace(",", ".")
+    if s == "":
+        return 0
+    try:
+        n = float(s)
+    except (TypeError, ValueError):
+        return 0
+    if n <= 0:
+        return 0
+    if n > 1:
+        n = n / 100.0
+    if n < 0.1 or n > 0.9:
+        return 0
+    return n
+
+
+def resolver_nombre_modelo_parcial(texto, candidatos):
+    raw = norm(texto)
+    if not raw or not candidatos:
+        return None
+    try:
+        entero = int(raw)
+    except (TypeError, ValueError):
+        entero = None
+    if entero is not None and str(entero) == raw and 1 <= entero <= len(candidatos):
+        return candidatos[entero - 1]
+    alvo = clave_modelo_norm(raw)
+    for m in candidatos:
+        if clave_modelo_norm(m["nombre"]) == alvo:
+            return m
+    alvo_sin = clave_modelo_norm(modelo_sin_lote(raw))
+    hits = [m for m in candidatos if clave_modelo_norm(modelo_sin_lote(m["nombre"])) == alvo_sin]
+    if len(hits) == 1:
+        return hits[0]
+    hits = [m for m in candidatos if alvo in clave_modelo_norm(m["nombre"])]
+    if len(hits) == 1:
+        return hits[0]
+    return None
 
 
 def valor_mapa_modelo(mapa, modelo):
@@ -1005,13 +1052,14 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None):
-    """Motor v5.9.39: lotes, Division=Si y secuencia de color por volumen."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
+    """Motor v5.9.40: lotes, Division=Si y paralelo L1-4 si un modelo no usa el 100%."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
     mapa_division = mapa_division or {}
     apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
+    modelo_parcial = modelo_parcial or {"activo": False, "nombre": "", "fraccion": FRACCION_PARCIAL_DEFAULT}
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     tareas = expandir_por_division(tareas, mapa_division)
@@ -1213,15 +1261,36 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 return True
         return False
 
+    def es_modelo_parcial(m):
+        if not modelo_parcial or not modelo_parcial.get("activo") or not m:
+            return False
+        alvo = clave_modelo_norm(modelo_parcial.get("clave") or modelo_parcial.get("nombre") or "")
+        if not alvo:
+            return False
+        if clave_modelo_norm(m["nombre"]) == alvo:
+            return True
+        if clave_modelo_norm(modelo_sin_lote(m["nombre"])) == alvo:
+            return True
+        return clave_modelo_norm(modelo_sin_lote(m["nombre"])) == clave_modelo_norm(
+            modelo_sin_lote(modelo_parcial.get("nombre") or "")
+        )
+
+    def linea_con_parcial(lin):
+        if not es_linea_estandar(lin) or not modelo_parcial or not modelo_parcial.get("activo"):
+            return False
+        return any(es_modelo_parcial(modelos.get(nom)) for nom in (ocupante.get(lin) or []))
+
     def max_ocupantes_ahora(lin, m=None):
-        if str(lin) != "5":
-            return 1
-        if es_exclusivo_linea5(m):
-            return 1
-        except_nom = m["nombre"] if m else None
-        if linea5_ocupada_por_exclusivo(except_nom):
-            return 1
-        return MAX_MODELOS_LINEA5
+        if str(lin) == "5":
+            if es_exclusivo_linea5(m):
+                return 1
+            except_nom = m["nombre"] if m else None
+            if linea5_ocupada_por_exclusivo(except_nom):
+                return 1
+            return MAX_MODELOS_LINEA5
+        if es_linea_estandar(lin) and (es_modelo_parcial(m) or linea_con_parcial(lin)):
+            return MAX_MODELOS_L14_PARCIAL
+        return 1
 
     def lineas_clave_modelo(m, overflow):
         return ",".join(sorted(lineas_modelo(m, overflow)))
@@ -1453,7 +1522,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
 
         def desalojar_para(m, lin):
-            if max_ocupantes_ahora(lin, m) > 1:
+            if str(lin) == "5" and max_ocupantes_ahora(lin, m) > 1:
                 return False
             occ = ocupante.get(lin) or []
             if m["nombre"] in occ:
@@ -1465,6 +1534,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 ocupante[lin] = [m["nombre"]]
                 return True
             if len(occ) < max_ocupantes_ahora(lin, m):
+                if es_linea_estandar(lin) and linea_con_parcial(lin):
+                    fam_new = familia_modelo(m)
+                    if fam_new and familia_ocupa_linea(fam_new, lin, m["nombre"]):
+                        return False
                 ocupante[lin].append(m["nombre"])
                 return True
             worst_i = -1
@@ -1501,7 +1574,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     if t["restante"] <= 0:
                         continue
                     for lin in elegibles(t, overflow):
-                        if seen.get(lin) or max_ocupantes_ahora(lin, m) > 1:
+                        if seen.get(lin) or (str(lin) == "5" and max_ocupantes_ahora(lin, m) > 1):
                             continue
                         if not modelo_puede(m, d, lin, overflow):
                             continue
@@ -1553,7 +1626,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
 
-    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None, vuelta_filtro=0):
+    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None, vuelta_filtro=0, techo_carga=1):
+        techo = techo_carga if 0 < techo_carga < 1 else 1.0
         for t in m["tareas"]:
             if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
                 continue
@@ -1573,7 +1647,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
             if lin not in elegibles(t, overflow):
                 continue
-            avail = 1.0 - carga[lin][d]
+            avail = techo - carga[lin][d]
             if avail <= 0.001:
                 return 0
             cap_lin = cap_de_tarea(t, lin, caps_lineas)
@@ -1593,9 +1667,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return piezas
         return 0
 
-    def producir_modelo_dia(m, lin, d, overflow):
+    def producir_modelo_dia(m, lin, d, overflow, techo_carga=1):
+        techo = techo_carga if 0 < techo_carga < 1 else 1.0
         explota = es_especial_explosivo(m, overflow, d)
-        while carga[lin][d] < 0.999:
+        while carga[lin][d] < techo - 0.001:
             solo_minima = restante_minima(m) > 0
             vuelta_filtro = 0 if solo_minima else vuelta_activa(m)
             rank = None
@@ -1615,7 +1690,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                         continue
                     rank = rango_color(t.get("color"))
                     break
-            if producir_lote(m, lin, d, overflow, 0, solo_minima, rank, vuelta_filtro) <= 0:
+            if producir_lote(m, lin, d, overflow, 0, solo_minima, rank, vuelta_filtro, techo) <= 0:
                 break
             if restante_minima(m) <= 0 and tuvo_minima(m):
                 break
@@ -1688,6 +1763,32 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             p = producir_lote(modelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5, solo_minima)
             estancado = 0 if p > 0 else estancado + 1
 
+    def producir_paralelo_estandar(noms, lin, d, overflow):
+        fraccion = (modelo_parcial or {}).get("fraccion") or FRACCION_PARCIAL_DEFAULT
+        if fraccion < 0.1 or fraccion > 0.9:
+            fraccion = FRACCION_PARCIAL_DEFAULT
+        ordered = [nom for nom in noms if es_modelo_parcial(modelos.get(nom))]
+        for nom in noms:
+            if nom not in ordered:
+                ordered.append(nom)
+        if len(ordered) < 2:
+            if ordered:
+                producir_modelo_dia(modelos[ordered[0]], lin, d, overflow)
+            return
+        fam0 = familia_modelo(modelos[ordered[0]])
+        nom_b = next((nom for nom in ordered[1:] if familia_modelo(modelos[nom]) != fam0), None)
+        if not nom_b:
+            producir_modelo_dia(modelos[ordered[0]], lin, d, overflow)
+            return
+        m_a = modelos[ordered[0]]
+        m_b = modelos[nom_b]
+        producir_modelo_dia(m_a, lin, d, overflow, fraccion)
+        producir_modelo_dia(m_b, lin, d, overflow, 1)
+        if carga[lin][d] < 0.999:
+            producir_modelo_dia(m_a, lin, d, overflow, 1)
+        if carga[lin][d] < 0.999:
+            producir_modelo_dia(m_b, lin, d, overflow, 1)
+
     def siguiente_candidato(lin, d, overflow, skip):
         last_nom = ultimo_modelo.get(lin) or ""
         last_m = modelos.get(last_nom)
@@ -1745,6 +1846,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not skip.get(nom) and modelo_puede(modelos[nom], d, lin, overflow_now)
                 and not debe_ceder_al_lote_familia(modelos[nom], overflow_now)
             ]
+            if es_linea_estandar(lin) and linea_con_parcial(lin) and len(ocupante[lin]) < max_ocupantes_ahora(lin):
+                next_pre = siguiente_candidato(lin, d, overflow_now, skip)
+                if next_pre:
+                    ocupante[lin].append(next_pre)
             noms = ocupante[lin]
             if str(lin) == "5":
                 excl = [nom for nom in noms if es_exclusivo_linea5(modelos.get(nom))]
@@ -1759,6 +1864,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     producir_rueda_linea5(paralelos, d, overflow_now)
                 else:
                     producir_modelo_dia(modelos[noms[0]], lin, d, overflow_now)
+            elif es_linea_estandar(lin) and len(noms) >= 2 and linea_con_parcial(lin):
+                producir_paralelo_estandar(noms, lin, d, overflow_now)
             elif noms:
                 producir_modelo_dia(modelos[noms[0]], lin, d, overflow_now)
             if carga[lin][d] >= 0.999:
@@ -3568,7 +3675,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.39"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.40"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4024,6 +4131,150 @@ class TestLotesYDivision(unittest.TestCase):
         self.assertIn("mapaDivision[modP] = \"si\"", gs)
         self.assertIn("expandirTareasPorDivision_(tareas, mapaDivision)", gs)
         self.assertIn("claveLoteMO_", gs)
+
+
+class TestModeloParcialParaleloL14(unittest.TestCase):
+    def _t(self, sku, modelo, cant, prio, linea="4", **kw):
+        d = {
+            "sku": sku, "modelo": modelo, "mo": "MO-" + sku,
+            "cantidad": cant, "cap": 130, "lineas": [str(linea)],
+            "color": "Negro", "prioridadNum": prio, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": prio, "solicitadaOrig": cant,
+        }
+        d.update(kw)
+        return d
+
+    def test_parsear_fraccion_y_resolver_nombre(self):
+        self.assertEqual(parsear_fraccion_parcial("50"), 0.5)
+        self.assertEqual(parsear_fraccion_parcial("60%"), 0.6)
+        self.assertEqual(parsear_fraccion_parcial("0.4"), 0.4)
+        self.assertEqual(parsear_fraccion_parcial(""), 0)
+        self.assertEqual(parsear_fraccion_parcial("100"), 0)
+        self.assertEqual(parsear_fraccion_parcial("5"), 0)
+        cands = [{"nombre": "MAR LOTE 1 KIDS"}, {"nombre": "RIO DAMA"}, {"nombre": "VITA BIKER DAMA"}]
+        self.assertEqual(resolver_nombre_modelo_parcial("2", cands)["nombre"], "RIO DAMA")
+        self.assertEqual(resolver_nombre_modelo_parcial("MAR KIDS", cands)["nombre"], "MAR LOTE 1 KIDS")
+        self.assertEqual(resolver_nombre_modelo_parcial("vita biker", cands)["nombre"], "VITA BIKER DAMA")
+        self.assertIsNone(resolver_nombre_modelo_parcial("NO EXISTE", cands))
+
+    def test_sin_parcial_sigue_secuencial_en_l4(self):
+        tareas = [
+            self._t("R1", "RIO DAMA", 400, 1),
+            self._t("V1", "VITA BIKER DAMA", 400, 2),
+        ]
+        out = planificar(tareas, {}, total_dias=5)
+        por_dia = []
+        for d in range(5):
+            hoy = {t["modelo"]: t["plan"]["4"][d] for t in out if t["plan"]["4"][d] > 0}
+            por_dia.append(hoy)
+            self.assertEqual(sum(hoy.values()), 130)
+        for d in range(3):
+            self.assertEqual(por_dia[d], {"RIO DAMA": 130})
+
+    def test_parcial_comparte_el_dia_con_siguiente_prioridad(self):
+        tareas = [
+            self._t("R1", "RIO DAMA", 400, 1),
+            self._t("V1", "VITA BIKER DAMA", 400, 2),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=5,
+            modelo_parcial={"activo": True, "nombre": "RIO DAMA", "fraccion": 0.5},
+        )
+        lunes = {t["modelo"]: t["plan"]["4"][0] for t in out if t["plan"]["4"][0] > 0}
+        self.assertEqual(lunes["RIO DAMA"], 65)
+        self.assertEqual(lunes["VITA BIKER DAMA"], 65)
+        self.assertEqual(sum(lunes.values()), 130)
+
+    def test_companero_es_el_siguiente_de_la_cola_no_el_tercero(self):
+        tareas = [
+            self._t("A", "MODELO A", 400, 1, linea="3"),
+            self._t("B", "MODELO B", 400, 2, linea="3"),
+            self._t("C", "MODELO C", 400, 3, linea="3"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "MODELO A", "fraccion": 0.5},
+        )
+        lunes = {t["modelo"]: t["plan"]["3"][0] for t in out if t["plan"]["3"][0] > 0}
+        self.assertEqual(lunes.get("MODELO A"), 65)
+        self.assertEqual(lunes.get("MODELO B"), 65)
+        self.assertEqual(lunes.get("MODELO C", 0), 0)
+
+    def test_misma_familia_no_es_companero(self):
+        tareas = [
+            self._t("RC", "RIO CAB", 400, 1, linea="2"),
+            self._t("RD", "RIO DAMA", 400, 2, linea="2"),
+            self._t("VB", "VITA BIKER DAMA", 400, 3, linea="2"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "RIO CAB", "fraccion": 0.5},
+        )
+        lunes = {t["modelo"]: t["plan"]["2"][0] for t in out if t["plan"]["2"][0] > 0}
+        self.assertEqual(lunes.get("RIO CAB"), 65)
+        self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
+        self.assertEqual(lunes.get("RIO DAMA", 0), 0)
+
+    def test_fraccion_60_40(self):
+        tareas = [
+            self._t("A", "MODELO A", 400, 1, linea="1"),
+            self._t("B", "MODELO B", 400, 2, linea="1"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "MODELO A", "fraccion": 0.6},
+        )
+        lunes = {t["modelo"]: t["plan"]["1"][0] for t in out if t["plan"]["1"][0] > 0}
+        self.assertEqual(lunes["MODELO A"], 78)
+        self.assertEqual(lunes["MODELO B"], 52)
+
+    def test_sin_companero_usa_toda_la_linea(self):
+        tareas = [self._t("A", "MODELO A", 400, 1, linea="4")]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "MODELO A", "fraccion": 0.5},
+        )
+        self.assertEqual(out[0]["plan"]["4"][0], 130)
+
+    def test_no_aplica_en_linea_5(self):
+        tareas = [
+            {"sku": "A", "modelo": "MODELO A", "mo": "MO-A", "cantidad": 400, "cap": 40,
+             "lineas": ["5"], "color": "Negro", "prioridadNum": 1, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 400},
+            {"sku": "B", "modelo": "MODELO B", "mo": "MO-B", "cantidad": 400, "cap": 40,
+             "lineas": ["5"], "color": "Negro", "prioridadNum": 2, "esEspecial": False,
+             "diaIngreso": 0, "fechaKey": 1, "solicitadaOrig": 400},
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "MODELO A", "fraccion": 0.5},
+        )
+        por = {t["modelo"]: t["plan"]["5"][0] for t in out}
+        self.assertEqual(por["MODELO A"], 20)
+        self.assertEqual(por["MODELO B"], 20)
+
+    def test_cruza_lote_en_el_nombre(self):
+        tareas = [
+            self._t("M1", "MAR LOTE 1 KIDS", 400, 1, linea="3"),
+            self._t("V1", "VITA BIKER DAMA", 400, 2, linea="3"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={"activo": True, "nombre": "MAR KIDS", "fraccion": 0.5},
+        )
+        lunes = {t["modelo"]: t["plan"]["3"][0] for t in out if t["plan"]["3"][0] > 0}
+        self.assertEqual(lunes.get("MAR LOTE 1 KIDS"), 65)
+        self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
+
+    def test_gs_pregunta_modelo_parcial(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn("preguntarModeloParcial_", gs)
+        self.assertIn("producirParaleloEstandar_", gs)
+        self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.40"', gs)
+        self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
 
 
 if __name__ == "__main__":
