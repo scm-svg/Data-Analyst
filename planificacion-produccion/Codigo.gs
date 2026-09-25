@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.42 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.43 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ACTUALIZAR MOs: asignar una MO a un SKU (en la hoja MO o en
+ *     Por Hacer) ya no se trata como orden huérfana. Se cruza el
+ *     mismo lote por SKU + tipo + modelo aunque un lado aún no
+ *     tenga MO, se conserva el número y se escribe en ambas listas.
+ *     Dos lotes del mismo SKU (MAR LOTE 1 vs LOTE 2) no se mezclan.
  *   - MODELO A MEDIA ESTACIÓN (L1-4): al generar el plan pregunta si
  *     algún modelo planificado no usa el 100% de las estaciones. Se
  *     pueden marcar UNO o DOS (ej. "1, 3" o "RIO DAMA, VITA BIKER").
@@ -228,7 +233,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.42";
+var VERSION_SISTEMA = "5.9.43";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -792,6 +797,39 @@ function claveLoteMO_(sku, tipo, mo, modelo) {
   return s + "||" + tp;
 }
 
+/**
+ * Cruza una fila de la hoja MO con Por Hacer aunque un lado ya tenga
+ * número de MO y el otro todavía no. No junta lotes distintos
+ * (mismo SKU, otra MO o otro modelo).
+ */
+function resolverClaveActivaMO_(sku, tipo, mo, modelo, skusActivos, metaActivos) {
+  if (!skusActivos) return null;
+  var exact = claveLoteMO_(sku, tipo, mo, modelo);
+  if (Object.prototype.hasOwnProperty.call(skusActivos, exact)) return exact;
+  var sinMo = claveLoteMO_(sku, tipo, "", modelo);
+  if (Object.prototype.hasOwnProperty.call(skusActivos, sinMo)) return sinMo;
+  if (!metaActivos) return null;
+
+  var skuN = normUp_(sku);
+  var tipoN = norm_(tipo) || "Producción";
+  var alvo = claveModeloNorm_(modelo || "");
+  var moB = claveLookupMO_(mo);
+  var hits = [];
+  var k;
+  for (k in metaActivos) {
+    if (!Object.prototype.hasOwnProperty.call(metaActivos, k)) continue;
+    var m = metaActivos[k] || {};
+    if (normUp_(m.sku) !== skuN) continue;
+    if ((norm_(m.tipo) || "Producción") !== tipoN) continue;
+    if (alvo && claveModeloNorm_(m.modelo || "") !== alvo) continue;
+    var moA = claveLookupMO_(m.mo);
+    if (moB && moA && moB !== moA) continue;
+    hits.push(k);
+  }
+  if (hits.length === 1) return hits[0];
+  return null;
+}
+
 function minimaDeModelo_(mapaMinimas, modelo) {
   if (!mapaMinimas) return 0;
   var lookup = valorMapaModelo_(mapaMinimas, modelo);
@@ -970,6 +1008,7 @@ function deltaPorHuellasCostura_(filas, huellasAplicadas) {
 function claveLookupMO_(mo) {
   var s = String(mo == null ? "" : mo).trim().toUpperCase();
   if (s === "") return "";
+  if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, "");
   var m = s.match(/^0*([0-9]+)(.*)$/);
   if (m) return m[1] + m[2];
   return s;
@@ -4522,20 +4561,36 @@ function actualizarMOs_() {
   var skusEnMO = new Set();
   var huerfanos = 0;
 
+  function marcarLoteConsumido_(skuM, tipoM, moM, modeloM) {
+    skusEnMO.add(claveLoteMO_(skuM, tipoM, moM, modeloM));
+    skusEnMO.add(claveLoteMO_(skuM, tipoM, "", modeloM));
+    if (norm_(moM)) skusEnMO.add(claveLoteMO_(skuM, tipoM, moM, ""));
+  }
+
   for (var b = 0; b < bloqueMO.length; b++) {
     var skuB = norm_(bloqueMO[b][0]);
     var tipoB = norm_(bloqueMO[b][1]) || "Producción";
     if (skuB === "") continue;
 
-    var claveB = claveLoteMO_(skuB, tipoB, bloqueMO[b][3], bloqueMO[b][5]);
+    var moB = bloqueMO[b][3];
+    var modeloB = norm_(bloqueMO[b][5]);
+    var claveB = claveLoteMO_(skuB, tipoB, moB, modeloB);
     if (skusTerminados.hasOwnProperty(claveB)) continue;
-    if (!skusActivos.hasOwnProperty(claveB)) { huerfanos++; continue; }
+    if (skusEnMO.has(claveB)) continue;
 
+    var claveAct = resolverClaveActivaMO_(skuB, tipoB, moB, modeloB, skusActivos, metaActivos);
+    if (!claveAct) { huerfanos++; continue; }
+    if (skusEnMO.has(claveAct)) continue;
+
+    var metaB = metaActivos[claveAct] || {};
+    var moFinal = norm_(moB) || norm_(metaB.mo) || "";
+    var modeloFinal = modeloB || norm_(metaB.modelo) || "";
     filasMOFinal.push([
-      skuB, tipoB, bloqueMO[b][2], bloqueMO[b][3], bloqueMO[b][4],
-      norm_(bloqueMO[b][5]) || ((metaActivos[claveB] && metaActivos[claveB].modelo) || "")
+      skuB, tipoB, bloqueMO[b][2], moFinal, bloqueMO[b][4], modeloFinal
     ]);
-    skusEnMO.add(claveB);
+    marcarLoteConsumido_(skuB, tipoB, moFinal, modeloFinal);
+    marcarLoteConsumido_(metaB.sku || skuB, metaB.tipo || tipoB, metaB.mo, metaB.modelo);
+    skusEnMO.add(claveAct);
   }
 
   var nuevas = 0;
@@ -4547,6 +4602,7 @@ function actualizarMOs_() {
         metaN.sku || "", metaN.tipo || "Producción", skusActivos[claveActiva],
         metaN.mo || "", "", metaN.modelo || ""
       ]);
+      marcarLoteConsumido_(metaN.sku, metaN.tipo, metaN.mo, metaN.modelo);
       nuevas++;
     }
   }
@@ -4586,8 +4642,8 @@ function actualizarMOs_() {
   });
 
   function buscarDiccMO_(sku, tipo, mo, modelo) {
-    var k = claveLoteMO_(sku, tipo, mo, modelo);
-    if (diccMO[k]) return diccMO[k];
+    var k = resolverClaveActivaMO_(sku, tipo, mo, modelo, diccMO, diccMO);
+    if (k && diccMO[k]) return diccMO[k];
     if (mo) {
       var kMo = claveLoteMO_(sku, tipo, mo, "");
       if (diccMO[kMo]) return diccMO[kMo];
