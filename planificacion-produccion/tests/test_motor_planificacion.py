@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.40 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.42 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -448,6 +448,76 @@ def resolver_nombre_modelo_parcial(texto, candidatos):
     if len(hits) == 1:
         return hits[0]
     return None
+
+
+def partir_textos_modelo_parcial(texto):
+    raw = norm(texto)
+    if not raw:
+        return []
+    if re.match(r"^\d+(\s+\d+)+$", raw):
+        return raw.split()
+    partes = re.split(r"[,;/|]+|\s+y\s+|\s+and\s+", raw, flags=re.I)
+    return [p.strip() for p in partes if p.strip()]
+
+
+def resolver_nombres_modelo_parcial(texto, candidatos):
+    partes = partir_textos_modelo_parcial(texto)
+    if not partes:
+        return []
+    out = []
+    seen = set()
+    for parte in partes:
+        m = resolver_nombre_modelo_parcial(parte, candidatos)
+        if m is None:
+            return None
+        k = clave_modelo_norm(m["nombre"])
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(m)
+    return out
+
+
+def nombres_cfg_modelo_parcial(cfg):
+    if not cfg:
+        return []
+    noms = list(cfg.get("nombres") or [])
+    if not noms and cfg.get("nombre"):
+        noms.append(cfg["nombre"])
+    companero = cfg.get("companero") or ""
+    if companero and companero not in noms:
+        noms.append(companero)
+    return noms
+
+
+def coincide_modelo_parcial_nombre(m, nombre, clave=""):
+    if not m or not (nombre or clave):
+        return False
+    alvo = clave_modelo_norm(clave or nombre)
+    if not alvo:
+        return False
+    if clave_modelo_norm(m["nombre"]) == alvo:
+        return True
+    if clave_modelo_norm(modelo_sin_lote(m["nombre"])) == alvo:
+        return True
+    return bool(nombre) and clave_modelo_norm(modelo_sin_lote(m["nombre"])) == clave_modelo_norm(
+        modelo_sin_lote(nombre)
+    )
+
+
+def armar_cfg_modelo_parcial(elegidos, fracc=FRACCION_PARCIAL_DEFAULT):
+    a = elegidos[0]
+    b = elegidos[1] if len(elegidos) > 1 else None
+    return {
+        "activo": True,
+        "nombre": a["nombre"],
+        "clave": clave_modelo_norm(a["nombre"]),
+        "nombres": [m["nombre"] for m in elegidos],
+        "claves": [clave_modelo_norm(m["nombre"]) for m in elegidos],
+        "companero": b["nombre"] if b else "",
+        "claveCompanero": clave_modelo_norm(b["nombre"]) if b else "",
+        "fraccion": fracc or FRACCION_PARCIAL_DEFAULT,
+    }
 
 
 def valor_mapa_modelo(mapa, modelo):
@@ -1053,13 +1123,15 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.40: lotes, Division=Si y paralelo L1-4 si un modelo no usa el 100%."""
+    """Motor v5.9.42: lotes, Division=Si y paralelo L1-4; uno o dos modelos a media estación, cada uno con la cola."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
     mapa_division = mapa_division or {}
     apoyo_l1 = apoyo_l1 or {"activo": False, "desde_semana": 0}
-    modelo_parcial = modelo_parcial or {"activo": False, "nombre": "", "fraccion": FRACCION_PARCIAL_DEFAULT}
+    modelo_parcial = modelo_parcial or {
+        "activo": False, "nombre": "", "nombres": [], "fraccion": FRACCION_PARCIAL_DEFAULT,
+    }
 
     tareas = expandir_por_minima(tareas, mapa_minimas, mapa_minimas_sku)
     tareas = expandir_por_division(tareas, mapa_division)
@@ -1264,16 +1336,13 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def es_modelo_parcial(m):
         if not modelo_parcial or not modelo_parcial.get("activo") or not m:
             return False
-        alvo = clave_modelo_norm(modelo_parcial.get("clave") or modelo_parcial.get("nombre") or "")
-        if not alvo:
-            return False
-        if clave_modelo_norm(m["nombre"]) == alvo:
-            return True
-        if clave_modelo_norm(modelo_sin_lote(m["nombre"])) == alvo:
-            return True
-        return clave_modelo_norm(modelo_sin_lote(m["nombre"])) == clave_modelo_norm(
-            modelo_sin_lote(modelo_parcial.get("nombre") or "")
-        )
+        noms = nombres_cfg_modelo_parcial(modelo_parcial)
+        claves = modelo_parcial.get("claves") or []
+        for i, nom in enumerate(noms):
+            clave = claves[i] if i < len(claves) else ""
+            if coincide_modelo_parcial_nombre(m, nom, clave):
+                return True
+        return False
 
     def linea_con_parcial(lin):
         if not es_linea_estandar(lin) or not modelo_parcial or not modelo_parcial.get("activo"):
@@ -1343,6 +1412,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if len(occ) >= max_ocupantes_ahora(lin, m):
                     continue
                 if fam and familia_ocupa_linea(fam, lin, m["nombre"]):
+                    continue
+                if es_modelo_parcial(m) and occ and linea_con_parcial(lin):
                     continue
                 out.append(lin)
         return out
@@ -1537,6 +1608,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if es_linea_estandar(lin) and linea_con_parcial(lin):
                     fam_new = familia_modelo(m)
                     if fam_new and familia_ocupa_linea(fam_new, lin, m["nombre"]):
+                        return False
+                    if es_modelo_parcial(m) and occ:
                         return False
                 ocupante[lin].append(m["nombre"])
                 return True
@@ -1767,7 +1840,19 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         fraccion = (modelo_parcial or {}).get("fraccion") or FRACCION_PARCIAL_DEFAULT
         if fraccion < 0.1 or fraccion > 0.9:
             fraccion = FRACCION_PARCIAL_DEFAULT
-        ordered = [nom for nom in noms if es_modelo_parcial(modelos.get(nom))]
+        ordered = []
+        noms_cfg = nombres_cfg_modelo_parcial(modelo_parcial)
+        claves_cfg = (modelo_parcial or {}).get("claves") or []
+        for j, nom_cfg in enumerate(noms_cfg):
+            clave = claves_cfg[j] if j < len(claves_cfg) else ""
+            for nom in noms:
+                if nom in ordered:
+                    continue
+                if coincide_modelo_parcial_nombre(modelos.get(nom), nom_cfg, clave):
+                    ordered.append(nom)
+        for nom in noms:
+            if es_modelo_parcial(modelos.get(nom)) and nom not in ordered:
+                ordered.append(nom)
         for nom in noms:
             if nom not in ordered:
                 ordered.append(nom)
@@ -3675,7 +3760,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.40"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4157,6 +4242,33 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertEqual(resolver_nombre_modelo_parcial("vita biker", cands)["nombre"], "VITA BIKER DAMA")
         self.assertIsNone(resolver_nombre_modelo_parcial("NO EXISTE", cands))
 
+    def test_resolver_dos_modelos_a_la_vez(self):
+        cands = [
+            {"nombre": "MAR LOTE 1 KIDS"},
+            {"nombre": "RIO DAMA"},
+            {"nombre": "VITA BIKER DAMA"},
+        ]
+        self.assertEqual(partir_textos_modelo_parcial("1, 3"), ["1", "3"])
+        self.assertEqual(partir_textos_modelo_parcial("1 3"), ["1", "3"])
+        self.assertEqual(partir_textos_modelo_parcial("1 y 3"), ["1", "3"])
+        self.assertEqual(
+            partir_textos_modelo_parcial("RIO DAMA, VITA BIKER DAMA"),
+            ["RIO DAMA", "VITA BIKER DAMA"],
+        )
+        par = resolver_nombres_modelo_parcial("1, 3", cands)
+        self.assertEqual([m["nombre"] for m in par], ["MAR LOTE 1 KIDS", "VITA BIKER DAMA"])
+        par = resolver_nombres_modelo_parcial("RIO DAMA / vita biker", cands)
+        self.assertEqual([m["nombre"] for m in par], ["RIO DAMA", "VITA BIKER DAMA"])
+        par = resolver_nombres_modelo_parcial("2", cands)
+        self.assertEqual([m["nombre"] for m in par], ["RIO DAMA"])
+        self.assertIsNone(resolver_nombres_modelo_parcial("1, NO EXISTE", cands))
+        cfg = armar_cfg_modelo_parcial(par, 0.6)
+        self.assertEqual(cfg["nombre"], "RIO DAMA")
+        self.assertEqual(cfg["nombres"], ["RIO DAMA"])
+        cfg2 = armar_cfg_modelo_parcial(resolver_nombres_modelo_parcial("1, 3", cands), 0.5)
+        self.assertEqual(cfg2["nombres"], ["MAR LOTE 1 KIDS", "VITA BIKER DAMA"])
+        self.assertEqual(cfg2["companero"], "VITA BIKER DAMA")
+
     def test_sin_parcial_sigue_secuencial_en_l4(self):
         tareas = [
             self._t("R1", "RIO DAMA", 400, 1),
@@ -4266,15 +4378,88 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertEqual(lunes.get("MAR LOTE 1 KIDS"), 65)
         self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
 
+    def test_dos_parciales_misma_linea_cada_uno_con_su_cola(self):
+        """A y C están marcados; el día de A se junta con B (la cola), no con C."""
+        tareas = [
+            self._t("A", "MODELO A", 400, 1, linea="3"),
+            self._t("B", "MODELO B", 400, 2, linea="3"),
+            self._t("C", "MODELO C", 400, 3, linea="3"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={
+                "activo": True,
+                "nombre": "MODELO A",
+                "nombres": ["MODELO A", "MODELO C"],
+                "fraccion": 0.5,
+            },
+        )
+        lunes = {t["modelo"]: t["plan"]["3"][0] for t in out if t["plan"]["3"][0] > 0}
+        self.assertEqual(lunes.get("MODELO A"), 65)
+        self.assertEqual(lunes.get("MODELO B"), 65)
+        self.assertEqual(lunes.get("MODELO C", 0), 0)
+
+    def test_dos_parciales_en_lineas_distintas(self):
+        """A en L3 y C en L4: cada uno se junta con su cola, no se fuerzan a la misma línea."""
+        tareas = [
+            self._t("A", "MODELO A", 400, 1, linea="3"),
+            self._t("B", "MODELO B", 400, 2, linea="3"),
+            self._t("C", "MODELO C", 400, 3, linea="4"),
+            self._t("D", "MODELO D", 400, 4, linea="4"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={
+                "activo": True,
+                "nombre": "MODELO A",
+                "nombres": ["MODELO A", "MODELO C"],
+                "fraccion": 0.5,
+            },
+        )
+        l3 = {t["modelo"]: t["plan"].get("3", [0])[0] for t in out}
+        l4 = {t["modelo"]: t["plan"].get("4", [0])[0] for t in out}
+        self.assertEqual(l3.get("MODELO A"), 65)
+        self.assertEqual(l3.get("MODELO B"), 65)
+        self.assertEqual(l3.get("MODELO C", 0), 0)
+        self.assertEqual(l4.get("MODELO C"), 65)
+        self.assertEqual(l4.get("MODELO D"), 65)
+        self.assertEqual(l4.get("MODELO A", 0), 0)
+
+    def test_dos_parciales_misma_familia_companero_es_la_cola(self):
+        """RIO CAB y RIO DAMA marcados: CAB se junta con VITA (cola), no con DAMA."""
+        tareas = [
+            self._t("RC", "RIO CAB", 400, 1, linea="2"),
+            self._t("RD", "RIO DAMA", 400, 2, linea="2"),
+            self._t("VB", "VITA BIKER DAMA", 400, 3, linea="2"),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=1,
+            modelo_parcial={
+                "activo": True,
+                "nombre": "RIO CAB",
+                "nombres": ["RIO CAB", "RIO DAMA"],
+                "fraccion": 0.5,
+            },
+        )
+        lunes = {t["modelo"]: t["plan"]["2"][0] for t in out if t["plan"]["2"][0] > 0}
+        self.assertEqual(lunes.get("RIO CAB"), 65)
+        self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
+        self.assertEqual(lunes.get("RIO DAMA", 0), 0)
+
     def test_gs_pregunta_modelo_parcial(self):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
         self.assertIn("preguntarModeloParcial_", gs)
+        self.assertIn("resolverNombresModeloParcial_", gs)
+        self.assertIn("partirTextosModeloParcial_", gs)
+        self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.40"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
+        self.assertIn("UNO o DOS", gs)
+        self.assertIn("NO significa que corran juntos", gs)
 
 
 if __name__ == "__main__":
