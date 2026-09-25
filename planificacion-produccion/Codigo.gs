@@ -1,18 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.41 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.42 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
  *   - MODELO A MEDIA ESTACIÓN (L1-4): al generar el plan pregunta si
  *     algún modelo planificado no usa el 100% de las estaciones. Se
- *     pueden elegir UNO o DOS modelos a la vez (ej. "1, 3" o
- *     "RIO DAMA, VITA BIKER"). Si son dos, esos corren juntos en la
- *     línea (solo 1 a 4). Si es uno, el compañero es el siguiente de
- *     la cola. Se reparte la capacidad del día (50/50 por defecto;
- *     se puede indicar el %). El compañero no es de la misma familia
- *     (esos siguen en secuencia de color/género). Línea 5 no cambia.
+ *     pueden marcar UNO o DOS (ej. "1, 3" o "RIO DAMA, VITA BIKER").
+ *     Elegir dos NO los obliga a coincidir en la misma línea. Cuando
+ *     le toca producir a CADA uno, en su línea y su momento, trabaja
+ *     en paralelo con el siguiente de la cola (otra familia). Se
+ *     reparte la capacidad del día (50/50 por defecto; se puede
+ *     indicar el %). Línea 5 no cambia.
  *   - LOTES POR MO + MODELO: se quita el bloqueo que impedía repetir
  *     un SKU en Por Hacer. La identidad es MO + modelo (el lote va en
  *     Producto, ej. MAR LOTE 1 KIDS). Dos filas del mismo SKU no se
@@ -228,7 +228,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.41";
+var VERSION_SISTEMA = "5.9.42";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1782,7 +1782,7 @@ function textoModeloParcial_(cfg) {
   var pct = Math.round((cfg.fraccion || FRACCION_PARCIAL_DEFAULT) * 100);
   var noms = nombresCfgModeloParcial_(cfg);
   if (noms.length >= 2) {
-    return noms[0] + " + " + noms[1] + " (" + pct + "% / " + (100 - pct) + "%)";
+    return noms[0] + " y " + noms[1] + " a media estación (" + pct + "% + cola cada uno)";
   }
   return (noms[0] || cfg.nombre) + " al " + pct + "% + siguiente de la cola";
 }
@@ -1797,10 +1797,11 @@ function preguntarModeloParcial_(listaModelos) {
       "Modelos que no usan el 100% de la línea",
       "¿De los modelos planificados hay alguno que, por su secuencia de operaciones, " +
       "no use el 100% de las estaciones en las líneas 1 a 4?\n\n" +
-      "Si aceptas puedes elegir UNO o DOS modelos. En esa línea (solo 1 a 4) " +
-      "corren en paralelo y se reparte la capacidad del día (50/50 si no indicas otro %).\n\n" +
-      "• Un modelo: el compañero es el siguiente de la cola (otra familia).\n" +
-      "• Dos modelos: esos dos corren juntos. Escríbelos a la vez, separados por coma.\n\n" +
+      "Si aceptas puedes marcar UNO o DOS. Cuando le toque producir a CADA uno " +
+      "(en su línea y su momento), esa línea trabaja en paralelo con el siguiente " +
+      "de la cola de prioridad (otra familia). Se reparte la capacidad del día " +
+      "(50/50 si no indicas otro %).\n\n" +
+      "Elegir dos NO significa que corran juntos el mismo día en la misma línea.\n\n" +
       "La Línea 5 ya tiene su propio paralelo.",
       ui.ButtonSet.YES_NO
     );
@@ -1827,36 +1828,26 @@ function preguntarModeloParcial_(listaModelos) {
     if (elegidos.length > 2) elegidos = elegidos.slice(0, 2);
     if (elegidos.length === 1) {
       var rComp = ui.prompt(
-        "Segundo modelo (opcional)",
-        "¿Qué otro modelo corre en paralelo con " + elegidos[0].nombre + "?\n" +
-        "Número o nombre. Vacío = el siguiente de la cola de prioridad.\n\n" + lista,
+        "Otro modelo a media estación (opcional)",
+        "¿Hay OTRO modelo que tampoco use el 100% de las estaciones?\n" +
+        "Número o nombre. Vacío = solo " + elegidos[0].nombre + ".\n" +
+        "Cuando le toque a cada uno, se junta con el siguiente de la cola " +
+        "(no tienen que coincidir en la misma línea).\n\n" + lista,
         ui.ButtonSet.OK_CANCEL
       );
       if (rComp.getSelectedButton() === ui.Button.OK && norm_(rComp.getResponseText()) !== "") {
         var extra = resolverNombreModeloParcial_(rComp.getResponseText(), cands);
         if (!extra) {
-          ui.alert("No se reconoció el segundo modelo. Se usará el siguiente de la cola.");
+          ui.alert("No se reconoció el segundo modelo. Queda solo " + elegidos[0].nombre + ".");
         } else if (claveModeloNorm_(extra.nombre) !== claveModeloNorm_(elegidos[0].nombre)) {
           elegidos.push(extra);
         }
       }
     }
-    if (elegidos.length === 2 &&
-        familiaDeNombre_(elegidos[0].nombre) &&
-        familiaDeNombre_(elegidos[0].nombre) === familiaDeNombre_(elegidos[1].nombre)) {
-      ui.alert(
-        "Esos dos modelos son de la misma familia (" + familiaDeNombre_(elegidos[0].nombre) +
-        "). El compañero tiene que ser de otra familia (el lote de color/género se mantiene).\n" +
-        "Se genera el plan sin paralelo extra en L1-4."
-      );
-      return off;
-    }
     var r3 = ui.prompt(
       "Porcentaje de la línea",
-      "¿Qué % de las estaciones usa " + elegidos[0].nombre + "?\n" +
-      (elegidos.length === 2
-        ? ("El resto queda para " + elegidos[1].nombre + ".\n")
-        : "El resto queda para el siguiente modelo de la cola.\n") +
+      "¿Qué % de las estaciones usa cada modelo marcado cuando le toca?\n" +
+      "El resto queda para el siguiente de la cola.\n" +
       "Vacío = 50. Ejemplo: 50 o 60.",
       ui.ButtonSet.OK_CANCEL
     );
@@ -2160,55 +2151,12 @@ function generarPlanificacionSemanal_() {
     return false;
   }
 
-  function resolverModeloParcialPorNombre_(nombre) {
-    if (!nombre) return null;
-    if (mapaModelos[nombre]) return mapaModelos[nombre];
-    var kP;
-    for (kP in mapaModelos) {
-      if (!mapaModelos.hasOwnProperty(kP)) continue;
-      if (coincideModeloParcialNombre_(mapaModelos[kP], nombre, claveModeloNorm_(nombre))) {
-        return mapaModelos[kP];
-      }
-    }
-    return null;
-  }
-
-  function companeroParcialPreferido_(lin, dHoy, overflow, skip) {
-    if (!esLineaEstandar_(lin)) return null;
-    if (!cfg.modeloParcial || !cfg.modeloParcial.activo) return null;
-    if (!(ocupante[lin] || []).length || !lineaConParcial_(lin)) return null;
-    var nomsP = nombresCfgModeloParcial_(cfg.modeloParcial);
-    if (nomsP.length < 2) return null;
-    var famOcc = familiaModelo_(mapaModelos[ocupante[lin][0]]);
-    var iC, mC;
-    for (iC = 0; iC < nomsP.length; iC++) {
-      mC = resolverModeloParcialPorNombre_(nomsP[iC]);
-      if (!mC || restanteModelo_(mC) <= 0) continue;
-      if (ocupante[lin].indexOf(mC.nombre) !== -1) continue;
-      if (skip && skip[mC.nombre]) continue;
-      if (famOcc && familiaModelo_(mC) === famOcc) continue;
-      var yaOtraP = ["1", "2", "3", "4", "5"].some(function (l2) {
-        return l2 !== lin && ocupante[l2].indexOf(mC.nombre) !== -1;
-      });
-      if (yaOtraP && !esEspecialExplosivo_(mC, overflow, dHoy)) continue;
-      if (!modeloPuedeProducirHoyNom_(mC.nombre, lin, dHoy, overflow)) continue;
-      return mC.nombre;
-    }
-    return null;
-  }
-
   function lineaConParcial_(lin) {
     if (!esLineaEstandar_(lin)) return false;
     if (!cfg.modeloParcial || !cfg.modeloParcial.activo) return false;
     return (ocupante[lin] || []).some(function (nom) {
       return esModeloParcial_(mapaModelos[nom]);
     });
-  }
-
-  function cupoParaleloParcialPermite_(m, lin) {
-    if (!m || !esLineaEstandar_(lin) || !lineaConParcial_(lin)) return true;
-    if (nombresCfgModeloParcial_(cfg.modeloParcial).length < 2) return true;
-    return esModeloParcial_(m);
   }
 
   function maxOcupantes_(lin, mCand) {
@@ -2657,7 +2605,7 @@ function generarPlanificacionSemanal_() {
         if (occ.indexOf(m.nombre) !== -1) return;
         if (occ.length >= maxOcupantes_(lin, m)) return;
         if (fam && familiaOcupaLinea_(fam, lin, m.nombre)) return;
-        if (!cupoParaleloParcialPermite_(m, lin)) return;
+        if (esModeloParcial_(m) && occ.length > 0 && lineaConParcial_(lin)) return;
         out.push(lin);
       });
     });
@@ -2887,7 +2835,7 @@ function generarPlanificacionSemanal_() {
         if (esLineaEstandar_(lin) && lineaConParcial_(lin)) {
           var famNew = familiaModelo_(m);
           if (famNew && familiaOcupaLinea_(famNew, lin, m.nombre)) return false;
-          if (!cupoParaleloParcialPermite_(m, lin)) return false;
+          if (esModeloParcial_(m) && occ.length > 0) return false;
         }
         ocupante[lin].push(m.nombre);
         return true;
@@ -3042,11 +2990,6 @@ function generarPlanificacionSemanal_() {
       if (!famRef && ocupante[lin].length) famRef = familiaModelo_(mapaModelos[ocupante[lin][0]]);
       var paraParalelo = ocupante[lin].length > 0;
       if (String(lin) === "5" && paraParalelo && linea5OcupadaPorExclusivo_()) return null;
-      if (paraParalelo && esLineaEstandar_(lin) && lineaConParcial_(lin)) {
-        var prefPar = companeroParcialPreferido_(lin, d, overflow, skip);
-        if (prefPar) return prefPar;
-        if (nombresCfgModeloParcial_(cfg.modeloParcial).length >= 2) return null;
-      }
       if (famRef && !paraParalelo) {
         var loteSig = loteFamiliaActivo_(famRef, overflow);
         if (loteSig && loteSig.modelo !== lastNom && !skip[loteSig.modelo] &&
@@ -3373,7 +3316,7 @@ function generarPlanificacionSemanal_() {
     "• Líneas 1-4: un modelo a la vez, salvo el modelo a media estación. Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Modelo a media estación (L1-4): " + ((cfg.modeloParcial && cfg.modeloParcial.activo)
       ? (textoModeloParcial_(cfg.modeloParcial) + ".")
-      : "no. Al generar puedes marcar uno o dos modelos que no usen el 100% de las estaciones y se planifican en paralelo.") + "\n" +
+      : "no. Al generar puedes marcar uno o dos modelos que no usen el 100%; cuando le toque a cada uno, se junta con el siguiente de la cola.") + "\n" +
     "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos), salvo Secuencia=No: ese modelo es el único ocupante. Un solo modelo usa su cap del día.\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: prioridad 1 en TODAS las Linea de Produccion asignadas (2+ líneas = las toma sí o sí al llegar Día de inicio). Si la celda viene vacía, 1. No desborda a L1.\n" +
@@ -5296,7 +5239,7 @@ function supuestosDashboard_(capsModelo) {
     "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2; el ocupante nativo de L1 se queda con el otro 50%.",
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
-    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones: esa línea corre esos dos en paralelo (si eliges uno, el compañero es el siguiente de la cola). Línea 5: hasta 2 familias en paralelo.",
+    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
     "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan como salen de costura: semana/día de arranque, SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."

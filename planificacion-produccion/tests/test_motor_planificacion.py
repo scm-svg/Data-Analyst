@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.41 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.42 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1123,7 +1123,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.41: lotes, Division=Si y paralelo L1-4 con uno o dos modelos a media estación."""
+    """Motor v5.9.42: lotes, Division=Si y paralelo L1-4; uno o dos modelos a media estación, cada uno con la cola."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -1344,57 +1344,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 return True
         return False
 
-    def resolver_modelo_parcial_por_nombre(nombre):
-        if not nombre:
-            return None
-        if nombre in modelos:
-            return modelos[nombre]
-        for m in modelos.values():
-            if coincide_modelo_parcial_nombre(m, nombre, clave_modelo_norm(nombre)):
-                return m
-        return None
-
-    def companero_parcial_preferido(lin, d, overflow, skip):
-        if not es_linea_estandar(lin) or not modelo_parcial or not modelo_parcial.get("activo"):
-            return None
-        if not (ocupante.get(lin) or []) or not linea_con_parcial(lin):
-            return None
-        noms = nombres_cfg_modelo_parcial(modelo_parcial)
-        if len(noms) < 2:
-            return None
-        fam_occ = familia_modelo(modelos.get(ocupante[lin][0]))
-        for nom in noms:
-            m_c = resolver_modelo_parcial_por_nombre(nom)
-            if not m_c or restante_modelo(m_c) <= 0:
-                continue
-            if m_c["nombre"] in (ocupante.get(lin) or []):
-                continue
-            if skip.get(m_c["nombre"]):
-                continue
-            if fam_occ and familia_modelo(m_c) == fam_occ:
-                continue
-            ya_otra = any(
-                l2 != lin and m_c["nombre"] in (ocupante.get(l2) or [])
-                for l2 in ocupante
-            )
-            if ya_otra and not es_especial_explosivo(m_c, overflow, d):
-                continue
-            if not modelo_puede(m_c, d, lin, overflow):
-                continue
-            return m_c["nombre"]
-        return None
-
     def linea_con_parcial(lin):
         if not es_linea_estandar(lin) or not modelo_parcial or not modelo_parcial.get("activo"):
             return False
         return any(es_modelo_parcial(modelos.get(nom)) for nom in (ocupante.get(lin) or []))
-
-    def cupo_paralelo_parcial_permite(m, lin):
-        if not m or not es_linea_estandar(lin) or not linea_con_parcial(lin):
-            return True
-        if len(nombres_cfg_modelo_parcial(modelo_parcial)) < 2:
-            return True
-        return es_modelo_parcial(m)
 
     def max_ocupantes_ahora(lin, m=None):
         if str(lin) == "5":
@@ -1460,7 +1413,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     continue
                 if fam and familia_ocupa_linea(fam, lin, m["nombre"]):
                     continue
-                if not cupo_paralelo_parcial_permite(m, lin):
+                if es_modelo_parcial(m) and occ and linea_con_parcial(lin):
                     continue
                 out.append(lin)
         return out
@@ -1656,7 +1609,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                     fam_new = familia_modelo(m)
                     if fam_new and familia_ocupa_linea(fam_new, lin, m["nombre"]):
                         return False
-                    if not cupo_paralelo_parcial_permite(m, lin):
+                    if es_modelo_parcial(m) and occ:
                         return False
                 ocupante[lin].append(m["nombre"])
                 return True
@@ -1930,12 +1883,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         para_paralelo = bool(ocupante.get(lin))
         if str(lin) == "5" and para_paralelo and linea5_ocupada_por_exclusivo():
             return None
-        if para_paralelo and es_linea_estandar(lin) and linea_con_parcial(lin):
-            pref = companero_parcial_preferido(lin, d, overflow, skip)
-            if pref:
-                return pref
-            if len(nombres_cfg_modelo_parcial(modelo_parcial)) >= 2:
-                return None
         if fam_ref and not para_paralelo:
             lote = lote_familia_activo(fam_ref, overflow)
             if (lote and lote["modelo"] != last_nom and not skip.get(lote["modelo"])
@@ -3813,7 +3760,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.41"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4431,7 +4378,8 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertEqual(lunes.get("MAR LOTE 1 KIDS"), 65)
         self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
 
-    def test_par_explicito_salta_al_del_medio(self):
+    def test_dos_parciales_misma_linea_cada_uno_con_su_cola(self):
+        """A y C están marcados; el día de A se junta con B (la cola), no con C."""
         tareas = [
             self._t("A", "MODELO A", 400, 1, linea="3"),
             self._t("B", "MODELO B", 400, 2, linea="3"),
@@ -4443,37 +4391,42 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
                 "activo": True,
                 "nombre": "MODELO A",
                 "nombres": ["MODELO A", "MODELO C"],
-                "companero": "MODELO C",
                 "fraccion": 0.5,
             },
         )
         lunes = {t["modelo"]: t["plan"]["3"][0] for t in out if t["plan"]["3"][0] > 0}
         self.assertEqual(lunes.get("MODELO A"), 65)
-        self.assertEqual(lunes.get("MODELO C"), 65)
-        self.assertEqual(lunes.get("MODELO B", 0), 0)
+        self.assertEqual(lunes.get("MODELO B"), 65)
+        self.assertEqual(lunes.get("MODELO C", 0), 0)
 
-    def test_par_explicito_cruza_lote_en_el_nombre(self):
+    def test_dos_parciales_en_lineas_distintas(self):
+        """A en L3 y C en L4: cada uno se junta con su cola, no se fuerzan a la misma línea."""
         tareas = [
-            self._t("M1", "MAR LOTE 1 KIDS", 400, 1, linea="3"),
+            self._t("A", "MODELO A", 400, 1, linea="3"),
             self._t("B", "MODELO B", 400, 2, linea="3"),
-            self._t("V1", "VITA BIKER DAMA", 400, 3, linea="3"),
+            self._t("C", "MODELO C", 400, 3, linea="4"),
+            self._t("D", "MODELO D", 400, 4, linea="4"),
         ]
         out = planificar(
             tareas, {}, total_dias=1,
             modelo_parcial={
                 "activo": True,
-                "nombre": "MAR KIDS",
-                "nombres": ["MAR KIDS", "VITA BIKER DAMA"],
-                "companero": "VITA BIKER DAMA",
+                "nombre": "MODELO A",
+                "nombres": ["MODELO A", "MODELO C"],
                 "fraccion": 0.5,
             },
         )
-        lunes = {t["modelo"]: t["plan"]["3"][0] for t in out if t["plan"]["3"][0] > 0}
-        self.assertEqual(lunes.get("MAR LOTE 1 KIDS"), 65)
-        self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
-        self.assertEqual(lunes.get("MODELO B", 0), 0)
+        l3 = {t["modelo"]: t["plan"].get("3", [0])[0] for t in out}
+        l4 = {t["modelo"]: t["plan"].get("4", [0])[0] for t in out}
+        self.assertEqual(l3.get("MODELO A"), 65)
+        self.assertEqual(l3.get("MODELO B"), 65)
+        self.assertEqual(l3.get("MODELO C", 0), 0)
+        self.assertEqual(l4.get("MODELO C"), 65)
+        self.assertEqual(l4.get("MODELO D"), 65)
+        self.assertEqual(l4.get("MODELO A", 0), 0)
 
-    def test_par_misma_familia_no_abre_tercero(self):
+    def test_dos_parciales_misma_familia_companero_es_la_cola(self):
+        """RIO CAB y RIO DAMA marcados: CAB se junta con VITA (cola), no con DAMA."""
         tareas = [
             self._t("RC", "RIO CAB", 400, 1, linea="2"),
             self._t("RD", "RIO DAMA", 400, 2, linea="2"),
@@ -4485,14 +4438,13 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
                 "activo": True,
                 "nombre": "RIO CAB",
                 "nombres": ["RIO CAB", "RIO DAMA"],
-                "companero": "RIO DAMA",
                 "fraccion": 0.5,
             },
         )
         lunes = {t["modelo"]: t["plan"]["2"][0] for t in out if t["plan"]["2"][0] > 0}
-        self.assertEqual(lunes.get("RIO CAB"), 130)
+        self.assertEqual(lunes.get("RIO CAB"), 65)
+        self.assertEqual(lunes.get("VITA BIKER DAMA"), 65)
         self.assertEqual(lunes.get("RIO DAMA", 0), 0)
-        self.assertEqual(lunes.get("VITA BIKER DAMA", 0), 0)
 
     def test_gs_pregunta_modelo_parcial(self):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
@@ -4501,12 +4453,13 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertIn("preguntarModeloParcial_", gs)
         self.assertIn("resolverNombresModeloParcial_", gs)
         self.assertIn("partirTextosModeloParcial_", gs)
-        self.assertIn("companeroParcialPreferido_", gs)
+        self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.41"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.42"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
-        self.assertIn("UNO o DOS modelos", gs)
+        self.assertIn("UNO o DOS", gs)
+        self.assertIn("NO significa que corran juntos", gs)
 
 
 if __name__ == "__main__":

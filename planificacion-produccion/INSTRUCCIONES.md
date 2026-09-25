@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.41 — códigos listos para pegar
+# Planificación de Producción v5.9.42 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,24 +14,24 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye la **selección de uno o dos modelos a media estación en L1-4** (**5.9.41**), el paralelo automático con el siguiente de la cola (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
 
-## Motor · Modelo a media estación en L1-4 (5.9.41)
+## Motor · Modelo a media estación en L1-4 (5.9.42)
 
 Al pulsar **Generar Planificación**, después del apoyo de L1, el script pregunta:
 
 1. **¿Hay un modelo planificado que no use el 100% de las estaciones en L1-4?** Sí / No.
 2. Si Sí: escribe **uno o dos modelos** (número o nombre), **separados por coma**. Ejemplos: `1, 3` o `RIO DAMA, VITA BIKER DAMA`. Vale el nombre de Priorizacion (`MAR KIDS`) aunque en Por Hacer sea `MAR LOTE 1 KIDS`.
-3. Si escribiste **solo uno**, un segundo prompt pregunta el compañero. **Vacío** = el siguiente de la cola de prioridad.
-4. **¿Qué % de las estaciones usa el primero?** Vacío = 50. El resto de la línea queda para el otro modelo.
+3. Si escribiste **solo uno**, un segundo prompt pregunta si hay **otro** que tampoco use el 100%. Vacío = solo ese.
+4. **¿Qué % de las estaciones usa cada marcado cuando le toca?** Vacío = 50. El resto queda para el siguiente de la cola.
 
 Efecto:
 
 - Solo aplica a **líneas 1 a 4**. La Línea 5 no cambia (sigue con su rueda de 2 familias).
-- En la línea por donde corre ese modelo entran **dos modelos en paralelo** el mismo día.
-- Si eliges **dos**, esos dos corren juntos (no se mete el de en medio de la cola). Si eliges **uno**, el segundo es el **siguiente de la cola de prioridad** que pueda producir hoy en esa línea.
-- El compañero **no es de la misma familia** (RIO CAB + RIO DAMA siguen en secuencia de color/género; el compañero es p. ej. VITA). Si marcas dos de la misma familia, el plan se genera **sin** paralelo extra.
-- Se reparte la capacidad del día: el primer modelo usa el % indicado (50% → 65 pzas si su cap es 130) y el compañero el resto.
+- Elegir **dos** no los obliga a coincidir en la misma línea ni el mismo día.
+- Cuando le toca producir a **cada** modelo marcado, en su línea y su momento, entra el **siguiente de la cola** (otra familia) en paralelo.
+- El compañero **no es de la misma familia** (RIO CAB + RIO DAMA siguen en secuencia de color/género; el compañero es p. ej. VITA).
+- Se reparte la capacidad del día: el marcado usa el % indicado (50% → 65 pzas si su cap es 130) y el de la cola el resto.
 - Si no hay compañero disponible, el modelo marcado usa **toda** su cap del día (no se deja la línea a medias).
 - Sin marcar ningún modelo, L1-4 siguen **un modelo a la vez** (si termina, el sobrante del día pasa al siguiente).
 
