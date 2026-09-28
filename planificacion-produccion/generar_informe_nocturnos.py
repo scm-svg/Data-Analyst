@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import html as htmlmod
 from datetime import date
 from typing import Dict, List
 
@@ -617,8 +618,131 @@ def escribir_excel(payload: dict, path: str):
     wb.save(path)
 
 
+def _hx(s) -> str:
+    return htmlmod.escape("" if s is None else str(s))
+
+
+def _cubre_html(v) -> str:
+    if v is True:
+        return '<span class="ok">Cubre 16/11</span>'
+    if v is False:
+        return '<span class="no">No cubre</span>'
+    return "--"
+
+
+def _tabla_modelos(items: List[dict]) -> str:
+    rows = sorted(
+        items,
+        key=lambda m: (m.get("termino_esc_iso") or "9999", m.get("modelo") or ""),
+    )
+    out = [
+        '<div class="wrap"><table><thead><tr>',
+        "<th>Modelo</th><th></th><th>Prioridad</th><th>Líneas</th><th>Faltante</th><th>Obj.</th>",
+        "<th>Salida base</th><th>Salida esc.</th><th>Almacén base</th><th>Almacén esc.</th>",
+        "<th>Días ganados</th><th>Pzas noche</th><th>Pzas 16/11</th><th>Pzas dic</th><th>16/11</th>",
+        "</tr></thead><tbody>",
+    ]
+    for m in rows:
+        lote = '<span class="badge">Lote nuevo</span>' if m.get("lote_nuevo") else ""
+        cls = ' class="lote"' if m.get("lote_nuevo") else ""
+        out.append(
+            f"<tr{cls}><td>{_hx(m['modelo'])}</td><td>{lote}</td>"
+            f"<td>{_hx(m.get('prioridad'))}</td><td>{_hx(m.get('lineas'))}</td>"
+            f"<td>{fmt_n(m.get('faltante'))}</td><td>{_hx(m.get('fecha_obj'))}</td>"
+            f"<td>{_hx(m.get('termino_base'))}</td><td>{_hx(m.get('termino_esc'))}</td>"
+            f"<td>{_hx(m.get('entrada_base'))}</td><td>{_hx(m.get('entrada_esc'))}</td>"
+            f"<td>{_hx(m.get('dias_ganados') if m.get('dias_ganados') is not None else '--')}</td>"
+            f"<td>{fmt_n(m.get('pzas_nocturno'))}</td><td>{fmt_n(m.get('pzas_alm16_esc'))}</td>"
+            f"<td>{fmt_n(m.get('pzas_dic_esc'))}</td><td>{_cubre_html(m.get('cubre_almacen_esc'))}</td></tr>"
+        )
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
+
+def _kpis_html(sid: str, payload: dict) -> str:
+    x = payload["kpis"][sid]
+    idle = sum((payload["idle_dia"].get(sid) or {}).values())
+    usd_p = f"US$ {fmt_n(x['usd_por_pza'], 2)}" if x.get("usd_por_pza") is not None else "--"
+    return f"""
+    <div class="g g5">
+      <div class="kpi"><span>Noches</span><b>{x['n_noches']}</b></div>
+      <div class="kpi"><span>Costo bono</span><b>{fmt_usd(x['costo_usd'])}</b></div>
+      <div class="kpi"><span>Pzas nocturno</span><b>{fmt_n(x['pzas_nocturno'])}</b></div>
+      <div class="kpi"><span>Extra almacén 16/11</span><b>{fmt_n(x['extra_alm16'])}</b></div>
+      <div class="kpi"><span>Lote nuevo p/ dic</span><b>{fmt_n(x['pzas_lotes_dic_esc'])}</b></div>
+    </div>
+    <div class="g g4">
+      <div class="kpi"><span>Lote nuevo p/ 16/11</span><b>{fmt_n(x['pzas_lotes_alm16_esc'])}</b></div>
+      <div class="kpi"><span>US$ / pza</span><b>{usd_p}</b></div>
+      <div class="kpi"><span>Lotes que cierran antes</span><b>{x['lotes_adelantados']} / 6</b></div>
+      <div class="kpi"><span>Cupo diurno liberado</span><b>{fmt_n(idle)}</b></div>
+    </div>"""
+
+
+def _lis(items: List[str], cls: str) -> str:
+    return "".join(f'<div class="{cls}">{_hx(t)}</div>' for t in items)
+
+
+def _sec_esc(sid: str, payload: dict) -> str:
+    spec = next(e for e in payload["escenarios"] if e["id"] == sid)
+    pc = payload["pros_contras"][sid]
+    noches = ", ".join(payload["noches"][sid]) or "—"
+    lotes = [m for m in payload["modelos"][sid] if m.get("lote_nuevo")]
+    lin = payload["pzas_linea"].get(sid) or {}
+    idle = payload["idle_dia"].get(sid) or {}
+    lin_rows = "".join(
+        f"<tr><td>Línea {x}</td><td>{PERSONAS[x]}</td><td>{fmt_n(lin.get(x, 0))}</td>"
+        f"<td>{fmt_n(idle.get(x, 0))}</td></tr>"
+        for x in "12345"
+    )
+    return f"""
+    <div class="card"><h3>{_hx(spec['titulo'])} · noches { _hx(noches)}</h3>
+      {_kpis_html(sid, payload)}</div>
+    <div class="g g2">
+      <div class="card"><h3>A favor</h3>{_lis(pc['pros'], 'pro')}</div>
+      <div class="card"><h3>En contra</h3>{_lis(pc['contras'], 'con')}</div>
+    </div>
+    <div class="card"><h3>Lotes nuevos (orden de salida)</h3>{_tabla_modelos(lotes)}</div>
+    <div class="card"><h3>Aprovechamiento por línea</h3>
+      <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Cupo diurno liberado</th></tr></thead>
+      <tbody>{lin_rows}</tbody></table>
+    </div>
+    <div class="card"><h3>Todos los modelos Por Hacer (orden de salida de costura)</h3>
+      {_tabla_modelos(payload['modelos'][sid])}</div>
+    """
+
+
 def escribir_html(payload: dict, path: str):
-    data = json.dumps(payload, ensure_ascii=False)
+    k = payload["kpis"]
+    cmp_rows = []
+    for sid in "0ABCD":
+        spec = next(e for e in payload["escenarios"] if e["id"] == sid)
+        x = k[sid]
+        label = "Base" if sid == "0" else sid
+        cmp_rows.append(
+            "<tr>"
+            f"<td>{label}</td><td>{_hx(spec['titulo'])}</td>"
+            f"<td>{x['n_noches']}</td><td>{fmt_usd(x['costo_usd'])}</td>"
+            f"<td>{fmt_n(x['pzas_nocturno'])}</td><td>{fmt_n(x['extra_alm16'])}</td>"
+            f"<td>{fmt_n(x['pzas_lotes_alm16_esc'])}</td><td>{fmt_n(x['pzas_lotes_dic_esc'])}</td>"
+            f"<td>{x['lotes_adelantados']}</td><td>{x['dias_ganados_lotes'] if x['dias_ganados_lotes'] is not None else '--'}</td>"
+            "</tr>"
+        )
+    lote_rows = []
+    for m in payload["lotes"]:
+        lote_rows.append(
+            '<tr class="lote">'
+            f"<td>{_hx(m['modelo'])}</td><td>{fmt_n(m['faltante'])}</td><td>{_hx(m['cap'])}</td>"
+            f"<td>{_hx(m['lineas'])}</td><td>{_hx(m['prioridad'])}</td>"
+            f"<td>{_hx(m['termino_plan'])}</td><td>{_hx(m['entrada_plan'])}</td>"
+            f"<td>{_hx(m['fecha_obj'])}</td><td><span class=\"no\">No cubre</span></td></tr>"
+        )
+    extras = [k[s]["extra_alm16"] for s in "0ABCD"]
+    costos = [k[s]["costo_usd"] for s in "0ABCD"]
+    secs = "\n".join(
+        f'<section class="sec" id="sec-{sid}">{_sec_esc(sid, payload)}</section>'
+        for sid in "ABCD"
+    )
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -668,112 +792,46 @@ tr.lote td{{background:rgba(255,193,7,.08)}}
   <h1>Turnos <em>nocturnos</em> · decisión de planificación</h1>
   <p>Escenarios A–D · martes / miércoles / viernes · 5 líneas · solo Por Hacer · corte almacén 16/11/2026 · bono US$ 15 × 22 personas</p>
 </header>
-<nav class="tabs" id="tabs"></nav>
-<div class="content" id="app"></div>
-<footer class="foot">Informe generado del plan ACTUAL vs LOTE NUEVO. Cap nocturna = 50% de la cap actual (máquinas nuevas aún no a régimen). Listas ordenadas por salida de costura.</footer>
-<script>
-const D = {data};
-const ids = ["res","A","B","C","D","sup"];
-const names = {{res:"Resumen",A:"Escenario A",B:"Escenario B",C:"Escenario C",D:"Escenario D",sup:"Supuestos"}};
-const fmt = n => n==null||n==="" ? "--" : Number(n).toLocaleString("es-VE", {{maximumFractionDigits:0}});
-const usd = n => n==null ? "--" : "US$ "+fmt(n);
-function cubre(v){{return v===true?'<span class="ok">Cubre 16/11</span>':(v===false?'<span class="no">No cubre</span>':'--');}}
-function tablaModelos(list){{
-  const rows = list.slice().sort((a,b)=> (a.termino_esc_iso||"9999").localeCompare(b.termino_esc_iso||"9999") || a.modelo.localeCompare(b.modelo));
-  return `<div class="wrap"><table><thead><tr>
-    <th>Modelo</th><th></th><th>Prioridad</th><th>Líneas</th><th>Faltante</th><th>Obj.</th>
-    <th>Salida base</th><th>Salida esc.</th><th>Almacén base</th><th>Almacén esc.</th>
-    <th>Días ganados</th><th>Pzas noche</th><th>Pzas 16/11</th><th>Pzas dic</th><th>16/11</th>
-  </tr></thead><tbody>` + rows.map(m=>`<tr class="${{m.lote_nuevo?"lote":""}}">
-    <td>${{m.modelo}}</td><td>${{m.lote_nuevo?'<span class="badge">Lote nuevo</span>':''}}</td>
-    <td>${{m.prioridad||""}}</td><td>${{m.lineas||""}}</td><td>${{fmt(m.faltante)}}</td>
-    <td>${{m.fecha_obj}}</td><td>${{m.termino_base}}</td><td>${{m.termino_esc}}</td>
-    <td>${{m.entrada_base}}</td><td>${{m.entrada_esc}}</td><td>${{m.dias_ganados??"--"}}</td>
-    <td>${{fmt(m.pzas_nocturno)}}</td><td>${{fmt(m.pzas_alm16_esc)}}</td><td>${{fmt(m.pzas_dic_esc)}}</td>
-    <td>${{cubre(m.cubre_almacen_esc)}}</td></tr>`).join("") + "</tbody></table></div>";
-}}
-function kpisBox(sid){{
-  const x=D.kpis[sid];
-  const idle=Object.values(D.idle_dia[sid]||{{}}).reduce((a,b)=>a+b,0);
-  return `<div class="g g5">
-    <div class="kpi"><span>Noches</span><b>${{x.n_noches}}</b></div>
-    <div class="kpi"><span>Costo bono</span><b>${{usd(x.costo_usd)}}</b></div>
-    <div class="kpi"><span>Pzas nocturno</span><b>${{fmt(x.pzas_nocturno)}}</b></div>
-    <div class="kpi"><span>Extra almacén 16/11</span><b>${{fmt(x.extra_alm16)}}</b></div>
-    <div class="kpi"><span>Lote nuevo p/ dic</span><b>${{fmt(x.pzas_lotes_dic_esc)}}</b></div>
-  </div>
-  <div class="g g4">
-    <div class="kpi"><span>Lote nuevo p/ 16/11</span><b>${{fmt(x.pzas_lotes_alm16_esc)}}</b></div>
-    <div class="kpi"><span>US$ / pza</span><b>${{x.usd_por_pza==null?"--":usd(x.usd_por_pza)}}</b></div>
-    <div class="kpi"><span>Lotes que cierran antes</span><b>${{x.lotes_adelantados}} / 6</b></div>
-    <div class="kpi"><span>Cupo diurno liberado</span><b>${{fmt(idle)}}</b></div>
-  </div>`;
-}}
-function secEsc(sid){{
-  const spec=D.escenarios.find(e=>e.id===sid);
-  const pc=D.pros_contras[sid];
-  const lotes=D.modelos[sid].filter(m=>m.lote_nuevo);
-  const lin=D.pzas_linea[sid]||{{}};
-  return `<div class="card"><h3>${{spec.titulo}} · noches ${{(D.noches[sid]||[]).join(", ")||"—"}}</h3>
-    ${{kpisBox(sid)}}</div>
-    <div class="g g2">
-      <div class="card"><h3>A favor</h3>${{pc.pros.map(t=>`<div class="pro">${{t}}</div>`).join("")}}</div>
-      <div class="card"><h3>En contra</h3>${{pc.contras.map(t=>`<div class="con">${{t}}</div>`).join("")}}</div>
-    </div>
-    <div class="card"><h3>Lotes nuevos (orden de salida)</h3>${{tablaModelos(lotes)}}</div>
-    <div class="card"><h3>Aprovechamiento por línea</h3>
-      <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Cupo diurno liberado</th></tr></thead><tbody>
-      ${{["1","2","3","4","5"].map(l=>`<tr><td>Línea ${{l}}</td><td>${{D.personas[l]}}</td><td>${{fmt(lin[l]||0)}}</td><td>${{fmt((D.idle_dia[sid]||{{}})[l]||0)}}</td></tr>`).join("")}}
-      </tbody></table>
-    </div>
-    <div class="card"><h3>Todos los modelos Por Hacer (orden de salida de costura)</h3>${{tablaModelos(D.modelos[sid])}}</div>`;
-}}
-function render(){{
-  const k=D.kpis;
-  document.getElementById("tabs").innerHTML = ids.map((id,i)=>`<button class="tab ${{i===0?"on":""}}" data-id="${{id}}">${{names[id]}}</button>`).join("");
-  const cmp = ["0","A","B","C","D"].map(sid=>{{
-    const x=k[sid];
-    return `<tr><td>${{sid==="0"?"Base":sid}}</td><td>${{D.escenarios.find(e=>e.id===sid).titulo}}</td>
-      <td>${{x.n_noches}}</td><td>${{usd(x.costo_usd)}}</td><td>${{fmt(x.pzas_nocturno)}}</td>
-      <td>${{fmt(x.extra_alm16)}}</td><td>${{fmt(x.pzas_lotes_alm16_esc)}}</td>
-      <td>${{fmt(x.pzas_lotes_dic_esc)}}</td><td>${{x.lotes_adelantados}}</td>
-      <td>${{x.dias_ganados_lotes??"--"}}</td></tr>`;
-  }}).join("");
-  const lotes = D.lotes.map(m=>`<tr class="lote"><td>${{m.modelo}}</td><td>${{fmt(m.faltante)}}</td><td>${{m.cap}}</td>
-    <td>${{m.lineas}}</td><td>${{m.prioridad}}</td><td>${{m.termino_plan}}</td><td>${{m.entrada_plan}}</td>
-    <td>${{m.fecha_obj}}</td><td><span class="no">No cubre</span></td></tr>`).join("");
-  document.getElementById("app").innerHTML = `
+<nav class="tabs">
+  <button class="tab on" data-id="res">Resumen</button>
+  <button class="tab" data-id="A">Escenario A</button>
+  <button class="tab" data-id="B">Escenario B</button>
+  <button class="tab" data-id="C">Escenario C</button>
+  <button class="tab" data-id="D">Escenario D</button>
+  <button class="tab" data-id="sup">Supuestos</button>
+</nav>
+<div class="content">
   <section class="sec on" id="sec-res">
-    <div class="card"><h3>Lectura para gerencia</h3><div class="note">${{D.lectura}}</div></div>
+    <div class="card"><h3>Lectura para gerencia</h3><div class="note">{_hx(payload['lectura'])}</div></div>
     <div class="g g4">
-      <div class="kpi"><span>Plan ACTUAL</span><b>${{fmt(D.pzas_actual)}} pzas</b></div>
-      <div class="kpi"><span>Plan LOTE NUEVO</span><b>${{fmt(D.pzas_nuevo)}} pzas</b></div>
-      <div class="kpi"><span>Lotes a insertar</span><b>${{fmt(D.pzas_lotes)}} pzas</b></div>
-      <div class="kpi"><span>Corte almacén</span><b>${{D.corte_almacen}}</b></div>
+      <div class="kpi"><span>Plan ACTUAL</span><b>{fmt_n(payload['pzas_actual'])} pzas</b></div>
+      <div class="kpi"><span>Plan LOTE NUEVO</span><b>{fmt_n(payload['pzas_nuevo'])} pzas</b></div>
+      <div class="kpi"><span>Lotes a insertar</span><b>{fmt_n(payload['pzas_lotes'])} pzas</b></div>
+      <div class="kpi"><span>Corte almacén</span><b>{_hx(payload['corte_almacen'])}</b></div>
     </div>
     <div class="card"><h3>Comparación de escenarios</h3>
       <div class="cw"><canvas id="ch1"></canvas></div>
       <div class="wrap"><table><thead><tr>
         <th>Esc.</th><th>Descripción</th><th>Noches</th><th>Costo</th><th>Pzas noche</th>
         <th>Extra 16/11</th><th>Lote nuevo 16/11</th><th>Lote nuevo dic</th><th>Lotes adelantados</th><th>Mediana días</th>
-      </tr></thead><tbody>${{cmp}}</tbody></table></div>
+      </tr></thead><tbody>{''.join(cmp_rows)}</tbody></table></div>
     </div>
     <div class="card"><h3>Lotes nuevos que hoy no están en el plan ACTUAL</h3>
       <p style="color:var(--mu);font-size:.8rem;margin-bottom:8px">Proyección de tienda / diciembre / tienda nueva. Orden de salida de costura del plan sin nocturnos.</p>
       <div class="wrap"><table><thead><tr><th>Modelo</th><th>Faltante</th><th>Cap/día</th><th>Líneas</th><th>Prioridad</th><th>Salida plan</th><th>Almacén plan</th><th>Obj.</th><th>16/11</th></tr></thead>
-      <tbody>${{lotes}}</tbody></table></div>
+      <tbody>{''.join(lote_rows)}</tbody></table></div>
     </div>
     <div class="g g2">
       <div class="card"><h3>Riesgo si no hay nocturnos</h3>
-        ${{D.pros_contras["0"].contras.map(t=>`<div class="con">${{t}}</div>`).join("")}}
+        {_lis(payload['pros_contras']['0']['contras'], 'con')}
       </div>
       <div class="card"><h3>Qué gana el nocturno (todas las líneas)</h3>
-        ${{D.pros_contras["D"].pros.slice(0,4).map(t=>`<div class="pro">${{t}}</div>`).join("")}}
+        {_lis(payload['pros_contras']['D']['pros'][:4], 'pro')}
         <p style="color:var(--mu);font-size:.78rem;margin-top:8px">L1 noche = cola de L2. Especiales no se tocan. Cobro 30/09 sin noche.</p>
       </div>
     </div>
   </section>
-  ${{["A","B","C","D"].map(sid=>`<section class="sec" id="sec-${{sid}}">${{secEsc(sid)}}</section>`).join("")}}
+  {secs}
   <section class="sec" id="sec-sup">
     <div class="card"><h3>Supuestos</h3>
       <table><tbody>
@@ -789,36 +847,49 @@ function render(){{
         <tr><td>Fuente</td><td>Planificacion Produccion ACTUAL.xlsx y LOTE NUEVO.xlsx.</td></tr>
       </tbody></table>
     </div>
-  </section>`;
-  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{{
-    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
-    document.querySelectorAll(".sec").forEach(x=>x.classList.remove("on"));
+  </section>
+</div>
+<footer class="foot">Informe generado del plan ACTUAL vs LOTE NUEVO. Cap nocturna = 50% de la cap actual (máquinas nuevas aún no a régimen). Listas ordenadas por salida de costura.</footer>
+<script>
+const EXTRA = {extras};
+const COSTO = {costos};
+document.querySelectorAll(".tab").forEach(function(b){{
+  b.onclick = function(){{
+    document.querySelectorAll(".tab").forEach(function(x){{x.classList.remove("on");}});
+    document.querySelectorAll(".sec").forEach(function(x){{x.classList.remove("on");}});
     b.classList.add("on");
     document.getElementById("sec-"+b.dataset.id).classList.add("on");
-  }});
-  const ctx=document.getElementById("ch1");
-  if(ctx && window.Chart){{
-    new Chart(ctx,{{type:"bar",data:{{
-      labels:["Base","A","B","C","D"],
-      datasets:[
-        {{label:"Pzas extra p/ 16/11",data:["0","A","B","C","D"].map(s=>k[s].extra_alm16),backgroundColor:"#5b6af7",yAxisID:"y"}},
-        {{label:"Costo US$",data:["0","A","B","C","D"].map(s=>k[s].costo_usd),backgroundColor:"#f75b8a",yAxisID:"y2"}}
+  }};
+}});
+(function(){{
+  var ctx = document.getElementById("ch1");
+  if(!ctx || !window.Chart) return;
+  new Chart(ctx, {{
+    type: "bar",
+    data: {{
+      labels: ["Base","A","B","C","D"],
+      datasets: [
+        {{label:"Pzas extra p/ 16/11", data: EXTRA, backgroundColor:"#5b6af7", yAxisID:"y"}},
+        {{label:"Costo US$", data: COSTO, backgroundColor:"#f75b8a", yAxisID:"y2"}}
       ]
-    }},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{labels:{{color:"#c9cbe0"}}}}}},
-      scales:{{
-        x:{{ticks:{{color:"#7a7b95"}},grid:{{color:"#2a2b3a"}}}},
-        y:{{ticks:{{color:"#7a7b95"}},grid:{{color:"#2a2b3a"}},position:"left"}},
-        y2:{{ticks:{{color:"#7a7b95"}},grid:{{display:false}},position:"right"}}
-      }}}});
-  }}
-}}
-render();
+    }},
+    options: {{
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {{legend: {{labels: {{color:"#c9cbe0"}}}}}},
+      scales: {{
+        x: {{ticks: {{color:"#7a7b95"}}, grid: {{color:"#2a2b3a"}}}},
+        y: {{ticks: {{color:"#7a7b95"}}, grid: {{color:"#2a2b3a"}}, position:"left"}},
+        y2: {{ticks: {{color:"#7a7b95"}}, grid: {{display:false}}, position:"right"}}
+      }}
+    }}
+  }});
+}})();
 </script>
 </body></html>
 """
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
-
 
 def main():
     plan_nuevo = cargar_plan(NUEVO_XLSX)
