@@ -219,7 +219,7 @@
             return (
               "<tr><td>" +
               esc(s.modelo) +
-              '</td><td class="num">' +
+              "</td><td>" +
               esc(s.sku) +
               '</td><td class="num">' +
               fmtNum(s.stock) +
