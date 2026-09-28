@@ -31,8 +31,9 @@ DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 TH_A, TH_B = 0.8, 0.95
 MIN_STOCK_UNITS = 29  # stock > 28
 EXCLUDED_MATRICES = frozenset({"AA", "BA", "AB"})
-# Cobertura alta → rotación operativa C (stock / ventas mensuales)
+# Cobertura alta → margen/rotación operativa C (stock / ventas mensuales)
 OPERATIVE_ROT_C_COVERAGE_MONTHS = 12.0
+PRIORITY_OPERATIVE_COVERAGE_MONTHS = 6.0
 EXCLUDED_MODELS_EXACT = frozenset({"ANKLE SOCKS DAMA", "RETRO VZLA CAB"})
 RETAIL_LOCS = [
     "CERRO VERDE",
@@ -183,11 +184,38 @@ PRIORITY_MODELS_EXACT = frozenset(
         "MAFE ADVANCE DAMA",
         "CLASICA ADVANCE CAB",
         "EXPLORE CAP",
+        "FIT CAP",
+        "DAD CAP",
+        "CAMO CAP",
+        "PRO CAP",
+        "TOALLA SPORT",
+        "TOALLA PLAYA",
+        "TOALLA ESTAMPADA 2.0",
+        "TOALLA ESTAMPADA",
+        "TOALLA CLIP 2.0",
+        "PACKING SET PRO",
         "RETRO VZLA DAMA",
         "RETRO VZLA KIDS",
     }
 )
 PRIORITY_MODEL_PREFIXES = ("ANKLE SOCKS", "CREW SOCKS", "NO SHOW SOCKS")
+# Equipamiento BF: incluir variantes con stock aunque la rotación sea alta (matriz operativa CC en listado)
+EQUIPAMIENTO_PRIORITY_MODELS = frozenset(
+    {
+        "TOALLA SPORT",
+        "TOALLA PLAYA",
+        "TOALLA ESTAMPADA 2.0",
+        "TOALLA ESTAMPADA",
+        "TOALLA CLIP 2.0",
+        "FIT CAP",
+        "DAD CAP",
+        "CAMO CAP",
+        "PRO CAP",
+        "EXPLORE CAP",
+        "PACKING SET PRO",
+        "MAXI TOTE",
+    }
+)
 
 
 def is_priority_full_variant(modelo: str) -> bool:
@@ -230,20 +258,38 @@ def coverage_months(stock: float, monthly_qty: float) -> float:
     return stock / monthly_qty
 
 
-def operative_class(pareto_cls: str, stock: float, monthly_qty: float) -> str:
+def operative_class(
+    pareto_cls: str,
+    stock: float,
+    monthly_qty: float,
+    *,
+    coverage_threshold: float = OPERATIVE_ROT_C_COVERAGE_MONTHS,
+) -> str:
     """Margen o rotación operativa: cobertura alta → C aunque el pareto ABC diga A/B."""
     cov = coverage_months(stock, monthly_qty)
-    if stock > 0 and cov >= OPERATIVE_ROT_C_COVERAGE_MONTHS:
+    if stock > 0 and cov >= coverage_threshold:
         return "C"
     return pareto_cls
 
 
-def operative_rotation_class(rot_pareto: str, stock: float, monthly_qty: float) -> str:
-    return operative_class(rot_pareto, stock, monthly_qty)
+def operative_rotation_class(
+    rot_pareto: str,
+    stock: float,
+    monthly_qty: float,
+    *,
+    coverage_threshold: float = OPERATIVE_ROT_C_COVERAGE_MONTHS,
+) -> str:
+    return operative_class(rot_pareto, stock, monthly_qty, coverage_threshold=coverage_threshold)
 
 
-def operative_margin_class(margin_pareto: str, stock: float, monthly_qty: float) -> str:
-    return operative_class(margin_pareto, stock, monthly_qty)
+def operative_margin_class(
+    margin_pareto: str,
+    stock: float,
+    monthly_qty: float,
+    *,
+    coverage_threshold: float = OPERATIVE_ROT_C_COVERAGE_MONTHS,
+) -> str:
+    return operative_class(margin_pareto, stock, monthly_qty, coverage_threshold=coverage_threshold)
 
 
 def build_sku_candidate(
@@ -281,9 +327,21 @@ def build_sku_candidate(
     stock_r = float(stock_retail.get(sku, 0))
     stock_t = float(stock_taller.get(sku, 0))
     cov = coverage_months(stock, rotacion_mes)
-    mcls_op = operative_margin_class(mcls, stock, rotacion_mes)
-    rot_op = operative_rotation_class(rot, stock, rotacion_mes)
+    cov_thresh = PRIORITY_OPERATIVE_COVERAGE_MONTHS if priority else OPERATIVE_ROT_C_COVERAGE_MONTHS
+    mcls_op = operative_margin_class(mcls, stock, rotacion_mes, coverage_threshold=cov_thresh)
+    rot_op = operative_rotation_class(rot, stock, rotacion_mes, coverage_threshold=cov_thresh)
     matriz = mcls_op + rot_op
+    mod_u = clean_cell(modelo).upper()
+    if priority and (matriz in EXCLUDED_MATRICES or matriz[0] != "C"):
+        equip_force = mod_u in EQUIPAMIENTO_PRIORITY_MODELS
+        if equip_force and stock > 0:
+            mcls_op = rot_op = "C"
+            matriz = "CC"
+        elif cov >= PRIORITY_OPERATIVE_COVERAGE_MONTHS or (rotacion_mes <= 0 and stock >= MIN_STOCK_UNITS):
+            mcls_op = rot_op = "C"
+            matriz = "CC"
+        else:
+            return None
     if matriz in EXCLUDED_MATRICES:
         return None
     if matriz[0] != "C":
