@@ -1,10 +1,17 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.43 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.44 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - SECUENCIA=NO SIN FAMILIA: Priorizacion col. H = No saca al
+ *     modelo del lote familiar (color → género) en TODAS las líneas.
+ *     RIO KIDS con No ya no espera ni cede L2 a RIO DAMA a mitad de
+ *     semana. Corre solo en su línea hasta terminar; el sobrante del
+ *     día pasa a la cola de prioridad, no al hermano. El Negro→Blanco
+ *     de SUS propias variantes se mantiene. L5 sigue siendo ocupante
+ *     exclusivo. No reclama líneas extra ni parte MOs.
  *   - ACTUALIZAR MOs: asignar una MO a un SKU (en la hoja MO o en
  *     Por Hacer) ya no se trata como orden huérfana. Se cruza el
  *     mismo lote por SKU + tipo + modelo aunque un lado aún no
@@ -233,7 +240,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.43";
+var VERSION_SISTEMA = "5.9.44";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -2172,6 +2179,11 @@ function generarPlanificacionSemanal_() {
     return !!(m && m.secuenciaNo && !m.esEspecial);
   }
 
+  /** Secuencia=No: no entra al lote familiar (no espera/cede color ni género a un hermano). */
+  function participaLoteFamilia_(m) {
+    return !!(m && !m.esEspecial && !m.secuenciaNo);
+  }
+
   function linea5OcupadaPorExclusivo_(exceptNom) {
     return (ocupante["5"] || []).some(function (nom) {
       if (exceptNom && nom === exceptNom) return false;
@@ -2614,7 +2626,7 @@ function generarPlanificacionSemanal_() {
     for (var iL = 0; iL < listaModelos.length; iL++) {
       var mL = listaModelos[iL];
       if (familiaModelo_(mL) !== fam || restanteModelo_(mL) <= 0) continue;
-      if (mL.esEspecial) continue;
+      if (!participaLoteFamilia_(mL)) continue;
       var soloMin = restanteMinima_(mL) > 0;
       for (var tL = 0; tL < mL.tareas.length; tL++) {
         var tF = mL.tareas[tL];
@@ -2657,6 +2669,7 @@ function generarPlanificacionSemanal_() {
     for (var iH = 0; iH < listaModelos.length; iH++) {
       var h = listaModelos[iH];
       if (h.nombre === m.nombre || familiaModelo_(h) !== fam) continue;
+      if (!participaLoteFamilia_(m) || !participaLoteFamilia_(h)) continue;
       if (h.esEspecial || restanteModelo_(h) <= 0) continue;
       if (lineasDondeEsta_(h.nombre).length > 0) continue;
       if (!modeloPuedeProducirHoyNom_(h.nombre, lin, d, overflow)) continue;
@@ -2679,6 +2692,7 @@ function generarPlanificacionSemanal_() {
 
   function debeEsperarLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (!participaLoteFamilia_(m)) return false;
     if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && lineasModelo_(m, overflow).indexOf("5") !== -1) return false;
     var fam = familiaModelo_(m);
@@ -2686,13 +2700,10 @@ function generarPlanificacionSemanal_() {
     if (lineasDondeEsta_(m.nombre).length > 0) return false;
     var lote = loteFamiliaActivo_(fam, overflow);
     if (!lote || lote.modelo === m.nombre) return false;
-    if (lote.m && lote.m.esEspecial) return false;
+    if (lote.m && !participaLoteFamilia_(lote.m)) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
     if (lineasDondeEsta_(lote.modelo).length > 0) return false;
     if (!lote.m.tareas.some(function (tLote) { return tareaVivaHoy_(tLote); })) return false;
-    if (m.secuenciaNo) {
-      return lote.colorRank < colorRankVivo_(m);
-    }
     var libresLote = lineasLibresParaModelo_(lote.m, overflow);
     var libresMias = lineasLibresParaModelo_(m, overflow);
     if (libresLote.length >= 2 && libresMias.length > 0) return false;
@@ -2720,6 +2731,7 @@ function generarPlanificacionSemanal_() {
 
   function debeCederAlLoteFamilia_(m, overflow) {
     if (!m || m.esEspecial) return false;
+    if (!participaLoteFamilia_(m)) return false;
     if (esUrgenteExplosivo_(m, overflow, d)) return false;
     if (esExclusivoLinea5_(m) && (lineasDondeEsta_(m.nombre).indexOf("5") !== -1 ||
         lineasModelo_(m, overflow).indexOf("5") !== -1)) return false;
@@ -2727,15 +2739,9 @@ function generarPlanificacionSemanal_() {
     if (!fam) return false;
     var lote = loteFamiliaActivo_(fam, overflow);
     if (!lote || lote.modelo === m.nombre) return false;
-    if (lote.m && lote.m.esEspecial) return false;
+    if (lote.m && !participaLoteFamilia_(lote.m)) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
     if (!lote.m.tareas.some(function (tLote) { return tareaVivaHoy_(tLote); })) return false;
-    if (m.secuenciaNo) {
-      if (lote.colorRank < colorRankVivo_(m)) {
-        return lineasDondeEsta_(lote.modelo).length === 0;
-      }
-      return false;
-    }
     return lineasDondeEsta_(lote.modelo).length === 0;
   }
 
@@ -2748,6 +2754,7 @@ function generarPlanificacionSemanal_() {
     var out = [];
     listaModelos.forEach(function (mC) {
       if (familiaModelo_(mC) !== fam) return;
+      if (!participaLoteFamilia_(mC)) return;
       if (restanteModelo_(mC) <= 0) return;
       if (skip && skip[mC.nombre]) return;
       if (ocupante[lin].indexOf(mC.nombre) !== -1) return;
@@ -2838,14 +2845,16 @@ function generarPlanificacionSemanal_() {
       }
       if (esUrgenteExplosivo_(mNew, overflowL1, d)) {
         if (!modeloPuedeProducirHoyNom_(nomOcc, lin, d, overflowL1)) return true;
-        if (familiaModelo_(mO) === familiaModelo_(mNew)) return true;
+        if (familiaModelo_(mO) === familiaModelo_(mNew) &&
+            participaLoteFamilia_(mO) && participaLoteFamilia_(mNew)) return true;
         var bOx = bandaViva_(mO);
         var bNx = bandaViva_(mNew);
         if (bOx < bNx) return false;
         if (bOx === bNx && mO.prioMin < mNew.prioMin) return false;
         return true;
       }
-      if (familiaModelo_(mO) === familiaModelo_(mNew) && !mNew.esEspecial) return false;
+      if (familiaModelo_(mO) === familiaModelo_(mNew) && !mNew.esEspecial &&
+          participaLoteFamilia_(mO) && participaLoteFamilia_(mNew)) return false;
       var bO = bandaViva_(mO);
       var bN = bandaViva_(mNew);
       if (bO !== bN) return bO > bN;
@@ -2907,6 +2916,8 @@ function generarPlanificacionSemanal_() {
         ocupante[lin].push(lastNom);
         return;
       }
+      var lastFamM = lastM || (lastNom ? mapaModelos[lastNom] : null);
+      if (lastFamM && !participaLoteFamilia_(lastFamM)) return;
       var famLast = lastM ? familiaModelo_(lastM) : (lastNom ? familiaDeNombre_(lastNom) : "");
       var loteLast = loteFamiliaActivo_(famLast, overflowL1);
       if (loteLast && modeloPuedeProducirHoyNom_(loteLast.modelo, lin, d, overflowL1) &&
@@ -3028,8 +3039,11 @@ function generarPlanificacionSemanal_() {
       var famRef = lastM ? familiaModelo_(lastM) : familiaDeNombre_(lastNom);
       if (!famRef && ocupante[lin].length) famRef = familiaModelo_(mapaModelos[ocupante[lin][0]]);
       var paraParalelo = ocupante[lin].length > 0;
+      var lastParticipa = lastM
+        ? participaLoteFamilia_(lastM)
+        : (lastNom && mapaModelos[lastNom] ? participaLoteFamilia_(mapaModelos[lastNom]) : true);
       if (String(lin) === "5" && paraParalelo && linea5OcupadaPorExclusivo_()) return null;
-      if (famRef && !paraParalelo) {
+      if (famRef && !paraParalelo && lastParticipa) {
         var loteSig = loteFamiliaActivo_(famRef, overflow);
         if (loteSig && loteSig.modelo !== lastNom && !skip[loteSig.modelo] &&
             !(loteSig.m && loteSig.m.esEspecial) &&
@@ -3040,7 +3054,7 @@ function generarPlanificacionSemanal_() {
         }
       }
       var generoTerminado = lastM && restanteModelo_(lastM) <= 0;
-      if (famRef && !paraParalelo && generoTerminado) {
+      if (famRef && !paraParalelo && generoTerminado && lastParticipa) {
         var hermanos = hermanosPendientesEnLinea_(lin, d, overflow, skip, famRef).filter(function (h) {
           return h.nombre !== lastNom;
         });
@@ -3351,7 +3365,7 @@ function generarPlanificacionSemanal_() {
     "• Urgente/mínima con 2+ líneas: el día de la fecha estimada y el hábil anterior toma SÍ O SÍ todas las asignadas. Color, género y prioridad de otros quedan atrás para ese producto (un Especial que sí produzca ese día no se toca). Fuera de esa ventana, la segunda línea solo si está libre.\n" +
     "• Especial con 2+ líneas: prioridad 1 en cada asignada desde su Día de inicio (Running Tank 1 y 2, Clásica 3 y 4). El faltante se reparte entre esas líneas.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
-    "• Priorizacion col. H Secuencia=No: en L1-4 no espera/cede género; el lote de color sí. En L5 ese modelo corre solo (sin paralelo), sin esperar color/género. No toma líneas de más ni parte MOs.\n" +
+    "• Priorizacion col. H Secuencia=No: el modelo NO entra al lote familiar (no espera ni cede color/género a un hermano). Corre solo en su línea hasta terminar; el sobrante va a la cola, no a RIO DAMA u otro hermano. El Negro→Blanco de SUS variantes se mantiene. En L5 además es ocupante exclusivo. No toma líneas de más ni parte MOs.\n" +
     "• Líneas 1-4: un modelo a la vez, salvo el modelo a media estación. Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Modelo a media estación (L1-4): " + ((cfg.modeloParcial && cfg.modeloParcial.activo)
       ? (textoModeloParcial_(cfg.modeloParcial) + ".")
@@ -4366,7 +4380,7 @@ function actualizarModelosPriorizacion_() {
   msg += nuevos > 0
     ? "➕ ACTUALIZACIÓN:\nSe agregaron " + nuevos + " modelos nuevos.\nAsigna Prioridad, Fecha, Cantidad Mínima, Líneas, Secuencia (H) y Division (I)."
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
-  msg += "\n\nColumna H Secuencia: escribe No para saltar el orden de género (el lote de color se mantiene).";
+  msg += "\n\nColumna H Secuencia: escribe No para que el modelo no entre al lote familiar (no espera ni cede color/género a un hermano). En L5 además corre solo.";
   msg += "\nColumna I Division: escribe Si para producir el modelo en dos vueltas al 50%.";
   msg += "\nSi el producto en Por Hacer trae lote (MAR LOTE 1 KIDS), se conserva la fila base (MAR KIDS).";
   msg += "\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
