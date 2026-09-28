@@ -34,7 +34,9 @@ EXCLUDED_MATRICES = frozenset({"AA", "BA", "AB"})
 # Cobertura alta → margen/rotación operativa C (stock / ventas mensuales)
 OPERATIVE_ROT_C_COVERAGE_MONTHS = 12.0
 PRIORITY_OPERATIVE_COVERAGE_MONTHS = 6.0
-EXCLUDED_MODELS_EXACT = frozenset({"ANKLE SOCKS DAMA", "RETRO VZLA CAB"})
+EXCLUDED_MODELS_EXACT = frozenset(
+    {"ANKLE SOCKS DAMA", "RETRO VZLA CAB", "CLASICA ADVANCE CAB"}
+)
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -182,7 +184,6 @@ PRIORITY_MODELS_EXACT = frozenset(
         "MAXI TOTE",
         "BASIC LINE SHORT DAMA",
         "MAFE ADVANCE DAMA",
-        "CLASICA ADVANCE CAB",
         "EXPLORE CAP",
         "FIT CAP",
         "DAD CAP",
