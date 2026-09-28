@@ -199,7 +199,7 @@ PRIORITY_MODELS_EXACT = frozenset(
     }
 )
 PRIORITY_MODEL_PREFIXES = ("ANKLE SOCKS", "CREW SOCKS", "NO SHOW SOCKS")
-# Equipamiento BF: incluir variantes con stock aunque la rotación sea alta (matriz operativa CC en listado)
+# Equipamiento BF: matriz operativa CC en listado (tras filtro de cobertura por modelo)
 EQUIPAMIENTO_PRIORITY_MODELS = frozenset(
     {
         "TOALLA SPORT",
@@ -216,6 +216,30 @@ EQUIPAMIENTO_PRIORITY_MODELS = frozenset(
         "MAXI TOTE",
     }
 )
+# Cobertura mínima por modelo (meses). strict_gt=True → estrictamente mayor que el umbral.
+MODEL_COVERAGE_RULES: dict[str, tuple[float, bool]] = {
+    "TOALLA SPORT": (8.0, True),
+    "TOALLA PLAYA": (8.0, True),
+    "TOALLA ESTAMPADA 2.0": (8.0, True),
+    "TOALLA ESTAMPADA": (8.0, True),
+    "TOALLA CLIP 2.0": (6.0, False),
+    "NOAH SPORT LITE CAB": (6.0, False),
+    "ANDRE MOTION DAMA": (6.0, False),
+}
+DEFAULT_PRIORITY_COVERAGE_MIN = 6.0
+
+
+def passes_model_coverage_filter(modelo: str, cov: float, priority_line: bool) -> bool:
+    if cov >= 900:
+        return True
+    mod = clean_cell(modelo).upper()
+    rule = MODEL_COVERAGE_RULES.get(mod)
+    if rule is None and priority_line:
+        rule = (DEFAULT_PRIORITY_COVERAGE_MIN, False)
+    if rule is None:
+        return True
+    threshold, strict_gt = rule
+    return cov > threshold if strict_gt else cov >= threshold
 
 
 def is_priority_full_variant(modelo: str) -> bool:
@@ -327,11 +351,13 @@ def build_sku_candidate(
     stock_r = float(stock_retail.get(sku, 0))
     stock_t = float(stock_taller.get(sku, 0))
     cov = coverage_months(stock, rotacion_mes)
+    mod_u = clean_cell(modelo).upper()
+    if not passes_model_coverage_filter(modelo, cov, priority):
+        return None
     cov_thresh = PRIORITY_OPERATIVE_COVERAGE_MONTHS if priority else OPERATIVE_ROT_C_COVERAGE_MONTHS
     mcls_op = operative_margin_class(mcls, stock, rotacion_mes, coverage_threshold=cov_thresh)
     rot_op = operative_rotation_class(rot, stock, rotacion_mes, coverage_threshold=cov_thresh)
     matriz = mcls_op + rot_op
-    mod_u = clean_cell(modelo).upper()
     if priority and (matriz in EXCLUDED_MATRICES or matriz[0] != "C"):
         equip_force = mod_u in EQUIPAMIENTO_PRIORITY_MODELS
         if equip_force and stock > 0:
@@ -794,7 +820,7 @@ def main() -> None:
         "summary": summary,
         "inventario_view": {
             "name": "Inventario baja rotación - Listado",
-            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU. Matriz operativa: margen y rotación C si cobertura ≥12 meses; solo filas con margen C.",
+            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU. Filtros de cobertura: toallas sport/playa/estampada >8m; clip ≥6m; líneas priorizadas ≥6m salvo regla propia.",
             "sort": "stock_desc",
         },
         "catalog": catalog,
