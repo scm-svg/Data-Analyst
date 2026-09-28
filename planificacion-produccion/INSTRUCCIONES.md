@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.44 — códigos listos para pegar
+# Planificación de Producción v5.9.45 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,18 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Listado por color, sin saltos (5.9.45)
+
+En `Proyeccion - SKUS`, Entrada de almacén y los drill-downs del dashboard, las variantes de un modelo **no se intercalan por el día en que cada SKU arrancó**.
+
+- Primero los SKUs de **Priorizacion - SKUs**.
+- Luego **Negro → Blanco → Azul Marino**.
+- El resto de colores **por volumen** del color en el modelo (el de más piezas primero).
+- Dentro del color, por **talla** (XS→XL o 2→14).
+
+Así, con **Division=Si** (1ª vuelta de todas las variantes al 50% y luego la 2ª), Lila 14 ya no aparece entre Azul Rey 4 y Azul Rey 6. El motor también filtra el lote del día por **color exacto** (no por el rango 50 de “otros”), para no mezclar Lila / Azul Rey / Aguamarina en la misma pasada.
 
 ## Motor · Secuencia=No sin lote familiar (5.9.44)
 
@@ -71,11 +82,12 @@ Al abrir un modelo, las variantes se listan **como van a salir de costura**, no 
 
 Criterio, el mismo del motor:
 
-1. Primero el SKU que **arranca antes** (semana y día con producción).
-2. SKUs de **Priorizacion - SKUs** (salen primero cuando el modelo entra a la línea).
-3. Color núcleo: **Negro → Blanco → Marino**; el resto por **volumen del color** en el modelo.
-4. Talla (XS → S → M → L → XL, o número).
-5. Empate: más cantidad, luego el código SKU.
+1. SKUs de **Priorizacion - SKUs** (salen primero cuando el modelo entra a la línea).
+2. Color núcleo: **Negro → Blanco → Marino**; el resto por **volumen del color** en el modelo.
+3. Talla (XS → S → M → L → XL, o número).
+4. Empate: semana/día de arranque, más cantidad, luego el código SKU.
+
+El día en que cada variante arrancó **no parte** un color (un Lila 14 no se lista entre tallas de Azul Rey).
 
 ## Dashboard · Almacén y encabezado (5.9.37)
 

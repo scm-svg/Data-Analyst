@@ -1,10 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.44 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.45 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - COLOR SIN SALTOS: Proyeccion - SKUS, Entrada de almacén y los
+ *     drill-downs agrupan por color dentro del modelo. Primero
+ *     Priorizacion - SKUs, luego Negro → Blanco → Azul Marino, el
+ *     resto por volumen del color, y la talla. El día/semana de
+ *     arranque ya no parte un color (Lila 14 no se mete entre Azul
+ *     Rey 4 y 6; Amarillo Neon no se parte con Verde Militar). El
+ *     lote del motor filtra por color exacto, no por el rango 50 de
+ *     “otros”, para no mezclar Lila/Azul Rey/Aguamarina el mismo día.
  *   - SECUENCIA=NO SIN FAMILIA: Priorizacion col. H = No saca al
  *     modelo del lote familiar (color → género) en TODAS las líneas.
  *     RIO KIDS con No ya no espera ni cede L2 a RIO DAMA a mitad de
@@ -42,9 +50,10 @@
  *     Proyeccion - SKUS y Entrada de almacén.
  *   - DRILL-DOWN SKU POR SALIDA: al abrir un modelo (Calendario,
  *     Salida semanal, Seguimiento, Impresión Digital y Almacén) los
- *     SKUs salen en el orden de producción: primero la semana/día
- *     en que arrancan, luego Priorizacion - SKUs, Negro → Blanco →
- *     Marino y la talla. Ya no se listan por MO ni alfabético.
+ *     SKUs salen agrupados por color: Priorizacion - SKUs, Negro →
+ *     Blanco → Marino, el resto por volumen, y la talla. Ya no se
+ *     listan por MO, alfabético ni por el día en que cada variante
+ *     arrancó (eso partía el color).
  *   - ALMACÉN ESTADOS Y KPIs: Produccion Parcial (amarillo) si hay
  *     piezas hechas pero aún falta. En blanco si producida = 0.
  *     Ya producida solo cuando el SKU está completo y, en el modelo,
@@ -240,7 +249,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.44";
+var VERSION_SISTEMA = "5.9.45";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1263,14 +1272,8 @@ function msSalidaDeSku_(s) {
   return isFinite(k) ? k : Infinity;
 }
 
-/** Orden en que el SKU sale de costura: semana/día, prio SKU, color, talla. */
+/** Orden de listado: prio SKU, color (N→B→Marino / volumen), talla. El día no parte el color. */
 function cmpSkuSalidaProduccion_(a, b) {
-  var wa = primerSemDeSku_(a), wb = primerSemDeSku_(b);
-  if (wa !== wb) return wa - wb;
-  var da = primerDiaDeSku_(a), db = primerDiaDeSku_(b);
-  if (da !== db) return da - db;
-  var ta = msSalidaDeSku_(a), tb = msSalidaDeSku_(b);
-  if (ta !== tb) return ta - tb;
   var pa = a.esSkuPrio ? 0 : 1, pb = b.esSkuPrio ? 0 : 1;
   if (pa !== pb) return pa - pb;
   if (a.esSkuPrio && b.esSkuPrio) {
@@ -1283,6 +1286,12 @@ function cmpSkuSalidaProduccion_(a, b) {
   if (cmpCol) return cmpCol;
   var xa = ordenTalla_(a.talla), xb = ordenTalla_(b.talla);
   if (xa !== xb) return xa - xb;
+  var wa = primerSemDeSku_(a), wb = primerSemDeSku_(b);
+  if (wa !== wb) return wa - wb;
+  var da = primerDiaDeSku_(a), db = primerDiaDeSku_(b);
+  if (da !== db) return da - db;
+  var ta = msSalidaDeSku_(a), tb = msSalidaDeSku_(b);
+  if (ta !== tb) return ta - tb;
   var ca = cantDeSkuSalida_(a);
   var cb = cantDeSkuSalida_(b);
   if (cb !== ca) return cb - ca;
@@ -2337,7 +2346,7 @@ function generarPlanificacionSemanal_() {
     return piezas;
   }
 
-  function producirLote_(mP, lin, d, overflow, maxLote, soloMinima, colorRankFiltro, vueltaFiltro, techoCarga) {
+  function producirLote_(mP, lin, d, overflow, maxLote, soloMinima, colorNormFiltro, vueltaFiltro, techoCarga) {
     var techo = (techoCarga > 0 && techoCarga < 1) ? techoCarga : 1;
     for (var ti = 0; ti < mP.tareas.length; ti++) {
       var t = mP.tareas[ti];
@@ -2345,7 +2354,7 @@ function generarPlanificacionSemanal_() {
       if (t.restante <= 0 || d < diaInicioEfectivo_(t) || (d < DIAS_LABORALES && diaSemanaActual === t.diaNoLaborable)) continue;
       if (soloMinima && !t.esMinima) continue;
       if (!soloMinima && vueltaFiltro > 0 && (t.vuelta || 0) !== 0 && (t.vuelta || 0) !== vueltaFiltro) continue;
-      if (colorRankFiltro !== undefined && colorRankFiltro !== null && rangoColor_(t.color) !== colorRankFiltro) continue;
+      if (colorNormFiltro !== undefined && colorNormFiltro !== null && claveColorNorm_(t.color) !== colorNormFiltro) continue;
       var clave = claveMO_(t);
       if (!t.esEspecial) {
         if (lineaPorMO[clave]) t.lineaFija = lineaPorMO[clave];
@@ -2374,8 +2383,8 @@ function generarPlanificacionSemanal_() {
     while (carga[lin][d] < techo - 0.001) {
       var soloMinima = restanteMinima_(mP) > 0;
       var vueltaFiltro = soloMinima ? 0 : vueltaActiva_(mP);
-      var rank = null;
-      var hayRank = false;
+      var colorFiltro = null;
+      var hayColor = false;
       if (!explota) {
         for (var tiR = 0; tiR < mP.tareas.length; tiR++) {
           var tR = mP.tareas[tiR];
@@ -2386,12 +2395,12 @@ function generarPlanificacionSemanal_() {
           var fijaR = tR.esEspecial ? null : (lineaPorMO[claveR] || tR.lineaFija);
           if (fijaR && fijaR !== lin) continue;
           if (elegiblesTarea_(tR, overflow).indexOf(lin) === -1) continue;
-          rank = rangoColor_(tR.color);
-          hayRank = true;
+          colorFiltro = claveColorNorm_(tR.color);
+          hayColor = true;
           break;
         }
       }
-      if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayRank ? rank : null, vueltaFiltro, techo) <= 0) break;
+      if (producirLote_(mP, lin, d, overflow, 0, soloMinima, hayColor ? colorFiltro : null, vueltaFiltro, techo) <= 0) break;
       if (restanteMinima_(mP) <= 0 && tuvoMinima_(mP)) break;
       if (!explota && debeCederAlLoteFamilia_(mP, overflow)) break;
     }
@@ -3389,7 +3398,7 @@ function generarPlanificacionSemanal_() {
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
     "• Lotes: el mismo SKU puede repetirse; se distingue por MO + modelo (lote en Producto).\n" +
     "• Division=Si (Priorizacion col. I): dos vueltas al 50% en el mismo orden de variantes.\n" +
-    "• Color: Negro → Blanco → Marino; el resto por volumen del color. Géneros que comparten línea alternan dentro del color.\n" +
+    "• Color: Negro → Blanco → Marino; el resto por volumen del color (sin saltos en Proyeccion - SKUS). Géneros que comparten línea alternan dentro del color.\n" +
     "• Proyección: amarillo al llegar a la mínima, verde al llegar a la meta."
   );
 }
@@ -3961,13 +3970,15 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   var idxModelo = {};
   for (var imo = 0; imo < modelosOrdenados.length; imo++) idxModelo[modelosOrdenados[imo]] = imo;
 
-  var skusOrdenados = Object.keys(infoSku).sort(function (a, b) {
-    var ia = infoSku[a], ib = infoSku[b];
-    var ma = idxModelo.hasOwnProperty(ia.modelo) ? idxModelo[ia.modelo] : 9999;
-    var mb = idxModelo.hasOwnProperty(ib.modelo) ? idxModelo[ib.modelo] : 9999;
+  var listaSkuProy = [];
+  Object.keys(infoSku).forEach(function (k) { listaSkuProy.push(infoSku[k]); });
+  listaSkuProy.sort(function (a, b) {
+    var ma = idxModelo.hasOwnProperty(a.modelo) ? idxModelo[a.modelo] : 9999;
+    var mb = idxModelo.hasOwnProperty(b.modelo) ? idxModelo[b.modelo] : 9999;
     if (ma !== mb) return ma - mb;
-    return cmpSkuSalidaProduccion_(ia, ib);
+    return 0;
   });
+  var skusOrdenados = ordenarSkusPorSalidaEnLista_(listaSkuProy);
 
   var filasProySku = [];
   var fondosSku = [];
@@ -3976,8 +3987,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   var primeraFilaSku = {};
 
   for (var miS = 0; miS < skusOrdenados.length; miS++) {
-    var claveSku = skusOrdenados[miS];
-    var isku = infoSku[claveSku];
+    var isku = skusOrdenados[miS];
     var fechaFinMsSku = Infinity;
     if (isku.diaFinEstimado >= 0) {
       fechaFinMsSku = fechaDeDia_(cfg, isku.diaFinEstimado).getTime();
@@ -4176,8 +4186,9 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     var ma = String(a.modelo || a.producto || "");
     var mb = String(b.modelo || b.producto || "");
     if (ma !== mb) return ma.localeCompare(mb);
-    return cmpSkuSalidaProduccion_(a, b);
+    return 0;
   });
+  listAlmacenSku = ordenarSkusPorSalidaEnLista_(listAlmacenSku);
 
   var arrSku = [];
   listAlmacenSku.forEach(function (tG) {
@@ -5312,7 +5323,7 @@ function supuestosDashboard_(capsModelo) {
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
-    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan como salen de costura: semana/día de arranque, SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
+    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
     ]
   };
 }
