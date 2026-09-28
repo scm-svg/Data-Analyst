@@ -113,7 +113,7 @@ body.light .chip{border-color:rgba(0,0,0,.12)}
   <div class="hdr-r"><div class="kpi-bar" id="kpiBar"></div><button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️ Light</button></div>
 </div>
 <div id="alertBar"></div>
-<div class="mbar"><span class="mbar-lbl">🏃 Línea:</span><button class="mbtn active" data-m="" onclick="setModelo('')">🏃 Todas <span class="mcnt" id="mcnt_all">0</span></button><button class="mbtn" data-m="R2 SPORT 5\"" onclick="setModelo('R2 SPORT 5\"')">⚡ Sport 5\" <span class="mcnt" id="mcnt_SPORT5">0</span></button><button class="mbtn" data-m="R2 RUNNING 3,5\"" onclick="setModelo('R2 RUNNING 3,5\"')">🏃 Running 3,5\" <span class="mcnt" id="mcnt_RUNNING35">0</span></button></div>
+<div class="mbar"><span class="mbar-lbl">🏃 Línea:</span><button class="mbtn active" data-m="" onclick="setModelo(this.dataset.m)">🏃 Todas <span class="mcnt" id="mcnt_all">0</span></button><button class="mbtn" data-m='R2 SPORT 5"' onclick="setModelo(this.dataset.m)">⚡ Sport 5" <span class="mcnt" id="mcnt_SPORT5">0</span></button><button class="mbtn" data-m='R2 RUNNING 3,5"' onclick="setModelo(this.dataset.m)">🏃 Running 3,5" <span class="mcnt" id="mcnt_RUNNING35">0</span></button></div>
 <div class="fbar">
   <div class="fg"><label>Tienda</label><select id="fT" onchange="af()"><option value="">Todas</option></select></div>
   <div class="fg"><label>Género</label><select id="fG" onchange="af()"><option value="">Todos</option></select></div>
