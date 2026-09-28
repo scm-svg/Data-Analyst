@@ -288,15 +288,23 @@ def main() -> None:
         stock = float(row.stock_total)
         if stock <= 0:
             continue
-        if stock < MIN_STOCK_UNITS:
+
+        abc = abc_metrics.get(sku)
+        modelo = (
+            clean_cell(row.modelo_inv)
+            or (clean_cell(abc["modelo"]) if abc else "")
+            or clean_cell(modelo_sales.get(sku), sku)
+        )
+        jacket_line = is_jacket_legacy_line(modelo)
+
+        if stock < MIN_STOCK_UNITS and not jacket_line:
             excluded_stats["stock_bajo_28"] += 1
             continue
 
-        if margin_abc.get(sku) != "C":
+        if margin_abc.get(sku) != "C" and not jacket_line:
             excluded_stats["margen_no_c"] += 1
             continue
 
-        abc = abc_metrics.get(sku)
         if not abc:
             excluded_stats["sin_guia_abc"] += 1
             continue
@@ -305,9 +313,6 @@ def main() -> None:
         if not seg:
             excluded_stats["fuera_segmento"] += 1
             continue
-
-        modelo = clean_cell(row.modelo_inv) or clean_cell(abc["modelo"]) or clean_cell(modelo_sales.get(sku), sku)
-        jacket_line = is_jacket_legacy_line(modelo)
         rot = rot_abc.get(sku, "C")
         if rot != "C" and not jacket_line:
             excluded_stats["rotacion_no_c"] += 1
@@ -414,8 +419,11 @@ def main() -> None:
             }
         )
 
-    catalog.sort(key=lambda x: (-x["stock_total"], -x["rotacion_mes"]))
-    model_rows.sort(key=lambda x: (-x["stock_total"], -x["rotacion_mes"]))
+    # Vista inventario: ocultar modelos con stock total ≤ 28 (excepto ya filtrados en SKUs)
+    catalog = [c for c in catalog if c["stock_total"] >= MIN_STOCK_UNITS]
+    catalog.sort(key=lambda x: (-(x["stock_tiendas"] + x["stock_taller"]), -x["stock_total"]))
+    model_rows = [m for m in model_rows if m["stock_total"] >= MIN_STOCK_UNITS]
+    model_rows.sort(key=lambda x: (-(x["stock_tiendas"] + x["stock_taller"]), -x["stock_total"]))
 
     assert all(c["stock_total"] > 0 for c in candidates), "Hay SKUs sin stock en la propuesta"
 
