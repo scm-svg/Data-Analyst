@@ -88,9 +88,9 @@
     if (!DATA || !DATA.skus) return;
 
     try {
-      applyTheme(localStorage.getItem("bf-theme") || "light");
+      applyTheme(localStorage.getItem("bf-theme") || "dark");
     } catch (e) {
-      applyTheme("light");
+      applyTheme("dark");
     }
 
     var state = { seg: "", search: "" };
@@ -284,6 +284,25 @@
               fmtNum(m.stock_taller) +
               '</td><td class="num">' +
               (m.meses_cobertura != null ? fmtNum(m.meses_cobertura, 1) : "—") +
+              "</td></tr>"
+            );
+          })
+          .join("");
+      }
+
+      var fuera = DATA.meta.inventario_fuera_lista || [];
+      var fueraCard = $("fueraListaCard");
+      if (fueraCard && fuera.length) {
+        fueraCard.style.display = "block";
+        $("bodyFueraLista").innerHTML = fuera
+          .map(function (r) {
+            return (
+              "<tr><td>" +
+              esc(r.modelo) +
+              '</td><td class="num">' +
+              fmtNum(r.stock_total) +
+              "</td><td>" +
+              esc(r.motivo) +
               "</td></tr>"
             );
           })

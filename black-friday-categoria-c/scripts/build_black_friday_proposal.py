@@ -182,6 +182,7 @@ PRIORITY_MODELS_EXACT = frozenset(
         "BASIC LINE SHORT DAMA",
         "MAFE ADVANCE DAMA",
         "CLASICA ADVANCE CAB",
+        "EXPLORE CAP",
         "RETRO VZLA DAMA",
         "RETRO VZLA KIDS",
     }
@@ -229,12 +230,20 @@ def coverage_months(stock: float, monthly_qty: float) -> float:
     return stock / monthly_qty
 
 
-def operative_rotation_class(rot_pareto: str, stock: float, monthly_qty: float) -> str:
-    """Rotación por cobertura: muchos meses de stock → C aunque el pareto ABC diga B/A."""
+def operative_class(pareto_cls: str, stock: float, monthly_qty: float) -> str:
+    """Margen o rotación operativa: cobertura alta → C aunque el pareto ABC diga A/B."""
     cov = coverage_months(stock, monthly_qty)
     if stock > 0 and cov >= OPERATIVE_ROT_C_COVERAGE_MONTHS:
         return "C"
-    return rot_pareto
+    return pareto_cls
+
+
+def operative_rotation_class(rot_pareto: str, stock: float, monthly_qty: float) -> str:
+    return operative_class(rot_pareto, stock, monthly_qty)
+
+
+def operative_margin_class(margin_pareto: str, stock: float, monthly_qty: float) -> str:
+    return operative_class(margin_pareto, stock, monthly_qty)
 
 
 def build_sku_candidate(
@@ -272,9 +281,12 @@ def build_sku_candidate(
     stock_r = float(stock_retail.get(sku, 0))
     stock_t = float(stock_taller.get(sku, 0))
     cov = coverage_months(stock, rotacion_mes)
+    mcls_op = operative_margin_class(mcls, stock, rotacion_mes)
     rot_op = operative_rotation_class(rot, stock, rotacion_mes)
-    matriz = mcls + rot_op
+    matriz = mcls_op + rot_op
     if matriz in EXCLUDED_MATRICES:
+        return None
+    if matriz[0] != "C":
         return None
     return {
         "sku": sku,
@@ -289,6 +301,7 @@ def build_sku_candidate(
         "segmento": seg,
         "abc_margen": mcls,
         "abc_rotacion": rot,
+        "margen_operativo": mcls_op,
         "rotacion_operativa": rot_op,
         "matriz": matriz,
         "stock_total": stock,
@@ -649,6 +662,65 @@ def main() -> None:
         if len(sugeridos_modelos) >= 15:
             break
 
+    inv_model_stock = (
+        inv_df.groupby("MODELO", as_index=False)
+        .agg(stock_total=("Cantidad en inventario", "sum"))
+        .sort_values("stock_total", ascending=False)
+    )
+    inventario_fuera_lista: list[dict] = []
+    for row in inv_model_stock.itertuples():
+        mod = clean_cell(row.MODELO)
+        if not mod or row.stock_total < 200:
+            continue
+        if mod in in_catalog or is_excluded_model(mod):
+            continue
+        mod_skus = inv_df[inv_df["MODELO"] == row.MODELO]["SKU"].unique()
+        seg_ok = False
+        could_cc = 0
+        reasons: Counter = Counter()
+        for sku in mod_skus:
+            lk = stock_lookup.get(sku)
+            st = float(lk.stock_total) if lk else 0.0
+            if st <= 0:
+                continue
+            abc = abc_metrics.get(sku)
+            if not abc or not segment(abc.get("categoria") or ""):
+                reasons["fuera_segmento"] += 1
+                continue
+            seg_ok = True
+            qty = float(qty_by_sku.get(sku, 0))
+            rm = qty / sales_months if sales_months else 0.0
+            m = margin_abc.get(sku, "C")
+            r = rot_abc.get(sku, "C")
+            mo = operative_margin_class(m, st, rm)
+            ro = operative_rotation_class(r, st, rm)
+            mat = mo + ro
+            if mat in EXCLUDED_MATRICES:
+                reasons["matriz_excluida"] += 1
+            elif mat[0] != "C":
+                reasons["margen_no_c_operativo"] += 1
+            elif st < MIN_STOCK_UNITS:
+                reasons["stock_bajo"] += 1
+            else:
+                could_cc += 1
+        if not seg_ok:
+            continue
+        motivo = "Sin variantes CC operativas (cobertura ≥12m → margen/rot C)"
+        if could_cc:
+            motivo = f"{could_cc} SKU(s) CC operativos — revisar reglas de modelo"
+        elif reasons:
+            top = reasons.most_common(2)
+            motivo = "; ".join(f"{k}: {v}" for k, v in top)
+        inventario_fuera_lista.append(
+            {
+                "modelo": mod,
+                "stock_total": int(row.stock_total),
+                "motivo": motivo,
+            }
+        )
+        if len(inventario_fuera_lista) >= 18:
+            break
+
     payload = {
         "meta": {
             "title": "Propuesta Black Friday · Categoría C",
@@ -659,11 +731,12 @@ def main() -> None:
             "meses_incluidos": months_list,
             "priority_models": sorted(PRIORITY_MODELS_EXACT) + list(PRIORITY_MODEL_PREFIXES),
             "sugeridos_revision": sugeridos_modelos,
+            "inventario_fuera_lista": inventario_fuera_lista,
         },
         "summary": summary,
         "inventario_view": {
             "name": "Inventario baja rotación - Listado",
-            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU. Matriz: margen ABC + rotación operativa (C si cobertura ≥12 meses).",
+            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU. Matriz operativa: margen y rotación C si cobertura ≥12 meses; solo filas con margen C.",
             "sort": "stock_desc",
         },
         "catalog": catalog,
@@ -755,7 +828,7 @@ def write_html(payload: dict) -> None:
     embedded = json_for_script_tag(payload)
     app_js = DASHBOARD_APP_SRC.read_text(encoding="utf-8")
     html_head = f"""<!DOCTYPE html>
-<html lang="es" data-theme="light">
+<html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -859,7 +932,7 @@ html[data-theme="dark"] .row-model td{{background:rgba(255,255,255,.03)}}
   <label>Segmento</label><select id="fSeg"><option value="">Todos</option><option>Manufactura</option><option>Equipamiento</option></select>
   <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…">
   <span class="theme-spacer"></span>
-  <label>Vista</label><select id="fTheme"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
+  <label>Vista</label><select id="fTheme"><option value="dark">Oscuro</option><option value="light">Claro</option></select>
 </div>
 <nav class="tabs">
   <button class="tab active" data-tab="resumen">Resumen</button>
@@ -876,6 +949,9 @@ html[data-theme="dark"] .row-model td{{background:rgba(255,255,255,.03)}}
     </div>
     <div class="card" style="margin-bottom:12px"><h3>Top modelos por inventario</h3><div class="cs">Ordenado por stock en tiendas + taller</div>
       <div class="tscroll" style="max-height:320px"><table><thead><tr><th>Modelo</th><th class="mat">Matriz</th><th class="num">SKUs</th><th class="num">Stock tiendas</th><th class="num">Stock taller</th><th class="num">Cobertura (meses)</th></tr></thead><tbody id="bodyTopModelos"></tbody></table></div>
+    </div>
+    <div class="card" id="fueraListaCard" style="margin-top:12px;display:none"><h3>Inventario alto fuera del listado</h3><div class="cs">Manufactura/equipamiento · stock modelo ≥200 · no excluidos por reglas fijas</div>
+      <div class="tscroll" style="max-height:280px"><table><thead><tr><th>Modelo</th><th class="num">Stock total</th><th>Motivo / nota</th></tr></thead><tbody id="bodyFueraLista"></tbody></table></div>
     </div>
     <div class="card" id="sugeridosCard" style="margin-top:12px;display:none"><h3>Otros candidatos a revisar</h3><div class="cs">Margen C · rotación C · stock ≥29 · aún no en lista prioritaria</div>
       <div class="tscroll"><table><thead><tr><th>Modelo</th><th>SKU ejemplo</th><th class="num">Stock</th><th class="num">Rotación/mes</th></tr></thead><tbody id="bodySugeridos"></tbody></table></div>
