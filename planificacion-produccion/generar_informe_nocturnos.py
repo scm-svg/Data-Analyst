@@ -45,28 +45,28 @@ OUT_HTML = os.path.join(OUT_DIR, "Informe_Turnos_Nocturnos.html")
 ARTIFACT_DIR = "/opt/cursor/artifacts"
 
 
-NAVY = "1B2A4A"
-AC = "5B6AF7"
-GR = "2E9E5E"
-RD = "C0392B"
-YW = "C47B00"
+NAVY = "12203C"
+AC = "12203C"
+GR = "137333"
+RD = "C5221F"
+YW = "B06000"
 FILL_NAVY = PatternFill("solid", fgColor=NAVY)
-FILL_AC = PatternFill("solid", fgColor=AC)
-FILL_HEAD = PatternFill("solid", fgColor="1E2F55")
-FILL_ALT = PatternFill("solid", fgColor="F4F6FB")
-FILL_LOTE = PatternFill("solid", fgColor="FFF4D6")
-FILL_OK = PatternFill("solid", fgColor="E3F6EA")
-FILL_BAD = PatternFill("solid", fgColor="FDECEC")
-FILL_SOFT = PatternFill("solid", fgColor="EEF1FA")
+FILL_AC = PatternFill("solid", fgColor=NAVY)
+FILL_HEAD = PatternFill("solid", fgColor=NAVY)
+FILL_ALT = PatternFill("solid", fgColor="F6F7F9")
+FILL_LOTE = PatternFill("solid", fgColor="FEF7E0")
+FILL_OK = PatternFill("solid", fgColor="E6F4EA")
+FILL_BAD = PatternFill("solid", fgColor="FCE8E6")
+FILL_SOFT = PatternFill("solid", fgColor="E8F0FE")
 FONT_W = Font(name="Calibri", color="FFFFFF", bold=True, size=11)
 FONT_H = Font(name="Calibri", color="FFFFFF", bold=True, size=16)
 FONT_T = Font(name="Calibri", bold=True, size=13, color=NAVY)
 FONT_N = Font(name="Calibri", size=10)
 THIN = Border(
-    left=Side(style="thin", color="D0D4E4"),
-    right=Side(style="thin", color="D0D4E4"),
-    top=Side(style="thin", color="D0D4E4"),
-    bottom=Side(style="thin", color="D0D4E4"),
+    left=Side(style="thin", color="DADCE0"),
+    right=Side(style="thin", color="DADCE0"),
+    top=Side(style="thin", color="DADCE0"),
+    bottom=Side(style="thin", color="DADCE0"),
 )
 WRAP = Alignment(wrap_text=True, vertical="center")
 
@@ -615,6 +615,10 @@ def escribir_excel(payload: dict, path: str):
     wss.page_setup.fitToHeight = 0
     wss.sheet_properties.pageSetUpPr.fitToPage = True
 
+    for name in wb.sheetnames:
+        sh = wb[name]
+        sh.sheet_view.showGridLines = False
+        sh.sheet_properties.tabColor = "12203C"
     wb.save(path)
 
 
@@ -749,57 +753,95 @@ def escribir_html(payload: dict, path: str):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Turnos nocturnos · decisión de planificación</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-:root{{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--ac:#5b6af7;--a2:#f75b8a;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif}}
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}}
-.hdr{{padding:22px 40px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,#0d0e13,#191a2d)}}
-.hdr h1{{font-family:var(--fh);font-size:1.6rem;font-weight:800}}
-.hdr h1 em{{color:var(--ac);font-style:normal}}
-.hdr p{{color:var(--mu);font-size:.85rem;margin-top:4px}}
-.tabs{{display:flex;gap:4px;padding:0 40px;background:var(--surf);border-bottom:1px solid var(--brd);overflow:auto}}
-.tab{{background:none;border:none;color:var(--mu);font-family:var(--fh);font-weight:700;font-size:.8rem;padding:12px 16px;cursor:pointer;border-bottom:3px solid transparent}}
-.tab.on{{color:var(--tx);border-bottom-color:var(--ac)}}
-.content{{padding:22px 40px;max-width:1500px;margin:0 auto}}
-.sec{{display:none}}.sec.on{{display:block}}
-.g{{display:grid;gap:12px;margin-bottom:14px}}
-.g5{{grid-template-columns:repeat(5,1fr)}}.g4{{grid-template-columns:repeat(4,1fr)}}.g2{{grid-template-columns:1fr 1fr}}
-.kpi{{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:12px}}
-.kpi b{{display:block;font-family:var(--fh);font-size:1.25rem;color:var(--ac)}}
-.kpi span{{font-size:.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}}
-.card{{background:var(--surf);border:1px solid var(--brd);border-radius:14px;padding:16px;margin-bottom:14px}}
-.card h3{{font-family:var(--fh);font-size:.95rem;margin-bottom:8px}}
-.note{{background:var(--s2);border-left:3px solid var(--ac);padding:12px;border-radius:8px;color:#c9cbe0;line-height:1.45;font-size:.88rem}}
-.pro,.con{{padding:8px 10px;border-radius:8px;margin:6px 0;font-size:.82rem;line-height:1.4}}
-.pro{{background:rgba(76,175,118,.12);border-left:3px solid var(--gr)}}
-.con{{background:rgba(239,68,68,.12);border-left:3px solid var(--rd)}}
-table{{width:100%;border-collapse:collapse;font-size:.78rem}}
-th{{text-align:left;color:var(--mu);font-size:.64rem;text-transform:uppercase;padding:8px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf)}}
-td{{padding:7px 8px;border-bottom:1px solid var(--brd);vertical-align:top}}
-tr.lote td{{background:rgba(255,193,7,.08)}}
-.ok{{color:var(--gr);font-weight:700}}.no{{color:var(--rd);font-weight:700}}
-.badge{{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.65rem;font-weight:700;background:rgba(255,193,7,.2);color:var(--yw)}}
-.wrap{{overflow:auto;max-height:520px}}
-.cw{{height:260px;position:relative}}
-.foot{{text-align:center;color:var(--mu);font-size:.72rem;padding:18px;border-top:1px solid var(--brd)}}
-@media(max-width:900px){{.g5,.g4,.g2{{grid-template-columns:1fr 1fr}}.content,.hdr,.tabs{{padding-left:14px;padding-right:14px}}}}
+:root {{
+  --azul: #1a56db; --azul-claro: #e8f0fe; --azul-borde: #a8c7fa;
+  --verde: #137333; --verde-bg: #e6f4ea; --verde-borde: #a8dab5;
+  --rojo: #c5221f; --rojo-bg: #fce8e6; --rojo-borde: #f5b5b3;
+  --ambar: #b06000; --ambar-bg: #fef7e0;
+  --gris: #5f6368; --borde: #dadce0; --texto: #202124; --navy: #12203c;
+}}
+* {{ box-sizing: border-box; }}
+body {{
+  margin: 0; background: #f6f7f9; color: var(--texto);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 15px; line-height: 1.5;
+}}
+header.top {{ background: var(--navy); color: #fff; padding: 22px 0 0; }}
+.wrap {{ max-width: 1280px; margin: 0 auto; padding: 0 20px; }}
+header.top h1 {{ margin: 0 0 4px; font-size: 24px; font-weight: 700; }}
+header.top h1 em {{ font-style: normal; color: #a8c7fa; }}
+header.top .sub {{ color: #b9c4d8; font-size: 14px; margin-bottom: 16px; }}
+.chips {{ display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }}
+.chip {{
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; color: #e8eaed;
+}}
+.chip b {{ color: #fff; }}
+nav.tabs {{ display: flex; gap: 2px; flex-wrap: wrap; }}
+nav.tabs button {{
+  background: rgba(255,255,255,.08); color: #cdd6e6; border: 0; cursor: pointer;
+  padding: 11px 22px; font-size: 14px; font-weight: 600; font-family: inherit;
+  border-radius: 8px 8px 0 0;
+}}
+nav.tabs button:hover {{ background: rgba(255,255,255,.16); color: #fff; }}
+nav.tabs button.on {{ background: #f6f7f9; color: var(--navy); }}
+.content {{ max-width: 1280px; margin: 0 auto; padding: 24px 20px 60px; }}
+.sec {{ display: none; }}
+.sec.on {{ display: block; }}
+.g {{ display: grid; gap: 14px; margin-bottom: 14px; }}
+.g5 {{ grid-template-columns: repeat(5, 1fr); }}
+.g4 {{ grid-template-columns: repeat(4, 1fr); }}
+.g2 {{ grid-template-columns: 1fr 1fr; }}
+.kpi {{ background: #fff; border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px; }}
+.kpi b {{ display: block; font-size: 25px; font-weight: 800; margin-top: 4px; line-height: 1.1; color: var(--navy); }}
+.kpi span {{ font-size: 12px; color: var(--gris); text-transform: uppercase; letter-spacing: .4px; font-weight: 600; }}
+.card {{ background: #fff; border: 1px solid var(--borde); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }}
+.card h3 {{ font-size: 15px; margin: 0 0 10px; color: var(--gris); text-transform: uppercase; letter-spacing: .4px; }}
+.note {{ background: var(--azul-claro); border: 1px solid var(--azul-borde); border-radius: 12px; padding: 16px 20px; color: var(--texto); line-height: 1.45; font-size: 14.5px; }}
+.pro, .con {{ padding: 8px 12px; border-radius: 8px; margin: 6px 0; font-size: 14px; line-height: 1.4; }}
+.pro {{ background: var(--verde-bg); border-left: 4px solid var(--verde); }}
+.con {{ background: var(--rojo-bg); border-left: 4px solid var(--rojo); }}
+.tablebox {{ border: 1px solid var(--borde); border-radius: 12px; overflow: hidden; }}
+table {{ width: 100%; border-collapse: collapse; background: #fff; font-size: 14px; }}
+th {{
+  background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+  font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px;
+  position: sticky; top: 0;
+}}
+td {{ padding: 9px 12px; border-bottom: 1px solid var(--borde); vertical-align: top; }}
+tr.lote td {{ background: var(--ambar-bg); }}
+.ok {{ color: var(--verde); font-weight: 700; }}
+.no {{ color: var(--rojo); font-weight: 700; }}
+.badge {{ display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--ambar-bg); color: var(--ambar); }}
+.wrap {{ overflow: auto; max-height: 520px; }}
+.cw {{ height: 280px; position: relative; background: #fff; }}
+.foot {{ text-align: center; color: var(--gris); font-size: 12.5px; padding: 18px 20px 28px; }}
+@media (max-width: 900px) {{ .g5, .g4, .g2 {{ grid-template-columns: 1fr 1fr; }} }}
 </style>
 </head>
 <body>
-<header class="hdr">
-  <h1>Turnos <em>nocturnos</em> · decisión de planificación</h1>
-  <p>Escenarios A–D · martes / miércoles / viernes · 5 líneas · solo Por Hacer · corte almacén 16/11/2026 · bono US$ 15 × 22 personas</p>
+<header class="top">
+  <div class="wrap">
+    <h1>Turnos nocturnos · decisión de planificación</h1>
+    <div class="sub">Comparación contra el plan con lotes nuevos, sin nocturno · corte almacén 16/11/2026</div>
+    <div class="chips">
+      <span class="chip">Mar / mié / vie</span>
+      <span class="chip">5 líneas · <b>22 personas</b></span>
+      <span class="chip">Bono <b>US$ 15</b> / persona / noche</span>
+      <span class="chip">Solo Por Hacer</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab on" data-id="res">Resumen</button>
+      <button class="tab" data-id="A">Escenario A</button>
+      <button class="tab" data-id="B">Escenario B</button>
+      <button class="tab" data-id="C">Escenario C</button>
+      <button class="tab" data-id="D">Escenario D</button>
+      <button class="tab" data-id="sup">Supuestos</button>
+    </nav>
+  </div>
 </header>
-<nav class="tabs">
-  <button class="tab on" data-id="res">Resumen</button>
-  <button class="tab" data-id="A">Escenario A</button>
-  <button class="tab" data-id="B">Escenario B</button>
-  <button class="tab" data-id="C">Escenario C</button>
-  <button class="tab" data-id="D">Escenario D</button>
-  <button class="tab" data-id="sup">Supuestos</button>
-</nav>
 <div class="content">
   <section class="sec on" id="sec-res">
     <div class="card"><h3>Lectura para gerencia</h3><div class="note">{_hx(payload['lectura'])}</div></div>
@@ -817,7 +859,7 @@ tr.lote td{{background:rgba(255,193,7,.08)}}
       </tr></thead><tbody>{''.join(cmp_rows)}</tbody></table></div>
     </div>
     <div class="card"><h3>Lotes nuevos que hoy no están en el plan ACTUAL</h3>
-      <p style="color:var(--mu);font-size:.8rem;margin-bottom:8px">Proyección de tienda / diciembre / tienda nueva. Orden de salida de costura del plan sin nocturnos.</p>
+      <p style="color:var(--gris);font-size:13.5px;margin-bottom:8px">Proyección de tienda / diciembre / tienda nueva. Orden de salida de costura del plan sin nocturnos.</p>
       <div class="wrap"><table><thead><tr><th>Modelo</th><th>Faltante</th><th>Cap/día</th><th>Líneas</th><th>Prioridad</th><th>Salida plan</th><th>Almacén plan</th><th>Obj.</th><th>16/11</th></tr></thead>
       <tbody>{''.join(lote_rows)}</tbody></table></div>
     </div>
@@ -827,7 +869,7 @@ tr.lote td{{background:rgba(255,193,7,.08)}}
       </div>
       <div class="card"><h3>Qué gana el nocturno (todas las líneas)</h3>
         {_lis(payload['pros_contras']['D']['pros'][:4], 'pro')}
-        <p style="color:var(--mu);font-size:.78rem;margin-top:8px">L1 noche = cola de L2. Especiales no se tocan. Cobro 30/09 sin noche.</p>
+        <p style="color:var(--gris);font-size:13px;margin-top:8px">L1 noche = cola de L2. Especiales no se tocan. Cobro 30/09 sin noche.</p>
       </div>
     </div>
   </section>
@@ -869,18 +911,18 @@ document.querySelectorAll(".tab").forEach(function(b){{
     data: {{
       labels: ["Base","A","B","C","D"],
       datasets: [
-        {{label:"Pzas extra p/ 16/11", data: EXTRA, backgroundColor:"#5b6af7", yAxisID:"y"}},
-        {{label:"Costo US$", data: COSTO, backgroundColor:"#f75b8a", yAxisID:"y2"}}
+        {{label:"Pzas extra p/ 16/11", data: EXTRA, backgroundColor:"#1a56db", yAxisID:"y"}},
+        {{label:"Costo US$", data: COSTO, backgroundColor:"#9aa7bd", yAxisID:"y2"}}
       ]
     }},
     options: {{
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {{legend: {{labels: {{color:"#c9cbe0"}}}}}},
+      plugins: {{legend: {{labels: {{color:"#202124", font: {{size: 13}}}}}}}},
       scales: {{
-        x: {{ticks: {{color:"#7a7b95"}}, grid: {{color:"#2a2b3a"}}}},
-        y: {{ticks: {{color:"#7a7b95"}}, grid: {{color:"#2a2b3a"}}, position:"left"}},
-        y2: {{ticks: {{color:"#7a7b95"}}, grid: {{display:false}}, position:"right"}}
+        x: {{ticks: {{color:"#5f6368"}}, grid: {{color:"#eceff3"}}}},
+        y: {{ticks: {{color:"#5f6368"}}, grid: {{color:"#eceff3"}}, position:"left"}},
+        y2: {{ticks: {{color:"#5f6368"}}, grid: {{display:false}}, position:"right"}}
       }}
     }}
   }});
