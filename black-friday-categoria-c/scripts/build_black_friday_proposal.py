@@ -39,6 +39,37 @@ RETAIL_LOCS = [
     "TOLON",
     "VELA",
 ]
+def clean_cell(val, fallback: str = "") -> str:
+    if val is None:
+        return fallback
+    try:
+        if pd.isna(val):
+            return fallback
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return fallback
+    text = str(val).strip()
+    return fallback if text.lower() == "nan" else text
+
+
+def sanitize_for_json(obj):
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    try:
+        if pd.isna(obj):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return obj
+
+
 MONTH_ORDER = {
     "enero": 1,
     "febrero": 2,
@@ -291,16 +322,16 @@ def main() -> None:
         exp_bf_units = monthly * BF_UPLIFT
         min_store_need = math.ceil(exp_bf_units * (1 + RESERVE_PCT)) if monthly > 0 else max(1, int(stock_r * 0.1))
 
-        modelo = row.modelo_inv or abc["modelo"] or modelo_sales.get(sku, sku)
+        modelo = clean_cell(row.modelo_inv) or clean_cell(abc["modelo"]) or clean_cell(modelo_sales.get(sku), sku)
         candidates.append(
             {
                 "sku": sku,
-                "producto": row.producto_inv or abc["producto"],
+                "producto": clean_cell(row.producto_inv) or clean_cell(abc["producto"], sku),
                 "modelo": modelo,
-                "categoria": abc["categoria"],
-                "genero": row.genero_inv or abc["genero"],
-                "color": row.color_inv or abc["color"],
-                "talla": row.talla_inv or abc["talla"],
+                "categoria": clean_cell(abc["categoria"]),
+                "genero": clean_cell(row.genero_inv) or clean_cell(abc["genero"]),
+                "color": clean_cell(row.color_inv) or clean_cell(abc["color"]),
+                "talla": clean_cell(row.talla_inv) or clean_cell(abc["talla"]),
                 "qty": qty,
                 "revenue": abc["revenue"],
                 "cost": abc["cost"],
@@ -453,7 +484,11 @@ def main() -> None:
         "retail_locations": RETAIL_LOCS,
     }
 
-    OUT_JSON.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    payload = sanitize_for_json(payload)
+    OUT_JSON.write_text(
+        json.dumps(payload, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )
     write_excel(payload)
     write_html(payload)
 
@@ -528,7 +563,7 @@ def write_excel(payload: dict) -> None:
 
 
 def write_html(payload: dict) -> None:
-    data_json = json.dumps(payload, ensure_ascii=False)
+    data_json = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     rules_html = "".join(f"<li>{r}</li>" for r in payload["meta"]["rules"])
     html = f"""<!DOCTYPE html>
 <html lang="es">
