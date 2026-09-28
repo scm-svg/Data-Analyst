@@ -186,10 +186,7 @@
 
     function renderKpis() {
       var s = DATA.summary;
-      $("subtitle").textContent = DATA.meta.subtitle + " · " + s.periodo_ventas;
-      if ($("periodLabel")) $("periodLabel").textContent = s.periodo_ventas;
-      var meses = (DATA.meta.meses_incluidos || []).join(", ");
-      if ($("monthsList")) $("monthsList").textContent = meses || "—";
+      $("subtitle").textContent = DATA.meta.subtitle;
       $("kpis").innerHTML = [
         ["SKUs", s.skus_c_total],
         ["Und. stock", s.unidades_stock],
@@ -212,6 +209,53 @@
       if ($("subInv")) $("subInv").textContent = view.description;
       var sug = DATA.meta.sugeridos_revision || [];
       var card = $("sugeridosCard");
+      var statsEl = $("resumenStats");
+      if (statsEl) {
+        var total = s.unidades_stock || 1;
+        var pctT = Math.round((100 * s.unidades_tiendas) / total);
+        var pctW = 100 - pctT;
+        statsEl.innerHTML = [
+          ["En tiendas", pctT + "%", fmt(s.unidades_tiendas) + " und."],
+          ["En taller", pctW + "%", fmt(s.unidades_taller) + " und."],
+          ["Matriz CC", fmt(s.matriz_cc || 0), "SKUs margen C · rot. C"],
+        ]
+          .map(function (row) {
+            return (
+              '<div class="stat"><div class="v">' +
+              row[1] +
+              '</div><div class="l">' +
+              row[0] +
+              (row[2] ? ' · <span style="text-transform:none;font-weight:400">' + row[2] + "</span>" : "") +
+              "</div></div>"
+            );
+          })
+          .join("");
+      }
+
+      var topBody = $("bodyTopModelos");
+      if (topBody) {
+        var top = (DATA.catalog || []).slice(0, 12);
+        topBody.innerHTML = top
+          .map(function (m) {
+            return (
+              "<tr><td>" +
+              esc(m.modelo) +
+              '</td><td class="mat">' +
+              esc(m.matriz) +
+              '</td><td class="num">' +
+              fmtNum(m.skus_count) +
+              '</td><td class="num">' +
+              fmtNum(m.stock_tiendas) +
+              '</td><td class="num">' +
+              fmtNum(m.stock_taller) +
+              '</td><td class="num">' +
+              (m.meses_cobertura != null ? fmtNum(m.meses_cobertura, 1) : "—") +
+              "</td></tr>"
+            );
+          })
+          .join("");
+      }
+
       if (card && sug.length) {
         card.style.display = "block";
         $("bodySugeridos").innerHTML = sug
@@ -265,6 +309,15 @@
         .join("");
     }
 
+    function destroyChart(key) {
+      if (window[key]) {
+        try {
+          window[key].destroy();
+        } catch (e) {}
+        window[key] = null;
+      }
+    }
+
     function renderCharts() {
       if (typeof Chart === "undefined") return;
       var seg = { Manufactura: 0, Equipamiento: 0 };
@@ -272,28 +325,51 @@
         seg[r.segmento] = (seg[r.segmento] || 0) + 1;
       });
       var canvas = $("cSeg");
-      if (!canvas) return;
-      if (window._bfChart) {
-        try {
-          window._bfChart.destroy();
-        } catch (e) {}
+      if (canvas) {
+        destroyChart("_bfChartSeg");
+        window._bfChartSeg = new Chart(canvas, {
+          type: "doughnut",
+          data: {
+            labels: Object.keys(seg),
+            datasets: [
+              {
+                data: Object.values(seg),
+                backgroundColor: ["rgba(37,99,235,.85)", "rgba(100,116,139,.75)"],
+                borderColor: "#fff",
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            plugins: { legend: { position: "bottom", labels: { color: "#64748b" } } },
+            maintainAspectRatio: false,
+          },
+        });
       }
-      window._bfChart = new Chart(canvas, {
-        type: "doughnut",
-        data: {
-          labels: Object.keys(seg),
-          datasets: [
-            {
-              data: Object.values(seg),
-              backgroundColor: ["rgba(34,211,238,.8)", "rgba(251,191,36,.8)"],
-            },
-          ],
-        },
-        options: {
-          plugins: { legend: { position: "bottom" } },
-          maintainAspectRatio: false,
-        },
-      });
+
+      var cLoc = $("cStockLoc");
+      var s = DATA.summary;
+      if (cLoc && s) {
+        destroyChart("_bfChartLoc");
+        window._bfChartLoc = new Chart(cLoc, {
+          type: "doughnut",
+          data: {
+            labels: ["Tiendas", "Taller"],
+            datasets: [
+              {
+                data: [s.unidades_tiendas, s.unidades_taller],
+                backgroundColor: ["rgba(43,108,176,.9)", "rgba(148,163,184,.85)"],
+                borderColor: "#fff",
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            plugins: { legend: { position: "bottom", labels: { color: "#64748b" } } },
+            maintainAspectRatio: false,
+          },
+        });
+      }
     }
 
     $("fSeg").onchange = function (e) {

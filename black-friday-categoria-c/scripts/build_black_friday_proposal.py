@@ -30,7 +30,7 @@ DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 
 TH_A, TH_B = 0.8, 0.95
 MIN_STOCK_UNITS = 29  # stock > 28
-EXCLUDED_MATRICES = frozenset({"AA", "BA"})
+EXCLUDED_MATRICES = frozenset({"AA", "BA", "AB"})
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -749,38 +749,44 @@ def write_html(payload: dict) -> None:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{{
-  --bg:#0a0b10;--surf:#12131a;--s2:#1a1b24;--brd:#2e3040;--tx:#eef0f8;--mu:#8b8da8;
-  --a:#22d3ee;--b:#fbbf24;--c:#f472b6;--gr:#34d399;--ac:#6366f1;--bf:#ff6b35;
+  --brand:#1a365d;--brand-mid:#234876;--brand-light:#2b6cb0;
+  --bg:#ffffff;--surf:#ffffff;--s2:#f1f5f9;--brd:#e2e8f0;--tx:#1e293b;--mu:#64748b;
+  --a:#2563eb;--b:#475569;--c:#be185d;--gr:#059669;--ac:#1d4ed8;--bf:#93c5fd;
   --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh;
-  background-image:radial-gradient(ellipse 70% 45% at 50% -15%,rgba(255,107,53,.15),transparent);}}
-.hdr{{border-bottom:1px solid var(--brd);padding:18px 28px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-start}}
-.hdr h1{{font-family:var(--fh);font-size:1.45rem;font-weight:800}}
+body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}}
+.hdr{{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-mid) 100%);color:#f8fafc;padding:20px 28px 22px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-start}}
+.hdr h1{{font-family:var(--fh);font-size:1.45rem;font-weight:800;color:#fff}}
 .hdr h1 em{{color:var(--bf);font-style:normal}}
-.sub{{color:var(--mu);font-size:.78rem;margin-top:4px;max-width:820px;line-height:1.45}}
+.sub{{color:rgba(248,250,252,.82);font-size:.78rem;margin-top:4px;max-width:820px;line-height:1.45}}
 .kpis{{display:flex;flex-wrap:wrap;gap:8px}}
-.kpi{{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:8px 12px;min-width:88px;text-align:center}}
-.kpi .v{{font-family:var(--fh);font-size:1.05rem;font-weight:800;color:var(--a)}}
-.kpi .l{{font-size:.58rem;color:var(--mu);text-transform:uppercase;margin-top:2px}}
-.tabs{{display:flex;gap:0;padding:10px 28px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow:auto}}
-.tab{{padding:8px 14px;font-family:var(--fh);font-size:.72rem;font-weight:700;color:var(--mu);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}}
-.tab.active{{color:var(--tx);border-bottom-color:var(--bf)}}
-.content{{padding:18px 28px;max-width:1680px;margin:0 auto}}
+.kpi{{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:8px 12px;min-width:88px;text-align:center}}
+.kpi .v{{font-family:var(--fh);font-size:1.05rem;font-weight:800;color:#fff}}
+.kpi .l{{font-size:.58rem;color:rgba(248,250,252,.75);text-transform:uppercase;margin-top:2px}}
+.tabs{{display:flex;gap:0;padding:0 28px;border-bottom:1px solid var(--brd);background:var(--surf);overflow:auto}}
+.tab{{padding:10px 14px;font-family:var(--fh);font-size:.72rem;font-weight:700;color:var(--mu);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}}
+.tab.active{{color:var(--brand);border-bottom-color:var(--brand-light)}}
+.content{{padding:18px 28px 28px;max-width:1680px;margin:0 auto;background:var(--bg)}}
 .sec{{display:none}}.sec.active{{display:block}}
 .g2{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}}
-.card{{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px}}
-.card h3{{font-family:var(--fh);font-size:.85rem;margin-bottom:4px}}
+.g3{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}}
+.card{{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(26,54,93,.06)}}
+.card h3{{font-family:var(--fh);font-size:.85rem;margin-bottom:4px;color:var(--brand)}}
 .card .cs{{font-size:.66rem;color:var(--mu);margin-bottom:10px}}
+.stat-row{{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px}}
+.stat-row .stat{{flex:1;min-width:120px}}
+.stat-row .stat .v{{font-family:var(--fh);font-size:1.35rem;font-weight:800;color:var(--brand-light)}}
+.stat-row .stat .l{{font-size:.65rem;color:var(--mu);text-transform:uppercase;margin-top:2px}}
 .opt{{border-radius:10px;padding:12px;border:1px solid var(--brd);background:var(--s2)}}
 .opt.a{{border-color:rgba(255,107,53,.45)}}
 .opt.b{{border-color:rgba(99,102,241,.45)}}
 .opt h4{{font-family:var(--fh);font-size:.82rem;margin-bottom:6px}}
 .opt p{{font-size:.72rem;color:var(--mu);line-height:1.45}}
 .big{{font-family:var(--fh);font-size:1.6rem;font-weight:800;color:var(--bf)}}
-.fbar{{padding:8px 28px;background:var(--surf);border-bottom:1px solid var(--brd);display:flex;flex-wrap:wrap;gap:8px;align-items:center}}
-.fbar select,.fbar input{{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
+.fbar{{padding:8px 28px;background:var(--s2);border-bottom:1px solid var(--brd);display:flex;flex-wrap:wrap;gap:8px;align-items:center}}
+.fbar label{{font-size:.72rem;color:var(--mu);font-weight:600}}
+.fbar select,.fbar input{{background:#fff;color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
 table{{width:100%;border-collapse:collapse;font-size:.73rem}}
 .cat-table{{table-layout:fixed;width:100%;border-spacing:0}}
 .cat-table col.col-expand{{width:36px}}
@@ -790,7 +796,7 @@ table{{width:100%;border-collapse:collapse;font-size:.73rem}}
 .cat-table th.mat,.cat-table td.mat{{text-align:center;font-weight:700;font-family:var(--fh);padding-left:4px;padding-right:4px}}
 .cat-table th.num,.cat-table td.num{{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";white-space:nowrap;padding-left:6px;padding-right:10px}}
 .cat-table thead th.num{{text-align:right}}
-th{{text-align:left;font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:6px 8px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf)}}
+th{{text-align:left;font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:6px 8px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--s2)}}
 td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .tscroll{{max-height:520px;overflow:auto}}
 .tag{{display:inline-block;padding:2px 7px;border-radius:6px;font-size:.65rem;font-weight:700;font-family:var(--fh)}}
@@ -798,8 +804,8 @@ td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .diag{{font-size:.72rem;line-height:1.45;color:var(--mu);padding:10px;border-radius:8px;background:var(--s2);border:1px solid var(--brd);margin-top:10px}}
 .diag ul{{margin:8px 0 0 18px}}
 #loadErr{{display:none;margin:12px 28px;padding:12px;border-radius:8px;background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.4);color:#f472b6;font-size:.78rem}}
-.expander{{cursor:pointer;color:var(--a);font-weight:800;width:24px;display:inline-block;user-select:none}}
-.row-model td{{background:rgba(255,255,255,.03);font-weight:600}}
+.expander{{cursor:pointer;color:var(--brand-light);font-weight:800;width:24px;display:inline-block;user-select:none}}
+.row-model td{{background:var(--s2);font-weight:600}}
 .row-variant td{{font-size:.72rem}}
 .row-variant .sku{{color:var(--tx);font-weight:600}}
 .row-variant .var-meta{{color:var(--mu);font-size:.66rem;margin-top:2px}}
@@ -828,11 +834,13 @@ td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 <main class="content">
   <section class="sec active" id="sec-resumen">
     <div class="g2">
-      <div class="card"><h3>SKUs por segmento</h3><div class="cw" style="height:240px"><canvas id="cSeg"></canvas></div></div>
-      <div class="card"><h3>Período de ventas</h3><div class="cs">Excel ventas (todos los meses)</div>
-        <p style="font-size:1.1rem;font-family:var(--fh);font-weight:800;margin-top:12px" id="periodLabel"></p>
-        <p style="font-size:.72rem;color:var(--mu);margin-top:8px" id="monthsList"></p>
+      <div class="card"><h3>SKUs por segmento</h3><div class="cs">Manufactura vs equipamiento en la propuesta</div><div class="cw" style="height:240px"><canvas id="cSeg"></canvas></div></div>
+      <div class="card"><h3>Stock por ubicación</h3><div class="cs">Unidades en tiendas vs taller (lista propuesta)</div><div class="cw" style="height:240px"><canvas id="cStockLoc"></canvas></div>
+        <div class="stat-row" id="resumenStats"></div>
       </div>
+    </div>
+    <div class="card" style="margin-bottom:12px"><h3>Top modelos por inventario</h3><div class="cs">Ordenado por stock en tiendas + taller</div>
+      <div class="tscroll" style="max-height:320px"><table><thead><tr><th>Modelo</th><th class="mat">Matriz</th><th class="num">SKUs</th><th class="num">Stock tiendas</th><th class="num">Stock taller</th><th class="num">Cobertura (meses)</th></tr></thead><tbody id="bodyTopModelos"></tbody></table></div>
     </div>
     <div class="card" id="sugeridosCard" style="margin-top:12px;display:none"><h3>Otros candidatos a revisar</h3><div class="cs">Margen C · rotación C · stock ≥29 · aún no en lista prioritaria</div>
       <div class="tscroll"><table><thead><tr><th>Modelo</th><th>SKU ejemplo</th><th class="num">Stock</th><th class="num">Rotación/mes</th></tr></thead><tbody id="bodySugeridos"></tbody></table></div>
