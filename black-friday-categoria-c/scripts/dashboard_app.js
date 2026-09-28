@@ -55,9 +55,43 @@
     return null;
   }
 
+  function chartPalette() {
+    var dark = document.documentElement.getAttribute("data-theme") === "dark";
+    if (dark) {
+      return {
+        legend: "#8b8da8",
+        seg: ["rgba(34,211,238,.8)", "rgba(251,191,36,.8)"],
+        loc: ["rgba(34,211,238,.85)", "rgba(139,141,168,.75)"],
+        border: "#12131a",
+      };
+    }
+    return {
+      legend: "#64748b",
+      seg: ["rgba(37,99,235,.85)", "rgba(100,116,139,.75)"],
+      loc: ["rgba(43,108,176,.9)", "rgba(148,163,184,.85)"],
+      border: "#fff",
+    };
+  }
+
+  function applyTheme(name) {
+    var theme = name === "dark" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("bf-theme", theme);
+    } catch (e) {}
+    var sel = $("fTheme");
+    if (sel) sel.value = theme;
+  }
+
   function boot() {
     var DATA = loadPayload();
     if (!DATA || !DATA.skus) return;
+
+    try {
+      applyTheme(localStorage.getItem("bf-theme") || "light");
+    } catch (e) {
+      applyTheme("light");
+    }
 
     var state = { seg: "", search: "" };
     var expanded = Object.create(null);
@@ -325,6 +359,7 @@
         seg[r.segmento] = (seg[r.segmento] || 0) + 1;
       });
       var canvas = $("cSeg");
+      var pal = chartPalette();
       if (canvas) {
         destroyChart("_bfChartSeg");
         window._bfChartSeg = new Chart(canvas, {
@@ -334,14 +369,14 @@
             datasets: [
               {
                 data: Object.values(seg),
-                backgroundColor: ["rgba(37,99,235,.85)", "rgba(100,116,139,.75)"],
-                borderColor: "#fff",
+                backgroundColor: pal.seg,
+                borderColor: pal.border,
                 borderWidth: 2,
               },
             ],
           },
           options: {
-            plugins: { legend: { position: "bottom", labels: { color: "#64748b" } } },
+            plugins: { legend: { position: "bottom", labels: { color: pal.legend } } },
             maintainAspectRatio: false,
           },
         });
@@ -358,14 +393,14 @@
             datasets: [
               {
                 data: [s.unidades_tiendas, s.unidades_taller],
-                backgroundColor: ["rgba(43,108,176,.9)", "rgba(148,163,184,.85)"],
-                borderColor: "#fff",
+                backgroundColor: pal.loc,
+                borderColor: pal.border,
                 borderWidth: 2,
               },
             ],
           },
           options: {
-            plugins: { legend: { position: "bottom", labels: { color: "#64748b" } } },
+            plugins: { legend: { position: "bottom", labels: { color: pal.legend } } },
             maintainAspectRatio: false,
           },
         });
@@ -382,6 +417,13 @@
       renderCatalogTable();
       renderFlatSkus();
     };
+    var fTheme = $("fTheme");
+    if (fTheme) {
+      fTheme.onchange = function (e) {
+        applyTheme(e.target.value);
+        renderCharts();
+      };
+    }
 
     try {
       renderKpis();

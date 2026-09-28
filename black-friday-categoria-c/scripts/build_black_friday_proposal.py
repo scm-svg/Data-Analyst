@@ -31,6 +31,9 @@ DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 TH_A, TH_B = 0.8, 0.95
 MIN_STOCK_UNITS = 29  # stock > 28
 EXCLUDED_MATRICES = frozenset({"AA", "BA", "AB"})
+# Cobertura alta → rotación operativa C (stock / ventas mensuales)
+OPERATIVE_ROT_C_COVERAGE_MONTHS = 12.0
+EXCLUDED_MODELS_EXACT = frozenset({"ANKLE SOCKS DAMA", "RETRO VZLA CAB"})
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -150,6 +153,9 @@ def segment(cat: str) -> str | None:
 
 
 def is_excluded_model(modelo: str, producto: str = "") -> bool:
+    m = clean_cell(modelo).upper()
+    if m in EXCLUDED_MODELS_EXACT:
+        return True
     m = f"{modelo} {producto}".upper()
     excluded_fragments = (
         "CUADRO BAND",
@@ -176,7 +182,6 @@ PRIORITY_MODELS_EXACT = frozenset(
         "BASIC LINE SHORT DAMA",
         "MAFE ADVANCE DAMA",
         "CLASICA ADVANCE CAB",
-        "RETRO VZLA CAB",
         "RETRO VZLA DAMA",
         "RETRO VZLA KIDS",
     }
@@ -224,6 +229,14 @@ def coverage_months(stock: float, monthly_qty: float) -> float:
     return stock / monthly_qty
 
 
+def operative_rotation_class(rot_pareto: str, stock: float, monthly_qty: float) -> str:
+    """Rotación por cobertura: muchos meses de stock → C aunque el pareto ABC diga B/A."""
+    cov = coverage_months(stock, monthly_qty)
+    if stock > 0 and cov >= OPERATIVE_ROT_C_COVERAGE_MONTHS:
+        return "C"
+    return rot_pareto
+
+
 def build_sku_candidate(
     sku: str,
     stock: float,
@@ -255,11 +268,12 @@ def build_sku_candidate(
     if rot != "C" and not priority:
         return None
     qty = float(qty_by_sku.get(sku, 0))
-    rotacion_mes = qty / sales_months
+    rotacion_mes = qty / sales_months if sales_months else 0.0
     stock_r = float(stock_retail.get(sku, 0))
     stock_t = float(stock_taller.get(sku, 0))
     cov = coverage_months(stock, rotacion_mes)
-    matriz = mcls + rot
+    rot_op = operative_rotation_class(rot, stock, rotacion_mes)
+    matriz = mcls + rot_op
     if matriz in EXCLUDED_MATRICES:
         return None
     return {
@@ -275,6 +289,7 @@ def build_sku_candidate(
         "segmento": seg,
         "abc_margen": mcls,
         "abc_rotacion": rot,
+        "rotacion_operativa": rot_op,
         "matriz": matriz,
         "stock_total": stock,
         "stock_tiendas": stock_r,
@@ -647,8 +662,8 @@ def main() -> None:
         },
         "summary": summary,
         "inventario_view": {
-            "name": "Inventario baja rotación",
-            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU.",
+            "name": "Inventario baja rotación - Listado",
+            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU. Matriz: margen ABC + rotación operativa (C si cobertura ≥12 meses).",
             "sort": "stock_desc",
         },
         "catalog": catalog,
@@ -740,7 +755,7 @@ def write_html(payload: dict) -> None:
     embedded = json_for_script_tag(payload)
     app_js = DASHBOARD_APP_SRC.read_text(encoding="utf-8")
     html_head = f"""<!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -748,31 +763,46 @@ def write_html(payload: dict) -> None:
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-:root{{
+:root,html[data-theme="light"]{{
   --brand:#1a365d;--brand-mid:#234876;--brand-light:#2b6cb0;
   --bg:#ffffff;--surf:#ffffff;--s2:#f1f5f9;--brd:#e2e8f0;--tx:#1e293b;--mu:#64748b;
   --a:#2563eb;--b:#475569;--c:#be185d;--gr:#059669;--ac:#1d4ed8;--bf:#93c5fd;
+  --hdr-bg:linear-gradient(180deg,#1a365d 0%,#234876 100%);--hdr-tx:#fff;--hdr-sub:rgba(248,250,252,.82);
+  --kpi-bg:rgba(255,255,255,.1);--kpi-brd:rgba(255,255,255,.22);--kpi-v:#fff;--kpi-l:rgba(248,250,252,.75);
+  --tab-active:#1a365d;--tab-line:#2b6cb0;--card-shadow:0 1px 3px rgba(26,54,93,.06);
+  --chart-legend:#64748b;--input-bg:#fff;
   --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;
+}}
+html[data-theme="dark"]{{
+  --brand:#22d3ee;--brand-mid:#12131a;--brand-light:#22d3ee;
+  --bg:#0a0b10;--surf:#12131a;--s2:#1a1b24;--brd:#2e3040;--tx:#eef0f8;--mu:#8b8da8;
+  --a:#22d3ee;--b:#fbbf24;--c:#f472b6;--gr:#34d399;--ac:#6366f1;--bf:#ff6b35;
+  --hdr-bg:var(--surf);--hdr-tx:var(--tx);--hdr-sub:var(--mu);
+  --kpi-bg:var(--s2);--kpi-brd:var(--brd);--kpi-v:var(--a);--kpi-l:var(--mu);
+  --tab-active:var(--tx);--tab-line:var(--bf);--card-shadow:none;
+  --chart-legend:#8b8da8;--input-bg:var(--s2);
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}}
-.hdr{{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-mid) 100%);color:#f8fafc;padding:20px 28px 22px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-start}}
-.hdr h1{{font-family:var(--fh);font-size:1.45rem;font-weight:800;color:#fff}}
+html[data-theme="dark"] body{{background-image:radial-gradient(ellipse 70% 45% at 50% -15%,rgba(255,107,53,.15),transparent)}}
+.hdr{{background:var(--hdr-bg);color:var(--hdr-tx);padding:20px 28px 22px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--brd)}}
+.hdr h1{{font-family:var(--fh);font-size:1.45rem;font-weight:800;color:var(--hdr-tx)}}
 .hdr h1 em{{color:var(--bf);font-style:normal}}
-.sub{{color:rgba(248,250,252,.82);font-size:.78rem;margin-top:4px;max-width:820px;line-height:1.45}}
+.sub{{color:var(--hdr-sub);font-size:.78rem;margin-top:4px;max-width:820px;line-height:1.45}}
 .kpis{{display:flex;flex-wrap:wrap;gap:8px}}
-.kpi{{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:8px 12px;min-width:88px;text-align:center}}
-.kpi .v{{font-family:var(--fh);font-size:1.05rem;font-weight:800;color:#fff}}
-.kpi .l{{font-size:.58rem;color:rgba(248,250,252,.75);text-transform:uppercase;margin-top:2px}}
+.kpi{{background:var(--kpi-bg);border:1px solid var(--kpi-brd);border-radius:10px;padding:8px 12px;min-width:88px;text-align:center}}
+.kpi .v{{font-family:var(--fh);font-size:1.05rem;font-weight:800;color:var(--kpi-v)}}
+.kpi .l{{font-size:.58rem;color:var(--kpi-l);text-transform:uppercase;margin-top:2px}}
 .tabs{{display:flex;gap:0;padding:0 28px;border-bottom:1px solid var(--brd);background:var(--surf);overflow:auto}}
 .tab{{padding:10px 14px;font-family:var(--fh);font-size:.72rem;font-weight:700;color:var(--mu);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}}
-.tab.active{{color:var(--brand);border-bottom-color:var(--brand-light)}}
+.tab.active{{color:var(--tab-active);border-bottom-color:var(--tab-line)}}
 .content{{padding:18px 28px 28px;max-width:1680px;margin:0 auto;background:var(--bg)}}
 .sec{{display:none}}.sec.active{{display:block}}
 .g2{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}}
 .g3{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}}
-.card{{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(26,54,93,.06)}}
-.card h3{{font-family:var(--fh);font-size:.85rem;margin-bottom:4px;color:var(--brand)}}
+.card{{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:14px;box-shadow:var(--card-shadow)}}
+.card h3{{font-family:var(--fh);font-size:.85rem;margin-bottom:4px;color:var(--brand-light)}}
+html[data-theme="light"] .card h3{{color:var(--brand)}}
 .card .cs{{font-size:.66rem;color:var(--mu);margin-bottom:10px}}
 .stat-row{{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px}}
 .stat-row .stat{{flex:1;min-width:120px}}
@@ -786,7 +816,7 @@ body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100v
 .big{{font-family:var(--fh);font-size:1.6rem;font-weight:800;color:var(--bf)}}
 .fbar{{padding:8px 28px;background:var(--s2);border-bottom:1px solid var(--brd);display:flex;flex-wrap:wrap;gap:8px;align-items:center}}
 .fbar label{{font-size:.72rem;color:var(--mu);font-weight:600}}
-.fbar select,.fbar input{{background:#fff;color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
+.fbar select,.fbar input{{background:var(--input-bg);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
 table{{width:100%;border-collapse:collapse;font-size:.73rem}}
 .cat-table{{table-layout:fixed;width:100%;border-spacing:0}}
 .cat-table col.col-expand{{width:36px}}
@@ -806,11 +836,14 @@ td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 #loadErr{{display:none;margin:12px 28px;padding:12px;border-radius:8px;background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.4);color:#f472b6;font-size:.78rem}}
 .expander{{cursor:pointer;color:var(--brand-light);font-weight:800;width:24px;display:inline-block;user-select:none}}
 .row-model td{{background:var(--s2);font-weight:600}}
+html[data-theme="dark"] .row-model td{{background:rgba(255,255,255,.03)}}
 .row-variant td{{font-size:.72rem}}
 .row-variant .sku{{color:var(--tx);font-weight:600}}
 .row-variant .var-meta{{color:var(--mu);font-size:.66rem;margin-top:2px}}
 .footer{{text-align:center;color:var(--mu);font-size:.62rem;padding:14px;border-top:1px solid var(--brd)}}
 @media(max-width:960px){{.g2{{grid-template-columns:1fr}}}}
+.theme-spacer{{flex:1}}
+@media(max-width:960px){{.theme-spacer{{display:none}}}}
 </style>
 </head>
 <body>
@@ -825,10 +858,12 @@ td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 <div class="fbar">
   <label>Segmento</label><select id="fSeg"><option value="">Todos</option><option>Manufactura</option><option>Equipamiento</option></select>
   <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…">
+  <span class="theme-spacer"></span>
+  <label>Vista</label><select id="fTheme"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
 </div>
 <nav class="tabs">
   <button class="tab active" data-tab="resumen">Resumen</button>
-  <button class="tab" data-tab="inventario">Inventario baja rotación</button>
+  <button class="tab" data-tab="inventario">Inventario baja rotación - Listado</button>
   <button class="tab" data-tab="detalle">Detalle SKU</button>
 </nav>
 <main class="content">
