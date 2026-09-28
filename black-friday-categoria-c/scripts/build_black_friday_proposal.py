@@ -29,6 +29,7 @@ DASHBOARD_APP_SRC = Path(__file__).resolve().parent / "dashboard_app.js"
 DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 
 TH_A, TH_B = 0.8, 0.95
+MIN_STOCK_UNITS = 29  # stock > 28
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -149,13 +150,24 @@ def segment(cat: str) -> str | None:
 
 def is_excluded_model(modelo: str, producto: str = "") -> bool:
     m = f"{modelo} {producto}".upper()
-    if "CUADRO BAND" in m:
-        return True
-    if "SHORT PLAYA" in m:
-        return True
-    if "CLASICA GC SUBLIMADO KIDS" in m or "CLÁSICA GC SUBLIMADO KIDS" in m:
-        return True
-    return False
+    excluded_fragments = (
+        "CUADRO BAND",
+        "SHORT PLAYA",
+        "CLASICA GC SUBLIMADO KIDS",
+        "CLÁSICA GC SUBLIMADO KIDS",
+        "MOTION LOOP",
+        "RIO ORIGINAL",
+        "MAR ORIGINAL",
+        "EXPLORE PANTS",
+        "CUADRO JACKET 2.0",
+    )
+    return any(x in m for x in excluded_fragments)
+
+
+def is_jacket_legacy_line(modelo: str) -> bool:
+    """Jacket 1.0: CAB, DAMA y KIDS — todas las variantes SKU."""
+    m = clean_cell(modelo).upper()
+    return m in ("JACKET CAB", "JACKET DAMA", "JACKET KIDS")
 
 
 def sales_scope(df: pd.DataFrame) -> tuple[pd.DataFrame, str, int, list[str]]:
@@ -276,6 +288,9 @@ def main() -> None:
         stock = float(row.stock_total)
         if stock <= 0:
             continue
+        if stock < MIN_STOCK_UNITS:
+            excluded_stats["stock_bajo_28"] += 1
+            continue
 
         if margin_abc.get(sku) != "C":
             excluded_stats["margen_no_c"] += 1
@@ -291,8 +306,10 @@ def main() -> None:
             excluded_stats["fuera_segmento"] += 1
             continue
 
+        modelo = clean_cell(row.modelo_inv) or clean_cell(abc["modelo"]) or clean_cell(modelo_sales.get(sku), sku)
+        jacket_line = is_jacket_legacy_line(modelo)
         rot = rot_abc.get(sku, "C")
-        if rot != "C":
+        if rot != "C" and not jacket_line:
             excluded_stats["rotacion_no_c"] += 1
             continue
 
@@ -303,7 +320,6 @@ def main() -> None:
         stock_t = float(stock_taller.get(sku, 0))
         cov = coverage_months(stock, rotacion_mes)
 
-        modelo = clean_cell(row.modelo_inv) or clean_cell(abc["modelo"]) or clean_cell(modelo_sales.get(sku), sku)
         candidates.append(
             {
                 "sku": sku,
@@ -428,21 +444,16 @@ def main() -> None:
             "sales_source": str(SALES_XLSX.name),
             "meses_incluidos": months_list,
             "rules": [
-                "Inventario Excel: solo SKUs con stock > 0",
-                f"Ventas Excel ({period_label}): rotación C (baja salida)",
-                "Guía ABC: margen C + categoría Manufactura/Equipamiento",
-                "Excluidos: CUADRO BAND, SHORT PLAYA, CLASICA GC SUBLIMADO KIDS",
+                f"Inventario: stock ≥ {MIN_STOCK_UNITS} unidades",
+                f"Ventas Excel ({period_label}): rotación C (Jacket 1.0 CAB/DAMA/KIDS incluye variantes)",
+                "Guía ABC: margen C + Manufactura/Equipamiento",
+                "Excluidos: Cuadro Band, Short Playa, Motion Loop, Rio/Mar Original, Explore Pants, Jacket 2.0",
             ],
         },
         "summary": summary,
-        "option_a": {
-            "name": "Opción A · Prioridad rotación",
-            "description": "Modelos ordenados por menor rotación/mes (más lento primero). Expandí para ver SKUs.",
-            "sort": "rotacion_asc",
-        },
-        "option_b": {
-            "name": "Opción B · Prioridad inventario",
-            "description": "Modelos ordenados por mayor stock en tiendas + taller. Expandí para ver SKUs.",
+        "inventario_view": {
+            "name": "Inventario baja rotación",
+            "description": "Modelos con stock en tiendas + taller. Expandí ▶ para ver variantes SKU.",
             "sort": "stock_desc",
         },
         "catalog": catalog,
@@ -504,15 +515,11 @@ def write_excel(payload: dict) -> None:
         pd.DataFrame(
             [
                 {
-                    "Opción": payload["option_a"]["name"],
-                    "Descripción": payload["option_a"]["description"],
-                },
-                {
-                    "Opción": payload["option_b"]["name"],
-                    "Descripción": payload["option_b"]["description"],
+                    "Vista": payload["inventario_view"]["name"],
+                    "Descripción": payload["inventario_view"]["description"],
                 },
             ]
-        ).to_excel(writer, sheet_name="Vistas propuesta", index=False)
+        ).to_excel(writer, sheet_name="Vista propuesta", index=False)
         models.to_excel(writer, sheet_name="Modelos prioritarios", index=False)
         skus.to_excel(writer, sheet_name="Detalle SKU", index=False)
         ws = writer.sheets["Detalle SKU"]
@@ -533,7 +540,6 @@ def json_for_script_tag(payload: dict) -> str:
 
 
 def write_html(payload: dict) -> None:
-    rules_html = "".join(f"<li>{r}</li>" for r in payload["meta"]["rules"])
     embedded = json_for_script_tag(payload)
     app_js = DASHBOARD_APP_SRC.read_text(encoding="utf-8")
     html_head = f"""<!DOCTYPE html>
@@ -609,48 +615,25 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
   <label>Buscar</label><input id="fSearch" placeholder="SKU, modelo…">
 </div>
 <nav class="tabs">
-  <button class="tab active" data-tab="resumen">Resumen directiva</button>
-  <button class="tab" data-tab="opcion-a">Opción A · Rotación</button>
-  <button class="tab" data-tab="opcion-b">Opción B · Inventario</button>
+  <button class="tab active" data-tab="resumen">Resumen</button>
+  <button class="tab" data-tab="inventario">Inventario baja rotación</button>
   <button class="tab" data-tab="detalle">Detalle SKU</button>
 </nav>
 <main class="content">
   <section class="sec active" id="sec-resumen">
     <div class="g2">
-      <div class="card"><h3>Alcance corregido</h3><div class="cs">Excel inventario + ventas (actualizados)</div>
-        <ul style="font-size:.76rem;line-height:1.55;margin-left:18px;color:var(--tx)">{rules_html}</ul>
-        <div class="diag" id="assumptions"></div>
-      </div>
-      <div class="card"><h3>Dos vistas de lectura</h3><div class="cs">Sin descuentos · solo rotación e inventario</div>
-        <div class="g2" style="grid-template-columns:1fr 1fr;margin-top:8px">
-          <div class="opt a" id="cardA"></div>
-          <div class="opt b" id="cardB"></div>
-        </div>
-      </div>
-    </div>
-    <div class="g2">
-      <div class="card"><h3>SKUs por segmento</h3><div class="cw" style="height:220px"><canvas id="cSeg"></canvas></div></div>
-      <div class="card"><h3>Período ventas</h3><div class="cs">Fuente: Excel ventas</div>
+      <div class="card"><h3>SKUs por segmento</h3><div class="cw" style="height:240px"><canvas id="cSeg"></canvas></div></div>
+      <div class="card"><h3>Período de ventas</h3><div class="cs">Excel ventas (todos los meses)</div>
         <p style="font-size:1.1rem;font-family:var(--fh);font-weight:800;margin-top:12px" id="periodLabel"></p>
         <p style="font-size:.72rem;color:var(--mu);margin-top:8px" id="monthsList"></p>
       </div>
     </div>
-    <div class="card"><h3>Top 15 modelos por stock</h3><div class="tscroll"><table><thead><tr>
-      <th>Modelo</th><th>Segmento</th><th>SKUs</th><th>Stock total</th><th>Tiendas</th><th>Taller</th><th>Rotación/mes</th>
-    </tr></thead><tbody id="topModels"></tbody></table></div></div>
   </section>
-  <section class="sec" id="sec-opcion-a">
-    <div class="card"><h3 id="titleA">Opción A</h3><div class="cs" id="subA"></div>
+  <section class="sec" id="sec-inventario">
+    <div class="card"><h3 id="titleInv">Inventario baja rotación</h3><div class="cs" id="subInv"></div>
       <div class="tscroll"><table class="cat-table"><thead><tr>
         <th></th><th>Modelo</th><th>Matriz</th><th>SKUs</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th><th>Cobertura</th>
-      </tr></thead><tbody id="bodyA"></tbody></table></div>
-    </div>
-  </section>
-  <section class="sec" id="sec-opcion-b">
-    <div class="card"><h3 id="titleB">Opción B</h3><div class="cs" id="subB"></div>
-      <div class="tscroll"><table class="cat-table"><thead><tr>
-        <th></th><th>Modelo</th><th>Matriz</th><th>SKUs</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th><th>Cobertura</th>
-      </tr></thead><tbody id="bodyB"></tbody></table></div>
+      </tr></thead><tbody id="bodyInv"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-detalle">

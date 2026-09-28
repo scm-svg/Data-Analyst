@@ -42,9 +42,7 @@
       }
     }
     if (window.BF_PROPOSAL_DATA) return window.BF_PROPOSAL_DATA;
-    showError(
-      "Sin datos. Regenerá el HTML con build_black_friday_proposal.py (archivo autocontenido)."
-    );
+    showError("Sin datos embebidos. Regenerá el HTML con build_black_friday_proposal.py.");
     return null;
   }
 
@@ -54,6 +52,11 @@
 
     var state = { seg: "", search: "" };
     var expanded = Object.create(null);
+    var view = DATA.inventario_view || DATA.option_b || {
+      name: "Inventario baja rotación",
+      description: "",
+      sort: "stock_desc",
+    };
 
     function catalogFiltered() {
       var list = (DATA.catalog || []).slice();
@@ -74,19 +77,13 @@
       return list;
     }
 
-    function sortCatalog(list, mode) {
+    function sortCatalog(list) {
       list = list.slice();
-      if (mode === "rotacion_asc") {
-        list.sort(function (a, b) {
-          return a.rotacion_mes - b.rotacion_mes || b.stock_total - a.stock_total;
-        });
-      } else {
-        list.sort(function (a, b) {
-          var sa = a.stock_tiendas + a.stock_taller;
-          var sb = b.stock_tiendas + b.stock_taller;
-          return sb - sa || b.stock_total - a.stock_total;
-        });
-      }
+      list.sort(function (a, b) {
+        var sa = a.stock_tiendas + a.stock_taller;
+        var sb = b.stock_tiendas + b.stock_taller;
+        return sb - sa || b.stock_total - a.stock_total;
+      });
       return list;
     }
 
@@ -94,10 +91,10 @@
       return [v.genero, v.color, v.talla].filter(Boolean).join(" · ") || "—";
     }
 
-    function renderCatalogTable(tbodyId, sortMode) {
-      var tbody = $(tbodyId);
+    function renderCatalogTable() {
+      var tbody = $("bodyInv");
       if (!tbody) return;
-      var rows = sortCatalog(catalogFiltered(), sortMode);
+      var rows = sortCatalog(catalogFiltered());
       var html = "";
       rows.forEach(function (m) {
         var open = !!expanded[m.modelo];
@@ -164,29 +161,26 @@
       };
     });
 
-    function onCatalogClick(e) {
-      var t = e.target;
-      if (!t || !t.getAttribute) return;
-      var mod = t.getAttribute("data-model");
-      if (!mod) return;
-      expanded[mod] = !expanded[mod];
-      renderCatalogTable("bodyA", "rotacion_asc");
-      renderCatalogTable("bodyB", "stock_desc");
+    var bodyInv = $("bodyInv");
+    if (bodyInv) {
+      bodyInv.addEventListener("click", function (e) {
+        var t = e.target;
+        if (!t || !t.getAttribute) return;
+        var mod = t.getAttribute("data-model");
+        if (!mod) return;
+        expanded[mod] = !expanded[mod];
+        renderCatalogTable();
+      });
     }
-
-    ["bodyA", "bodyB"].forEach(function (id) {
-      var el = $(id);
-      if (el) el.addEventListener("click", onCatalogClick);
-    });
 
     function renderKpis() {
       var s = DATA.summary;
       $("subtitle").textContent = DATA.meta.subtitle + " · " + s.periodo_ventas;
-      $("periodLabel").textContent = s.periodo_ventas;
+      if ($("periodLabel")) $("periodLabel").textContent = s.periodo_ventas;
       var meses = (DATA.meta.meses_incluidos || []).join(", ");
       if ($("monthsList")) $("monthsList").textContent = meses || "—";
       $("kpis").innerHTML = [
-        ["SKUs ofertables", s.skus_c_total],
+        ["SKUs", s.skus_c_total],
         ["Und. stock", s.unidades_stock],
         ["En tiendas", s.unidades_tiendas],
         ["En taller", s.unidades_taller],
@@ -203,26 +197,8 @@
         })
         .join("");
 
-      if ($("titleA")) $("titleA").textContent = DATA.option_a.name;
-      if ($("titleB")) $("titleB").textContent = DATA.option_b.name;
-      if ($("subA")) $("subA").textContent = DATA.option_a.description;
-      if ($("subB")) $("subB").textContent = DATA.option_b.description;
-      $("cardA").innerHTML =
-        "<h4>" +
-        esc(DATA.option_a.name) +
-        "</h4><p>" +
-        esc(DATA.option_a.description) +
-        "</p>";
-      $("cardB").innerHTML =
-        "<h4>" +
-        esc(DATA.option_b.name) +
-        "</h4><p>" +
-        esc(DATA.option_b.description) +
-        "</p>";
-      if ($("assumptions")) {
-        $("assumptions").textContent =
-          "Rotación/mes = unidades vendidas en el período ÷ cantidad de meses del Excel.";
-      }
+      if ($("titleInv")) $("titleInv").textContent = view.name;
+      if ($("subInv")) $("subInv").textContent = view.description;
     }
 
     function renderFlatSkus() {
@@ -252,34 +228,6 @@
             fmt(r.stock_tiendas) +
             "</td><td>" +
             fmt(r.stock_taller) +
-            "</td></tr>"
-          );
-        })
-        .join("");
-    }
-
-    function renderAll() {
-      renderCatalogTable("bodyA", "rotacion_asc");
-      renderCatalogTable("bodyB", "stock_desc");
-      renderFlatSkus();
-      $("topModels").innerHTML = (DATA.models || [])
-        .slice(0, 15)
-        .map(function (m) {
-          return (
-            "<tr><td>" +
-            esc(m.modelo) +
-            "</td><td>" +
-            esc(m.segmento) +
-            "</td><td>" +
-            fmt(m.skus_c) +
-            "</td><td>" +
-            fmt(m.stock_total) +
-            "</td><td>" +
-            fmt(m.stock_tiendas) +
-            "</td><td>" +
-            fmt(m.stock_taller) +
-            "</td><td>" +
-            fmt(m.rotacion_mes, 1) +
             "</td></tr>"
           );
         })
@@ -319,16 +267,19 @@
 
     $("fSeg").onchange = function (e) {
       state.seg = e.target.value;
-      renderAll();
+      renderCatalogTable();
+      renderFlatSkus();
     };
     $("fSearch").oninput = function (e) {
       state.search = e.target.value;
-      renderAll();
+      renderCatalogTable();
+      renderFlatSkus();
     };
 
     try {
       renderKpis();
-      renderAll();
+      renderCatalogTable();
+      renderFlatSkus();
       renderCharts();
     } catch (err) {
       console.error(err);
