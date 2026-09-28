@@ -907,6 +907,7 @@ def escribir_html(payload: dict, path: str):
             f"<td>{x['n_noches']}</td><td>{fmt_usd(x['costo_usd'])}</td>"
             f"<td>{fmt_n(x['pzas_nocturno'])}</td><td>{fmt_n(x['extra_alm16'])}</td>"
             f"<td>{x['modelos_adelantados']}</td>"
+            f"<td>{x['dias_ganados_mediana'] if x.get('dias_ganados_mediana') is not None else '--'}</td>"
             f"<td>{fmt_n(cupo.get('cupo_usable') if sid=='A' else 0)}</td>"
             f"<td>{fmt_n(cupo.get('cobertura'), 1) if sid=='A' else '--'}</td>"
             "</tr>"
@@ -1058,7 +1059,7 @@ td.rem {{ background:var(--ambar-bg); }}
       <div class="cw"><canvas id="ch1"></canvas></div>
       <div class="wrap"><table><thead><tr>
         <th>Esc.</th><th>Descripción</th><th>Noches</th><th>Costo</th><th>Pzas noche</th>
-        <th>Extra 16/11</th><th>Modelos adelantados</th><th>Cupo p/ lotes</th><th>Cobertura lotes</th>
+        <th>Extra 16/11</th><th>Modelos adelantados</th><th>Mediana días ganados</th><th>Cupo p/ lotes</th><th>Cobertura lotes</th>
       </tr></thead><tbody>{''.join(cmp_rows)}</tbody></table></div>
     </div>
     <div class="card"><h3>Lotes nuevos · faltante vs cupo que libera el nocturno</h3>
