@@ -11,10 +11,12 @@ sys.path.insert(0, ROOT)
 from escenarios_nocturnos import (  # noqa: E402
     BONO_USD,
     CORTE_ALMACEN,
+    ESCENARIOS,
     EventoLinea,
     ModeloInfo,
     PERSONAS,
     add_business_days,
+    asignar_cupo_lotes,
     cap_nocturna,
     costo_bono,
     es_cobro,
@@ -27,7 +29,7 @@ from escenarios_nocturnos import (  # noqa: E402
 
 
 NUEVO_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_LOTE_NUEVO_f414.xlsx"
-ACTUAL_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_ACTUAL_15df.xlsx"
+ACTUAL_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_ACTUAL_d499.xlsx"
 
 
 def _plan(eventos, modelos):
@@ -133,6 +135,24 @@ class MotorSintetico(unittest.TestCase):
         fechas = [r.termino_esc for r in rows]
         self.assertEqual(fechas, sorted(fechas, key=lambda d: d or date.max))
 
+    def test_asignar_cupo_lotes_prorratea_por_linea(self):
+        idle = {"2": 1000.0, "3": 0.0, "4": 400.0, "5": 80.0}
+        lotes = [
+            ModeloInfo("RIO LOTE NUEVO CAB", faltante=1000, cap=101, lineas="2", lote_nuevo=True),
+            ModeloInfo("RIO LOTE NUEVO DAMA", faltante=1000, cap=101, lineas="2", lote_nuevo=True),
+            ModeloInfo("MAR LOTE NUEVO CAB", faltante=800, cap=124, lineas="4", lote_nuevo=True),
+        ]
+        out = asignar_cupo_lotes(idle, lotes)
+        by = {r["modelo"]: r for r in out["por_modelo"]}
+        self.assertEqual(by["RIO LOTE NUEVO CAB"]["asignado"], 500.0)
+        self.assertEqual(by["RIO LOTE NUEVO DAMA"]["asignado"], 500.0)
+        self.assertEqual(by["MAR LOTE NUEVO CAB"]["asignado"], 400.0)
+        self.assertEqual(out["cupo_usable"], 1400.0)
+        self.assertEqual(out["faltante_total"], 2800.0)
+        lin5 = next(x for x in out["por_linea"] if x["linea"] == "5")
+        self.assertEqual(lin5["n_lotes"], 0)
+        self.assertEqual(lin5["idle"], 80.0)
+
     def test_remanente_ocupa_cupo_diurno(self):
         eventos = [
             EventoLinea(date(2026, 9, 29), "2", "RIO DAMA", 100.0, False, 0),
@@ -169,15 +189,20 @@ class MotorSintetico(unittest.TestCase):
         self.assertTrue(any(c["semana"] == 1 for c in s1["calendario"]))
 
 
-@unittest.skipUnless(os.path.isfile(NUEVO_XLSX), "Excel lote nuevo no disponible")
+@unittest.skipUnless(os.path.isfile(ACTUAL_XLSX), "Excel ACTUAL no disponible")
 class IntegracionExcel(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from escenarios_nocturnos import cargar_plan
+        from escenarios_nocturnos import cargar_plan, comparar_lotes
 
-        cls.nuevo = cargar_plan(NUEVO_XLSX)
-        cls.actual = cargar_plan(ACTUAL_XLSX) if os.path.isfile(ACTUAL_XLSX) else None
-        cls.sims = {n: simular_nocturnos(cls.nuevo, n) for n in range(5)}
+        cls.actual = cargar_plan(ACTUAL_XLSX)
+        cls.nuevo = cargar_plan(NUEVO_XLSX) if os.path.isfile(NUEVO_XLSX) else None
+        cls.sims = {n: simular_nocturnos(cls.actual, n) for n in (0, 4)}
+
+    def test_solo_base_y_a_en_catalogo(self):
+        ids = [e["id"] for e in ESCENARIOS]
+        self.assertEqual(ids, ["0", "A"])
+        self.assertEqual(ESCENARIOS[1]["semanas"], 4)
 
     def test_n0_identidad_tablero(self):
         s0 = self.sims[0]
@@ -186,37 +211,39 @@ class IntegracionExcel(unittest.TestCase):
         self.assertEqual(k["extra_alm16"], 0)
         self.assertEqual(k["modelos_adelantados"], 0)
         self.assertEqual(k["remanente_usado"], 0)
-        self.assertGreater(k["remanente_total"], 0)
+        self.assertEqual(k["lotes_nuevos"], 0)
 
-    def test_remanente_en_d_baja_ociosidad(self):
+    def test_remanente_en_a_baja_ociosidad(self):
         s0 = self.sims[0]
-        sd = self.sims[4]
-        self.assertGreater(sd["remanente_usado"], s0["remanente_usado"])
-        idle_d = sum((sd["idle_dia"] or {}).values())
-        idle_sin_cola = sd["pzas_nocturno"]
-        self.assertLess(idle_d, idle_sin_cola)
+        sa = self.sims[4]
+        self.assertGreaterEqual(sa["remanente_usado"], s0["remanente_usado"])
+        idle_a = sum((sa["idle_dia"] or {}).values())
+        self.assertLess(idle_a, sa["pzas_nocturno"])
 
-    def test_lotes_nuevos_y_corte_almacen(self):
-        lotes = [m for m in self.nuevo["modelos"].values() if m.lote_nuevo]
+    def test_plan_actual_sin_lotes_nuevos(self):
+        lotes = [m for m in self.actual["modelos"].values() if m.lote_nuevo]
+        self.assertEqual(len(lotes), 0)
+        self.assertGreater(sum(m.faltante for m in self.actual["modelos"].values()), 10000)
+
+    def test_escenario_a_cuatro_semanas(self):
+        ka = kpis_escenario(self.sims[4])
+        self.assertEqual(ka["n_noches"], 11)
+        self.assertEqual(ka["costo_usd"], 3630.0)
+        self.assertGreater(ka["pzas_nocturno"], 2000)
+        self.assertGreater(ka["pzas_por_linea"].get("1", 0), 0)
+        self.assertGreater(ka["extra_alm16"], 0)
+
+    def test_cupo_lotes_vs_faltante(self):
+        from escenarios_nocturnos import comparar_lotes
+
+        self.assertIsNotNone(self.nuevo)
+        lotes = comparar_lotes(self.actual, self.nuevo)
         self.assertEqual(len(lotes), 6)
-        self.assertGreater(sum(m.faltante for m in lotes), 8000)
-        for m in lotes:
-            self.assertTrue(m.entrada_plan is None or m.entrada_plan > CORTE_ALMACEN)
-
-    def test_escenarios_monotonos(self):
-        prev_p = 0
-        prev_c = 0
-        for n in range(1, 5):
-            k = kpis_escenario(self.sims[n])
-            self.assertGreaterEqual(k["pzas_nocturno"], prev_p)
-            self.assertGreaterEqual(k["costo_usd"], prev_c)
-            self.assertGreaterEqual(k["extra_alm16"], prev_p - 1)
-            prev_p = k["pzas_nocturno"]
-            prev_c = k["costo_usd"]
-        kd = kpis_escenario(self.sims[4])
-        self.assertEqual(kd["n_noches"], 11)
-        self.assertEqual(kd["costo_usd"], 3630.0)
-        self.assertGreater(kd["pzas_por_linea"].get("1", 0), 0)
+        out = asignar_cupo_lotes(self.sims[4]["idle_dia"], lotes)
+        self.assertGreater(out["faltante_total"], 8000)
+        self.assertGreater(out["cupo_usable"], 2000)
+        self.assertLess(out["cupo_usable"], out["faltante_total"])
+        self.assertEqual(round(out["cupo_usable"] + out["hueco_total"], 0), out["faltante_total"])
 
     def test_listas_orden_salida(self):
         rows = self.sims[4]["resultados"]

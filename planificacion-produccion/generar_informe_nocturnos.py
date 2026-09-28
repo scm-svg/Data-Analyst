@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera el informe Excel + HTML de escenarios de turno nocturno A–D."""
+"""Genera el informe Excel + HTML de turnos nocturnos: Base vs escenario A (4 semanas)."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ import os
 import shutil
 import html as htmlmod
 from datetime import date
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
@@ -22,6 +22,7 @@ from escenarios_nocturnos import (
     CORTE_COSTURA_DICIEMBRE,
     ESCENARIOS,
     PERSONAS,
+    asignar_cupo_lotes,
     celdas_a_dict,
     comparar_lotes,
     cargar_plan,
@@ -41,7 +42,7 @@ NUEVO_XLSX = os.environ.get(
 )
 ACTUAL_XLSX = os.environ.get(
     "PLAN_ACTUAL_XLSX",
-    "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_ACTUAL_15df.xlsx",
+    "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_ACTUAL_d499.xlsx",
 )
 OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 OUT_XLSX = os.path.join(OUT_DIR, "Informe_Turnos_Nocturnos.xlsx")
@@ -102,143 +103,122 @@ def _kpis_plain(k: dict) -> dict:
     return out
 
 
-def _pros_contras(sid: str, k: dict, sim: dict) -> Dict[str, List[str]]:
+def _pros_contras(sid: str, k: dict, sim: dict, cupo: Optional[dict] = None) -> Dict[str, List[str]]:
     noches = ", ".join(fmt_fecha(d) for d in sim["noches"]) or "ninguna"
     idle = sum((k.get("idle_dia") or {}).values())
     lin = k.get("pzas_por_linea") or {}
     l1 = lin.get("1") or lin.get(1) or 0
+    cupo = cupo or {}
     pros, cons = [], []
     if sid == "0":
         pros.append("No hay costo de bono nocturno ni desgaste extra de plantilla.")
-        pros.append("El tablero diurno y los pedidos especiales no se tocan.")
+        pros.append("El tablero diurno del plan ACTUAL y los pedidos especiales no se tocan.")
         cons.append(
-            f"Ninguno de los 6 lotes nuevos entra a almacén al {fmt_fecha(CORTE_ALMACEN)} "
-            "(cierran entre el 25/11 y el 18/12)."
+            f"El plan actual cubre almacén 16/11 con {k.get('cubre_almacen_esc')} modelos; "
+            "RIO KIDS urgente y shorts de L5 ya llegan justos o tarde."
         )
         cons.append(
-            f"Solo {fmt_n(k['pzas_lotes_alm16_esc'])} pzas de lote nuevo se costuran a tiempo "
-            f"para almacén 16/11 (corte de costura {fmt_fecha(CORTE_COSTURA_ALMACEN)})."
-        )
-        cons.append(
-            "RIO/MAR lote nuevo CAB-DAMA-KIDS no cubren diciembre ni la tienda nueva a tiempo: "
-            "el cierre más tarde es RIO LOTE NUEVO DAMA el 18/12 en almacén."
+            f"Los 6 lotes nuevos (~{fmt_n(cupo.get('faltante_total') or 8912)} pzas) no están en este tablero: "
+            "sin nocturno no hay cupo diurno libre para empezar a producirlos."
         )
         cons.append("Capacidad real (101–124 pzas/día, L5=40) sigue por debajo de las máquinas nuevas a 130.")
         return {"pros": pros, "contras": cons}
 
     pros.append(
         f"{k['n_noches']} noches ({noches}) producen {fmt_n(k['pzas_nocturno'])} pzas extra "
-        f"a {fmt_usd(k['usd_por_pza'])} por pieza."
+        f"del plan ACTUAL a {fmt_usd(k['usd_por_pza'])} por pieza."
     )
     pros.append(
         f"+{fmt_n(k['extra_alm16'])} pzas adelantadas al corte de almacén 16/11 "
         f"({fmt_n(k['pzas_alm16_base'])} → {fmt_n(k['pzas_alm16_esc'])})."
     )
-    pros.append(
-        f"Lotes nuevos: {fmt_n(k['pzas_lotes_alm16_esc'])} pzas costuradas para 16/11 "
-        f"(+{fmt_n(k['extra_alm16_lotes'])} vs base) y {fmt_n(k['pzas_lotes_dic_esc'])} "
-        f"para demanda diciembre ({fmt_fecha(CORTE_COSTURA_DICIEMBRE)})."
-    )
-    if k.get("lotes_adelantados"):
+    if k.get("modelos_adelantados"):
         pros.append(
-            f"{k['lotes_adelantados']} de 6 lotes nuevos cierran antes "
-            f"(mediana {k['dias_ganados_lotes']} días de costura)."
+            f"{k['modelos_adelantados']} modelos ya planificados cierran antes "
+            f"(mediana {k['dias_ganados_mediana']} días de costura)."
         )
     rem_u = k.get("remanente_usado") or 0
     rem_t = k.get("remanente_total") or 0
     if rem_u > 0:
         pros.append(
-            f"El cupo diurno que deja el nocturno se rellena con lo que sigue en cola: "
-            f"{fmt_n(rem_u)} pzas de faltante no tablero entran al horizonte "
-            f"(remanente total {fmt_n(rem_t)} pzas)."
+            f"El cupo diurno que deja el nocturno se rellena primero con la cola actual: "
+            f"{fmt_n(rem_u)} pzas de faltante no tablero del plan ACTUAL "
+            f"(remanente {fmt_n(rem_t)} pzas)."
         )
-    if idle > 0:
-        cons.append(
-            f"Tras rellenar la cola quedan {fmt_n(idle)} pzas de ociosidad diurna "
-            "(sin modelo asignado en esa línea, p.ej. MOTION LOOP o holgura de L5)."
+    if cupo.get("cupo_usable"):
+        pros.append(
+            f"Tras la cola actual quedan {fmt_n(cupo['cupo_usable'])} pzas de cupo diurno en L2–L4 "
+            f"para lotes nuevos (piden {fmt_n(cupo['faltante_total'])}; cobertura {fmt_n(cupo['cobertura'], 1)}%)."
         )
     if l1:
         pros.append(
-            f"L1 de noche aporta {fmt_n(l1)} pzas a la cola de L2 (RIO), que es la que arrastra "
-            "Kids urgente y los lotes nuevos RIO."
+            f"L1 de noche aporta {fmt_n(l1)} pzas a la cola de L2 (RIO), que arrastra Kids urgente."
         )
 
     cons.append(
         f"Costo de bono: {fmt_usd(k['costo_usd'])} "
-        f"({k['n_noches']} × {personas_total()} personas × {fmt_usd(BONO_USD)}), "
-        "aunque alguna línea quede a media carga."
+        f"({k['n_noches']} × {personas_total()} personas × {fmt_usd(BONO_USD)})."
     )
     if k.get("noches_perdidas_cobro"):
         cons.append(
             f"Se pierde {k['noches_perdidas_cobro']} noche teórica por cobro "
             f"(30/09, último del mes). Quedan {k['n_noches']} de {k['noches_teoricas']}."
         )
-    cons.append(
-        "Ningún lote nuevo cierra entero en almacén al 16/11: el turno nocturno adelanta piezas, "
-        "no mueve el corte de gerencia por sí solo."
-    )
-    cons.append(
-        "L1 de noche sigue la cola de L2, no la cola propia: RIO LOTE NUEVO CAB y DAMA no adelantan "
-        "su fecha de cierre (el cuello queda en el turno diurno de L1)."
-    )
-    cons.append(
-        "No aplica a Por Hacer-Especial: Clásica / Mafe / satélite siguen en el día y pueden "
-        "bloquear estaciones mientras la noche corre regular."
-    )
-    cons.append(
-        "La cap nocturna es el 50% de la cap actual (máquinas nuevas aún no a régimen). "
-        "Si la planta no sostiene ese 50%, el adelanto se encoge."
-    )
-    if sid in ("C", "D"):
+    if cupo.get("hueco_total"):
         cons.append(
-            "Tres o cuatro semanas de mar-mié-vie nocturno concentran fatiga, ausentismo y "
-            "calidad en el tramo que alimenta noviembre-diciembre."
+            f"El cupo liberado no alcanza los lotes nuevos: cubre {fmt_n(cupo.get('cupo_usable'))} de "
+            f"{fmt_n(cupo.get('faltante_total'))} pzas (hueco {fmt_n(cupo.get('hueco_total'))}). "
+            "Ese cupo cae al final del horizonte, no mete los lotes al almacén del 16/11."
         )
+    if idle > (cupo.get("cupo_usable") or 0):
+        cons.append(
+            f"Hay {fmt_n(idle - (cupo.get('cupo_usable') or 0))} pzas de ociosidad en líneas sin lote nuevo "
+            "(L1 / L5)."
+        )
+    cons.append(
+        "L1 de noche sigue la cola de L2, no la cola propia."
+    )
+    cons.append(
+        "No aplica a Por Hacer-Especial: Clásica / Mafe / satélite siguen en el día."
+    )
+    cons.append(
+        "Cuatro semanas de mar-mié-vie nocturno concentran fatiga, ausentismo y calidad "
+        "en el tramo que alimenta noviembre-diciembre."
+    )
+    cons.append(
+        "La cap nocturna es el 50% de la cap actual (máquinas nuevas aún no a régimen)."
+    )
     return {"pros": pros, "contras": cons}
-
-
-def _pick_modelo(items: List[dict], nombre: str) -> dict:
-    for m in items:
-        if m.get("modelo") == nombre:
-            return m
-    return {}
 
 
 def _lectura(payload: dict) -> str:
     k = payload["kpis"]
-    kd, kc, kb, ka = k["D"], k["C"], k["B"], k["A"]
-    md = payload["modelos"]["D"]
-    m0 = payload["modelos"]["0"]
-    cab = _pick_modelo(md, "MAR LOTE NUEVO CAB")
-    cab0 = _pick_modelo(m0, "MAR LOTE NUEVO CAB")
-    kids = _pick_modelo(md, "RIO LOTE NUEVO KIDS")
-    kids0 = _pick_modelo(m0, "RIO LOTE NUEVO KIDS")
-    rem = kd.get("remanente_usado") or 0
+    ka = k["A"]
+    k0 = k["0"]
+    cupo = payload.get("cupo_lotes") or {}
     return (
-        f"Insertar los 6 lotes nuevos (~{fmt_n(payload['pzas_lotes'])} pzas) sin nocturnos deja "
-        f"el almacén del {fmt_fecha(CORTE_ALMACEN)} cubierto solo con el plan actual: 0 de 6 lotes "
-        f"nuevos llegan completos. Con D se costuran {fmt_n(kd['pzas_lotes_alm16_esc'])} pzas de esos "
-        f"lotes a tiempo para el 16/11 (vs {fmt_n(k['0']['pzas_lotes_alm16_esc'])} sin noches) y "
-        f"{fmt_n(kd['pzas_lotes_dic_esc'])} pzas para diciembre/tienda nueva. "
-        f"MAR LOTE NUEVO CAB pasa de entrar el {cab0.get('entrada_base') or cab0.get('entrada_esc') or '--'} "
-        f"al {cab.get('entrada_esc') or '--'} y RIO LOTE NUEVO KIDS del "
-        f"{kids0.get('entrada_base') or kids0.get('entrada_esc') or '--'} al {kids.get('entrada_esc') or '--'}. "
-        f"El cupo diurno que libera la noche se rellena con la cola (remanente absorbido: {fmt_n(rem)} pzas). "
-        f"C logra parte del adelanto de D ({fmt_n(kc['extra_alm16'])} vs "
-        f"{fmt_n(kd['extra_alm16'])} pzas) a menor costo ({fmt_usd(kc['costo_usd'])} vs {fmt_usd(kd['costo_usd'])}). "
-        f"A ({fmt_usd(ka['costo_usd'])}) y B ({fmt_usd(kb['costo_usd'])}) sirven de piloto. "
-        f"Recomendación: D si el criterio es tiendas + diciembre + tienda nueva; C si se quiere "
-        f"limitar fatiga y caja. A no alcanza el objetivo de almacén."
+        f"El informe corre sobre el plan ACTUAL (~{fmt_n(payload['pzas_actual'])} pzas ya planificadas, "
+        f"sin lotes nuevos). El escenario A son 4 semanas de nocturno: {ka['n_noches']} noches, "
+        f"costo {fmt_usd(ka['costo_usd'])}, {fmt_n(ka['pzas_nocturno'])} pzas extra de lo que ya está en cola. "
+        f"Al corte de almacén 16/11 se adelantan {fmt_n(ka['extra_alm16'])} pzas "
+        f"({fmt_n(k0['pzas_alm16_esc'])} → {fmt_n(ka['pzas_alm16_esc'])}) y "
+        f"{ka['modelos_adelantados']} modelos cierran antes. "
+        f"Ese cupo diurno se usa primero para terminar el plan actual "
+        f"(remanente absorbido: {fmt_n(ka.get('remanente_usado') or 0)} pzas). "
+        f"Lo que queda libre en L2–L4 son {fmt_n(cupo.get('cupo_usable'))} pzas para los 6 lotes nuevos, "
+        f"que piden {fmt_n(cupo.get('faltante_total'))} ({fmt_n(cupo.get('cobertura'), 1)}% de cobertura). "
+        f"Hueco {fmt_n(cupo.get('hueco_total'))} pzas. Ese cupo cae al final del tablero: sirve para "
+        f"empezar los lotes nuevos, no para meterlos al almacén del 16/11."
     )
 
 
-def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
+def construir_payload(plan_actual: dict, plan_nuevo: dict) -> dict:
     lotes = comparar_lotes(plan_actual, plan_nuevo)
     sims = {}
     kpis = {}
     modelos = {}
     for spec in ESCENARIOS:
-        sim = simular_nocturnos(plan_nuevo, spec["semanas"])
+        sim = simular_nocturnos(plan_actual, spec["semanas"])
         sims[spec["id"]] = sim
     base_res = {r.modelo: r for r in sims["0"]["resultados"]}
     for sid, sim in sims.items():
@@ -261,7 +241,11 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
         sid = spec["id"]
         kpis[sid] = _kpis_plain(kpis_escenario(sims[sid]))
         modelos[sid] = modelos_a_dict(sims[sid]["resultados"])
-    pc = {spec["id"]: _pros_contras(spec["id"], kpis[spec["id"]], sims[spec["id"]]) for spec in ESCENARIOS}
+    cupo_lotes = asignar_cupo_lotes(sims["A"].get("idle_dia") or {}, lotes)
+    pc = {
+        spec["id"]: _pros_contras(spec["id"], kpis[spec["id"]], sims[spec["id"]], cupo_lotes)
+        for spec in ESCENARIOS
+    }
     calendario = {sid: celdas_a_dict(sims[sid].get("calendario") or []) for sid in sims}
     base_idx = {}
     for c in calendario.get("0") or []:
@@ -297,6 +281,7 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
             }
             for m in lotes
         ],
+        "cupo_lotes": cupo_lotes,
         "kpis": kpis,
         "modelos": modelos,
         "noches": {spec["id"]: [fmt_fecha(d) for d in sims[spec["id"]]["noches"]] for spec in ESCENARIOS},
@@ -317,7 +302,6 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
     }
     payload["lectura"] = _lectura(payload)
     return payload
-
 
 def _header(ws, title, subtitle, ncols=12):
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
@@ -431,8 +415,8 @@ def escribir_excel(payload: dict, path: str):
     ws.title = "Resumen"
     _header(
         ws,
-        "Turnos nocturnos · decisión de planificación",
-        "Escenarios A–D sobre el plan con lotes nuevos. Corte almacén 16/11/2026. Solo Por Hacer (no Especial).",
+        "Turnos nocturnos · plan ACTUAL",
+        "Base vs escenario A (4 semanas). Solo piezas ya planificadas. Corte almacén 16/11/2026. Por Hacer, no Especial.",
         12,
     )
     r = 4
@@ -451,18 +435,19 @@ def escribir_excel(payload: dict, path: str):
         "Noches reales",
         "Noches teóricas",
         "Costo bono US$",
-        "Pzas nocturno",
+        "Pzas nocturno (plan actual)",
         "US$/pza",
         "Extra p/ 16/11",
-        "Pzas lote nuevo p/ 16/11",
-        "Pzas lote nuevo p/ dic",
-        "Lotes nuevos que cierran antes",
-        "Mediana días ganados (lotes)",
         "Modelos adelantados",
+        "Mediana días ganados",
+        "Cubre almacén 16/11",
+        "Cupo libre p/ lotes nuevos",
+        "Cobertura lotes nuevos %",
     ]
     cmp_rows = []
     tit = {e["id"]: e["titulo"] for e in payload["escenarios"]}
-    for sid in "0ABCD":
+    cupo = payload.get("cupo_lotes") or {}
+    for sid in ("0", "A"):
         x = k[sid]
         cmp_rows.append(
             [
@@ -474,11 +459,11 @@ def escribir_excel(payload: dict, path: str):
                 x["pzas_nocturno"],
                 x["usd_por_pza"] if x["usd_por_pza"] is not None else 0,
                 x["extra_alm16"],
-                x["pzas_lotes_alm16_esc"],
-                x["pzas_lotes_dic_esc"],
-                x["lotes_adelantados"],
-                x["dias_ganados_lotes"] if x["dias_ganados_lotes"] is not None else 0,
                 x["modelos_adelantados"],
+                x["dias_ganados_mediana"] if x["dias_ganados_mediana"] is not None else 0,
+                x["cubre_almacen_esc"],
+                cupo.get("cupo_usable") if sid == "A" else 0,
+                cupo.get("cobertura") if sid == "A" else 0,
             ]
         )
     r = _write_table(ws, r, cmp_headers, cmp_rows)
@@ -487,8 +472,8 @@ def escribir_excel(payload: dict, path: str):
     chart.type = "col"
     chart.title = "Piezas extra vs costo"
     chart.y_axis.title = "Pzas extra 16/11"
-    data = Reference(ws, min_col=8, min_row=10, max_row=15)
-    cats = Reference(ws, min_col=1, min_row=11, max_row=15)
+    data = Reference(ws, min_col=8, min_row=10, max_row=12)
+    cats = Reference(ws, min_col=1, min_row=11, max_row=12)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     chart.shape = 4
@@ -497,7 +482,7 @@ def escribir_excel(payload: dict, path: str):
     chart2.type = "col"
     chart2.y_axis.axId = 200
     chart2.y_axis.title = "US$"
-    data2 = Reference(ws, min_col=5, min_row=10, max_row=15)
+    data2 = Reference(ws, min_col=5, min_row=10, max_row=12)
     chart2.add_data(data2, titles_from_data=True)
     chart2.y_axis.crosses = "max"
     chart += chart2
@@ -505,28 +490,79 @@ def escribir_excel(payload: dict, path: str):
     chart.height = 8
     ws.add_chart(chart, "A16")
 
-    r = 32
-    ws.cell(r, 1, "Lotes nuevos (no están en el plan ACTUAL)").font = FONT_T
-    r = 33
-    lote_headers = ["Modelo", "Faltante", "Cap/día", "Líneas", "Prioridad", "Salida costura plan", "Entrada almacén plan", "Fecha obj.", "¿Cubre 16/11 hoy?"]
+    r = 28
+    ws.cell(r, 1, "Lotes nuevos · faltante vs cupo que libera el nocturno").font = FONT_T
+    r = 29
+    lote_headers = [
+        "Modelo",
+        "Línea",
+        "Faltante (esperado)",
+        "Cap/día",
+        "Cupo línea liberado",
+        "Asignado a este lote",
+        "Cobertura %",
+        "Hueco",
+        "Días de cupo",
+    ]
     lote_rows = []
-    for m in payload["lotes"]:
-        cubre = "No cubre"
+    for m in (cupo.get("por_modelo") or []):
         lote_rows.append(
-            [m["modelo"], m["faltante"], m["cap"], m["lineas"], m["prioridad"], m["termino_plan"], m["entrada_plan"], m["fecha_obj"], cubre]
+            [
+                m["modelo"],
+                m["lineas"],
+                m["faltante"],
+                m["cap"],
+                m["cupo_linea"],
+                m["asignado"],
+                m["cobertura"],
+                m["hueco"],
+                m["dias_cupo"],
+            ]
         )
-    r = _write_table(ws, r, lote_headers, lote_rows)
+    lote_rows.append(
+        [
+            "TOTAL",
+            "L2–L4",
+            cupo.get("faltante_total"),
+            "",
+            cupo.get("cupo_usable"),
+            cupo.get("cupo_usable"),
+            cupo.get("cobertura"),
+            cupo.get("hueco_total"),
+            "",
+        ]
+    )
+    r = _write_table(ws, r, lote_headers, lote_rows, lote_col=0)
     r += 1
-    ws.cell(r, 1, "Contraste plan ACTUAL vs plan LOTE NUEVO").font = FONT_T
+    ws.cell(r, 1, "Cupo diurno libre por línea (después de terminar el plan ACTUAL)").font = FONT_T
+    r += 1
+    r = _write_table(
+        ws,
+        r,
+        ["Línea", "Cupo libre", "Lotes nuevos", "Faltante lotes", "Asignado", "Hueco", "Cobertura %"],
+        [
+            [
+                f"Línea {ln['linea']}",
+                ln["idle"],
+                ln["n_lotes"],
+                ln["faltante_lotes"],
+                ln["asignado"],
+                ln["hueco"],
+                ln["cobertura"] if ln["cobertura"] is not None else "--",
+            ]
+            for ln in (cupo.get("por_linea") or [])
+        ],
+    )
+    r += 1
+    ws.cell(r, 1, "Plan ACTUAL (este informe) vs lotes nuevos (tabla aparte)").font = FONT_T
     r += 1
     r = _write_table(
         ws,
         r,
         ["Plan", "Modelos Por Hacer", "Faltante (pzas)", "Lotes nuevos", "Pzas lotes nuevos"],
         [
-            ["ACTUAL (sin lotes nuevos)", payload["modelos_actual"], payload["pzas_actual"], 0, 0],
-            ["LOTE NUEVO", payload["modelos_nuevo"], payload["pzas_nuevo"], len(payload["lotes"]), payload["pzas_lotes"]],
-            ["Delta", payload["modelos_nuevo"] - payload["modelos_actual"], payload["pzas_nuevo"] - payload["pzas_actual"], len(payload["lotes"]), payload["pzas_lotes"]],
+            ["ACTUAL (piezas ya planificadas)", payload["modelos_actual"], payload["pzas_actual"], 0, 0],
+            ["Lotes nuevos (no simulados en el tablero)", len(payload["lotes"]), payload["pzas_lotes"], len(payload["lotes"]), payload["pzas_lotes"]],
         ],
     )
     r += 1
@@ -543,11 +579,11 @@ def escribir_excel(payload: dict, path: str):
     ws.cell(r, 1, "Riesgo si NO se hacen nocturnos").font = FONT_T
     r += 1
     riesgos = [
-        "Los 6 lotes nuevos (~8.912 pzas) no están en el plan ACTUAL; al meterlos, almacén 16/11 queda corto para tiendas + diciembre + tienda nueva.",
-        "Sin noches, MAR/RIO lote nuevo CAB-DAMA-KIDS entran a almacén entre el 25/11 y el 18/12.",
-        "RIO KIDS urgente y shorts de L5 ya van retrasados en el plan diurno; la noche de L1 refuerza la cola de L2 (RIO).",
-        "La cap actual (101–124, L5=40) no es la de máquinas nuevas a 130: el atraso se agranda si no se adelanta.",
-        "LITE PANT DAMA y Basic Line Pant quedan a fines de diciembre y no entran al corte de almacén.",
+        "Sin nocturnos el plan ACTUAL no libera cupo diurno para los 6 lotes nuevos (~8.912 pzas).",
+        "Con A, el cupo libre de L2–L4 cubre solo ~26% de esos lotes y cae al final del horizonte: no entran al almacén 16/11.",
+        "RIO KIDS urgente y shorts de L5 ya van justos en el día; la noche de L1 refuerza la cola de L2 (RIO).",
+        "La cap actual (101–124, L5=40) no es la de máquinas nuevas a 130.",
+        "LITE PANT DAMA cierra a fines de diciembre en la base; el nocturno la adelanta pero no la mete al 16/11.",
     ]
     for t in riesgos:
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=12)
@@ -579,20 +615,20 @@ def escribir_excel(payload: dict, path: str):
         )
         _header(wsx, f"Escenario {sid} — {spec['titulo']}", sub, 15)
         r = 4
-        kpi_h = ["Noches", "Costo US$", "Pzas nocturno", "US$/pza", "Extra 16/11", "Lote nuevo 16/11", "Lote nuevo dic", "Días ganados (lotes)", "Remanente en cola", "Ociosidad diurna"]
+        kpi_h = ["Noches", "Costo US$", "Pzas nocturno", "US$/pza", "Extra 16/11", "Modelos adelantados", "Cubre 16/11", "Remanente cola actual", "Cupo p/ lotes nuevos"]
         idle = sum((payload["idle_dia"].get(sid) or {}).values())
         rem_u = (payload.get("remanente") or {}).get(sid, {}).get("usado") or k[sid].get("remanente_usado") or 0
+        cupo = payload.get("cupo_lotes") or {}
         kpi_v = [
             k[sid]["n_noches"],
             k[sid]["costo_usd"],
             k[sid]["pzas_nocturno"],
             k[sid]["usd_por_pza"],
             k[sid]["extra_alm16"],
-            k[sid]["pzas_lotes_alm16_esc"],
-            k[sid]["pzas_lotes_dic_esc"],
-            k[sid]["dias_ganados_lotes"],
+            k[sid]["modelos_adelantados"],
+            k[sid]["cubre_almacen_esc"],
             rem_u,
-            idle,
+            cupo.get("cupo_usable") or idle,
         ]
         r = _write_table(wsx, r, kpi_h, [kpi_v])
         r += 1
@@ -616,17 +652,12 @@ def escribir_excel(payload: dict, path: str):
             wsx.row_dimensions[r].height = 34
             r += 1
         r += 1
-        wsx.cell(r, 1, "Todos los modelos Por Hacer · orden por días ganados").font = FONT_T
+        wsx.cell(r, 1, "Modelos Por Hacer del plan ACTUAL · orden por días ganados").font = FONT_T
         r += 1
         mods = list(payload["modelos"][sid])
         r = _write_table(wsx, r, MODEL_HEADERS, _model_rows(mods), lote_col=1)
         r += 1
-        wsx.cell(r, 1, "Lotes nuevos · orden por días ganados").font = FONT_T
-        r += 1
-        lotes_m = [m for m in payload["modelos"][sid] if m["lote_nuevo"]]
-        r = _write_table(wsx, r, MODEL_HEADERS, _model_rows(lotes_m), lote_col=1)
-        r += 1
-        wsx.cell(r, 1, "Piezas nocturnas por línea").font = FONT_T
+        wsx.cell(r, 1, "Piezas nocturnas y cupo libre por línea").font = FONT_T
         r += 1
         lin = payload["pzas_linea"].get(sid) or {}
         r = _write_table(
@@ -656,8 +687,8 @@ def escribir_excel(payload: dict, path: str):
     wsc = wb.create_sheet("Calendario")
     _header(
         wsc,
-        "Calendario de planificación · escenarios A–D",
-        "Filtrar por escenario y semana. Delta = piezas del escenario menos la base sin nocturnos. Remanente = faltante que no estaba en el tablero y ahora ocupa cupo diurno.",
+        "Calendario de planificación · Base vs A",
+        "Filtrar por escenario y semana. Solo plan ACTUAL. Delta = escenario A menos base sin nocturnos.",
         12,
     )
     cal_headers = [
@@ -736,24 +767,24 @@ def escribir_excel(payload: dict, path: str):
     rows = [
         ["Calendario", "Primer nocturno martes 29/09/2026. Semana arranca lunes 28/09."],
         ["Días de noche", "Martes, miércoles y viernes. 3 noches teóricas por semana."],
-        ["Cobro", "Sin nocturno el día 15 ni el último de mes. El 30/09 (miércoles) se salta: el escenario A tiene 2 noches, no 3."],
-        ["Alcance", "Cinco líneas. Solo modelos de Por Hacer. Por Hacer – Especial no se toca de noche."],
+        ["Cobro", "Sin nocturno el día 15 ni el último de mes. El 30/09 se salta: A tiene 11 noches de 12 teóricas."],
+        ["Alcance", "Cinco líneas. Solo Por Hacer del plan ACTUAL. Especial no se toca. Los lotes nuevos no van al tablero: se muestran en tabla de cupo."],
         ["Línea 1", "De noche tiene 100% del cupo nocturno, pero produce la cola de Línea 2 (RIO), no la cola diurna de L1."],
         ["Capacidad noche", "50% de la cap diurna del modelo que está al frente de esa línea. Cap según Por Hacer (máquinas nuevas aún no a 130)."],
         ["L5", "Cap diurna 40 → noche 20. El resto L2–L4 usa 101 o 124 según modelo."],
         ["Cómo se simula", "Se respeta el orden cronológico del tablero 12 semanas. Cada noche consume de la cola regular; los días siguientes fabrican lo que queda, así se adelantan los lotes de atrás."],
-        ["Cupos diurnos libres", "El cupo diurno que deja el nocturno no se deja ocioso: se rellena con lo que sigue en cola (siguiente modelo del tablero y el faltante no programado de esa línea)."],
+        ["Cupos diurnos libres", "Primero se rellena la cola actual. Lo que sobra en L2–L4 se reporta como cupo para lotes nuevos, prorrateado por faltante de cada línea."],
         ["Almacén", "Entrada = salida de costura + 4 días hábiles. El corte 16/11 (lunes) exige terminar costura el 10/11."],
         ["Diciembre / tienda nueva", "Se cuenta costura al 25/11 (entra a almacén ~01/12) como proxy de reposición diciembre y tienda nueva."],
         ["Costo", "US$ 15 por persona por noche. L1–L3 = 4; L4–L5 = 5; total 22. Se paga el equipo completo aunque una línea no llene el cupo."],
-        ["Plan ACTUAL vs NUEVO", "ACTUAL = planificación vigente. NUEVO = misma base + 6 lotes MAR/RIO LOTE NUEVO CAB-DAMA-KIDS (~8.912 pzas) que las proyecciones de tienda van a pedir."],
+        ["Plan ACTUAL vs lotes nuevos", "El motor corre solo ACTUAL. Los 6 lotes MAR/RIO LOTE NUEVO (~8.912 pzas) van aparte: faltante vs cupo diurno que libera A."],
         ["Qué no se mueve", "Pedidos especiales, satélite, días de cobro, sábados y domingos. No se reordena prioridad: se adelanta la cola tal cual está."],
-        ["Cuello L1", "Como L1 noche trabaja para L2, RIO LOTE NUEVO CAB y DAMA no adelantan su cierre: el remanente sigue en el día de L1."],
+        ["Cuello L1", "L1 noche trabaja para L2. No hay lote nuevo en L1: ese cupo no les asigna piezas."],
         ["Piezas no programadas", "MOTION LOOP (sin línea) no entra. El resto de LITE PANT, Basic Line Pant y SEMI MOTION se encolan al final de su línea y ocupan el cupo diurno que libera el nocturno."],
         ["Calendario", "La hoja Calendario y la pestaña HTML filtran por escenario y semana. Cada celda compara el plan del escenario contra la base (sin noches). Amarillo = remanente; azul = cambio vs base; navy = turno noche."],
         ["Conservadurismo", "Floor 50% de cap actual, no de 130. Si las máquinas nuevas llegan a régimen, el mismo esquema de noches rinde más."],
         ["Listas", "Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético."],
-        ["Fuente", "Planificacion_Produccion_ACTUAL.xlsx y Planificacion_Produccion_LOTE_NUEVO.xlsx (Por Hacer, tablero Semana 1–12, Proyeccion, Entrada de Almacen)."],
+        ["Fuente", "Planificacion_Produccion_ACTUAL.xlsx (simulación) y LOTE NUEVO.xlsx (solo tabla de cupo de lotes)."],
     ]
     r = 4
     r = _write_table(wss, r, ["Tema", "Supuesto"], rows)
@@ -813,7 +844,7 @@ def _tabla_modelos(items: List[dict]) -> str:
 
 def _kpis_html(sid: str, payload: dict) -> str:
     x = payload["kpis"][sid]
-    idle = sum((payload["idle_dia"].get(sid) or {}).values())
+    cupo = payload.get("cupo_lotes") or {}
     usd_p = f"US$ {fmt_n(x['usd_por_pza'], 2)}" if x.get("usd_por_pza") is not None else "--"
     return f"""
     <div class="g g5">
@@ -821,13 +852,13 @@ def _kpis_html(sid: str, payload: dict) -> str:
       <div class="kpi"><span>Costo bono</span><b>{fmt_usd(x['costo_usd'])}</b></div>
       <div class="kpi"><span>Pzas nocturno</span><b>{fmt_n(x['pzas_nocturno'])}</b></div>
       <div class="kpi"><span>Extra almacén 16/11</span><b>{fmt_n(x['extra_alm16'])}</b></div>
-      <div class="kpi"><span>Lote nuevo p/ dic</span><b>{fmt_n(x['pzas_lotes_dic_esc'])}</b></div>
+      <div class="kpi"><span>Modelos adelantados</span><b>{x['modelos_adelantados']}</b></div>
     </div>
     <div class="g g4">
-      <div class="kpi"><span>Lote nuevo p/ 16/11</span><b>{fmt_n(x['pzas_lotes_alm16_esc'])}</b></div>
+      <div class="kpi"><span>Cubre 16/11</span><b>{x['cubre_almacen_esc']}</b></div>
       <div class="kpi"><span>US$ / pza</span><b>{usd_p}</b></div>
-      <div class="kpi"><span>Lotes que cierran antes</span><b>{x['lotes_adelantados']} / 6</b></div>
-      <div class="kpi"><span>Remanente absorbido</span><b>{fmt_n(x.get('remanente_usado') or 0)}</b></div>
+      <div class="kpi"><span>Remanente cola actual</span><b>{fmt_n(x.get('remanente_usado') or 0)}</b></div>
+      <div class="kpi"><span>Cupo p/ lotes nuevos</span><b>{fmt_n(cupo.get('cupo_usable') if sid=='A' else 0)}</b></div>
     </div>"""
 
 
@@ -839,7 +870,6 @@ def _sec_esc(sid: str, payload: dict) -> str:
     spec = next(e for e in payload["escenarios"] if e["id"] == sid)
     pc = payload["pros_contras"][sid]
     noches = ", ".join(payload["noches"][sid]) or "—"
-    lotes = [m for m in payload["modelos"][sid] if m.get("lote_nuevo")]
     lin = payload["pzas_linea"].get(sid) or {}
     idle = payload["idle_dia"].get(sid) or {}
     lin_rows = "".join(
@@ -854,9 +884,8 @@ def _sec_esc(sid: str, payload: dict) -> str:
       <div class="card"><h3>A favor</h3>{_lis(pc['pros'], 'pro')}</div>
       <div class="card"><h3>En contra</h3>{_lis(pc['contras'], 'con')}</div>
     </div>
-    <div class="card"><h3>Todos los modelos Por Hacer (orden por días ganados)</h3>
+    <div class="card"><h3>Modelos Por Hacer del plan ACTUAL (orden por días ganados)</h3>
       {_tabla_modelos(payload['modelos'][sid])}</div>
-    <div class="card"><h3>Lotes nuevos (orden por días ganados)</h3>{_tabla_modelos(lotes)}</div>
     <div class="card"><h3>Aprovechamiento por línea</h3>
       <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Ociosidad diurna</th></tr></thead>
       <tbody>{lin_rows}</tbody></table>
@@ -867,7 +896,8 @@ def _sec_esc(sid: str, payload: dict) -> str:
 def escribir_html(payload: dict, path: str):
     k = payload["kpis"]
     cmp_rows = []
-    for sid in "0ABCD":
+    cupo = payload.get("cupo_lotes") or {}
+    for sid in ("0", "A"):
         spec = next(e for e in payload["escenarios"] if e["id"] == sid)
         x = k[sid]
         label = "Base" if sid == "0" else sid
@@ -876,24 +906,32 @@ def escribir_html(payload: dict, path: str):
             f"<td>{label}</td><td>{_hx(spec['titulo'])}</td>"
             f"<td>{x['n_noches']}</td><td>{fmt_usd(x['costo_usd'])}</td>"
             f"<td>{fmt_n(x['pzas_nocturno'])}</td><td>{fmt_n(x['extra_alm16'])}</td>"
-            f"<td>{fmt_n(x['pzas_lotes_alm16_esc'])}</td><td>{fmt_n(x['pzas_lotes_dic_esc'])}</td>"
-            f"<td>{x['lotes_adelantados']}</td><td>{x['dias_ganados_lotes'] if x['dias_ganados_lotes'] is not None else '--'}</td>"
+            f"<td>{x['modelos_adelantados']}</td>"
+            f"<td>{fmt_n(cupo.get('cupo_usable') if sid=='A' else 0)}</td>"
+            f"<td>{fmt_n(cupo.get('cobertura'), 1) if sid=='A' else '--'}</td>"
             "</tr>"
         )
     lote_rows = []
-    for m in payload["lotes"]:
+    for m in (cupo.get("por_modelo") or []):
         lote_rows.append(
             '<tr class="lote">'
-            f"<td>{_hx(m['modelo'])}</td><td>{fmt_n(m['faltante'])}</td><td>{_hx(m['cap'])}</td>"
-            f"<td>{_hx(m['lineas'])}</td><td>{_hx(m['prioridad'])}</td>"
-            f"<td>{_hx(m['termino_plan'])}</td><td>{_hx(m['entrada_plan'])}</td>"
-            f"<td>{_hx(m['fecha_obj'])}</td><td><span class=\"no\">No cubre</span></td></tr>"
+            f"<td>{_hx(m['modelo'])}</td><td>{_hx(m['lineas'])}</td>"
+            f"<td>{fmt_n(m['faltante'])}</td><td>{fmt_n(m['cupo_linea'])}</td>"
+            f"<td>{fmt_n(m['asignado'])}</td><td>{fmt_n(m['cobertura'], 1)}%</td>"
+            f"<td>{fmt_n(m['hueco'])}</td><td>{_hx(m['dias_cupo'])}</td></tr>"
         )
-    extras = [k[s]["extra_alm16"] for s in "0ABCD"]
-    costos = [k[s]["costo_usd"] for s in "0ABCD"]
+    lote_rows.append(
+        '<tr>'
+        f"<td><b>TOTAL</b></td><td>L2–L4</td>"
+        f"<td><b>{fmt_n(cupo.get('faltante_total'))}</b></td><td>{fmt_n(cupo.get('cupo_usable'))}</td>"
+        f"<td><b>{fmt_n(cupo.get('cupo_usable'))}</b></td><td><b>{fmt_n(cupo.get('cobertura'), 1)}%</b></td>"
+        f"<td><b>{fmt_n(cupo.get('hueco_total'))}</b></td><td></td></tr>"
+    )
+    extras = [k[s]["extra_alm16"] for s in ("0", "A")]
+    costos = [k[s]["costo_usd"] for s in ("0", "A")]
     secs = "\n".join(
         f'<section class="sec" id="sec-{sid}">{_sec_esc(sid, payload)}</section>'
-        for sid in "ABCD"
+        for sid in ("A",)
     )
     html = f"""<!DOCTYPE html>
 <html lang="es">
@@ -991,8 +1029,8 @@ td.rem {{ background:var(--ambar-bg); }}
 <body>
 <header class="top">
   <div class="wrap">
-    <h1>Turnos nocturnos · decisión de planificación</h1>
-    <div class="sub">Comparación contra el plan con lotes nuevos, sin nocturno · corte almacén 16/11/2026</div>
+    <h1>Turnos nocturnos · plan ACTUAL</h1>
+    <div class="sub">Base vs escenario A (4 semanas) · solo piezas ya planificadas · corte almacén 16/11/2026</div>
     <div class="chips">
       <span class="chip">Mar / mié / vie</span>
       <span class="chip">5 líneas · <b>22 personas</b></span>
@@ -1002,9 +1040,6 @@ td.rem {{ background:var(--ambar-bg); }}
     <nav class="tabs">
       <button class="tab on" data-id="res">Resumen</button>
       <button class="tab" data-id="A">Escenario A</button>
-      <button class="tab" data-id="B">Escenario B</button>
-      <button class="tab" data-id="C">Escenario C</button>
-      <button class="tab" data-id="D">Escenario D</button>
       <button class="tab" data-id="cal">Calendario</button>
       <button class="tab" data-id="sup">Supuestos</button>
     </nav>
@@ -1015,20 +1050,20 @@ td.rem {{ background:var(--ambar-bg); }}
     <div class="card"><h3>Lectura para gerencia</h3><div class="note">{_hx(payload['lectura'])}</div></div>
     <div class="g g4">
       <div class="kpi"><span>Plan ACTUAL</span><b>{fmt_n(payload['pzas_actual'])} pzas</b></div>
-      <div class="kpi"><span>Plan LOTE NUEVO</span><b>{fmt_n(payload['pzas_nuevo'])} pzas</b></div>
-      <div class="kpi"><span>Lotes a insertar</span><b>{fmt_n(payload['pzas_lotes'])} pzas</b></div>
+      <div class="kpi"><span>Lotes nuevos (aparte)</span><b>{fmt_n(payload['pzas_lotes'])} pzas</b></div>
+      <div class="kpi"><span>Cupo A p/ lotes</span><b>{fmt_n((payload.get('cupo_lotes') or {}).get('cupo_usable'))}</b></div>
       <div class="kpi"><span>Corte almacén</span><b>{_hx(payload['corte_almacen'])}</b></div>
     </div>
     <div class="card"><h3>Comparación de escenarios</h3>
       <div class="cw"><canvas id="ch1"></canvas></div>
       <div class="wrap"><table><thead><tr>
         <th>Esc.</th><th>Descripción</th><th>Noches</th><th>Costo</th><th>Pzas noche</th>
-        <th>Extra 16/11</th><th>Lote nuevo 16/11</th><th>Lote nuevo dic</th><th>Lotes adelantados</th><th>Mediana días</th>
+        <th>Extra 16/11</th><th>Modelos adelantados</th><th>Cupo p/ lotes</th><th>Cobertura lotes</th>
       </tr></thead><tbody>{''.join(cmp_rows)}</tbody></table></div>
     </div>
-    <div class="card"><h3>Lotes nuevos que hoy no están en el plan ACTUAL</h3>
-      <p style="color:var(--gris);font-size:13.5px;margin-bottom:8px">Proyección de tienda / diciembre / tienda nueva. Orden de salida de costura del plan sin nocturnos.</p>
-      <div class="wrap"><table><thead><tr><th>Modelo</th><th>Faltante</th><th>Cap/día</th><th>Líneas</th><th>Prioridad</th><th>Salida plan</th><th>Almacén plan</th><th>Obj.</th><th>16/11</th></tr></thead>
+    <div class="card"><h3>Lotes nuevos · faltante vs cupo que libera el nocturno</h3>
+      <p style="color:var(--gris);font-size:13.5px;margin-bottom:8px">No están en el tablero ACTUAL. El cupo es el diurno que queda libre en cada línea después de terminar lo ya planificado. Se reparte en proporción al faltante. Ese cupo cae al final del horizonte: no mete los lotes al 16/11.</p>
+      <div class="wrap"><table><thead><tr><th>Modelo</th><th>Línea</th><th>Faltante</th><th>Cupo línea</th><th>Asignado</th><th>Cobertura</th><th>Hueco</th><th>Días de cupo</th></tr></thead>
       <tbody>{''.join(lote_rows)}</tbody></table></div>
     </div>
     <div class="g g2">
@@ -1036,8 +1071,8 @@ td.rem {{ background:var(--ambar-bg); }}
         {_lis(payload['pros_contras']['0']['contras'], 'con')}
       </div>
       <div class="card"><h3>Qué gana el nocturno (todas las líneas)</h3>
-        {_lis(payload['pros_contras']['D']['pros'][:4], 'pro')}
-        <p style="color:var(--gris);font-size:13px;margin-top:8px">L1 noche = cola de L2. Especiales no se tocan. Cobro 30/09 sin noche.</p>
+        {_lis(payload['pros_contras']['A']['pros'][:4], 'pro')}
+        <p style="color:var(--gris);font-size:13px;margin-top:8px">L1 noche = cola de L2. Especiales no se tocan. Cobro 30/09 sin noche. Cupo libre = lotes nuevos, no replanificados.</p>
       </div>
     </div>
   </section>
@@ -1079,18 +1114,18 @@ td.rem {{ background:var(--ambar-bg); }}
         <tr><td>Líneas</td><td>5 líneas. L1–L3 = 4 personas, L4–L5 = 5. Bono US$ 15 / persona / noche.</td></tr>
         <tr><td>L1 noche</td><td>100% del cupo nocturno sobre la cola de L2 (RIO), no sobre la cola diurna de L1.</td></tr>
         <tr><td>Capacidad</td><td>50% de la cap diurna actual del modelo al frente. Máquinas nuevas aún no a 130 pzas/día.</td></tr>
-        <tr><td>Alcance</td><td>Solo Por Hacer. Por Hacer – Especial queda en el turno diurno.</td></tr>
+        <tr><td>Alcance</td><td>Solo Por Hacer del plan ACTUAL. Lotes nuevos en tabla de cupo, no en el tablero.</td></tr>
         <tr><td>Almacén</td><td>Salida costura + 4 días hábiles. 16/11 exige costura el 10/11. Diciembre se mide con costura al 25/11.</td></tr>
-        <tr><td>Simulación</td><td>Cola cronológica del tablero 12 semanas. La noche consume el frente; los días siguientes fabrican lo que sigue en cola (el plan se corre hacia adelante).</td></tr>
-        <tr><td>Cupos diurnos</td><td>El cupo que deja el nocturno se rellena con el siguiente modelo de la línea y con el faltante no programado (remanente). No se deja ocioso a propósito.</td></tr>
-        <tr><td>Calendario</td><td>Pestaña Calendario: filtrar escenario (Base/A–D) y semana 1–12. Cada celda muestra día y noche contra la base.</td></tr>
-        <tr><td>Listas</td><td>Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético.</td></tr>
-        <tr><td>Fuente</td><td>Planificacion Produccion ACTUAL.xlsx y LOTE NUEVO.xlsx.</td></tr>
+        <tr><td>Simulación</td><td>Cola cronológica del tablero 12 semanas ACTUAL. La noche consume el frente; los días siguientes fabrican lo que sigue en cola.</td></tr>
+        <tr><td>Cupos diurnos</td><td>Primero cola actual. El resto en L2–L4 se asigna a lotes nuevos (faltante vs cupo). L1 y L5 no tienen lote nuevo.</td></tr>
+        <tr><td>Calendario</td><td>Pestaña Calendario: filtrar Base o A y semana 1–12.</td></tr>
+        <tr><td>Listas</td><td>Las tablas de modelos van por días ganados (mayor impacto primero).</td></tr>
+        <tr><td>Fuente</td><td>Planificacion Produccion ACTUAL.xlsx (simulación) y LOTE NUEVO.xlsx (tabla de cupo).</td></tr>
       </tbody></table>
     </div>
   </section>
 </div>
-<footer class="foot">Informe generado del plan ACTUAL vs LOTE NUEVO. Cap nocturna = 50% de la cap actual (máquinas nuevas aún no a régimen). Tablas de modelos ordenadas por días ganados.</footer>
+<footer class="foot">Informe del plan ACTUAL (sin lotes nuevos en el tablero). Escenario A = 4 semanas de nocturno. Cap nocturna = 50% de la cap actual.</footer>
 <script>
 const EXTRA = {extras};
 const COSTO = {costos};
@@ -1109,7 +1144,7 @@ document.querySelectorAll(".tab").forEach(function(b){{
   new Chart(ctx, {{
     type: "bar",
     data: {{
-      labels: ["Base","A","B","C","D"],
+      labels: ["Base","A"],
       datasets: [
         {{label:"Pzas extra p/ 16/11", data: EXTRA, backgroundColor:"#1a56db", yAxisID:"y"}},
         {{label:"Costo US$", data: COSTO, backgroundColor:"#9aa7bd", yAxisID:"y2"}}
@@ -1129,16 +1164,16 @@ document.querySelectorAll(".tab").forEach(function(b){{
 }})();
 (function(){{
   if(!CAL || !CAL.celdas) return;
-  var esc = "D";
+  var esc = "A";
   var week = 1;
   var escBox = document.getElementById("cal-esc");
   var weekBox = document.getElementById("cal-week");
-  var labels = {{"0":"Base","A":"A","B":"B","C":"C","D":"D"}};
-  ["0","A","B","C","D"].forEach(function(id){{
+  var labels = {{"0":"Base","A":"A"}};
+  ["0","A"].forEach(function(id){{
     var b = document.createElement("button");
     b.textContent = labels[id];
     b.dataset.id = id;
-    if(id==="D") b.className = "on";
+    if(id==="A") b.className = "on";
     b.onclick = function(){{ esc = id; mark(escBox, b); render(); }};
     escBox.appendChild(b);
   }});
@@ -1232,7 +1267,7 @@ document.querySelectorAll(".tab").forEach(function(b){{
 def main():
     plan_nuevo = cargar_plan(NUEVO_XLSX)
     plan_actual = cargar_plan(ACTUAL_XLSX)
-    payload = construir_payload(plan_nuevo, plan_actual)
+    payload = construir_payload(plan_actual, plan_nuevo)
     os.makedirs(OUT_DIR, exist_ok=True)
     escribir_excel(payload, OUT_XLSX)
     escribir_html(payload, OUT_HTML)
@@ -1256,9 +1291,9 @@ def main():
     print("Excel:", OUT_XLSX)
     print("HTML:", OUT_HTML)
     print("JSON:", json_path)
-    for sid in "0ABCD":
+    for sid in ("0", "A"):
         k = payload["kpis"][sid]
-        print(sid, k["n_noches"], k["costo_usd"], k["pzas_nocturno"], k["extra_alm16"], k["pzas_lotes_alm16_esc"])
+        print(sid, k["n_noches"], k["costo_usd"], k["pzas_nocturno"], k["extra_alm16"], payload.get("cupo_lotes", {}).get("cupo_usable"))
 
 
 if __name__ == "__main__":

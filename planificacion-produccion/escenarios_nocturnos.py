@@ -29,12 +29,10 @@ PERSONAS = {"1": 4, "2": 4, "3": 4, "4": 5, "5": 5}
 CAP_FALLBACK = {"1": 130.0, "2": 130.0, "3": 130.0, "4": 130.0, "5": 40.0}
 HOJAS_SEMANA = ["Planificacion"] + [f"Semana {i}" for i in range(2, 13)]
 ESCENARIOS = [
-    {"id": "0", "semanas": 0, "titulo": "Sin nocturnos (base lote nuevo)"},
-    {"id": "A", "semanas": 1, "titulo": "1 semana de nocturnos"},
-    {"id": "B", "semanas": 2, "titulo": "2 semanas de nocturnos"},
-    {"id": "C", "semanas": 3, "titulo": "3 semanas de nocturnos"},
-    {"id": "D", "semanas": 4, "titulo": "4 semanas de nocturnos"},
+    {"id": "0", "semanas": 0, "titulo": "Sin nocturnos (plan actual)"},
+    {"id": "A", "semanas": 4, "titulo": "4 semanas de nocturnos"},
 ]
+SEM_NOCHES_A = 4
 LOTES_NUEVOS_CLAVES = ("LOTE NUEVO",)
 
 
@@ -405,6 +403,66 @@ def _lineas_modelo(s: str) -> List[str]:
         if t.isdigit() and t in "12345":
             out.append(t)
     return out
+
+
+def asignar_cupo_lotes(idle_dia: Dict[str, float], lotes: Sequence[ModeloInfo]) -> dict:
+    """Reparte el cupo diurno que deja el nocturno entre lotes nuevos de la misma línea."""
+    by_line: Dict[str, List[ModeloInfo]] = defaultdict(list)
+    for m in lotes:
+        lins = _lineas_modelo(m.lineas)
+        lin = lins[0] if lins else ""
+        by_line[lin].append(m)
+    rows = []
+    usados: Dict[str, float] = defaultdict(float)
+    for lin, ms in by_line.items():
+        cupo = float(idle_dia.get(lin) or 0.0)
+        tot = sum(x.faltante for x in ms) or 1.0
+        for m in ms:
+            asg = cupo * (m.faltante / tot) if lin else 0.0
+            rows.append(
+                {
+                    "modelo": m.modelo,
+                    "lineas": m.lineas,
+                    "faltante": round(m.faltante, 0),
+                    "cap": m.cap,
+                    "prioridad": m.prioridad,
+                    "cupo_linea": round(cupo, 1),
+                    "asignado": round(asg, 1),
+                    "hueco": round(max(0.0, m.faltante - asg), 1),
+                    "cobertura": round(100.0 * asg / m.faltante, 1) if m.faltante else 0.0,
+                    "dias_cupo": round(asg / m.cap, 1) if m.cap else None,
+                }
+            )
+            usados[lin] += asg
+    rows.sort(key=lambda r: (-r["faltante"], r["modelo"]))
+    lineas = []
+    for lin in "12345":
+        ms = by_line.get(lin) or []
+        idle = float(idle_dia.get(lin) or 0.0)
+        need = sum(m.faltante for m in ms)
+        asg = usados.get(lin) or 0.0
+        lineas.append(
+            {
+                "linea": lin,
+                "idle": round(idle, 1),
+                "n_lotes": len(ms),
+                "faltante_lotes": round(need, 0),
+                "asignado": round(asg, 1),
+                "hueco": round(max(0.0, need - asg), 1),
+                "cobertura": round(100.0 * asg / need, 1) if need else None,
+            }
+        )
+    total_falt = sum(m.faltante for m in lotes)
+    total_asg = sum(r["asignado"] for r in rows)
+    return {
+        "por_modelo": rows,
+        "por_linea": lineas,
+        "faltante_total": round(total_falt, 0),
+        "cupo_total": round(sum(float(v) for v in (idle_dia or {}).values()), 1),
+        "cupo_usable": round(total_asg, 1),
+        "hueco_total": round(max(0.0, total_falt - total_asg), 1),
+        "cobertura": round(100.0 * total_asg / total_falt, 1) if total_falt else 0.0,
+    }
 
 
 def _agregar_remanente(colas: Dict[str, deque], eventos: Sequence[EventoLinea], modelos: Dict[str, ModeloInfo]) -> float:
