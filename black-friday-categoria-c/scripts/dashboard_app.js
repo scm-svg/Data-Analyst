@@ -14,6 +14,13 @@
     });
   }
 
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function showError(msg) {
     var el = $("loadErr");
     if (el) {
@@ -36,29 +43,110 @@
     }
     if (window.BF_PROPOSAL_DATA) return window.BF_PROPOSAL_DATA;
     showError(
-      "Sin datos. Usá el HTML autocontenido generado por build_black_friday_proposal.py o colocá bf_proposal_data.js junto al HTML."
+      "Sin datos. Regenerá el HTML con build_black_friday_proposal.py (archivo autocontenido)."
     );
     return null;
   }
 
   function boot() {
     var DATA = loadPayload();
-    if (!DATA || !DATA.skus) {
-      return;
-    }
+    if (!DATA || !DATA.skus) return;
 
     var state = { seg: "", search: "" };
+    var expanded = Object.create(null);
 
-    function filtered() {
-      return DATA.skus.filter(function (r) {
-        if (state.seg && r.segmento !== state.seg) return false;
-        if (state.search) {
-          var q = state.search.toLowerCase();
-          var blob = (r.sku + " " + r.modelo + " " + (r.producto || "")).toLowerCase();
-          if (blob.indexOf(q) < 0) return false;
+    function catalogFiltered() {
+      var list = (DATA.catalog || []).slice();
+      if (state.seg) list = list.filter(function (m) { return m.segmento === state.seg; });
+      if (state.search) {
+        var q = state.search.toLowerCase();
+        list = list.filter(function (m) {
+          if (m.modelo.toLowerCase().indexOf(q) >= 0) return true;
+          return (m.variants || []).some(function (v) {
+            return (
+              (v.sku + " " + v.color + " " + v.talla + " " + v.genero)
+                .toLowerCase()
+                .indexOf(q) >= 0
+            );
+          });
+        });
+      }
+      return list;
+    }
+
+    function sortCatalog(list, mode) {
+      list = list.slice();
+      if (mode === "rotacion_asc") {
+        list.sort(function (a, b) {
+          return a.rotacion_mes - b.rotacion_mes || b.stock_total - a.stock_total;
+        });
+      } else {
+        list.sort(function (a, b) {
+          var sa = a.stock_tiendas + a.stock_taller;
+          var sb = b.stock_tiendas + b.stock_taller;
+          return sb - sa || b.stock_total - a.stock_total;
+        });
+      }
+      return list;
+    }
+
+    function variantLabel(v) {
+      return [v.genero, v.color, v.talla].filter(Boolean).join(" · ") || "—";
+    }
+
+    function renderCatalogTable(tbodyId, sortMode) {
+      var tbody = $(tbodyId);
+      if (!tbody) return;
+      var rows = sortCatalog(catalogFiltered(), sortMode);
+      var html = "";
+      rows.forEach(function (m) {
+        var open = !!expanded[m.modelo];
+        html +=
+          '<tr class="row-model" data-model="' +
+          esc(m.modelo) +
+          '"><td><span class="expander" data-model="' +
+          esc(m.modelo) +
+          '">' +
+          (open ? "▼" : "▶") +
+          '</span></td><td>' +
+          esc(m.modelo) +
+          "</td><td>" +
+          esc(m.matriz) +
+          "</td><td>" +
+          fmt(m.skus_count) +
+          "</td><td>" +
+          fmt(m.rotacion_mes, 1) +
+          "</td><td><strong>" +
+          fmt(m.stock_total) +
+          "</strong></td><td>" +
+          fmt(m.stock_tiendas) +
+          "</td><td>" +
+          fmt(m.stock_taller) +
+          "</td><td>" +
+          (m.meses_cobertura != null ? m.meses_cobertura : "—") +
+          "</td></tr>";
+        if (open) {
+          (m.variants || []).forEach(function (v) {
+            html +=
+              '<tr class="row-variant"><td></td><td colspan="2"><span class="sku">' +
+              esc(v.sku) +
+              "</span> · " +
+              esc(variantLabel(v)) +
+              "</td><td>" +
+              fmt(v.rotacion_mes, 1) +
+              "</td><td>" +
+              fmt(v.stock_total) +
+              "</td><td>" +
+              fmt(v.stock_tiendas) +
+              "</td><td>" +
+              fmt(v.stock_taller) +
+              "</td><td>" +
+              (v.meses_cobertura != null ? v.meses_cobertura : "—") +
+              "</td></tr>";
+          });
         }
-        return true;
       });
+      tbody.innerHTML = html;
     }
 
     function tab(name) {
@@ -76,6 +164,21 @@
       };
     });
 
+    function onCatalogClick(e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) return;
+      var mod = t.getAttribute("data-model");
+      if (!mod) return;
+      expanded[mod] = !expanded[mod];
+      renderCatalogTable("bodyA", "rotacion_asc");
+      renderCatalogTable("bodyB", "stock_desc");
+    }
+
+    ["bodyA", "bodyB"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", onCatalogClick);
+    });
+
     function renderKpis() {
       var s = DATA.summary;
       $("subtitle").textContent = DATA.meta.subtitle + " · " + s.periodo_ventas;
@@ -86,8 +189,8 @@
         ["SKUs ofertables", s.skus_c_total],
         ["Und. stock", s.unidades_stock],
         ["En tiendas", s.unidades_tiendas],
-        ["Manufactura", s.manufactura_skus],
-        ["Brecha BF", s.brecha_total_unidades],
+        ["En taller", s.unidades_taller],
+        ["Modelos", (DATA.catalog || []).length],
       ]
         .map(function (pair) {
           return (
@@ -99,133 +202,84 @@
           );
         })
         .join("");
+
+      if ($("titleA")) $("titleA").textContent = DATA.option_a.name;
+      if ($("titleB")) $("titleB").textContent = DATA.option_b.name;
+      if ($("subA")) $("subA").textContent = DATA.option_a.description;
+      if ($("subB")) $("subB").textContent = DATA.option_b.description;
       $("cardA").innerHTML =
         "<h4>" +
-        DATA.option_a.name +
-        '</h4><div class="big">' +
-        DATA.option_a.avg_discount +
-        '%</div><p>' +
-        DATA.option_a.description +
+        esc(DATA.option_a.name) +
+        "</h4><p>" +
+        esc(DATA.option_a.description) +
         "</p>";
       $("cardB").innerHTML =
         "<h4>" +
-        DATA.option_b.name +
-        '</h4><div class="big">' +
-        DATA.option_b.avg_discount +
-        '%</div><p>' +
-        DATA.option_b.description +
+        esc(DATA.option_b.name) +
+        "</h4><p>" +
+        esc(DATA.option_b.description) +
         "</p>";
-      var as = DATA.meta.assumptions || {};
-      $("assumptions").innerHTML =
-        "Uplift BF ×" +
-        (as.bf_uplift_vs_mes || 4) +
-        " vs venta mensual (Excel). Reserva " +
-        Math.round((as.reserve_pct || 0.15) * 100) +
-        "%.";
+      if ($("assumptions")) {
+        $("assumptions").textContent =
+          "Rotación/mes = unidades vendidas en el período ÷ cantidad de meses del Excel.";
+      }
     }
 
-    function renderTables() {
-      var rows = filtered();
-      $("bodyA").innerHTML = rows
-        .map(function (r) {
-          return (
-            "<tr><td>" +
-            r.sku +
-            "</td><td>" +
-            r.modelo +
-            "</td><td><strong>" +
-            fmt(r.stock_total) +
-            "</strong></td><td>" +
-            fmt(r.venta_mensual_prom, 1) +
-            "</td><td>" +
-            (r.meses_cobertura != null ? r.meses_cobertura : "—") +
-            "</td><td><strong>" +
-            r.descuento_opcion_a +
-            "%</strong></td></tr>"
-          );
-        })
-        .join("");
-      $("bodyB").innerHTML = rows
-        .map(function (r) {
-          return (
-            "<tr><td>" +
-            r.sku +
-            "</td><td>" +
-            r.modelo +
-            "</td><td><strong>" +
-            fmt(r.stock_total) +
-            "</strong></td><td>" +
-            (r.meses_cobertura != null ? r.meses_cobertura : "—") +
-            "</td><td><strong>" +
-            r.descuento_opcion_b +
-            "%</strong></td><td>" +
-            fmt(r.brecha_abastecimiento) +
-            "</td></tr>"
-          );
-        })
-        .join("");
+    function renderFlatSkus() {
+      var rows = DATA.skus.filter(function (r) {
+        if (state.seg && r.segmento !== state.seg) return false;
+        if (state.search) {
+          var q = state.search.toLowerCase();
+          var blob = (r.sku + " " + r.modelo + " " + (r.producto || "")).toLowerCase();
+          if (blob.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
       $("bodyAll").innerHTML = rows
         .map(function (r) {
           return (
             "<tr><td>" +
-            r.prioridad +
+            esc(r.sku) +
             "</td><td>" +
-            r.sku +
+            esc(r.modelo) +
             "</td><td>" +
-            r.modelo +
-            "</td><td><strong>" +
+            esc([r.genero, r.color, r.talla].filter(Boolean).join(" · ")) +
+            "</td><td>" +
+            fmt(r.rotacion_mes, 1) +
+            "</td><td>" +
             fmt(r.stock_total) +
-            "</strong></td><td>" +
-            fmt(r.qty) +
             "</td><td>" +
-            r.descuento_opcion_a +
-            "%</td><td>" +
-            r.descuento_opcion_b +
-            "%</td></tr>"
-          );
-        })
-        .join("");
-      $("bodySupply").innerHTML = (DATA.supply || [])
-        .filter(function (r) {
-          if (!state.search) return true;
-          var q = state.search.toLowerCase();
-          return (r.sku + " " + r.modelo + " " + r.tienda).toLowerCase().indexOf(q) >= 0;
-        })
-        .slice(0, 800)
-        .map(function (r) {
-          return (
-            "<tr><td>" +
-            r.tienda +
+            fmt(r.stock_tiendas) +
             "</td><td>" +
-            r.sku +
-            "</td><td>" +
-            r.modelo +
-            "</td><td>" +
-            fmt(r.stock_actual) +
-            "</td><td>" +
-            fmt(r.objetivo_bf) +
-            "</td><td>" +
-            fmt(r.brecha) +
+            fmt(r.stock_taller) +
             "</td></tr>"
           );
         })
         .join("");
+    }
+
+    function renderAll() {
+      renderCatalogTable("bodyA", "rotacion_asc");
+      renderCatalogTable("bodyB", "stock_desc");
+      renderFlatSkus();
       $("topModels").innerHTML = (DATA.models || [])
         .slice(0, 15)
         .map(function (m) {
           return (
             "<tr><td>" +
-            m.modelo +
+            esc(m.modelo) +
             "</td><td>" +
-            m.segmento +
+            esc(m.segmento) +
             "</td><td>" +
-            m.skus_c +
+            fmt(m.skus_c) +
             "</td><td>" +
             fmt(m.stock_total) +
             "</td><td>" +
-            fmt(m.unidades_vendidas_periodo) +
+            fmt(m.stock_tiendas) +
             "</td><td>" +
-            fmt(m.margen_10m, 0) +
+            fmt(m.stock_taller) +
+            "</td><td>" +
+            fmt(m.rotacion_mes, 1) +
             "</td></tr>"
           );
         })
@@ -265,16 +319,16 @@
 
     $("fSeg").onchange = function (e) {
       state.seg = e.target.value;
-      renderTables();
+      renderAll();
     };
     $("fSearch").oninput = function (e) {
       state.search = e.target.value;
-      renderTables();
+      renderAll();
     };
 
     try {
       renderKpis();
-      renderTables();
+      renderAll();
       renderCharts();
     } catch (err) {
       console.error(err);

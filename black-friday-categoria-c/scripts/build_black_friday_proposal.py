@@ -29,8 +29,6 @@ DASHBOARD_APP_SRC = Path(__file__).resolve().parent / "dashboard_app.js"
 DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 
 TH_A, TH_B = 0.8, 0.95
-BF_UPLIFT = 4.0
-RESERVE_PCT = 0.15
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -40,6 +38,10 @@ RETAIL_LOCS = [
     "TOLON",
     "VELA",
 ]
+
+
+def is_taller_location(loc: str) -> bool:
+    return str(loc).upper().strip().startswith("TALLER")
 def clean_cell(val, fallback: str = "") -> str:
     if val is None:
         return fallback
@@ -182,43 +184,10 @@ def sales_scope(df: pd.DataFrame) -> tuple[pd.DataFrame, str, int, list[str]]:
     return df, label, len(periods), months_list
 
 
-def max_discount_for_margin_floor(unit_price: float, unit_cost: float, floor_rate: float) -> float:
-    if unit_price <= 0:
-        return 0.0
-    d = 1.0 - (unit_cost / unit_price) - floor_rate
-    return max(0.0, min(0.55, d))
-
-
 def coverage_months(stock: float, monthly_qty: float) -> float:
     if monthly_qty <= 0:
         return 999.0 if stock > 0 else 0.0
     return stock / monthly_qty
-
-
-def option_a_discount(matrix: str) -> float:
-    rot = matrix[1] if len(matrix) > 1 else "C"
-    if rot == "C":
-        return 0.40
-    if rot == "B":
-        return 0.30
-    if rot == "A":
-        return 0.20
-    return 0.35
-
-
-def option_b_discount(cov: float, matrix: str, unit_price: float, unit_cost: float) -> float:
-    if cov >= 6:
-        base = 0.45
-    elif cov >= 3:
-        base = 0.35
-    elif cov >= 1:
-        base = 0.25
-    else:
-        base = 0.15
-    if matrix.endswith("C"):
-        base += 0.05
-    cap = max_discount_for_margin_floor(unit_price, unit_cost, floor_rate=0.08)
-    return min(base, cap) if cap > 0 else base * 0.7
 
 
 def build_abc_margin_guide(data: dict) -> tuple[dict[str, dict], dict[str, str]]:
@@ -278,11 +247,14 @@ def main() -> None:
     )
     stock_by_sku = stock_by_sku[stock_by_sku["stock_total"] > 0].reset_index()
 
-    stock_by_sku_loc = (
-        inv_df.groupby(["SKU", "Ubicación"], as_index=False)["Cantidad en inventario"].sum()
-    )
     stock_retail = (
         inv_df[inv_df["Ubicación"].isin(RETAIL_LOCS)]
+        .groupby("SKU")["Cantidad en inventario"]
+        .sum()
+        .to_dict()
+    )
+    stock_taller = (
+        inv_df[inv_df["Ubicación"].apply(is_taller_location)]
         .groupby("SKU")["Cantidad en inventario"]
         .sum()
         .to_dict()
@@ -326,19 +298,10 @@ def main() -> None:
 
         matrix = "C" + rot
         qty = float(qty_by_sku.get(sku, 0))
-        monthly = qty / sales_months
+        rotacion_mes = qty / sales_months
         stock_r = float(stock_retail.get(sku, 0))
-
-        unit_price = abc["revenue"] / abc["qty"] if abc["qty"] > 0 else 0.0
-        unit_cost = abc["cost"] / abc["qty"] if abc["qty"] > 0 else 0.0
-        unit_margin = abc["margin"] / abc["qty"] if abc["qty"] > 0 else 0.0
-        margin_rate = abc["margin"] / abc["revenue"] if abc["revenue"] > 0 else 0.0
-
-        cov = coverage_months(stock, monthly)
-        disc_a = option_a_discount(matrix)
-        disc_b = option_b_discount(cov, matrix, unit_price, unit_cost)
-        exp_bf_units = monthly * BF_UPLIFT
-        min_store_need = math.ceil(exp_bf_units * (1 + RESERVE_PCT)) if monthly > 0 else max(1, int(stock_r * 0.1))
+        stock_t = float(stock_taller.get(sku, 0))
+        cov = coverage_months(stock, rotacion_mes)
 
         modelo = clean_cell(row.modelo_inv) or clean_cell(abc["modelo"]) or clean_cell(modelo_sales.get(sku), sku)
         candidates.append(
@@ -351,8 +314,6 @@ def main() -> None:
                 "color": clean_cell(row.color_inv) or clean_cell(abc["color"]),
                 "talla": clean_cell(row.talla_inv) or clean_cell(abc["talla"]),
                 "qty": qty,
-                "revenue": abc["revenue"],
-                "cost": abc["cost"],
                 "margin": abc["margin"],
                 "segmento": seg,
                 "abc_margen": "C",
@@ -360,22 +321,14 @@ def main() -> None:
                 "matriz": matrix,
                 "stock_total": stock,
                 "stock_tiendas": stock_r,
-                "venta_mensual_prom": round(monthly, 2),
+                "stock_taller": stock_t,
+                "rotacion_mes": round(rotacion_mes, 2),
                 "meses_cobertura": round(cov, 2) if cov < 900 else None,
-                "precio_unit": round(unit_price, 2),
-                "costo_unit": round(unit_cost, 2),
-                "margen_unit": round(unit_margin, 2),
-                "margen_pct": round(margin_rate * 100, 1),
-                "descuento_opcion_a": round(disc_a * 100, 1),
-                "descuento_opcion_b": round(disc_b * 100, 1),
-                "unidades_bf_estimadas": round(exp_bf_units, 1),
-                "stock_objetivo_tiendas": min_store_need,
-                "brecha_abastecimiento": max(0, min_store_need - int(stock_r)),
                 "prioridad": round(
                     100
                     + (min(cov, 24) * 4 if cov < 900 else 0)
                     + (stock_r * 0.08)
-                    + (monthly * 0.5 if monthly > 0 else 0),
+                    + (rotacion_mes * 0.5 if rotacion_mes > 0 else 0),
                     1,
                 ),
             }
@@ -383,67 +336,70 @@ def main() -> None:
 
     candidates.sort(key=lambda x: (-x["prioridad"], -x["stock_total"], -x["margin"]))
 
-    models: dict[str, dict] = defaultdict(
-        lambda: {
-            "skus": 0,
-            "stock": 0.0,
-            "margin": 0.0,
-            "qty": 0.0,
-            "segmento": "",
-            "matriz_dominante": Counter(),
-        }
-    )
+    by_model: dict[str, list[dict]] = defaultdict(list)
     for c in candidates:
-        mod = c["modelo"]
-        models[mod]["skus"] += 1
-        models[mod]["stock"] += c["stock_total"]
-        models[mod]["margin"] += c["margin"]
-        models[mod]["qty"] += c["qty"]
-        models[mod]["segmento"] = c["segmento"]
-        models[mod]["matriz_dominante"][c["matriz"]] += 1
+        by_model[c["modelo"]].append(c)
 
-    model_rows = []
-    for mod, v in models.items():
-        dom = v["matriz_dominante"].most_common(1)[0][0]
+    catalog: list[dict] = []
+    model_rows: list[dict] = []
+    for mod, variants in by_model.items():
+        variants.sort(key=lambda x: (-x["stock_total"], x["sku"]))
+        matriz_dom = Counter(v["matriz"] for v in variants).most_common(1)[0][0]
+        stock_total = sum(v["stock_total"] for v in variants)
+        stock_tiendas = sum(v["stock_tiendas"] for v in variants)
+        stock_taller_sum = sum(v["stock_taller"] for v in variants)
+        qty_periodo = sum(v["qty"] for v in variants)
+        rotacion_mes = sum(v["rotacion_mes"] for v in variants)
+        margin_sum = sum(v["margin"] for v in variants)
+        cov_model = coverage_months(stock_total, rotacion_mes)
+
+        variant_rows = [
+            {
+                "sku": v["sku"],
+                "genero": v["genero"],
+                "color": v["color"],
+                "talla": v["talla"],
+                "matriz": v["matriz"],
+                "rotacion_mes": v["rotacion_mes"],
+                "stock_total": v["stock_total"],
+                "stock_tiendas": v["stock_tiendas"],
+                "stock_taller": v["stock_taller"],
+                "meses_cobertura": v["meses_cobertura"],
+                "qty_periodo": v["qty"],
+            }
+            for v in variants
+        ]
+        entry = {
+            "modelo": mod,
+            "segmento": variants[0]["segmento"],
+            "matriz": matriz_dom,
+            "skus_count": len(variants),
+            "stock_total": int(stock_total),
+            "stock_tiendas": int(stock_tiendas),
+            "stock_taller": int(stock_taller_sum),
+            "rotacion_mes": round(rotacion_mes, 2),
+            "qty_periodo": int(qty_periodo),
+            "meses_cobertura": round(cov_model, 2) if cov_model < 900 else None,
+            "variants": variant_rows,
+        }
+        catalog.append(entry)
         model_rows.append(
             {
                 "modelo": mod,
-                "segmento": v["segmento"],
-                "skus_c": v["skus"],
-                "stock_total": int(v["stock"]),
-                "unidades_vendidas_periodo": int(v["qty"]),
-                "margen_10m": round(v["margin"], 2),
-                "matriz_dominante": dom,
+                "segmento": variants[0]["segmento"],
+                "skus_c": len(variants),
+                "stock_total": int(stock_total),
+                "stock_tiendas": int(stock_tiendas),
+                "stock_taller": int(stock_taller_sum),
+                "rotacion_mes": round(rotacion_mes, 2),
+                "unidades_vendidas_periodo": int(qty_periodo),
+                "margen_periodo": round(margin_sum, 2),
+                "matriz_dominante": matriz_dom,
             }
         )
-    model_rows.sort(key=lambda x: (-x["stock_total"], -x["margen_10m"]))
 
-    supply_rows = []
-    for c in candidates:
-        sku = c["sku"]
-        for loc in RETAIL_LOCS:
-            q = float(
-                stock_by_sku_loc[
-                    (stock_by_sku_loc["SKU"] == sku) & (stock_by_sku_loc["Ubicación"] == loc)
-                ]["Cantidad en inventario"].sum()
-            )
-            if q <= 0:
-                continue
-            share = q / c["stock_tiendas"] if c["stock_tiendas"] > 0 else 1.0
-            need = math.ceil(c["stock_objetivo_tiendas"] * share) if c["stock_tiendas"] > 0 else int(q)
-            supply_rows.append(
-                {
-                    "sku": sku,
-                    "modelo": c["modelo"],
-                    "tienda": loc,
-                    "stock_actual": int(q),
-                    "objetivo_bf": need,
-                    "brecha": max(0, need - int(q)),
-                    "descuento_a": c["descuento_opcion_a"],
-                    "descuento_b": c["descuento_opcion_b"],
-                }
-            )
-    supply_rows.sort(key=lambda x: (-x["brecha"], -x["stock_actual"]))
+    catalog.sort(key=lambda x: (-x["stock_total"], -x["rotacion_mes"]))
+    model_rows.sort(key=lambda x: (-x["stock_total"], -x["rotacion_mes"]))
 
     assert all(c["stock_total"] > 0 for c in candidates), "Hay SKUs sin stock en la propuesta"
 
@@ -455,8 +411,8 @@ def main() -> None:
         "skus_con_stock": len(candidates),
         "unidades_stock": int(sum(c["stock_total"] for c in candidates)),
         "unidades_tiendas": int(sum(c["stock_tiendas"] for c in candidates)),
+        "unidades_taller": int(sum(c["stock_taller"] for c in candidates)),
         "margen_historico": round(sum(c["margin"] for c in candidates), 2),
-        "brecha_total_unidades": int(sum(c["brecha_abastecimiento"] for c in candidates)),
         "manufactura_skus": sum(1 for c in candidates if c["segmento"] == "Manufactura"),
         "equipamiento_skus": sum(1 for c in candidates if c["segmento"] == "Equipamiento"),
         "matriz_cc": sum(1 for c in candidates if c["matriz"] == "CC"),
@@ -477,31 +433,21 @@ def main() -> None:
                 "Guía ABC: margen C + categoría Manufactura/Equipamiento",
                 "Excluidos: CUADRO BAND, SHORT PLAYA, CLASICA GC SUBLIMADO KIDS",
             ],
-            "assumptions": {
-                "bf_uplift_vs_mes": BF_UPLIFT,
-                "reserve_pct": RESERVE_PCT,
-                "margin_floor_opcion_b": 0.08,
-            },
         },
         "summary": summary,
         "option_a": {
-            "name": "Opción A · Impulso de rotación",
-            "description": "CC 40% (listado prioriza matriz CC con stock disponible).",
-            "avg_discount": round(
-                sum(c["descuento_opcion_a"] for c in candidates) / max(len(candidates), 1), 1
-            ),
+            "name": "Opción A · Prioridad rotación",
+            "description": "Modelos ordenados por menor rotación/mes (más lento primero). Expandí para ver SKUs.",
+            "sort": "rotacion_asc",
         },
         "option_b": {
-            "name": "Opción B · Equilibrio margen–stock",
-            "description": "Descuento por meses de cobertura (stock ÷ venta mensual Excel), tope margen 8%.",
-            "avg_discount": round(
-                sum(c["descuento_opcion_b"] for c in candidates) / max(len(candidates), 1), 1
-            ),
+            "name": "Opción B · Prioridad inventario",
+            "description": "Modelos ordenados por mayor stock en tiendas + taller. Expandí para ver SKUs.",
+            "sort": "stock_desc",
         },
+        "catalog": catalog,
         "models": model_rows[:200],
         "skus": candidates,
-        "supply": supply_rows[:5000],
-        "retail_locations": RETAIL_LOCS,
     }
 
     payload = sanitize_for_json(payload)
@@ -524,7 +470,6 @@ def main() -> None:
 def write_excel(payload: dict) -> None:
     skus = pd.DataFrame(payload["skus"])
     models = pd.DataFrame(payload["models"])
-    supply = pd.DataFrame(payload["supply"])
     summary = pd.DataFrame([payload["summary"]])
     rules = pd.DataFrame({"Regla": payload["meta"]["rules"]})
 
@@ -539,15 +484,10 @@ def write_excel(payload: dict) -> None:
         "abc_rotacion",
         "stock_total",
         "stock_tiendas",
-        "venta_mensual_prom",
+        "stock_taller",
+        "rotacion_mes",
         "meses_cobertura",
-        "precio_unit",
-        "margen_pct",
-        "descuento_opcion_a",
-        "descuento_opcion_b",
-        "unidades_bf_estimadas",
-        "stock_objetivo_tiendas",
-        "brecha_abastecimiento",
+        "qty",
         "prioridad",
         "genero",
         "color",
@@ -566,18 +506,15 @@ def write_excel(payload: dict) -> None:
                 {
                     "Opción": payload["option_a"]["name"],
                     "Descripción": payload["option_a"]["description"],
-                    "Descuento prom. %": payload["option_a"]["avg_discount"],
                 },
                 {
                     "Opción": payload["option_b"]["name"],
                     "Descripción": payload["option_b"]["description"],
-                    "Descuento prom. %": payload["option_b"]["avg_discount"],
                 },
             ]
-        ).to_excel(writer, sheet_name="Opciones BF", index=False)
+        ).to_excel(writer, sheet_name="Vistas propuesta", index=False)
         models.to_excel(writer, sheet_name="Modelos prioritarios", index=False)
         skus.to_excel(writer, sheet_name="Detalle SKU", index=False)
-        supply.to_excel(writer, sheet_name="Abastecimiento tiendas", index=False)
         ws = writer.sheets["Detalle SKU"]
         ws.set_column("A:A", 14)
         ws.set_column("B:D", 22)
@@ -650,6 +587,10 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .diag{{font-size:.72rem;line-height:1.45;color:var(--mu);padding:10px;border-radius:8px;background:var(--s2);border:1px solid var(--brd);margin-top:10px}}
 .diag ul{{margin:8px 0 0 18px}}
 #loadErr{{display:none;margin:12px 28px;padding:12px;border-radius:8px;background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.4);color:#f472b6;font-size:.78rem}}
+.expander{{cursor:pointer;color:var(--a);font-weight:800;width:24px;display:inline-block;user-select:none}}
+.row-model td{{background:rgba(255,255,255,.03);font-weight:600}}
+.row-variant td{{padding-left:28px!important;font-size:.7rem;color:var(--mu)}}
+.row-variant .sku{{color:var(--tx);font-weight:600}}
 .footer{{text-align:center;color:var(--mu);font-size:.62rem;padding:14px;border-top:1px solid var(--brd)}}
 @media(max-width:960px){{.g2{{grid-template-columns:1fr}}}}
 </style>
@@ -670,8 +611,7 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 <nav class="tabs">
   <button class="tab active" data-tab="resumen">Resumen directiva</button>
   <button class="tab" data-tab="opcion-a">Opción A · Rotación</button>
-  <button class="tab" data-tab="opcion-b">Opción B · Equilibrio</button>
-  <button class="tab" data-tab="abastecimiento">Abastecimiento tiendas</button>
+  <button class="tab" data-tab="opcion-b">Opción B · Inventario</button>
   <button class="tab" data-tab="detalle">Detalle SKU</button>
 </nav>
 <main class="content">
@@ -681,7 +621,7 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
         <ul style="font-size:.76rem;line-height:1.55;margin-left:18px;color:var(--tx)">{rules_html}</ul>
         <div class="diag" id="assumptions"></div>
       </div>
-      <div class="card"><h3>Comparativo de opciones</h3><div class="cs">Solo productos ofertables (stock &gt; 0)</div>
+      <div class="card"><h3>Dos vistas de lectura</h3><div class="cs">Sin descuentos · solo rotación e inventario</div>
         <div class="g2" style="grid-template-columns:1fr 1fr;margin-top:8px">
           <div class="opt a" id="cardA"></div>
           <div class="opt b" id="cardB"></div>
@@ -696,33 +636,26 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
       </div>
     </div>
     <div class="card"><h3>Top 15 modelos por stock</h3><div class="tscroll"><table><thead><tr>
-      <th>Modelo</th><th>Segmento</th><th>SKUs</th><th>Stock</th><th>Und. vendidas</th><th>Margen guía</th>
+      <th>Modelo</th><th>Segmento</th><th>SKUs</th><th>Stock total</th><th>Tiendas</th><th>Taller</th><th>Rotación/mes</th>
     </tr></thead><tbody id="topModels"></tbody></table></div></div>
   </section>
   <section class="sec" id="sec-opcion-a">
-    <div class="card"><h3>Opción A · Impulso de rotación</h3><div class="cs">Matriz CC · 40%</div>
-      <div class="tscroll"><table><thead><tr>
-        <th>SKU</th><th>Modelo</th><th>Stock</th><th>Vta/mes</th><th>Cobertura</th><th>% Desc.</th>
+    <div class="card"><h3 id="titleA">Opción A</h3><div class="cs" id="subA"></div>
+      <div class="tscroll"><table class="cat-table"><thead><tr>
+        <th></th><th>Modelo</th><th>Matriz</th><th>SKUs</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th><th>Cobertura</th>
       </tr></thead><tbody id="bodyA"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-opcion-b">
-    <div class="card"><h3>Opción B · Equilibrio margen–stock</h3>
-      <div class="tscroll"><table><thead><tr>
-        <th>SKU</th><th>Modelo</th><th>Stock</th><th>Cobertura</th><th>% Desc.</th><th>Brecha</th>
+    <div class="card"><h3 id="titleB">Opción B</h3><div class="cs" id="subB"></div>
+      <div class="tscroll"><table class="cat-table"><thead><tr>
+        <th></th><th>Modelo</th><th>Matriz</th><th>SKUs</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th><th>Cobertura</th>
       </tr></thead><tbody id="bodyB"></tbody></table></div>
     </div>
   </section>
-  <section class="sec" id="sec-abastecimiento">
-    <div class="card"><h3>Garantía de abastecimiento</h3><div class="cs">Solo filas con stock en tienda &gt; 0</div>
-      <div class="tscroll"><table><thead><tr>
-        <th>Tienda</th><th>SKU</th><th>Modelo</th><th>Stock</th><th>Objetivo</th><th>Brecha</th>
-      </tr></thead><tbody id="bodySupply"></tbody></table></div>
-    </div>
-  </section>
   <section class="sec" id="sec-detalle">
-    <div class="card"><h3>Listado ofertable</h3><div class="tscroll"><table><thead><tr>
-      <th>Prior.</th><th>SKU</th><th>Modelo</th><th>Stock</th><th>Vta período</th><th>%A</th><th>%B</th>
+    <div class="card"><h3>Listado SKU (plano)</h3><div class="tscroll"><table><thead><tr>
+      <th>SKU</th><th>Modelo</th><th>Variante</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th>
     </tr></thead><tbody id="bodyAll"></tbody></table></div></div>
   </section>
 </main>
