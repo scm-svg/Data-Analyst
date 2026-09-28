@@ -13,14 +13,15 @@ Entregables para presentación a directiva y operación de tiendas.
 
 ## Fuentes de datos
 
-1. **Clasificación ABC y ventas/márgenes** — dashboard `abc ver.html` (Oct 2025 → Jul 2026, margen de contribución, umbrales 80/15/5).
-2. **Inventario por tienda** — `INVENTARIO TOTAL CUADRO PARA ABC - PROPUESTA.xlsx`.
+1. **Inventario (Excel)** — stock real por SKU/tienda; **solo se listan SKUs con stock > 0**.
+2. **Ventas (Excel)** — rotación **Oct 2025 → Jul 2026** (sin ago–sep 2026).
+3. **Guía ABC** (`abc ver.html`) — margen C y categoría Manufactura/Equipamiento.
 
-## Alcance
+## Alcance (reglas)
 
-- Clase **C por margen** (SKUs con margen positivo en el período).
-- Segmentos **Manufactura** y **Equipamiento** únicamente.
-- **1.640 SKUs** en alcance; **896** con stock (**41.013** unidades en red).
+- Margen **C** (guía ABC) + rotación **C** (ventas Excel) = baja salida con inventario disponible.
+- **Excluidos:** CUADRO BAND, SHORT PLAYA (otra estrategia), CLASICA GC SUBLIMADO KIDS.
+- Matriz ABC es **referencia**; stock y ventas mandan en la propuesta.
 
 ## Dos opciones de descuento
 
