@@ -30,6 +30,7 @@ DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 
 TH_A, TH_B = 0.8, 0.95
 MIN_STOCK_UNITS = 29  # stock > 28
+EXCLUDED_MATRICES = frozenset({"AA", "BA"})
 RETAIL_LOCS = [
     "CERRO VERDE",
     "CHACAO",
@@ -258,6 +259,9 @@ def build_sku_candidate(
     stock_r = float(stock_retail.get(sku, 0))
     stock_t = float(stock_taller.get(sku, 0))
     cov = coverage_months(stock, rotacion_mes)
+    matriz = mcls + rot
+    if matriz in EXCLUDED_MATRICES:
+        return None
     return {
         "sku": sku,
         "producto": clean_cell(getattr(inv_row, "producto_inv", "")) or clean_cell(abc.get("producto"), sku),
@@ -271,7 +275,7 @@ def build_sku_candidate(
         "segmento": seg,
         "abc_margen": mcls,
         "abc_rotacion": rot,
-        "matriz": mcls + rot,
+        "matriz": matriz,
         "stock_total": stock,
         "stock_tiendas": stock_r,
         "stock_taller": stock_t,
@@ -503,6 +507,9 @@ def main() -> None:
     catalog: list[dict] = []
     model_rows: list[dict] = []
     for mod, variants in by_model.items():
+        variants = [v for v in variants if v["matriz"] not in EXCLUDED_MATRICES]
+        if not variants:
+            continue
         variants.sort(key=lambda x: (-x["stock_total"], x["sku"]))
         matriz_dom = Counter(v["matriz"] for v in variants).most_common(1)[0][0]
         stock_total = sum(v["stock_total"] for v in variants)
@@ -775,10 +782,14 @@ body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100v
 .fbar{{padding:8px 28px;background:var(--surf);border-bottom:1px solid var(--brd);display:flex;flex-wrap:wrap;gap:8px;align-items:center}}
 .fbar select,.fbar input{{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
 table{{width:100%;border-collapse:collapse;font-size:.73rem}}
-.cat-table{{table-layout:fixed}}
-.cat-table th:nth-child(1){{width:28px}}
-.cat-table th:nth-child(2){{width:22%}}
-.cat-table th.num,.cat-table td.num{{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}}
+.cat-table{{table-layout:fixed;width:100%;border-spacing:0}}
+.cat-table col.col-expand{{width:36px}}
+.cat-table col.col-model{{width:24%}}
+.cat-table col.col-mat{{width:56px}}
+.cat-table col.col-n{{width:96px}}
+.cat-table th.mat,.cat-table td.mat{{text-align:center;font-weight:700;font-family:var(--fh);padding-left:4px;padding-right:4px}}
+.cat-table th.num,.cat-table td.num{{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";white-space:nowrap;padding-left:6px;padding-right:10px}}
+.cat-table thead th.num{{text-align:right}}
 th{{text-align:left;font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:6px 8px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf)}}
 td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .tscroll{{max-height:520px;overflow:auto}}
@@ -829,8 +840,10 @@ td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
   </section>
   <section class="sec" id="sec-inventario">
     <div class="card"><h3 id="titleInv">Inventario baja rotación</h3><div class="cs" id="subInv"></div>
-      <div class="tscroll"><table class="cat-table"><thead><tr>
-        <th></th><th>Modelo</th><th>Matriz</th><th>SKUs</th><th>Rotación/mes</th><th>Stock total</th><th>Stock tiendas</th><th>Stock taller</th><th>Cobertura</th>
+      <div class="tscroll"><table class="cat-table"><colgroup>
+        <col class="col-expand"><col class="col-model"><col class="col-mat"><col class="col-n"><col class="col-n"><col class="col-n"><col class="col-n"><col class="col-n"><col class="col-n">
+      </colgroup><thead><tr>
+        <th scope="col" class="col-expand">&nbsp;</th><th scope="col">Modelo</th><th scope="col" class="mat">Matriz</th><th scope="col" class="num">SKUs</th><th scope="col" class="num">Rotación/mes</th><th scope="col" class="num">Stock total</th><th scope="col" class="num">Stock tiendas</th><th scope="col" class="num">Stock taller</th><th scope="col" class="num">Cobertura (meses)</th>
       </tr></thead><tbody id="bodyInv"></tbody></table></div>
     </div>
   </section>

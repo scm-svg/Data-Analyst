@@ -116,7 +116,7 @@
           (open ? "▼" : "▶") +
           '</span></td><td>' +
           esc(m.modelo) +
-          '</td><td class="num">' +
+          '</td><td class="mat">' +
           esc(m.matriz) +
           '</td><td class="num">' +
           fmtNum(m.skus_count) +
@@ -138,7 +138,7 @@
               esc(v.sku) +
               '</div><div class="var-meta">' +
               esc(variantLabel(v)) +
-              '</div></td><td class="num">' +
+              '</div></td><td class="mat">' +
               esc(v.matriz || "—") +
               '</td><td class="num">—</td><td class="num">' +
               fmtNum(v.rotacion_mes, 1) +
