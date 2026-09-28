@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.43 — códigos listos para pegar
+# Planificación de Producción v5.9.44 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,17 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Motor · Secuencia=No sin lote familiar (5.9.44)
+
+En Priorizacion columna H, **No** saca al modelo del lote familiar (color → género) en **todas** las líneas, no solo en L5.
+
+- **RIO KIDS** con `H=No` no espera ni cede L2 a **RIO DAMA** a mitad de semana (tampoco si KIDS tiene `Division=Si` y acaba la 1ª vuelta de Negro).
+- El modelo corre **solo** en su línea hasta terminar. El sobrante del día pasa a la **cola de prioridad**, no al hermano.
+- El orden Negro → Blanco → Marino de **sus propias** variantes se mantiene.
+- En **Línea 5** sigue siendo ocupante exclusivo (sin rueda en paralelo).
+- No reclama líneas extra ni parte MOs. Vacío u otro valor deja la secuencia normal de familia.
 
 ## Actualizar MOs · asignar número a un SKU (5.9.43)
 
@@ -103,14 +113,14 @@ Ejemplo: `MAR KIDS` con `I=Si` y 80 Negro + 80 Rojo → 40 Negro, 40 Rojo, 40 Ne
 
 Encabezado en H2: `Secuencia`.
 
-- Escribe **No** (también vale `NO` / `no`) en el modelo que **no** debe seguir el orden de género CAB → DAMA → KIDS.
-- En **L1–4** ese modelo **sí** respeta el lote de color: Negro → Blanco → Marino → resto.
-- En **Línea 5**, `No` significa que el modelo **no trabaja en paralelo**: es el único que corre en L5, sin esperar color ni género de la familia.
+- Escribe **No** (también vale `NO` / `no`) en el modelo que **no** debe compartir secuencia con la familia (CAB → DAMA → KIDS ni el lote de color entre hermanos).
+- En **todas las líneas** ese modelo corre solo: no espera ni cede a un hermano. El Negro → Blanco → Marino de **sus** variantes se mantiene.
+- En **Línea 5**, `No` además significa que el modelo **no trabaja en paralelo**: es el único que corre en L5.
 - No reclama la segunda línea ni parte una MO. Urgente con 2+ líneas sigue la regla de 5.9.15 (una línea por género de la familia).
 - Vacío u otro valor: secuencia normal de 5.9.15.
 - **Actualizar Priorización** conserva la columna H.
 
-Ejemplo L1–4: `RIO KIDS` con `H=No` y líneas `3 / 4` no espera a RIO CAB/DAMA del mismo color; si en la familia aún hay Negro, no arranca Blanco.
+Ejemplo L1–4: `RIO KIDS` con `H=No` en Línea 2 no cede a `RIO DAMA` a mitad de lote; el sobrante del día va a la cola, no al hermano.
 Ejemplo L5: `SHORT SPORT R1 CAB` con `H=No` usa toda la Línea 5; no comparte rueda con otro modelo.
 
 ## Priorizacion - SKUs
@@ -129,7 +139,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **RIO DAMA no suelta L2:** el lote de familia (Negro → Blanco → Marino, CAB → DAMA → KIDS) **ignora** hermanos que todavía no llegan a su Día de inicio. Si RIO KIDS está en la misma línea pero arranca el 29/09, RIO DAMA sigue en Línea 2 en la semana 2. Al llegar ese día, la secuencia de color/género vuelve a aplicar. El apoyo 50% de L1 no deja a DAMA como ocupante fantasma de una L2 vacía.
 - **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** guarda los checks con el botón **Guardar**, por MO+SKU, en `_ImpresionChecks`. Actualizar el dashboard no los borra.
 - **Urgente en fecha estimada:** un modelo Urgente/mínima con 2+ líneas toma **sí o sí** todas las asignadas el día de Fecha de Salida Estimada y el hábil anterior. Fuera de esa ventana, la segunda línea solo si está libre.
-- **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo y no espera/cede por color o género de la familia mientras corre ahí. En L1–4, `No` sigue saltando solo el orden de género (el lote de color se mantiene).
+- **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo. Desde **5.9.44**, `No` también saca al modelo del lote familiar en L1–4 (no espera/cede color ni género a un hermano).
 - **Horizonte 12 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 12 semanas (la actual + 11), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 11` y `Semana 12` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 10`. El menú **Ver Pestañas** las incluye.
 - **Dashboard de información:** menú **Producción → Dashboard de información** (modal en la hoja) y el mismo HTML en la app web. Pestañas: calendario, salida semanal, seguimiento, pendientes, almacén, supuestos e **Impresión Digital**. Lee el snapshot publicado.
 - **Meta = columna Faltante:** `Proyeccion` y el backlog usan el número de **Faltante** en `Por Hacer`. No se recorta a `Cantidad Solicitada − Cantida Producida` (eso dejaba RIO CAB en 1834 en vez de 1871, y SHORT SPORT R1 CAB+DAMA en 195 en vez de 202). Si Faltante está vacío, sí se usa sol−prod. Si Faltante es 0, la MO no entra.
@@ -139,7 +149,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Día de inicio reclama L1-4:** si MAR KIDS (Urgente) y RIO CAB (Media) comparten línea, RIO corre hasta el Día de inicio de MAR; ese día MAR entra y RIO cede. Vale para Especial, mínima, Urgente o mejor fecha/prioridad. **L5** no echa a nadie (sigue en paralelo).
 - **Especial con Día de inicio:** al llegar esa fecha, el modelo de `Por Hacer - Especial` toma su `Linea de Produccion` aunque otro (RIO, etc.) la esté usando. Antes se quedaba en 0 hasta que el ocupante terminara.
 - **Especial sin desborde a L1:** cada fila de `Por Hacer - Especial` se queda en su `Linea de Produccion`. Si L1 está libre, no se redirigen ahí modelos de L2–L5. Celda vacía sigue siendo 1.
-- **Secuencia=No:** en L1–4 desactiva solo el orden de género. El lote de color, la MO atómica y “un modelo a la vez en L1-4” no cambian. En **Línea 5**, `No` = ese modelo corre **solo** (sin paralelo), sin secuencia de color/género de la familia.
+- **Secuencia=No:** saca al modelo del lote familiar en L1–4 y L5. No espera ni cede color/género a un hermano; el Negro→Blanco de sus propias variantes se mantiene. En **Línea 5**, `No` = ese modelo corre **solo** (sin paralelo). La MO atómica y “un modelo a la vez en L1-4” no cambian.
 - **Lotes por color y género:** si el mismo producto (ej. RIO CAB y RIO DAMA) está asignado a **2 líneas y esas líneas están libres**, los géneros trabajan **en paralelo** (uno por línea). Si solo queda **una** línea libre, secuencian ahí **por color** (Negro → Blanco → Marino → resto) y **dentro de cada color por género** (CAB → DAMA → KIDS). El sobrante del día pasa al siguiente lote de la familia. Los Especiales no usan esta regla.
 - **Fix de sintaxis:** Apps Script ya no falla con `Unexpected token '}'`. Se restauró `familiaOcupaLinea_` (un recorte de v5.9.7 dejaba un `}` suelto).
 - **Capacidad diaria por producto:** no se usa un techo fijo 130/40. Al planificar se lee `Cap Produccion por Dia` (Por Hacer col. N, Por Hacer - Especial col. O) y esa cifra es el cupo del día mientras el modelo ocupa la línea. Si cambia de modelo a media jornada, el sobrante se calcula con la cap del que entra. Si la celda viene vacía, respaldo L1-4=130 / L5=40.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.43 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.44 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1215,7 +1215,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.43: lotes, Division=Si y paralelo L1-4; uno o dos modelos a media estación, cada uno con la cola."""
+    """Motor v5.9.44: Secuencia=No sale del lote familiar; Division=Si; paralelo L1-4."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -1417,6 +1417,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def es_exclusivo_linea5(m):
         return bool(m and m.get("secuenciaNo") and not m.get("esEspecial"))
 
+    def participa_lote_familia(m):
+        return bool(m and not m.get("esEspecial") and not m.get("secuenciaNo"))
+
     def linea5_ocupada_por_exclusivo(except_nom=None):
         for nom in ocupante.get("5") or []:
             if except_nom and nom == except_nom:
@@ -1469,7 +1472,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         for m in lista:
             if familia_modelo(m) != fam or restante_modelo(m) <= 0:
                 continue
-            if m.get("esEspecial"):
+            if not participa_lote_familia(m):
                 continue
             solo_min = restante_minima(m) > 0
             for t in m["tareas"]:
@@ -1517,6 +1520,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         for h in lista:
             if h["nombre"] == m["nombre"] or familia_modelo(h) != fam:
                 continue
+            if not participa_lote_familia(m) or not participa_lote_familia(h):
+                continue
             if h.get("esEspecial") or restante_modelo(h) <= 0:
                 continue
             if lineas_donde_esta(h["nombre"]):
@@ -1544,6 +1549,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def debe_esperar_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
+        if not participa_lote_familia(m):
+            return False
         if es_exclusivo_linea5(m) and "5" in lineas_modelo(m, overflow):
             return False
         fam = familia_modelo(m)
@@ -1554,7 +1561,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         lote = lote_familia_activo(fam, overflow)
         if not lote or lote["modelo"] == m["nombre"]:
             return False
-        if lote["m"].get("esEspecial"):
+        if lote["m"] and not participa_lote_familia(lote["m"]):
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
@@ -1562,8 +1569,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         if not any(tarea_viva_hoy(t, dia_ctx["d"]) for t in lote["m"]["tareas"]):
             return False
-        if m.get("secuenciaNo"):
-            return lote["colorRank"] < color_rank_vivo(m)
         libres_lote = lineas_libres_para_modelo(lote["m"], overflow)
         libres_mias = lineas_libres_para_modelo(m, overflow)
         if len(libres_lote) >= 2 and len(libres_mias) > 0:
@@ -1573,6 +1578,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     def debe_ceder_al_lote_familia(m, overflow):
         if not m or m.get("esEspecial"):
             return False
+        if not participa_lote_familia(m):
+            return False
         if es_exclusivo_linea5(m) and ("5" in lineas_donde_esta(m["nombre"]) or "5" in lineas_modelo(m, overflow)):
             return False
         fam = familia_modelo(m)
@@ -1581,15 +1588,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         lote = lote_familia_activo(fam, overflow)
         if not lote or lote["modelo"] == m["nombre"]:
             return False
-        if lote["m"].get("esEspecial"):
+        if lote["m"] and not participa_lote_familia(lote["m"]):
             return False
         if not comparten_lineas(m, lote["m"], overflow):
             return False
         if not any(tarea_viva_hoy(t, dia_ctx["d"]) for t in lote["m"]["tareas"]):
-            return False
-        if m.get("secuenciaNo"):
-            if lote["colorRank"] < color_rank_vivo(m):
-                return not lineas_donde_esta(lote["modelo"])
             return False
         return not lineas_donde_esta(lote["modelo"])
 
@@ -1605,6 +1608,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         out = []
         for mC in lista:
             if familia_modelo(mC) != fam or restante_modelo(mC) <= 0:
+                continue
+            if not participa_lote_familia(mC):
                 continue
             if skip.get(mC["nombre"]):
                 continue
@@ -1647,6 +1652,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not debe_esperar_lote_familia(last_m, overflow) and not debe_ceder_al_lote_familia(last_m, overflow):
                     ocupante[lin].append(last_nom)
                     continue
+            last_fam_m = last_m or modelos.get(last_nom)
+            if last_fam_m and not participa_lote_familia(last_fam_m):
+                continue
             fam_last = familia_modelo(last_m) if last_m else familia_de_nombre(last_nom)
             lote = lote_familia_activo(fam_last, overflow)
             if lote and modelo_puede(lote["m"], d, lin, overflow) and len(ocupante[lin]) < max_ocupantes_ahora(lin, lote["m"]):
@@ -1675,7 +1683,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                         return vol_n > vol_o
                     return m_new["nombre"] < m_o["nombre"]
                 return True
-            if familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial"):
+            if (familia_modelo(m_o) == familia_modelo(m_new) and not m_new.get("esEspecial")
+                    and participa_lote_familia(m_o) and participa_lote_familia(m_new)):
                 return False
             b_o, b_n = banda_viva(m_o), banda_viva(m_new)
             if b_o != b_n:
@@ -1973,9 +1982,13 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if not fam_ref and ocupante.get(lin):
             fam_ref = familia_modelo(modelos[ocupante[lin][0]])
         para_paralelo = bool(ocupante.get(lin))
+        last_participa = (
+            participa_lote_familia(last_m) if last_m
+            else (participa_lote_familia(modelos.get(last_nom)) if last_nom and modelos.get(last_nom) else True)
+        )
         if str(lin) == "5" and para_paralelo and linea5_ocupada_por_exclusivo():
             return None
-        if fam_ref and not para_paralelo:
+        if fam_ref and not para_paralelo and last_participa:
             lote = lote_familia_activo(fam_ref, overflow)
             if (lote and lote["modelo"] != last_nom and not skip.get(lote["modelo"])
                     and not lote["m"].get("esEspecial")
@@ -1984,7 +1997,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if lote["modelo"] not in (ocupante.get(lin) or []):
                     return lote["modelo"]
         genero_terminado = bool(last_m) and restante_modelo(last_m) <= 0
-        if fam_ref and not para_paralelo and genero_terminado:
+        if fam_ref and not para_paralelo and genero_terminado and last_participa:
             hermanos = [h for h in hermanos_pendientes(lin, d, overflow, skip, fam_ref) if h["nombre"] != last_nom]
             if hermanos:
                 return hermanos[0]["nombre"]
@@ -3286,19 +3299,19 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(d0, {"MAR DAMA": 130}, d0)
 
     def test_secuencia_no_sigue_cediendo_color(self):
-        """Secuencia=No no arranca Blanco si en la familia todavía hay Negro."""
+        """Secuencia=No no espera el Negro del hermano: arranca su propio Blanco."""
         tareas = [
             self._t("D", "RIO DAMA", "Blanco", 200, ["4"], fechaKey=20260901, prioridadNum=1),
             self._t("C", "RIO CAB", "Negro", 200, ["4"], fechaKey=20260920, prioridadNum=3),
         ]
         out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO DAMA": "NO"})
         d0 = self._por_dia_linea(out, "4", 0)
-        self.assertEqual(d0, {"RIO CAB": 130}, d0)
-        negro_d0 = sum(
+        self.assertEqual(d0, {"RIO DAMA": 130}, d0)
+        blanco_d0 = sum(
             t["plan"]["4"][0] for t in out
-            if t["modelo"] == "RIO CAB" and t["color"] == "Negro"
+            if t["modelo"] == "RIO DAMA" and t["color"] == "Blanco"
         )
-        self.assertEqual(negro_d0, 130)
+        self.assertEqual(blanco_d0, 130)
 
     def test_secuencia_no_no_toma_ambas_lineas(self):
         """Secuencia=No no reclama las dos líneas: un género por línea, MO atómica."""
@@ -3330,7 +3343,7 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(len(lineas_usadas), 1, lineas_usadas)
 
     def test_secuencia_no_negro_dama_antes_que_blanco_cab(self):
-        """CAB=No con Negro+Blanco y DAMA Negro en una línea: Negro CAB, Negro DAMA, luego Blanco CAB."""
+        """CAB=No con Negro+Blanco: termina sus colores y recién entonces entra DAMA."""
         tareas = [
             self._t("CN", "RIO CAB", "Negro", 130, ["4"]),
             self._t("CB", "RIO CAB", "Blanco", 130, ["4"]),
@@ -3345,14 +3358,14 @@ class TestLotesGeneroColor(unittest.TestCase):
         )
         self.assertEqual(negro_cab_d0, 130)
         d1 = self._por_dia_linea(out, "4", 1)
-        self.assertEqual(d1, {"RIO DAMA": 130}, d1)
-        d2 = self._por_dia_linea(out, "4", 2)
-        self.assertEqual(d2, {"RIO CAB": 130}, d2)
-        blanco_cab_d2 = sum(
-            t["plan"]["4"][2] for t in out
+        self.assertEqual(d1, {"RIO CAB": 130}, d1)
+        blanco_cab_d1 = sum(
+            t["plan"]["4"][1] for t in out
             if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
         )
-        self.assertEqual(blanco_cab_d2, 130)
+        self.assertEqual(blanco_cab_d1, 130)
+        d2 = self._por_dia_linea(out, "4", 2)
+        self.assertEqual(d2, {"RIO DAMA": 130}, d2)
 
     def test_secuencia_no_linea5_no_comparte_paralelo(self):
         """Secuencia=No en L5: el modelo usa toda la cap y el otro espera."""
@@ -3385,13 +3398,61 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(d0, {"SHORT SPORT R1 CAB": 40}, d0)
 
     def test_secuencia_no_en_l4_no_cambia_lote_color(self):
-        """Regresión: en L1-4, Secuencia=No sigue respetando el lote de color."""
+        """Regresión: en L1-4, Secuencia=No no cede al hermano aunque tenga Negro."""
         tareas = [
             self._t("D", "RIO DAMA", "Blanco", 200, ["4"], fechaKey=20260901, prioridadNum=1),
             self._t("C", "RIO CAB", "Negro", 200, ["4"], fechaKey=20260920, prioridadNum=3),
         ]
         out = planificar(tareas, {}, total_dias=1, mapa_secuencia={"RIO DAMA": "NO"})
-        self.assertEqual(self._por_dia_linea(out, "4", 0), {"RIO CAB": 130})
+        self.assertEqual(self._por_dia_linea(out, "4", 0), {"RIO DAMA": 130})
+
+    def test_secuencia_no_kids_no_cede_l2_a_dama(self):
+        """RIO KIDS con Secuencia=No no suelta L2 a RIO DAMA a mitad de lote."""
+        tareas = [
+            self._t("K", "RIO KIDS", "Negro", 500, ["2"], fechaKey=20260912, prioridadNum=1),
+            self._t("D", "RIO DAMA", "Negro", 400, ["2"], fechaKey=20260910, prioridadNum=3),
+        ]
+        out = planificar(tareas, {}, total_dias=10, mapa_secuencia={"RIO KIDS": "No"})
+        for d in range(3):
+            self.assertEqual(self._por_dia_linea(out, "2", d), {"RIO KIDS": 130}, "día %s" % d)
+        d3 = self._por_dia_linea(out, "2", 3)
+        self.assertEqual(d3.get("RIO KIDS"), 110, d3)
+        self.assertEqual(d3.get("RIO DAMA", 0), 20, d3)
+        d4 = self._por_dia_linea(out, "2", 4)
+        self.assertEqual(d4, {"RIO DAMA": 130}, d4)
+
+    def test_secuencia_no_kids_division_no_cede_a_dama(self):
+        """Division=Si + Secuencia=No: KIDS no cede L2 a DAMA al cerrar la 1ª vuelta de Negro."""
+        tareas = [
+            self._t("KN", "RIO KIDS", "Negro", 260, ["2"], fechaKey=20260912, prioridadNum=1),
+            self._t("KB", "RIO KIDS", "Blanco", 260, ["2"], fechaKey=20260912, prioridadNum=1),
+            self._t("DN", "RIO DAMA", "Negro", 260, ["2"], fechaKey=20260910, prioridadNum=3),
+        ]
+        out = planificar(
+            tareas, {}, total_dias=10,
+            mapa_secuencia={"RIO KIDS": "No"},
+            mapa_division={"RIO KIDS": "Si"},
+        )
+        d0 = self._por_dia_linea(out, "2", 0)
+        self.assertEqual(d0, {"RIO KIDS": 130}, d0)
+        negro_d0 = sum(
+            t["plan"]["2"][0] for t in out
+            if t["modelo"] == "RIO KIDS" and t["color"] == "Negro"
+        )
+        self.assertEqual(negro_d0, 130)
+        d1 = self._por_dia_linea(out, "2", 1)
+        self.assertEqual(d1, {"RIO KIDS": 130}, d1)
+        blanco_d1 = sum(
+            t["plan"]["2"][1] for t in out
+            if t["modelo"] == "RIO KIDS" and t["color"] == "Blanco"
+        )
+        self.assertEqual(blanco_d1, 130)
+        for d in range(4):
+            self.assertEqual(
+                self._por_dia_linea(out, "2", d).get("RIO DAMA", 0), 0,
+                "DAMA no debe entrar mientras KIDS tiene lote, día %s=%s" % (
+                    d, self._por_dia_linea(out, "2", d)),
+            )
 
     def test_acumulado_diez_semanas(self):
         vals = [100] * 10
@@ -3434,6 +3495,15 @@ class TestSecuenciaFlag(unittest.TestCase):
         self.assertTrue(secuencia_no_de_modelo({"rio kids": "NO"}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({"RIO KIDS": ""}, "RIO KIDS"))
         self.assertFalse(secuencia_no_de_modelo({}, "RIO KIDS"))
+
+    def test_gs_secuencia_no_sale_del_lote_familiar(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
+        self.assertIn("function participaLoteFamilia_(m)", gs)
+        self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
+        self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
 
 
 class TestApoyoLinea1(unittest.TestCase):
@@ -3852,7 +3922,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4397,7 +4467,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4638,7 +4708,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.43"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
