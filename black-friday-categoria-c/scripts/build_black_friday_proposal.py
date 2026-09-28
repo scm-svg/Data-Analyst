@@ -155,13 +155,37 @@ def segment(cat: str) -> str | None:
     return None
 
 
+def resolve_segment(modelo: str, categoria: str) -> str | None:
+    if clean_cell(modelo).upper() == "JACKET KIDS":
+        return "Equipamiento"
+    return segment(categoria)
+
+
+def is_socks_model(modelo: str) -> bool:
+    m = clean_cell(modelo).upper()
+    return any(m.startswith(p) for p in PRIORITY_MODEL_PREFIXES)
+
+
+def is_excluded_variant(modelo: str, color: str, producto: str) -> bool:
+    mod = clean_cell(modelo).upper()
+    col = clean_cell(color).lower()
+    prod = clean_cell(producto).upper()
+    if is_socks_model(modelo) and col not in ("blanco", "white"):
+        return True
+    if mod == "TOALLA SPORT":
+        if col == "negro" or "COPA CUADRO" in prod:
+            return True
+    return False
+
+
 def is_excluded_model(modelo: str, producto: str = "") -> bool:
     m = clean_cell(modelo).upper()
     if m in EXCLUDED_MODELS_EXACT:
         return True
+    if m == "CUADRO BAND":
+        return True
     m = f"{modelo} {producto}".upper()
     excluded_fragments = (
-        "CUADRO BAND",
         "SHORT PLAYA",
         "CLASICA GC SUBLIMADO KIDS",
         "CLÁSICA GC SUBLIMADO KIDS",
@@ -170,6 +194,9 @@ def is_excluded_model(modelo: str, producto: str = "") -> bool:
         "MAR ORIGINAL",
         "EXPLORE PANTS",
         "CUADRO JACKET 2.0",
+        "R2 SPORT",
+        "R2 RUNNING",
+        "SHORT R2",
     )
     return any(x in m for x in excluded_fragments)
 
@@ -195,6 +222,8 @@ PRIORITY_MODELS_EXACT = frozenset(
         "TOALLA ESTAMPADA",
         "TOALLA CLIP 2.0",
         "PACKING SET PRO",
+        "CUADRO TAG",
+        "CUADRO BAND VENEZUELA",
         "RETRO VZLA DAMA",
         "RETRO VZLA KIDS",
     }
@@ -215,6 +244,9 @@ EQUIPAMIENTO_PRIORITY_MODELS = frozenset(
         "EXPLORE CAP",
         "PACKING SET PRO",
         "MAXI TOTE",
+        "CUADRO TAG",
+        "CUADRO BAND VENEZUELA",
+        "JACKET KIDS",
     }
 )
 # Cobertura mínima por modelo (meses). strict_gt=True → estrictamente mayor que el umbral.
@@ -338,7 +370,11 @@ def build_sku_candidate(
         return None
     if not abc:
         return None
-    seg = segment(abc.get("categoria") or "")
+    color = clean_cell(getattr(inv_row, "color_inv", "")) or clean_cell(abc.get("color"))
+    producto = clean_cell(getattr(inv_row, "producto_inv", "")) or clean_cell(abc.get("producto"), sku)
+    if is_excluded_variant(modelo, color, producto):
+        return None
+    seg = resolve_segment(modelo, abc.get("categoria") or "")
     if not seg:
         return None
     mcls = margin_abc.get(sku, "C")
@@ -375,11 +411,11 @@ def build_sku_candidate(
         return None
     return {
         "sku": sku,
-        "producto": clean_cell(getattr(inv_row, "producto_inv", "")) or clean_cell(abc.get("producto"), sku),
+        "producto": producto,
         "modelo": modelo,
         "categoria": clean_cell(abc.get("categoria")),
         "genero": clean_cell(getattr(inv_row, "genero_inv", "")) or clean_cell(abc.get("genero")),
-        "color": clean_cell(getattr(inv_row, "color_inv", "")) or clean_cell(abc.get("color")),
+        "color": color,
         "talla": clean_cell(getattr(inv_row, "talla_inv", "")) or clean_cell(abc.get("talla")),
         "qty": qty,
         "margin": abc.get("margin", 0),
