@@ -307,18 +307,26 @@ def _write_table(ws, r, headers, rows, lote_col=None):
     return r
 
 
+def _sort_impacto(items: List[dict]) -> List[dict]:
+    """Mayor días ganados primero; sin dato al final."""
+    return sorted(
+        items,
+        key=lambda m: (
+            -(m["dias_ganados"] if m.get("dias_ganados") is not None else -10**9),
+            m.get("modelo") or "",
+        ),
+    )
+
+
 def _model_rows(items: List[dict], esc=True):
     rows = []
-    for m in items:
+    for m in _sort_impacto(items):
         cubre = m["cubre_almacen_esc"] if esc else m["cubre_almacen_base"]
         rows.append(
             [
                 m["modelo"],
                 "Lote nuevo" if m["lote_nuevo"] else "",
-                m["prioridad"],
-                m["lineas"],
                 m["faltante"],
-                m["fecha_obj"],
                 m["termino_base"],
                 m["termino_esc"] if esc else m["termino_base"],
                 m["entrada_base"],
@@ -336,10 +344,7 @@ def _model_rows(items: List[dict], esc=True):
 MODEL_HEADERS = [
     "Modelo",
     "Lote",
-    "Prioridad",
-    "Líneas",
     "Faltante",
-    "Fecha obj.",
     "Salida costura base",
     "Salida costura escenario",
     "Entrada almacén base",
@@ -541,10 +546,14 @@ def escribir_excel(payload: dict, path: str):
             wsx.row_dimensions[r].height = 34
             r += 1
         r += 1
-        wsx.cell(r, 1, "Lotes nuevos · orden de salida de costura").font = FONT_T
+        wsx.cell(r, 1, "Todos los modelos Por Hacer · orden por días ganados").font = FONT_T
+        r += 1
+        mods = list(payload["modelos"][sid])
+        r = _write_table(wsx, r, MODEL_HEADERS, _model_rows(mods), lote_col=1)
+        r += 1
+        wsx.cell(r, 1, "Lotes nuevos · orden por días ganados").font = FONT_T
         r += 1
         lotes_m = [m for m in payload["modelos"][sid] if m["lote_nuevo"]]
-        lotes_m.sort(key=lambda m: (m.get("termino_esc_iso") or "9999", m["modelo"]))
         r = _write_table(wsx, r, MODEL_HEADERS, _model_rows(lotes_m), lote_col=1)
         r += 1
         wsx.cell(r, 1, "Piezas nocturnas por línea").font = FONT_T
@@ -564,17 +573,10 @@ def escribir_excel(payload: dict, path: str):
                 for x in "12345"
             ],
         )
-        r += 1
-        wsx.cell(r, 1, "Todos los modelos Por Hacer · orden de salida de costura").font = FONT_T
-        r += 1
-        mods = list(payload["modelos"][sid])
-        mods.sort(key=lambda m: (m.get("termino_esc_iso") or "9999", m["modelo"]))
-        r = _write_table(wsx, r, MODEL_HEADERS, _model_rows(mods), lote_col=1)
-        for col in range(1, 16):
+        for col in range(1, 13):
             wsx.column_dimensions[get_column_letter(col)].width = 18
         wsx.column_dimensions["A"].width = 38
         wsx.freeze_panes = "A4"
-        wsx.auto_filter.ref = f"A{r - len(mods) - 1}:O{r - 1}"
         wsx.page_setup.orientation = "landscape"
         wsx.page_setup.fitToPage = True
         wsx.page_setup.fitToWidth = 1
@@ -600,7 +602,7 @@ def escribir_excel(payload: dict, path: str):
         ["Cuello L1", "Como L1 noche trabaja para L2, RIO LOTE NUEVO CAB y DAMA no adelantan su cierre: el remanente sigue en el día de L1."],
         ["Piezas no programadas", "MOTION LOOP (sin línea), resto de LITE PANT y Basic Line Pant / SEMI MOTION no caben en el horizonte: la noche libera cupo diurno posterior que podría absorberlos, pero no se reasigna en este modelo."],
         ["Conservadurismo", "Floor 50% de cap actual, no de 130. Si las máquinas nuevas llegan a régimen, el mismo esquema de noches rinde más."],
-        ["Listas", "Todos los listados van por fecha de salida de costura (calendario), no alfabético."],
+        ["Listas", "Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético."],
         ["Fuente", "Planificacion_Produccion_ACTUAL.xlsx y Planificacion_Produccion_LOTE_NUEVO.xlsx (Por Hacer, tablero Semana 1–12, Proyeccion, Entrada de Almacen)."],
     ]
     r = 4
@@ -635,13 +637,10 @@ def _cubre_html(v) -> str:
 
 
 def _tabla_modelos(items: List[dict]) -> str:
-    rows = sorted(
-        items,
-        key=lambda m: (m.get("termino_esc_iso") or "9999", m.get("modelo") or ""),
-    )
+    rows = _sort_impacto(items)
     out = [
         '<div class="wrap"><table><thead><tr>',
-        "<th>Modelo</th><th></th><th>Prioridad</th><th>Líneas</th><th>Faltante</th><th>Obj.</th>",
+        "<th>Modelo</th><th></th><th>Faltante</th>",
         "<th>Salida base</th><th>Salida esc.</th><th>Almacén base</th><th>Almacén esc.</th>",
         "<th>Días ganados</th><th>Pzas noche</th><th>Pzas 16/11</th><th>Pzas dic</th><th>16/11</th>",
         "</tr></thead><tbody>",
@@ -651,8 +650,7 @@ def _tabla_modelos(items: List[dict]) -> str:
         cls = ' class="lote"' if m.get("lote_nuevo") else ""
         out.append(
             f"<tr{cls}><td>{_hx(m['modelo'])}</td><td>{lote}</td>"
-            f"<td>{_hx(m.get('prioridad'))}</td><td>{_hx(m.get('lineas'))}</td>"
-            f"<td>{fmt_n(m.get('faltante'))}</td><td>{_hx(m.get('fecha_obj'))}</td>"
+            f"<td>{fmt_n(m.get('faltante'))}</td>"
             f"<td>{_hx(m.get('termino_base'))}</td><td>{_hx(m.get('termino_esc'))}</td>"
             f"<td>{_hx(m.get('entrada_base'))}</td><td>{_hx(m.get('entrada_esc'))}</td>"
             f"<td>{_hx(m.get('dias_ganados') if m.get('dias_ganados') is not None else '--')}</td>"
@@ -706,13 +704,13 @@ def _sec_esc(sid: str, payload: dict) -> str:
       <div class="card"><h3>A favor</h3>{_lis(pc['pros'], 'pro')}</div>
       <div class="card"><h3>En contra</h3>{_lis(pc['contras'], 'con')}</div>
     </div>
-    <div class="card"><h3>Lotes nuevos (orden de salida)</h3>{_tabla_modelos(lotes)}</div>
+    <div class="card"><h3>Todos los modelos Por Hacer (orden por días ganados)</h3>
+      {_tabla_modelos(payload['modelos'][sid])}</div>
+    <div class="card"><h3>Lotes nuevos (orden por días ganados)</h3>{_tabla_modelos(lotes)}</div>
     <div class="card"><h3>Aprovechamiento por línea</h3>
       <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Cupo diurno liberado</th></tr></thead>
       <tbody>{lin_rows}</tbody></table>
     </div>
-    <div class="card"><h3>Todos los modelos Por Hacer (orden de salida de costura)</h3>
-      {_tabla_modelos(payload['modelos'][sid])}</div>
     """
 
 
@@ -885,13 +883,13 @@ tr.lote td {{ background: var(--ambar-bg); }}
         <tr><td>Alcance</td><td>Solo Por Hacer. Por Hacer – Especial queda en el turno diurno.</td></tr>
         <tr><td>Almacén</td><td>Salida costura + 4 días hábiles. 16/11 exige costura el 10/11. Diciembre se mide con costura al 25/11.</td></tr>
         <tr><td>Simulación</td><td>Cola cronológica del tablero 12 semanas. La noche consume el frente; los días siguientes fabrican lo que queda (el plan se corre hacia adelante).</td></tr>
-        <tr><td>Listas</td><td>Orden de calendario de salida de costura, no alfabético.</td></tr>
+        <tr><td>Listas</td><td>Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético.</td></tr>
         <tr><td>Fuente</td><td>Planificacion Produccion ACTUAL.xlsx y LOTE NUEVO.xlsx.</td></tr>
       </tbody></table>
     </div>
   </section>
 </div>
-<footer class="foot">Informe generado del plan ACTUAL vs LOTE NUEVO. Cap nocturna = 50% de la cap actual (máquinas nuevas aún no a régimen). Listas ordenadas por salida de costura.</footer>
+<footer class="foot">Informe generado del plan ACTUAL vs LOTE NUEVO. Cap nocturna = 50% de la cap actual (máquinas nuevas aún no a régimen). Tablas de modelos ordenadas por días ganados.</footer>
 <script>
 const EXTRA = {extras};
 const COSTO = {costos};
