@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Propuesta Black Friday — categoría C, manufactura y equipamiento.
+"""Propuesta Black Friday — inventario de baja rotación.
 
-Lee el dashboard ABC (precios, costos y categorías), el cuadro de ventas
-actualizado y el inventario de la propuesta. Escribe un dashboard HTML
-autocontenido y un Excel para directiva.
+La lista sale del cuadro de rotación (SKU de cola, con stock, manufactura
+y equipamiento). Jacket 1.0 y Short Sport entran con el inventario completo
+de la línea. Zenit, Refresh y Motion Loop quedan fuera. El tablero y el
+Excel hablan en unidades, rotación y cobertura.
 """
 
 from __future__ import annotations
@@ -11,24 +12,26 @@ from __future__ import annotations
 import json
 import math
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Reference
 from openpyxl.chart.label import DataLabelList
-from openpyxl.chart.series import DataPoint
-from openpyxl.chart.shapes import GraphicalProperties
-from openpyxl.drawing.fill import PatternFillProperties, ColorChoice
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 ROOT = Path("/workspace/propuesta-black-friday")
 HTML_TEMPLATE = ROOT / "dashboard.template.html"
 HTML_OUT = ROOT / "propuesta-black-friday-categoria-c.html"
 XLSX_OUT = ROOT / "Propuesta_Black_Friday_Categoria_C.xlsx"
 ABC_HTML = Path("/home/ubuntu/.cursor/projects/workspace/uploads/abc_ver_5c4b.html")
+REF_HTML = Path(
+    "/home/ubuntu/.cursor/projects/workspace/uploads/black_friday_propuesta_categoria_c_0e74.html"
+)
 INV_XLSX = Path(
     "/home/ubuntu/.cursor/projects/workspace/uploads/INVENTARIO_TOTAL_CUADRO_PARA_ABC_-_PROPUESTA_dc6f.xlsx"
 )
@@ -55,47 +58,46 @@ STORE_MAP = {
     "TOLON": "Tolon",
 }
 PERIODS = [
-    "2025-10",
-    "2025-11",
-    "2025-12",
-    "2026-01",
-    "2026-02",
-    "2026-03",
-    "2026-04",
-    "2026-05",
-    "2026-06",
-    "2026-07",
-    "2026-08",
-    "2026-09",
+    "2025-10", "2025-11", "2025-12",
+    "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+    "2026-07", "2026-08", "2026-09",
 ]
-PERIOD_LABELS = ["Oct 25", "Nov 25", "Dic 25", "Ene 26", "Feb 26", "Mar 26", "Abr 26", "May 26", "Jun 26", "Jul 26", "Ago 26", "Sep 26"]
-RECENT = ["2026-07", "2026-08", "2026-09"]
-FLOOR = 1.10  # precio promo mínimo = costo × 1.10
-MIN_STOCK = 5
+FLOOR = 1.10
 MIN_DISC = 0.10
+MIN_MODEL_STOCK = 5
 
-# Escaleras. El tramo sale de la cobertura de decisión, no del promedio crudo.
-TIERS_IMPULSO = [
+# Líneas que el corte CC deja casi vacías y sí tienen bulto para ofrecer.
+FORCE_FULL = {
+    "JACKET CAB",
+    "JACKET DAMA",
+    "JACKET KIDS",
+    "SHORT SPORT KIDS",
+    "SHORT SPORT R1 DAMA",
+    "SHORT SPORT R1 CAB",
+}
+DROP_RE = re.compile(r"ZENIT|REFRESH|MOTION LOOP", re.I)
+
+TIERS = [
+    ("<6", "Menos de 6 meses", 0.15),
     ("6-12", "6 a 12 meses", 0.20),
     ("12-18", "12 a 18 meses", 0.25),
     ("18-24", "18 a 24 meses", 0.30),
     ("24+", "Más de 24 meses", 0.35),
-    ("dormido", "Sin salida reciente", 0.40),
+    ("dormido", "Sin salida en el año", 0.40),
 ]
-TIERS_DESATASCO = [
-    ("18-24", "18 a 24 meses", 0.35),
-    ("24+", "Más de 24 meses", 0.40),
-    ("dormido", "Sin salida reciente", 0.45),
-]
-RANGO_IMPULSO = {t[0] for t in TIERS_IMPULSO}
-RANGO_DESATASCO = {t[0] for t in TIERS_DESATASCO}
+TIER_PCT = {t[0]: t[2] for t in TIERS}
+
+
+def load_json_script(path: Path, element_id: str):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    marker = f'id="{element_id}"'
+    start = text.find(">", text.find(marker)) + 1
+    end = text.find("</script>", start)
+    return json.loads(text[start:end])
 
 
 def load_abc():
-    text = ABC_HTML.read_text(encoding="utf-8", errors="replace")
-    start = text.find(">", text.find('id="abc-embedded-data"')) + 1
-    end = text.find("</script>", start)
-    data = json.loads(text[start:end])
+    data = load_json_script(ABC_HTML, "abc-embedded-data")
     skus = data["skus"]
     rows = []
     for r in data["salesRows"]:
@@ -110,10 +112,10 @@ def load_abc():
     eco.loc[eco.ucost < 0, "ucost"] = np.nan
     sm = pd.DataFrame.from_dict(data["skuMaster"], orient="index").reset_index().rename(columns={"index": "sku"})
     sm["sku"] = sm.sku.str.upper()
-    return eco, sm, data["meta"]
+    return eco, sm
 
 
-def macro_of(cat: str | None):
+def macro_of(cat):
     if cat is None or (isinstance(cat, float) and math.isnan(cat)):
         return None
     s = str(cat)
@@ -132,7 +134,10 @@ def infer_category(modelo: str):
         return None, None
     if "PELOTA" in name:
         return "Equipamiento", "Equipamiento / Pelotas"
-    if re.search(r"VITA |MOTION LOOP|BASIC LINE|MANGA LARGA|FALDA |VESTIDO|SHORT |PANT|BIKER|LEGGING|BIKINI|TOP |HOODIE|JACKET|POLO ", name):
+    if re.search(
+        r"VITA |MOTION LOOP|BASIC LINE|MANGA LARGA|FALDA |VESTIDO|SHORT |PANT|BIKER|LEGGING|BIKINI|TOP |HOODIE|JACKET|POLO |ZENIT|REFRESH",
+        name,
+    ):
         return "Manufactura", "Manufactura / General"
     return None, None
 
@@ -153,31 +158,12 @@ def max_discount(price, cost) -> float:
     return max(0.0, 1.0 - FLOOR * float(cost) / float(price))
 
 
-def pareto(df: pd.DataFrame, value: str, outcol: str) -> pd.DataFrame:
-    df = df.copy()
-    df[outcol] = "C"
-    pos = df[df[value] > 0].sort_values([value, "modelo"], ascending=[False, True])
-    total = pos[value].sum()
-    if total <= 0:
-        return df
-    cum = pos[value].cumsum() / total
-    cls = np.where(cum <= 0.80, "A", np.where(cum <= 0.95, "B", "C"))
-    df.loc[pos.index, outcol] = cls
-    return df
-
-
-def rango_of(estado: str, cover: float) -> str:
-    if estado in ("frenado", "sin salida"):
-        return "dormido"
-    if cover < 6:
-        return "<6"
-    if cover < 12:
-        return "6-12"
-    if cover < 18:
-        return "12-18"
-    if cover < 24:
-        return "18-24"
-    return "24+"
+def sku_discount(price, cost, tier: float):
+    cap = max_discount(price, cost)
+    applied = step5(min(tier, cap))
+    if applied + 1e-9 < MIN_DISC:
+        return 0.0, False
+    return applied, applied + 1e-9 < tier - 1e-9
 
 
 def num(x, nd=2):
@@ -192,8 +178,49 @@ def num(x, nd=2):
     return round(v, nd)
 
 
+def clean(obj):
+    if isinstance(obj, dict):
+        return {k: clean(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [clean(v) for v in obj]
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        if not np.isfinite(obj):
+            return None
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if obj is pd.NA:
+        return None
+    return obj
+
+
+def wavg(values, weights):
+    v = np.asarray(values, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    mask = np.isfinite(v) & np.isfinite(w) & (w > 0)
+    if not mask.any():
+        return None
+    return float(np.average(v[mask], weights=w[mask]))
+
+
+def rango_of(qty: float, cover: float) -> str:
+    if qty <= 0:
+        return "dormido"
+    if cover < 6:
+        return "<6"
+    if cover < 12:
+        return "6-12"
+    if cover < 18:
+        return "12-18"
+    if cover < 24:
+        return "18-24"
+    return "24+"
+
+
 def build_frames():
-    eco, sm, abc_meta = load_abc()
+    eco, sm = load_abc()
     inv = pd.read_excel(INV_XLSX)
     ven = pd.read_excel(VEN_XLSX)
     for df, cols in (
@@ -208,21 +235,13 @@ def build_frames():
     ven["modelo"] = ven["modelo"].replace({"None": np.nan, "nan": np.nan})
 
     months = {
-        "octubre": 10,
-        "noviembre": 11,
-        "diciembre": 12,
-        "enero": 1,
-        "febrero": 2,
-        "marzo": 3,
-        "abril": 4,
-        "mayo": 5,
-        "junio": 6,
-        "julio": 7,
-        "agosto": 8,
-        "septiembre": 9,
+        "octubre": 10, "noviembre": 11, "diciembre": 12,
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5,
+        "junio": 6, "julio": 7, "agosto": 8, "septiembre": 9,
     }
     ven["mes_n"] = ven["Mes"].str.lower().map(months)
     ven["period"] = ven["Año"].astype(str) + "-" + ven["mes_n"].astype(int).astype(str).str.zfill(2)
+    ven = ven[ven.period.isin(PERIODS)].copy()
     ven["canal"] = np.where(ven["tienda / ubicación"].isin(["Pedidos", "CORPORATIVO"]), "mayor", "consumo")
     ven["tienda"] = ven["tienda / ubicación"].where(ven["tienda / ubicación"].isin(STORES))
 
@@ -243,7 +262,6 @@ def build_frames():
     base["talla"] = attr_inv["talla"].reindex(base.index).fillna(attr_ven["talla"]).fillna(sm_i["talla"])
     base["categoria"] = sm_i["categoria"].reindex(base.index)
     base["macro"] = base["categoria"].map(macro_of)
-    base["origen_cat"] = np.where(base["macro"].notna(), "maestro", None)
 
     known = base[base["macro"].notna()]
     mode_cat = known.groupby("modelo")["categoria"].agg(lambda s: s.value_counts().index[0])
@@ -251,263 +269,58 @@ def build_frames():
     inherit = base["macro"].isna() & base["modelo"].isin(mode_macro.index)
     base.loc[inherit, "categoria"] = base.loc[inherit, "modelo"].map(mode_cat)
     base.loc[inherit, "macro"] = base.loc[inherit, "modelo"].map(mode_macro)
-    base.loc[inherit, "origen_cat"] = "heredada"
 
     still = base["macro"].isna()
-    inferred_macro = []
-    inferred_cat = []
-    for modelo in base.loc[still, "modelo"]:
-        m, c = infer_category(modelo)
-        inferred_macro.append(m)
-        inferred_cat.append(c)
-    base.loc[still, "macro"] = inferred_macro
-    base.loc[still, "categoria"] = inferred_cat
-    base.loc[still & base["macro"].notna(), "origen_cat"] = "inferida"
+    inferred = [infer_category(m) for m in base.loc[still, "modelo"]]
+    base.loc[still, "macro"] = [m for m, _ in inferred]
+    base.loc[still, "categoria"] = [c for _, c in inferred]
     base["macro"] = base["macro"].fillna("Fuera de alcance")
     base["categoria"] = base["categoria"].fillna("Sin categoría")
 
     base["uprice"] = eco["uprice"].reindex(base.index)
     base["ucost"] = eco["ucost"].reindex(base.index)
-    base["precio_origen"] = np.where(base.uprice.notna(), "sku", "faltante")
     med_p = base.groupby("modelo")["uprice"].transform("median")
     med_c = base.groupby("modelo")["ucost"].transform("median")
     fill_p = base.uprice.isna() & med_p.notna()
     base.loc[fill_p, "uprice"] = med_p[fill_p]
-    base.loc[fill_p, "precio_origen"] = "modelo"
     fill_c = base.ucost.isna() & med_c.notna()
     base.loc[fill_c, "ucost"] = med_c[fill_c]
+    base["priced"] = base.uprice.notna() & base.ucost.notna() & (base.uprice > 0) & (base.ucost < base.uprice)
 
     cons = ven[ven.canal == "consumo"]
-    base["qty_12"] = cons.groupby("SKU")["Cant. ordenada"].sum().reindex(base.index).fillna(0)
-    base["qty_mayor"] = ven[ven.canal == "mayor"].groupby("SKU")["Cant. ordenada"].sum().reindex(base.index).fillna(0)
-    base["qty_3m"] = cons[cons.period.isin(RECENT)].groupby("SKU")["Cant. ordenada"].sum().reindex(base.index).fillna(0)
-    monthly = (
-        cons.groupby(["SKU", "period"])["Cant. ordenada"].sum().unstack(fill_value=0).reindex(columns=PERIODS, fill_value=0)
-    )
-    monthly = monthly.reindex(base.index).fillna(0)
-
+    base["qty_12"] = cons.groupby("SKU")["Cant. ordenada"].sum().reindex(base.index).fillna(0).clip(lower=0)
     inv["tienda"] = inv["Ubicación"].map(STORE_MAP)
     inv["pool"] = np.where(inv["Ubicación"].isin(["TALLER MANUFACTURADO", "TALLER EQUIPAMIENTO"]), "taller", "tienda")
     base["stock_tienda"] = inv[inv.pool == "tienda"].groupby("SKU")["Cantidad en inventario"].sum().reindex(base.index).fillna(0)
-    base["stock_taller_m"] = (
-        inv[inv["Ubicación"] == "TALLER MANUFACTURADO"].groupby("SKU")["Cantidad en inventario"].sum().reindex(base.index).fillna(0)
-    )
-    base["stock_taller_e"] = (
-        inv[inv["Ubicación"] == "TALLER EQUIPAMIENTO"].groupby("SKU")["Cantidad en inventario"].sum().reindex(base.index).fillna(0)
-    )
-    base["stock_taller"] = base["stock_taller_m"] + base["stock_taller_e"]
+    base["stock_taller"] = inv[inv.pool == "taller"].groupby("SKU")["Cantidad en inventario"].sum().reindex(base.index).fillna(0)
     base["stock"] = base["stock_tienda"] + base["stock_taller"]
 
-    store_stock = (
-        inv[inv.pool == "tienda"].pivot_table(index="SKU", columns="tienda", values="Cantidad en inventario", aggfunc="sum", fill_value=0)
+    store_stock = inv[inv.pool == "tienda"].pivot_table(
+        index="SKU", columns="tienda", values="Cantidad en inventario", aggfunc="sum", fill_value=0
     )
-    store_sales = (
-        cons[cons.tienda.notna()].pivot_table(index="SKU", columns="tienda", values="Cant. ordenada", aggfunc="sum", fill_value=0)
+    store_sales = cons[cons.tienda.notna()].pivot_table(
+        index="SKU", columns="tienda", values="Cant. ordenada", aggfunc="sum", fill_value=0
     )
     for col in STORES:
         if col not in store_stock.columns:
             store_stock[col] = 0
         if col not in store_sales.columns:
             store_sales[col] = 0
-    store_stock = store_stock.reindex(base.index).fillna(0)
-    store_sales = store_sales.reindex(base.index).fillna(0)
-
-    base["priced"] = base.uprice.notna() & base.ucost.notna() & (base.uprice > 0) & (base.ucost < base.uprice)
-    base["rev"] = np.where(base.priced, base.qty_12 * base.uprice, 0.0)
-    base["cogs"] = np.where(base.priced, base.qty_12 * base.ucost, 0.0)
-    base["margin"] = base.rev - base.cogs
-    base["stock_cost"] = np.where(base.ucost.notna(), base.stock * base.ucost, 0.0)
-    base["stock_retail"] = np.where(base.uprice.notna(), base.stock * base.uprice, 0.0)
-
-    scope_mask = base.macro.isin(["Manufactura", "Equipamiento"])
-    scope = base[scope_mask].copy()
-    return {
-        "base": base,
-        "scope": scope,
-        "monthly": monthly,
-        "store_stock": store_stock,
-        "store_sales": store_sales,
-        "ven": ven,
-        "abc_meta": abc_meta,
-    }
+    store_stock = store_stock[STORES].reindex(base.index).fillna(0)
+    store_sales = store_sales[STORES].reindex(base.index).fillna(0).clip(lower=0)
+    return base, store_stock, store_sales
 
 
-def model_table(scope: pd.DataFrame, monthly: pd.DataFrame) -> pd.DataFrame:
-    g = scope.reset_index().groupby(["modelo", "macro"], as_index=False)
-    mod = g.agg(
-        categoria=("categoria", lambda s: s.value_counts().index[0]),
-        origen_cat=("origen_cat", lambda s: s.value_counts().index[0]),
-        skus=("sku", "nunique"),
-        qty_12=("qty_12", "sum"),
-        qty_3m=("qty_3m", "sum"),
-        qty_mayor=("qty_mayor", "sum"),
-        rev=("rev", "sum"),
-        cogs=("cogs", "sum"),
-        margin=("margin", "sum"),
-        stock=("stock", "sum"),
-        stock_tienda=("stock_tienda", "sum"),
-        stock_taller=("stock_taller", "sum"),
-        stock_cost=("stock_cost", "sum"),
-        stock_retail=("stock_retail", "sum"),
-        skus_precio=("priced", "sum"),
-    )
-    # stock-weighted price and cost on priced units
-    priced = scope[scope.priced]
-    w = priced.reset_index().groupby("modelo").apply(
-        lambda d: pd.Series(
-            {
-                "pvp": np.average(d.uprice, weights=d.stock) if d.stock.sum() > 0 else d.uprice.median(),
-                "costo_u": np.average(d.ucost, weights=d.stock) if d.stock.sum() > 0 else d.ucost.median(),
-            }
-        ),
-        include_groups=False,
-    )
-    mod = mod.merge(w, on="modelo", how="left")
-    mod = pareto(mod, "margin", "abc_m")
-    mod = pareto(mod, "qty_12", "abc_r")
-    mod["matriz"] = mod.abc_m + mod.abc_r
-    rate12 = mod.qty_12 / 12.0
-    rate3 = mod.qty_3m / 3.0
-    estado = []
-    rate = []
-    cover = []
-    for r12, r3, qty12, qty3, stock in zip(rate12, rate3, mod.qty_12, mod.qty_3m, mod.stock):
-        if qty12 < 0:
-            est, rt = "devolucion", max(r12, 0)
-        elif stock <= 0:
-            est, rt = "sin stock", r12
-        elif qty12 <= 0 and qty3 <= 0:
-            est, rt = "sin salida", 0.0
-        elif qty3 <= 0:
-            est, rt = "frenado", r12
-        elif r12 <= 0:
-            est, rt = "despertando", r3
-        elif r3 > r12 * 1.5:
-            est, rt = "despertando", r3
-        elif r3 < r12 * 0.5:
-            est, rt = "enfriando", r3
-        else:
-            est, rt = "estable", r12
-        estado.append(est)
-        rate.append(float(rt))
-        if stock <= 0:
-            cover.append(0.0)
-        elif est in ("sin salida",):
-            cover.append(999.0)
-        elif est == "frenado":
-            cover.append(999.0 if stock >= MIN_STOCK else (stock / r12 if r12 > 0 else 999.0))
-        elif rt > 0:
-            cover.append(float(stock) / float(rt))
-        else:
-            cover.append(999.0)
-    mod["estado"] = estado
-    mod["rate"] = rate
-    mod["cover"] = cover
-    mod["rango"] = [rango_of(e, c) if e != "devolucion" else "devolucion" for e, c in zip(mod.estado, mod.cover)]
-    # dust: frenado with tiny stock should not look "dormido"
-    tiny = (mod.estado == "frenado") & (mod.stock < MIN_STOCK)
-    mod.loc[tiny, "rango"] = "<6"
-    mod["capital6"] = [
-        max(0.0, (st - 6.0 * rt) * (cost if pd.notna(cost) else 0.0))
-        for st, rt, cost in zip(mod.stock, mod.rate, mod.costo_u)
-    ]
-    mod["mg_pct"] = np.where(mod.rev > 0, mod.margin / mod.rev, np.where(mod.pvp > 0, (mod.pvp - mod.costo_u) / mod.pvp, np.nan))
-    # monthly by model
-    scope_idx = scope.copy()
-    m2 = monthly.reindex(scope_idx.index).fillna(0)
-    m2["modelo"] = scope_idx["modelo"].values
-    bym = m2.groupby("modelo")[PERIODS].sum()
-    mod = mod.merge(bym, on="modelo", how="left")
-    return mod
-
-
-def sku_discount(price, cost, tier: float):
-    cap = max_discount(price, cost)
-    applied = step5(min(tier, cap))
-    if applied + 1e-9 < MIN_DISC:
-        return 0.0, True
-    return applied, applied + 1e-9 < tier - 1e-9
-
-
-def assign_options(mod: pd.DataFrame, scope: pd.DataFrame):
-    """Return sku-level frame for candidate models and option flags."""
-    cc = mod[(mod.abc_m == "C") & (mod.abc_r == "C")].copy()
-    eligible_models = set(
-        cc[(cc.stock >= MIN_STOCK) & (cc.rango.isin(RANGO_IMPULSO)) & (cc.skus_precio > 0) & (cc.estado != "devolucion")][
-            "modelo"
-        ]
-    )
-    sk = scope.reset_index()
-    sk = sk[sk.modelo.isin(eligible_models)].copy()
-    tier_map = {t[0]: t[2] for t in TIERS_IMPULSO}
-    tier_i = {m: tier_map[r] for m, r in zip(cc.modelo, cc.rango) if m in eligible_models}
-    di, topi = [], []
-    for modelo, price, cost, priced in zip(sk.modelo, sk.uprice, sk.ucost, sk.priced):
-        if not priced or not (price > cost):
-            di.append(0.0)
-            topi.append(False)
-            continue
-        a, t = sku_discount(price, cost, tier_i[modelo])
-        di.append(a)
-        topi.append(t)
-    sk["tier_impulso"] = sk.modelo.map(tier_i)
-    sk["d_impulso"] = di
-    sk["tope_impulso"] = topi
-    # La opción amplia usa el mismo porcentaje en la cola C y suma los B lentos.
-    sk["d_desatasco"] = sk["d_impulso"]
-    sk["tope_desatasco"] = sk["tope_impulso"]
-    sk["en_impulso"] = sk.d_impulso >= MIN_DISC
-    sk["en_desatasco"] = sk.en_impulso
-    sk["clase"] = "C"
-    ok_i = set(sk.loc[sk.en_impulso, "modelo"])
-    sk = sk[sk.modelo.isin(ok_i)].copy()
-    sk_b, ok_b = addon_b(mod, scope, tier_map)
-    if len(sk_b):
-        sk = pd.concat([sk, sk_b], ignore_index=True)
-    ok_d = set(sk.loc[sk.en_desatasco, "modelo"])
-    return sk, ok_i, ok_d, ok_b
-
-
-def addon_b(mod: pd.DataFrame, scope: pd.DataFrame, tier_map: dict):
-    """Clase B de margen y C de rotación, con 18 meses o más. No son categoría C."""
-    bmod = mod[
-        (mod.abc_m == "B")
-        & (mod.abc_r == "C")
-        & (mod.stock >= MIN_STOCK)
-        & (mod.rango.isin(["18-24", "24+", "dormido"]))
-        & (mod.skus_precio > 0)
-        & (mod.estado != "devolucion")
-    ]
-    if bmod.empty:
-        return pd.DataFrame(), set()
-    tiers = {m: tier_map[r] for m, r in zip(bmod.modelo, bmod.rango)}
-    sk = scope.reset_index()
-    sk = sk[sk.modelo.isin(set(bmod.modelo))].copy()
-    di, topi = [], []
-    for modelo, price, cost, priced in zip(sk.modelo, sk.uprice, sk.ucost, sk.priced):
-        if not priced or not (price > cost):
-            di.append(0.0)
-            topi.append(False)
-            continue
-        a, t = sku_discount(price, cost, tiers[modelo])
-        di.append(a)
-        topi.append(t)
-    sk["tier_impulso"] = sk.modelo.map(tiers)
-    sk["d_impulso"] = 0.0
-    sk["tope_impulso"] = False
-    sk["d_desatasco"] = di
-    sk["tope_desatasco"] = topi
-    sk["en_impulso"] = False
-    sk["en_desatasco"] = sk.d_desatasco >= MIN_DISC
-    sk["clase"] = "B"
-    sk = sk[sk.en_desatasco].copy()
-    return sk, set(sk.modelo)
+def reference_skus():
+    data = load_json_script(REF_HTML, "bf-embedded-data")
+    skus = {str(r["sku"]).upper() for r in data["skus"]}
+    return skus, data["meta"], data["summary"]
 
 
 def plan_sku(store_stock: dict, taller: float, store_sales: dict, model_sales: dict):
     total = int(round(sum(store_stock.values()) + taller))
     if total <= 0:
-        return [], {s: 0 for s in STORES}
+        return []
     own = {s: store_sales.get(s, 0) for s in STORES if store_sales.get(s, 0) > 0}
     seeded = False
     if own:
@@ -547,10 +360,9 @@ def plan_sku(store_stock: dict, taller: float, store_sales: dict, model_sales: d
     tall = float(taller)
     for s, n in sorted(need.items(), key=lambda kv: -kv[1]):
         take = min(n, tall)
-        if take >= 0.5:
-            q = int(round(take))
-            if q > 0:
-                moves.append({"desde": "Taller", "hacia": s, "unidades": q})
+        q = int(round(take))
+        if q > 0:
+            moves.append({"desde": "Taller", "hacia": s, "unidades": q})
             tall -= q
             need[s] -= q
     donors = sorted(surplus.items(), key=lambda kv: -kv[1])
@@ -568,1003 +380,654 @@ def plan_sku(store_stock: dict, taller: float, store_sales: dict, model_sales: d
             if q > 0:
                 moves.append({"desde": d, "hacia": s, "unidades": q})
             n -= q
-            new_donors.append((d, sup - q))
+            new_donors.append((d, max(0, sup - q)))
         donors = new_donors
-        need[s] = n
-    return moves, targets
+    return moves
 
 
-def supply_for(sk: pd.DataFrame, scope: pd.DataFrame, store_stock: pd.DataFrame, store_sales: pd.DataFrame, models: set, flag: str):
-    sub = sk[(sk.modelo.isin(models)) & (sk[flag])].copy()
-    model_sales = (
-        scope.reset_index()
-        .groupby("modelo")
-        .apply(lambda d: pd.Series({s: float(store_sales.reindex(d.sku).fillna(0)[s].sum()) for s in STORES}), include_groups=False)
-    )
-    moves = []
-    for sku, row in sub.set_index("sku").iterrows():
-        ss = {s: float(store_stock.at[sku, s]) if sku in store_stock.index else 0.0 for s in STORES}
-        sv = {s: float(store_sales.at[sku, s]) if sku in store_sales.index else 0.0 for s in STORES}
-        ms = model_sales.loc[row.modelo].to_dict() if row.modelo in model_sales.index else {s: 0 for s in STORES}
-        mv, _targets = plan_sku(ss, float(row.stock_taller), sv, ms)
-        for m in mv:
-            moves.append(
+def assemble(base, store_stock, store_sales, ref_skus):
+    base = base.copy()
+    base["modelo_u"] = base["modelo"].fillna("").astype(str).str.strip()
+    drop_mask = base["modelo_u"].str.contains(DROP_RE)
+    in_ref = base.index.to_series().isin(ref_skus) & ~drop_mask & base["stock"].gt(0)
+    in_ref &= base["macro"].isin(["Manufactura", "Equipamiento"])
+    forced = base["modelo_u"].isin(FORCE_FULL) & ~drop_mask & base["stock"].gt(0)
+    forced &= base["macro"].isin(["Manufactura", "Equipamiento"])
+    offer = base[in_ref | forced].copy()
+    offer["origen"] = np.where(offer["modelo_u"].isin(FORCE_FULL), "Línea completa", "CC")
+    offer["matriz"] = np.where(offer["origen"] == "Línea completa", "Línea", "CC")
+
+    # Polvo: modelos CC con menos de 5 unidades. No arman evento.
+    stock_modelo = offer.groupby("modelo_u")["stock"].sum()
+    polvo_names = [
+        m for m, st in stock_modelo.items() if st < MIN_MODEL_STOCK and m not in FORCE_FULL
+    ]
+    polvo = offer[offer.modelo_u.isin(polvo_names)].copy()
+    offer = offer[~offer.modelo_u.isin(polvo_names)].copy()
+
+    rows_m = []
+    rows_s = []
+    for modelo, part in offer.groupby("modelo_u"):
+        qty = float(part.qty_12.sum())
+        stock = float(part.stock.sum())
+        rate = qty / 12.0
+        cover = (stock / rate) if rate > 0 else None
+        rango = rango_of(qty, cover if cover is not None else 999)
+        tier = TIER_PCT[rango]
+        di, topi, promo = [], [], []
+        for price, cost, priced in zip(part.uprice, part.ucost, part.priced):
+            if not priced:
+                di.append(0.0)
+                topi.append(False)
+                promo.append(None)
+                continue
+            applied, capped = sku_discount(float(price), float(cost), tier)
+            di.append(applied)
+            topi.append(capped)
+            promo.append(float(price) * (1 - applied) if applied >= MIN_DISC else None)
+        part = part.copy()
+        part["descuento"] = di
+        part["tope"] = topi
+        part["promo"] = promo
+        part["rango"] = rango
+        part["tier"] = tier
+        priced_disc = part[part.descuento >= MIN_DISC]
+        if len(priced_disc):
+            d_eff = 1 - (
+                (priced_disc.stock * priced_disc.uprice * (1 - priced_disc.descuento)).sum()
+                / (priced_disc.stock * priced_disc.uprice).sum()
+            )
+            pvp = wavg(priced_disc.uprice, priced_disc.stock)
+            pbf = wavg(priced_disc.uprice * (1 - priced_disc.descuento), priced_disc.stock)
+        else:
+            d_eff = None
+            pvp = wavg(part.uprice, part.stock)
+            pbf = None
+        sin_precio = int((~part.priced).sum())
+        rows_m.append(
+            {
+                "modelo": modelo,
+                "macro": part["macro"].value_counts().index[0],
+                "categoria": part["categoria"].value_counts().index[0],
+                "origen": "Línea completa" if modelo in FORCE_FULL else "CC",
+                "matriz": "Línea" if modelo in FORCE_FULL else "CC",
+                "skus": int(part.index.nunique()),
+                "rotacion": num(rate, 2),
+                "qty12": num(qty, 0),
+                "stock": num(stock, 0),
+                "tienda": num(part.stock_tienda.sum(), 0),
+                "taller": num(part.stock_taller.sum(), 0),
+                "cover": num(cover, 1) if cover is not None else None,
+                "rango": rango,
+                "descuento": num(d_eff, 4),
+                "precio": num(pvp, 2),
+                "promo": num(pbf, 2),
+                "tope": bool(part.tope.any()),
+                "sinPrecio": sin_precio == len(part),
+                "skusSinPrecio": sin_precio,
+            }
+        )
+        for sku, r in part.iterrows():
+            sku_rate = float(r.qty_12) / 12.0
+            sku_cover = (float(r.stock) / sku_rate) if sku_rate > 0 else None
+            rows_s.append(
                 {
                     "sku": sku,
-                    "modelo": row.modelo,
-                    "macro": row.macro,
-                    "desde": m["desde"],
-                    "hacia": m["hacia"],
-                    "unidades": m["unidades"],
+                    "modelo": modelo,
+                    "gen": "" if str(r.genero) in ("nan", "None") else str(r.genero or ""),
+                    "color": "" if str(r.color) in ("nan", "None") else str(r.color or ""),
+                    "talla": "" if str(r.talla) in ("nan", "None") else str(r.talla or ""),
+                    "matriz": r.matriz,
+                    "stock": num(r.stock, 0),
+                    "tienda": num(r.stock_tienda, 0),
+                    "taller": num(r.stock_taller, 0),
+                    "rotacion": num(sku_rate, 2),
+                    "cover": num(sku_cover, 1) if sku_cover is not None else None,
+                    "qty12": num(r.qty_12, 0),
+                    "descuento": num(r.descuento, 4) if r.descuento >= MIN_DISC else None,
+                    "precio": num(r.uprice, 2),
+                    "promo": num(r.promo, 2) if r.promo is not None else None,
+                    "tope": bool(r.tope),
+                    "priced": bool(r.priced),
                 }
             )
-    return pd.DataFrame(moves)
+    models = pd.DataFrame(rows_m)
+    skus = pd.DataFrame(rows_s)
+    return offer, models, skus, polvo
 
 
-def option_economics(sk: pd.DataFrame, mod: pd.DataFrame, models: set, dcol: str):
-    sub = sk[(sk.modelo.isin(models)) & (sk[dcol] >= MIN_DISC)].copy()
-    if sub.empty:
-        return {}
-    sub["promo"] = sub.uprice * (1 - sub[dcol])
-    sub["give_unit"] = sub.uprice - sub.promo
-    # natural month at the model rate, allocated by sku share of qty_12, else by stock
-    mrate = mod.set_index("modelo")["rate"]
-    mq = sub.groupby("modelo")["qty_12"].transform("sum")
-    mstock = sub.groupby("modelo")["stock"].transform("sum")
-    share = np.where(mq > 0, sub.qty_12 / mq, np.where(mstock > 0, sub.stock / mstock, 0))
-    sub["rate_sku"] = sub.modelo.map(mrate).fillna(0) * share
-    sub["natural_give"] = sub.rate_sku * sub.give_unit
-    sub["trapped_u"] = np.maximum(0, sub.stock - 6 * sub.rate_sku)
-    # trapped at sku using sku's own rate would mis-state; use share of model trapped units
-    m_trapped = np.maximum(0, mstock - 6 * sub.modelo.map(mrate).fillna(0))
-    # recompute model trapped on full model stock, then allocate by stock share among discounted skus
-    full_stock = mod.set_index("modelo")["stock"]
-    full_trap = np.maximum(0, full_stock - 6 * mrate)
-    sub["trap_model"] = sub.modelo.map(full_trap).fillna(0) * np.where(mstock > 0, sub.stock / mstock, 0)
-    sub["trap_margin"] = sub.trap_model * (sub.promo - sub.ucost)
-    sub["trap_cost"] = sub.trap_model * sub.ucost
-    sub["stock_cost"] = sub.stock * sub.ucost
-    sub["stock_pvp"] = sub.stock * sub.uprice
-    sub["promo_val"] = sub.stock * sub.promo
-    wdisc = 1 - sub.promo_val.sum() / sub.stock_pvp.sum() if sub.stock_pvp.sum() else 0
-    full_margin = (sub.stock_pvp - sub.stock_cost).sum()
-    promo_margin = (sub.promo_val - sub.stock_cost).sum()
+def build_supply(skus, offer, store_stock, store_sales):
+    disc = skus[skus.descuento.notna() & (skus.descuento >= MIN_DISC)]
+    model_sales = {}
+    for modelo, part in offer.groupby("modelo_u"):
+        model_sales[modelo] = {s: float(store_sales.reindex(part.index).fillna(0)[s].sum()) for s in STORES}
+    moves = []
+    for row in disc.itertuples(index=False):
+        sku = row.sku
+        ss = {s: float(store_stock.at[sku, s]) if sku in store_stock.index else 0.0 for s in STORES}
+        sv = {s: float(store_sales.at[sku, s]) if sku in store_sales.index else 0.0 for s in STORES}
+        for m in plan_sku(ss, float(offer.at[sku, "stock_taller"]) if sku in offer.index else 0.0, sv, model_sales.get(row.modelo, {})):
+            moves.append({"sku": sku, "modelo": row.modelo, "desde": m["desde"], "hacia": m["hacia"], "unidades": m["unidades"]})
+    moves_df = pd.DataFrame(moves)
+    tiendas = []
+    offer_idx = offer.index
+    for store in STORES:
+        stock_hoy = float(store_stock.reindex(offer_idx).fillna(0)[store].sum())
+        venta = float(store_sales.reindex(offer_idx).fillna(0)[store].sum())
+        if moves_df.empty:
+            entrar = salir = desde = 0
+        else:
+            entrar = int(moves_df.loc[moves_df.hacia == store, "unidades"].sum())
+            salir = int(moves_df.loc[moves_df.desde == store, "unidades"].sum())
+            desde = int(moves_df.loc[(moves_df.hacia == store) & (moves_df.desde == "Taller"), "unidades"].sum())
+        quiebres = 0
+        for modelo, part in offer.groupby("modelo_u"):
+            sold = float(store_sales.reindex(part.index).fillna(0)[store].sum())
+            have = float(store_stock.reindex(part.index).fillna(0)[store].sum())
+            if sold > 0 and have <= 0:
+                quiebres += 1
+        tiendas.append(
+            {
+                "tienda": store,
+                "stock": num(stock_hoy, 0),
+                "venta": num(venta, 0),
+                "entrar": entrar,
+                "desdeTaller": desde,
+                "salir": salir,
+                "quiebres": quiebres,
+            }
+        )
+    if moves_df.empty:
+        pull = []
+        top_moves = []
+        bajar = mover = 0
+    else:
+        bajar = int(moves_df.loc[moves_df.desde == "Taller", "unidades"].sum())
+        mover = int(moves_df.loc[moves_df.desde != "Taller", "unidades"].sum())
+        pull_s = moves_df[moves_df.desde == "Taller"].groupby("modelo")["unidades"].sum().sort_values(ascending=False).head(8)
+        pull = [{"modelo": i, "unidades": int(v)} for i, v in pull_s.items()]
+        top = moves_df.sort_values("unidades", ascending=False).head(40)
+        top_moves = top.to_dict(orient="records")
+    return moves_df, tiendas, pull, top_moves, bajar, mover
+
+
+def exclusion_rows(base):
+    """Zenit, Refresh y Motion Loop, con el stock real, para que directiva vea la salida."""
+    part = base[base.modelo.fillna("").astype(str).str.contains(DROP_RE) & base.stock.gt(0)].copy()
+    rows = []
+    for modelo, g in part.groupby(part.modelo.fillna("").astype(str).str.strip()):
+        qty = float(g.qty_12.sum())
+        rate = qty / 12.0
+        if "ZENIT" in modelo.upper():
+            motivo = "Zenit"
+        elif "REFRESH" in modelo.upper():
+            motivo = "Refresh"
+        else:
+            motivo = "Motion Loop"
+        rows.append(
+            {
+                "motivo": motivo,
+                "modelo": modelo,
+                "macro": g["macro"].value_counts().index[0],
+                "stock": num(g.stock.sum(), 0),
+                "tienda": num(g.stock_tienda.sum(), 0),
+                "taller": num(g.stock_taller.sum(), 0),
+                "qty12": num(qty, 0),
+                "rotacion": num(rate, 2),
+                "cover": num(g.stock.sum() / rate, 1) if rate > 0 else None,
+            }
+        )
+    rows.sort(key=lambda r: ({"Zenit": 0, "Refresh": 1, "Motion Loop": 2}[r["motivo"]], -r["stock"]))
+    return rows
+
+
+def polvo_rows(polvo):
+    rows = []
+    if polvo.empty:
+        return rows
+    for modelo, g in polvo.groupby(polvo.modelo.fillna("").astype(str).str.strip()):
+        rows.append(
+            {
+                "motivo": "Menos de 5 unidades",
+                "modelo": modelo,
+                "stock": num(g.stock.sum(), 0),
+                "qty12": num(g.qty_12.sum(), 0),
+            }
+        )
+    rows.sort(key=lambda r: r["modelo"])
+    return rows
+
+
+def resumen(models, skus, bajar, mover):
+    priced = skus[skus.descuento.notna()]
+    if len(priced) and (priced.stock * priced.precio).sum():
+        desc = 1 - (priced.stock * priced.promo).sum() / (priced.stock * priced.precio).sum()
+    else:
+        desc = None
+    cover_ok = models.cover.dropna()
+    u24 = int(models.loc[models.rango.isin(["24+", "dormido"]), "stock"].sum())
     return {
-        "modelos": int(sub.modelo.nunique()),
-        "skus": int(sub.sku.nunique()),
-        "unidades": num(sub.stock.sum(), 0),
-        "tienda": num(sub.stock_tienda.sum(), 0),
-        "taller": num(sub.stock_taller.sum(), 0),
-        "costo": num(sub.stock_cost.sum(), 0),
-        "pvp": num(sub.stock_pvp.sum(), 0),
-        "desc_efectivo": num(wdisc, 4),
-        "margen_conservado": num(promo_margin / full_margin, 4) if full_margin else None,
-        "costo_mes": num(sub.natural_give.sum(), 0),
-        "margen_atrapado": num(sub.trap_margin.sum(), 0),
-        "capital6": num(sub.trap_cost.sum(), 0),
-        "topados": int(sub.modelo.nunique() and (sub["tope_" + ("impulso" if "impulso" in dcol else "desatasco")].groupby(sub.modelo).any().sum())),
+        "modelos": int(models.modelo.nunique()) if len(models) else 0,
+        "skus": int(len(skus)),
+        "unidades": num(models.stock.sum(), 0) if len(models) else 0,
+        "tienda": num(models.tienda.sum(), 0) if len(models) else 0,
+        "taller": num(models.taller.sum(), 0) if len(models) else 0,
+        "desc_efectivo": num(desc, 4),
+        "bajar": int(bajar),
+        "mover": int(mover),
+        "rotacion_mediana": num(models.rotacion.median(), 2) if len(models) else None,
+        "cobertura_mediana": num(cover_ok.median(), 1) if len(cover_ok) else None,
+        "unidades_largas": u24,
     }
 
 
-def store_rollup(moves: pd.DataFrame, sk: pd.DataFrame, store_stock, store_sales, models: set, flag: str):
-    sub = sk[(sk.modelo.isin(models)) & (sk[flag])].copy()
-    rows = []
-    mv = moves if moves is not None and len(moves) else pd.DataFrame(columns=["desde", "hacia", "unidades", "modelo"])
-    for s in STORES:
-        stock = float(store_stock.reindex(sub.sku).fillna(0)[s].sum()) if len(sub) else 0
-        venta = float(store_sales.reindex(sub.sku).fillna(0)[s].sum()) if len(sub) else 0
-        entrar = float(mv.loc[mv.hacia == s, "unidades"].sum()) if len(mv) else 0
-        salir = float(mv.loc[mv.desde == s, "unidades"].sum()) if len(mv) else 0
-        desde_taller = float(mv.loc[(mv.hacia == s) & (mv.desde == "Taller"), "unidades"].sum()) if len(mv) else 0
-        # model quiebre: model sold in store, stock of model in store is 0
-        if len(sub):
-            st = store_stock.reindex(sub.sku).fillna(0)[s]
-            sa = store_sales.reindex(sub.sku).fillna(0)[s]
-            tmp = sub[["modelo"]].copy()
-            tmp["st"] = st.values
-            tmp["sa"] = sa.values
-            g = tmp.groupby("modelo").agg(st=("st", "sum"), sa=("sa", "sum"))
-            quiebre = int(((g.sa > 0) & (g.st <= 0)).sum())
-        else:
-            quiebre = 0
-        rows.append(
-            {
-                "tienda": s,
-                "stock": num(stock, 0),
-                "venta": num(venta, 0),
-                "entrar": num(entrar, 0),
-                "salir": num(salir, 0),
-                "desdeTaller": num(desde_taller, 0),
-                "quiebres": quiebre,
-            }
-        )
-    bajar = num(mv.loc[mv.desde == "Taller", "unidades"].sum(), 0) if len(mv) else 0
-    mover = num(mv.loc[mv.desde != "Taller", "unidades"].sum(), 0) if len(mv) else 0
-    # model-level pull
-    if len(mv):
-        pull = (
-            mv[mv.desde == "Taller"]
-            .groupby("modelo", as_index=False)
-            .agg(unidades=("unidades", "sum"), destinos=("hacia", "nunique"))
-            .sort_values("unidades", ascending=False)
-        )
-    else:
-        pull = pd.DataFrame(columns=["modelo", "unidades", "destinos"])
-    return rows, bajar, mover, pull
+def write_excel(models, skus, moves, tiendas, excl, polvo, res, texto):
+    wb = Workbook()
+    navy = PatternFill("solid", fgColor="0F6E56")
+    cream = PatternFill("solid", fgColor="F7F4EE")
+    sand = PatternFill("solid", fgColor="FFF6EA")
+    white = Font(name="Calibri", color="FFFFFF", bold=True, size=11)
+    title = Font(name="Calibri", bold=True, size=18, color="1C1915")
+    body = Font(name="Calibri", size=11, color="1C1915")
+    thin = Border(
+        left=Side(style="thin", color="E4DDD0"),
+        right=Side(style="thin", color="E4DDD0"),
+        top=Side(style="thin", color="E4DDD0"),
+        bottom=Side(style="thin", color="E4DDD0"),
+    )
+    wrap = Alignment(wrap_text=True, vertical="center")
+
+    def head(ws, headers, fill=navy):
+        for i, h in enumerate(headers, 1):
+            cell = ws.cell(1, i, h)
+            cell.fill = fill
+            cell.font = white
+            cell.alignment = wrap
+        ws.row_dimensions[1].height = 32
+        ws.freeze_panes = "B2"
+        ws.sheet_view.showGridLines = False
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToPage = True
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
+        ws.oddHeader.left.text = "Black Friday · inventario de baja rotación"
+        ws.oddFooter.right.text = "Página &P de &N"
+
+    def widths(ws, cols):
+        for i, w in enumerate(cols, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    def paint(ws, row, cols, zebra=False):
+        for c in range(1, cols + 1):
+            cell = ws.cell(row, c)
+            cell.font = body
+            cell.border = thin
+            cell.alignment = Alignment(vertical="center")
+            if zebra and row % 2 == 0:
+                cell.fill = cream
+
+    ws = wb.active
+    ws.title = "01_Decision"
+    ws.sheet_view.showGridLines = False
+    ws["A1"] = "Black Friday · inventario de baja rotación"
+    ws["A1"].font = title
+    ws.merge_cells("A1:F1")
+    ws["A2"] = "Octubre 2025 – septiembre 2026 · manufactura y equipamiento · para ofrecer en tienda"
+    ws["A2"].font = Font(name="Calibri", size=12, color="5E584E")
+    ws.merge_cells("A2:F2")
+    ws["A4"] = texto
+    ws["A4"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws["A4"].font = body
+    ws.merge_cells("A4:F4")
+    ws.row_dimensions[4].height = 78
+    labels = [
+        ("Modelos", res["modelos"]),
+        ("Unidades", res["unidades"]),
+        ("En tienda", res["tienda"]),
+        ("En taller", res["taller"]),
+        ("Cobertura mediana (meses)", res["cobertura_mediana"]),
+        ("Rotación mediana (u/mes)", res["rotacion_mediana"]),
+        ("Descuento efectivo", res["desc_efectivo"]),
+        ("Bajar de taller", res["bajar"]),
+        ("Mover entre tiendas", res["mover"]),
+        ("Unidades con cobertura larga", res["unidades_largas"]),
+    ]
+    ws["A6"] = "Indicador"
+    ws["B6"] = "Valor"
+    ws["A6"].fill = navy
+    ws["B6"].fill = navy
+    ws["A6"].font = white
+    ws["B6"].font = white
+    for i, (lab, val) in enumerate(labels, 7):
+        ws.cell(i, 1, lab).font = body
+        ws.cell(i, 2, val).font = Font(name="Calibri", bold=True, size=12)
+        ws.cell(i, 1).border = thin
+        ws.cell(i, 2).border = thin
+        if lab == "Descuento efectivo":
+            ws.cell(i, 2).number_format = "0.0%"
+        elif isinstance(val, (int, float)):
+            ws.cell(i, 2).number_format = "#,##0.00" if isinstance(val, float) and val < 100 else "#,##0"
+    ws["A18"] = "Escalera de descuento"
+    ws["A18"].font = Font(name="Calibri", bold=True, size=14)
+    for i, h in enumerate(["Tramo de cobertura", "Descuento", "Modelos", "Unidades"], 1):
+        cell = ws.cell(19, i, h)
+        cell.fill = navy
+        cell.font = white
+    for i, (rid, label, pct) in enumerate(TIERS):
+        part = models[models.rango == rid]
+        ws.cell(20 + i, 1, label).font = body
+        ws.cell(20 + i, 2, pct).font = body
+        ws.cell(20 + i, 2).number_format = "0%"
+        ws.cell(20 + i, 3, int(len(part))).font = body
+        ws.cell(20 + i, 4, int(part.stock.sum()) if len(part) else 0).font = body
+        ws.cell(20 + i, 4).number_format = "#,##0"
+        for c in range(1, 5):
+            ws.cell(20 + i, c).border = thin
+            if i % 2:
+                ws.cell(20 + i, c).fill = cream
+    ws["A28"] = "Líneas que entran con el stock completo"
+    ws["A28"].font = Font(name="Calibri", bold=True, size=14)
+    for i, h in enumerate(["Modelo", "Unidades", "Tienda", "Taller", "Rotación/mes", "Cobertura", "Descuento"], 1):
+        cell = ws.cell(29, i, h)
+        cell.fill = navy
+        cell.font = white
+    full = models[models.origen == "Línea completa"].sort_values("stock", ascending=False)
+    for i, r in enumerate(full.itertuples(index=False), 30):
+        vals = [r.modelo, r.stock, r.tienda, r.taller, r.rotacion, r.cover if r.cover is not None else "Sin salida", r.descuento]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(i, c, v)
+            cell.font = body
+            cell.border = thin
+            cell.fill = sand
+        ws.cell(i, 2).number_format = "#,##0"
+        ws.cell(i, 3).number_format = "#,##0"
+        ws.cell(i, 4).number_format = "#,##0"
+        ws.cell(i, 5).number_format = "0.00"
+        if isinstance(r.cover, float):
+            ws.cell(i, 6).number_format = "0.0"
+        if r.descuento is not None:
+            ws.cell(i, 7).number_format = "0%"
+    ws.column_dimensions["A"].width = 42
+    ws.column_dimensions["B"].width = 28
+    for col in "CDEFG":
+        ws.column_dimensions[col].width = 18
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
+    ws.oddHeader.left.text = "Black Friday · decisión"
+    ws.print_title_rows = "1:2"
+    ws.page_setup.horizontalCentered = True
+    ws.sheet_view.zoomScale = 120
+
+    headers = [
+        "Modelo", "Línea", "Categoría", "Origen", "SKUs", "Rotación/mes", "Venta 12 meses",
+        "Stock total", "Stock tiendas", "Stock taller", "Cobertura (meses)", "Descuento",
+        "Precio", "Precio Black Friday", "Piso de precio",
+    ]
+
+    def option_sheet(name, frame):
+        ws = wb.create_sheet(name)
+        head(ws, headers)
+        for i, r in enumerate(frame.itertuples(index=False), 2):
+            vals = [
+                r.modelo, r.macro, r.categoria, r.origen, r.skus, r.rotacion, r.qty12,
+                r.stock, r.tienda, r.taller, r.cover if r.cover is not None else "Sin salida",
+                r.descuento, r.precio, r.promo, "Sí" if r.tope else "",
+            ]
+            for c, v in enumerate(vals, 1):
+                ws.cell(i, c, None if v is None else v)
+            paint(ws, i, len(headers), zebra=True)
+            ws.cell(i, 6).number_format = "0.00"
+            ws.cell(i, 7).number_format = "#,##0"
+            for col in (8, 9, 10):
+                ws.cell(i, col).number_format = "#,##0"
+            if isinstance(r.cover, float):
+                ws.cell(i, 11).number_format = "0.0"
+            if r.descuento is not None:
+                ws.cell(i, 12).number_format = "0.0%"
+            for col in (13, 14):
+                if ws.cell(i, col).value is not None:
+                    ws.cell(i, col).number_format = '"$"#,##0.00'
+        widths(ws, [36, 16, 32, 18, 10, 14, 16, 14, 14, 14, 18, 12, 12, 20, 16])
+        ws.auto_filter.ref = f"A1:O{max(1, len(frame)+1)}"
+        ws.auto_filter.add_sort_condition("A2:A2")
+        ws.print_title_rows = "1:1"
+        ws.page_setup.fitToHeight = 0
+        ws.oddFooter.left.text = name.replace("_", " ")
+
+    by_rot = models.sort_values(["rotacion", "stock"], ascending=[True, False])
+    by_stock = models.sort_values(["stock", "rotacion"], ascending=[False, True])
+    option_sheet("02_Por_rotacion", by_rot)
+    option_sheet("03_Por_inventario", by_stock)
+
+    ws = wb.create_sheet("04_Detalle_SKU")
+    h = ["Modelo", "SKU", "Género", "Color", "Talla", "Origen", "Rotación/mes", "Venta 12 meses",
+         "Stock", "Tienda", "Taller", "Cobertura (meses)", "Descuento", "Precio", "Precio Black Friday"]
+    head(ws, h)
+    sk_sorted = skus.sort_values(["modelo", "stock"], ascending=[True, False])
+    origen = models.set_index("modelo")["origen"]
+    for i, r in enumerate(sk_sorted.itertuples(index=False), 2):
+        vals = [
+            r.modelo, r.sku, r.gen, r.color, r.talla, origen.get(r.modelo, "CC"),
+            r.rotacion, r.qty12, r.stock, r.tienda, r.taller,
+            r.cover if r.cover is not None else "Sin salida",
+            r.descuento, r.precio, r.promo,
+        ]
+        for c, v in enumerate(vals, 1):
+            ws.cell(i, c, None if v is None else v)
+        paint(ws, i, len(h), True)
+        ws.cell(i, 7).number_format = "0.00"
+        for col in (8, 9, 10, 11):
+            ws.cell(i, col).number_format = "#,##0"
+        if isinstance(r.cover, float):
+            ws.cell(i, 12).number_format = "0.0"
+        if r.descuento is not None:
+            ws.cell(i, 13).number_format = "0.0%"
+        for col in (14, 15):
+            if ws.cell(i, col).value is not None:
+                ws.cell(i, col).number_format = '"$"#,##0.00'
+    widths(ws, [32, 16, 14, 18, 12, 18, 14, 16, 12, 12, 12, 18, 12, 12, 20])
+    ws.auto_filter.ref = f"A1:O{max(1, len(sk_sorted)+1)}"
+    ws.print_title_rows = "1:1"
+
+    ws = wb.create_sheet("05_Movimientos")
+    h = ["Modelo", "SKU", "Desde", "Hacia", "Unidades"]
+    head(ws, h)
+    if not moves.empty:
+        ordered = moves.sort_values(["unidades", "modelo"], ascending=[False, True])
+        for i, r in enumerate(ordered.itertuples(index=False), 2):
+            for c, v in enumerate([r.modelo, r.sku, r.desde, r.hacia, int(r.unidades)], 1):
+                ws.cell(i, c, v)
+            paint(ws, i, 5, True)
+            ws.cell(i, 5).number_format = "#,##0"
+        ws.auto_filter.ref = f"A1:E{len(ordered)+1}"
+    widths(ws, [36, 16, 22, 22, 14])
+    ws.print_title_rows = "1:1"
+
+    ws = wb.create_sheet("06_No_entra")
+    h = ["Motivo", "Modelo", "Línea", "Unidades", "Tienda", "Taller", "Venta 12 meses", "Rotación/mes", "Cobertura (meses)"]
+    head(ws, h)
+    extra = []
+    for r in excl:
+        extra.append([r["motivo"], r["modelo"], r["macro"], r["stock"], r["tienda"], r["taller"], r["qty12"], r["rotacion"], r["cover"] if r["cover"] is not None else "Sin salida"])
+    for r in polvo:
+        extra.append([r["motivo"], r["modelo"], "", r["stock"], None, None, r["qty12"], None, None])
+    sinp = models[models.sinPrecio]
+    for r in sinp.itertuples(index=False):
+        extra.append(["Sin precio en el ABC", r.modelo, r.macro, r.stock, r.tienda, r.taller, r.qty12, r.rotacion, r.cover if r.cover is not None else "Sin salida"])
+    for i, vals in enumerate(extra, 2):
+        for c, v in enumerate(vals, 1):
+            ws.cell(i, c, None if v is None else v)
+        paint(ws, i, len(h), True)
+        for col in (4, 5, 6, 7):
+            if isinstance(ws.cell(i, col).value, (int, float)):
+                ws.cell(i, col).number_format = "#,##0"
+        if isinstance(ws.cell(i, 8).value, float):
+            ws.cell(i, 8).number_format = "0.00"
+        if isinstance(ws.cell(i, 9).value, float):
+            ws.cell(i, 9).number_format = "0.0"
+    widths(ws, [24, 36, 16, 14, 12, 12, 16, 14, 18])
+    if extra:
+        ws.auto_filter.ref = f"A1:I{len(extra)+1}"
+    ws.print_title_rows = "1:1"
+    note_row = len(extra) + 3
+    ws.cell(note_row, 1, "Zenit, Refresh y Motion Loop salen de la oferta por decisión de esta revisión. El polvo (menos de 5 unidades) es cola CC del cuadro de rotación: queda visible aquí y no arma el evento.").alignment = Alignment(wrap_text=True)
+    ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=6)
+    ws.row_dimensions[note_row].height = 36
+
+    ws = wb.create_sheet("07_Abasto_tiendas")
+    h = ["Tienda", "Stock hoy", "Venta 12 meses", "Deben entrar", "Desde taller", "Salen hacia otra tienda", "Modelos en quiebre"]
+    head(ws, h)
+    for i, t in enumerate(tiendas, 2):
+        vals = [t["tienda"], t["stock"], t["venta"], t["entrar"], t["desdeTaller"], t["salir"], t["quiebres"]]
+        for c, v in enumerate(vals, 1):
+            ws.cell(i, c, v)
+        paint(ws, i, len(h), True)
+        for col in range(2, 8):
+            ws.cell(i, col).number_format = "#,##0"
+    widths(ws, [22, 14, 16, 16, 16, 24, 22])
+    ws.cell(11, 1, "Cada tienda que vendió el SKU en el año queda con al menos una unidad. El taller cubre primero. El tope por tienda es cerca de dos meses de su propia venta. Lo que sobra se queda en taller para la semana del evento.").alignment = Alignment(wrap_text=True)
+    ws.merge_cells("A11:G11")
+    ws.row_dimensions[11].height = 32
+    ws.print_title_rows = "1:1"
+
+    # Gráfico de unidades por tramo, al lado de la escalera.
+    chart = BarChart()
+    chart.type = "col"
+    chart.title = "Unidades por tramo de descuento"
+    chart.y_axis.title = "Unidades"
+    chart.x_axis.title = None
+    data = Reference(wb["01_Decision"], min_col=4, min_row=19, max_row=19 + len(TIERS))
+    cats = Reference(wb["01_Decision"], min_col=1, min_row=20, max_row=19 + len(TIERS))
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    chart.shape = 4
+    chart.legend = None
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
+    chart.style = 10
+    chart.y_axis.majorGridlines = None
+    chart.width = 18
+    chart.height = 8
+    wb["01_Decision"].add_chart(chart, "A38")
+
+    # Validación suave: el origen solo admite dos valores, para quien filtre el libro.
+    dv = DataValidation(type="list", formula1='"CC,Línea completa"', allow_blank=False)
+    dv.error = "Origen"
+    dv.errorTitle = "Origen"
+    dv.add("D2:D500")
+    wb["02_Por_rotacion"].add_data_validation(dv)
+
+    wb.properties.title = "Propuesta Black Friday · baja rotación"
+    wb.properties.creator = "Cuadro"
+    wb.save(XLSX_OUT)
 
 
 def main():
-    ROOT.mkdir(parents=True, exist_ok=True)
-    frames = build_frames()
-    scope = frames["scope"]
-    base = frames["base"]
-    monthly = frames["monthly"]
-    store_stock = frames["store_stock"]
-    store_sales = frames["store_sales"]
-    mod = model_table(scope, monthly)
-    sk, ok_i, ok_d, ok_b = assign_options(mod, scope)
+    base, store_stock, store_sales = build_frames()
+    ref_skus, ref_meta, ref_summary = reference_skus()
+    offer, models, skus, polvo = assemble(base, store_stock, store_sales, ref_skus)
+    moves, tiendas, pull, top_moves, bajar, mover = build_supply(skus, offer, store_stock, store_sales)
+    excl = exclusion_rows(base)
+    polvo_list = polvo_rows(polvo)
+    res = resumen(models, skus, bajar, mover)
 
-    # economics use discounted skus only
-    eco_i = option_economics(sk, mod, ok_i, "d_impulso")
-    eco_d = option_economics(sk, mod, ok_d, "d_desatasco")
+    wanted = ["JACKET CAB", "JACKET DAMA", "JACKET KIDS", "SHORT SPORT KIDS", "SHORT SPORT R1 DAMA", "SHORT SPORT R1 CAB"]
+    have = set(models.modelo)
+    missing = [m for m in wanted if m not in have]
+    if missing:
+        raise SystemExit(f"Faltan líneas pedidas: {missing}")
+    banned = models.modelo.str.contains(DROP_RE)
+    if banned.any():
+        raise SystemExit(f"Se colaron excluidos: {models.loc[banned, 'modelo'].tolist()}")
+    if models.stock.sum() <= 0:
+        raise SystemExit("La oferta quedó sin unidades")
 
-    moves_i = supply_for(sk, scope, store_stock, store_sales, ok_i, "en_impulso")
-    moves_d = supply_for(sk, scope, store_stock, store_sales, ok_d, "en_desatasco")
-    roll_i, bajar_i, mover_i, pull_i = store_rollup(moves_i, sk, store_stock, store_sales, ok_i, "en_impulso")
-    roll_d, bajar_d, mover_d, pull_d = store_rollup(moves_d, sk, store_stock, store_sales, ok_d, "en_desatasco")
-    eco_i["bajar"] = bajar_i
-    eco_i["mover"] = mover_i
-    eco_d["bajar"] = bajar_d
-    eco_d["mover"] = mover_d
+    def miles(n):
+        return f"{int(round(float(n))):,}".replace(",", ".")
 
-    rec_id = "impulso"
-    b_cost = float(mod.loc[mod.modelo.isin(ok_b), "stock_cost"].sum()) if ok_b else 0.0
-    b_names = ", ".join(mod.loc[mod.modelo.isin(ok_b)].sort_values("stock_cost", ascending=False)["modelo"].tolist()) if ok_b else ""
+    focus = models[models.modelo.isin(wanted)].set_index("modelo")
+    bits = []
+    for name, label in (
+        ("JACKET CAB", "Jacket Caballero"),
+        ("JACKET DAMA", "Jacket Dama"),
+        ("JACKET KIDS", "Jacket Kids"),
+        ("SHORT SPORT KIDS", "Short Sport Kids"),
+        ("SHORT SPORT R1 DAMA", "Short Sport R1 Dama"),
+        ("SHORT SPORT R1 CAB", "Short Sport R1 Caballero"),
+    ):
+        r = focus.loc[name]
+        cover = "sin salida en el año" if r.cover is None else f"{r.cover:.0f} meses de cobertura"
+        disc = "sin precio" if r.descuento is None else f"{r.descuento * 100:.0f}%"
+        bits.append(f"{label}: {miles(r.stock)} unidades, {cover}, descuento {disc}")
 
-    # ---------- JSON ----------
-    def pack_model(r):
-        mensual = [num(r[p], 1) or 0 for p in PERIODS]
-        return {
-            "modelo": r.modelo,
-            "macro": r.macro,
-            "categoria": r.categoria,
-            "matriz": r.matriz,
-            "estado": r.estado,
-            "rango": r.rango,
-            "qty12": num(r.qty_12, 1),
-            "qty3": num(r.qty_3m, 1),
-            "rate": num(r.rate, 2),
-            "cover": None if r.estado == "sin salida" or (r.estado == "frenado" and r.cover >= 900) else num(min(float(r.cover), 120), 1),
-            "stock": num(r.stock, 0),
-            "tienda": num(r.stock_tienda, 0),
-            "taller": num(r.stock_taller, 0),
-            "costo": num(r.stock_cost, 0),
-            "pvp": num(r.stock_retail, 0),
-            "precio": num(r.pvp, 2),
-            "costoU": num(r.costo_u, 2),
-            "margenPct": num(r.mg_pct, 3),
-            "skus": int(r.skus),
-            "mensual": mensual,
-            "impulso": r.modelo in ok_i,
-            "desatasco": r.modelo in ok_d,
-            "clase": r.abc_m,
-        }
-
-    modelos_out = [pack_model(r) for _, r in mod.sort_values("stock_cost", ascending=False).iterrows() if r.modelo in ok_d]
-
-    # sku lines for dashboard (compact)
-    lineas = []
-    show = sk[sk.en_desatasco].copy()
-    for rec in show.itertuples(index=False):
-        lineas.append(
-            {
-                "sku": rec.sku,
-                "modelo": rec.modelo,
-                "gen": None if pd.isna(rec.genero) or rec.genero in ("None", "nan") else str(rec.genero),
-                "color": None if pd.isna(rec.color) or str(rec.color) in ("None", "nan") else str(rec.color),
-                "talla": None if pd.isna(rec.talla) or str(rec.talla) in ("None", "nan") else str(rec.talla),
-                "stock": num(rec.stock, 0),
-                "tienda": num(rec.stock_tienda, 0),
-                "taller": num(rec.stock_taller, 0),
-                "precio": num(rec.uprice, 2),
-                "costo": num(rec.ucost, 2),
-                "dI": num(rec.d_impulso, 2),
-                "dD": num(rec.d_desatasco, 2) if rec.en_desatasco else None,
-                "topeI": bool(rec.tope_impulso),
-                "topeD": bool(rec.tope_desatasco) if rec.en_desatasco else False,
-            }
-        )
-
-    # no tocar: margin C but rotation A/B, with stock
-    no = mod[(mod.abc_m == "C") & (mod.abc_r != "C") & (mod.stock > 0)].sort_values("qty_12", ascending=False)
-    no_tocar = [
-        {
-            "modelo": r.modelo,
-            "macro": r.macro,
-            "rot": r.abc_r,
-            "qty12": num(r.qty_12, 0),
-            "stock": num(r.stock, 0),
-            "taller": num(r.stock_taller, 0),
-            "precio": num(r.pvp, 2),
-            "costo": num(r.stock_cost, 0),
-        }
-        for _, r in no.iterrows()
-    ]
-    sana = mod[(mod.abc_m == "C") & (mod.abc_r == "C") & (mod.stock >= 1) & (~mod.modelo.isin(ok_i)) & (mod.rango == "<6")]
-    sana_out = [
-        {
-            "modelo": r.modelo,
-            "cover": num(r.cover, 1),
-            "stock": num(r.stock, 0),
-            "qty12": num(r.qty_12, 0),
-            "estado": r.estado,
-        }
-        for _, r in sana.sort_values("stock", ascending=False).iterrows()
-    ]
-    # sin precio: in scope, stock >= MIN_STOCK, no priced sku, slow or unknown
-    priced_models = set(scope[scope.priced].modelo)
-    sinp = mod[(~mod.modelo.isin(priced_models)) & (mod.stock >= MIN_STOCK) & (mod.qty_12 < 40)].sort_values("stock", ascending=False)
-    # also models not in mod? pelotas inferred are in scope so in mod
-    sin_precio = [
-        {
-            "modelo": r.modelo,
-            "macro": r.macro,
-            "categoria": r.categoria,
-            "origen": r.origen_cat,
-            "stock": num(r.stock, 0),
-            "taller": num(r.stock_taller, 0),
-            "tienda": num(r.stock_tienda, 0),
-            "qty12": num(r.qty_12, 0),
-        }
-        for _, r in sinp.iterrows()
-    ]
-
-    def agg_moves(df):
-        if df is None or df.empty:
-            return []
-        g = df.groupby(["modelo", "desde", "hacia"], as_index=False)["unidades"].sum().sort_values("unidades", ascending=False)
-        return [
-            {"modelo": r.modelo, "desde": r.desde, "hacia": r.hacia, "unidades": int(r.unidades)}
-            for _, r in g.iterrows()
-            if r.unidades > 0
-        ]
-
-    clase = {}
-    for cls, part in mod.groupby("abc_m"):
-        clase[cls] = {
-            "modelos": int(len(part)),
-            "margen": num(part.margin.sum(), 0),
-            "qty": num(part.qty_12.sum(), 0),
-            "stock": num(part.stock.sum(), 0),
-            "costo": num(part.stock_cost.sum(), 0),
-        }
-    matriz = {f"{a}{b}": int(n) for (a, b), n in mod.groupby(["abc_m", "abc_r"]).size().items()}
-
-    # concentration
-    solo = [m for m in modelos_out if m["impulso"]]
-    top_modelo = max(solo, key=lambda m: m["costo"] or 0) if solo else None
-
-    rec_texto = (
-        "Recomendamos Solo categoría C. Es la cola que el ABC ya marca como C de margen y C de rotación: "
-        f"{eco_i['modelos']} modelos y ${eco_i['costo']:,.0f} a costo. El descuento sube con los meses de inventario, "
-        "del 20% al 40%, y el precio no baja de costo × 1,10. "
-        f"La otra opción suma ${b_cost:,.0f} de clase B que tampoco rota y ya pasa de 18 meses de cobertura"
-        + (f" ({b_names})" if b_names else "")
-        + ". Ahí está el capital dormido más grande, pero no es categoría C. No entra en la recomendación "
-        "principal: si la meta se amplía de la cola C a todo lo que no rota, esa es la segunda opción."
+    texto = (
+        f"Recomendamos leer la oferta por rotación: lo más lento primero. "
+        f"Son {miles(res['modelos'])} modelos y {miles(res['unidades'])} unidades "
+        f"({miles(res['tienda'])} en tienda y {miles(res['taller'])} en taller). "
+        f"El descuento va del 15% al 40% según los meses de cobertura, y el precio promo se sostiene en costo × 1,10 o por encima. "
+        f"La otra lectura ordena esta misma oferta por inventario, para ver primero lo que más unidades ocupa. "
+        f"Jacket 1.0 y Short Sport entran con el stock completo de la línea. "
+        + ". ".join(bits)
+        + "."
     )
 
     payload = {
         "meta": {
             "periodo": "Octubre 2025 – septiembre 2026",
-            "meses": PERIOD_LABELS,
-            "tiendas": STORES,
-            "unidadesConsumo": num(scope.qty_12.sum(), 0),
-            "unidadesMayor": num(scope.qty_mayor.sum(), 0),
-            "modelos": int(len(mod)),
-            "clase": clase,
-            "matriz": matriz,
-            "margenTotal": num(mod.loc[mod.margin > 0, "margin"].sum(), 0),
+            "generado": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "fuente": "Cuadro de rotación categoría C, inventario y ventas de la propuesta",
+            "refSkus": ref_summary.get("skus_c_total"),
+            "refUnidades": ref_summary.get("unidades_stock"),
         },
-        "recomendacion": {"id": rec_id, "texto": rec_texto},
+        "recomendacion": {"id": "rotacion", "texto": texto},
         "opciones": {
-            "impulso": {
-                "id": "impulso",
-                "nombre": "Solo categoría C",
-                "corta": "La cola C de margen y de rotación",
-                "frase": "Solo lo que el ABC clasifica como C en margen y C en rotación. El porcentaje sube con los meses de inventario.",
-                "tiers": [{"id": a, "label": b, "pct": c} for a, b, c in TIERS_IMPULSO],
-                "resumen": eco_i,
-                "tiendas": roll_i,
+            "rotacion": {
+                "nombre": "Opción A · Rotación",
+                "frase": "Lo más lento primero. La misma oferta, ordenada por unidades al mes.",
+                "sort": "rotacion_asc",
             },
-            "desatasco": {
-                "id": "desatasco",
-                "nombre": "C + lentos de clase B",
-                "corta": "La cola C, más la clase B que no rota",
-                "frase": "Todo lo de la opción anterior, más los clase B de margen que son C de rotación y ya superan 18 meses de cobertura. Misma escalera de descuento.",
-                "tiers": [{"id": a, "label": b, "pct": c} for a, b, c in TIERS_IMPULSO],
-                "resumen": eco_d,
-                "tiendas": roll_d,
+            "inventario": {
+                "nombre": "Opción B · Inventario",
+                "frase": "Lo que más stock tiene primero. La misma oferta, ordenada por unidades en tienda y taller.",
+                "sort": "stock_desc",
             },
         },
-        "modelos": modelos_out,
-        "lineas": lineas,
-        "noTocar": no_tocar,
-        "sana": sana_out,
-        "sinPrecio": sin_precio,
-        "movimientos": {"impulso": agg_moves(moves_i), "desatasco": agg_moves(moves_d)},
-        "pull": {
-            "impulso": [{"modelo": r.modelo, "unidades": int(r.unidades), "destinos": int(r.destinos)} for _, r in pull_i.head(12).iterrows()],
-            "desatasco": [{"modelo": r.modelo, "unidades": int(r.unidades), "destinos": int(r.destinos)} for _, r in pull_d.head(12).iterrows()],
-        },
-        "extra": {"modelosB": len(ok_b), "capitalB": num(b_cost, 0)},
-        "top": {"modelo": top_modelo["modelo"], "costo": top_modelo["costo"], "macro": top_modelo["macro"]} if top_modelo else None,
+        "resumen": res,
+        "tiers": [{"id": i, "label": lab, "pct": pct} for i, lab, pct in TIERS],
+        "modelos": models.to_dict(orient="records"),
+        "lineas": skus.to_dict(orient="records"),
+        "tiendas": tiendas,
+        "pull": pull,
+        "movimientos": top_moves,
+        "excluidos": excl,
+        "polvo": {"modelos": len(polvo_list), "unidades": num(sum(r["stock"] for r in polvo_list), 0), "lista": polvo_list[:12]},
+        "foco": models[models.origen == "Línea completa"].sort_values("stock", ascending=False).to_dict(orient="records"),
     }
+    html = HTML_TEMPLATE.read_text(encoding="utf-8")
+    if html.count("__DATA__") != 1:
+        raise SystemExit("La plantilla debe tener un solo __DATA__")
+    html = html.replace("__DATA__", json.dumps(clean(payload), ensure_ascii=False, separators=(",", ":")))
+    HTML_OUT.write_text(html, encoding="utf-8")
+    write_excel(models, skus, moves, tiendas, excl, polvo_list, res, texto)
 
-    # attach per-model discount + supply highlights for the list
-    mod_i = mod.set_index("modelo")
-    disc_by = {}
-    for modelo, part in sk[sk.en_desatasco].groupby("modelo"):
-        part_i = part[part.en_impulso]
-        part_d = part[part.en_desatasco]
-        pvp = float((part_i.stock * part_i.uprice).sum()) if len(part_i) else 0.0
-        promo_i = float((part_i.stock * part_i.uprice * (1 - part_i.d_impulso)).sum()) if len(part_i) else 0.0
-        pvp_d = float((part_d.stock * part_d.uprice).sum()) if len(part_d) else 0.0
-        promo_d = float((part_d.stock * part_d.uprice * (1 - part_d.d_desatasco)).sum()) if len(part_d) else 0.0
-        disc_by[modelo] = {
-            "dI": num(1 - promo_i / pvp, 3) if pvp else None,
-            "tierI": num(part.tier_impulso.iloc[0], 2),
-            "topeI": bool(part_i.tope_impulso.any()) if len(part_i) else False,
-            "pvpI": num(promo_i / part_i.stock.sum(), 2) if len(part_i) and part_i.stock.sum() else None,
-            "dD": num(1 - promo_d / pvp_d, 3) if pvp_d else None,
-            "topeD": bool(part_d.tope_desatasco.any()) if len(part_d) else False,
-            "pvpD": num(promo_d / part_d.stock.sum(), 2) if len(part_d) and part_d.stock.sum() else None,
-        }
-    for m in payload["modelos"]:
-        m.update(disc_by.get(m["modelo"], {}))
-
-    # asserts
-    assert ok_i <= ok_d
-    assert ok_b.isdisjoint(ok_i)
-    bad = sk[sk.en_impulso & ((sk.uprice * (1 - sk.d_impulso) + 1e-6) < (sk.ucost * FLOOR))]
-    # allow 2 cent rounding from step
-    bad = bad[(sk.loc[bad.index, "uprice"] * (1 - sk.loc[bad.index, "d_impulso"])) + 0.05 < sk.loc[bad.index, "ucost"] * FLOOR]
-    assert bad.empty, bad[["sku", "uprice", "ucost", "d_impulso"]].head()
-    bad_b = sk[sk.en_desatasco & ((sk.uprice * (1 - sk.d_desatasco)) + 0.05 < sk.ucost * FLOOR)]
-    assert bad_b.empty, bad_b[["sku", "uprice", "ucost", "d_desatasco"]].head()
-    assert eco_i["modelos"] == len(ok_i)
-    assert eco_d["modelos"] == len(ok_d)
-
-    data_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    template = HTML_TEMPLATE.read_text(encoding="utf-8")
-    if "__DATA__" not in template:
-        raise SystemExit("template sin marcador __DATA__")
-    HTML_OUT.write_text(template.replace("__DATA__", data_json), encoding="utf-8")
-
-    write_excel(mod, sk, ok_i, ok_d, moves_i, moves_d, payload, store_stock, store_sales)
-    print_summary(payload, mod, ok_i, ok_d, ok_b, rec_id)
-    print("HTML", HTML_OUT, "bytes", HTML_OUT.stat().st_size)
-    print("XLSX", XLSX_OUT)
-
-
-def print_summary(payload, mod, ok_i, ok_d, ok_b, rec_id):
-    print("\n=== CLASE MARGEN ===")
-    print(payload["meta"]["clase"])
-    print("matriz", payload["meta"]["matriz"])
-    print("REC", rec_id, "addon B", sorted(ok_b))
-    for k in ("impulso", "desatasco"):
-        print(k, payload["opciones"][k]["resumen"])
-    print("sin precio")
-    for s in payload["sinPrecio"]:
-        print(" ", s)
-    print("no tocar", len(payload["noTocar"]), "sana", len(payload["sana"]))
-    print("top", payload["top"])
-    cc = mod[(mod.abc_m == "C") & (mod.abc_r == "C")]
-    print("CC models", len(cc), "in solo C", len(ok_i), "in C+B", len(ok_d), "addon B", ok_b)
-    print(cc[cc.modelo.isin(ok_i)].groupby("rango").agg(n=("modelo", "count"), stock=("stock", "sum"), cost=("stock_cost", "sum")).round(0))
-
-
-def write_excel(mod, sk, ok_i, ok_d, moves_i, moves_d, payload, store_stock, store_sales):
-    wb = Workbook()
-    navy = PatternFill("solid", fgColor="1B2430")
-    white = Font(color="FFFFFF", bold=True, name="Calibri", size=11)
-    green = PatternFill("solid", fgColor="0F6E56")
-    amber = PatternFill("solid", fgColor="8A5A00")
-    pink = PatternFill("solid", fgColor="8C3A62")
-    ice = PatternFill("solid", fgColor="F4F7FB")
-    soft = PatternFill("solid", fgColor="E7F6F1")
-    sand = PatternFill("solid", fgColor="FFF6E8")
-    thin = Border(
-        left=Side(style="thin", color="E2E8F0"),
-        right=Side(style="thin", color="E2E8F0"),
-        top=Side(style="thin", color="E2E8F0"),
-        bottom=Side(style="thin", color="E2E8F0"),
-    )
-    title_font = Font(name="Calibri", size=18, bold=True, color="1B2430")
-    h2 = Font(name="Calibri", size=13, bold=True, color="1B2430")
-    body = Font(name="Calibri", size=11, color="1B2430")
-    muted = Font(name="Calibri", size=11, color="526072")
-
-    def style_header(ws, row, cols, fill):
-        for c in range(1, cols + 1):
-            cell = ws.cell(row, c)
-            cell.fill = fill
-            cell.font = white
-            cell.alignment = Alignment(wrap_text=True, vertical="center")
-
-    def autosize(ws, widths):
-        for i, w in enumerate(widths, 1):
-            ws.column_dimensions[get_column_letter(i)].width = w
-        ws.auto_filter.ref = ws.dimensions
-        ws.freeze_panes = "A2"
-        ws.auto_filter.ref = ws.dimensions
-        ws.page_setup.orientation = "landscape"
-        ws.page_setup.fitToPage = True
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 0
-        ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-        ws.oddHeader.left.text = "Black Friday · Categoría C"
-        ws.oddFooter.right.text = "Página &P"
-
-    def paint(ws):
-        ws.sheet_view.showGridLines = False
-        ws.page_setup.horizontalCentered = True
-        ws.sheet_properties.tabColor = "1B2430"
-
-    # ----- portada
-    ws = wb.active
-    ws.title = "01_Decision"
-    paint(ws)
-    ws.sheet_properties.tabColor = "0F6E56"
-    ws.merge_cells("B2:G2")
-    ws["B2"] = "Propuesta Black Friday · Categoría C"
-    ws["B2"].font = title_font
-    ws.merge_cells("B3:G3")
-    ws["B3"] = "Manufactura y equipamiento de baja rotación  ·  Octubre 2025 a septiembre 2026"
-    ws["B3"].font = muted
-    ws.merge_cells("B5:G5")
-    ws["B5"] = payload["recomendacion"]["texto"]
-    ws["B5"].font = body
-    ws["B5"].alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[5].height = 60
-
-    headers = ["", "Solo categoría C", "C + lentos de clase B"]
-    for i, h in enumerate(headers, 2):
-        ws.cell(7, i, h).font = white
-        ws.cell(7, i).fill = green if i == 2 else (amber if i == 3 else navy)
-        ws.cell(7, i).alignment = Alignment(horizontal="center")
-    ri = payload["opciones"]["impulso"]["resumen"]
-    rd = payload["opciones"]["desatasco"]["resumen"]
-    rows = [
-        ("Modelos", ri["modelos"], rd["modelos"]),
-        ("SKUs con descuento", ri["skus"], rd["skus"]),
-        ("Unidades en inventario", ri["unidades"], rd["unidades"]),
-        ("En tienda", ri["tienda"], rd["tienda"]),
-        ("En taller", ri["taller"], rd["taller"]),
-        ("Capital a costo (USD)", ri["costo"], rd["costo"]),
-        ("Inventario a precio actual (USD)", ri["pvp"], rd["pvp"]),
-        ("Capital que sobra sobre 6 meses (USD costo)", ri["capital6"], rd["capital6"]),
-        ("Descuento efectivo sobre el inventario", ri["desc_efectivo"], rd["desc_efectivo"]),
-        ("Margen del inventario que se conserva", ri["margen_conservado"], rd["margen_conservado"]),
-        ("Margen que se entrega en un mes de venta normal (USD)", ri["costo_mes"], rd["costo_mes"]),
-        ("Margen promo del inventario que sobra (USD)", ri["margen_atrapado"], rd["margen_atrapado"]),
-        ("Unidades a bajar de taller antes del evento", ri["bajar"], rd["bajar"]),
-        ("Unidades a mover entre tiendas", ri["mover"], rd["mover"]),
-    ]
-    for i, (lab, a, b) in enumerate(rows, 8):
-        ws.cell(i, 2, lab).font = body
-        ws.cell(i, 3, a).font = Font(name="Calibri", size=12, bold=True, color="1B2430")
-        ws.cell(i, 4, b).font = Font(name="Calibri", size=12, bold=True, color="1B2430")
-        if i % 2 == 0:
-            for col in range(2, 5):
-                ws.cell(i, col).fill = ice
-        ws.cell(i, 2).alignment = Alignment(wrap_text=True)
-    for r in range(15, 17):
-        ws.cell(r, 3).number_format = "0.0%"
-        ws.cell(r, 4).number_format = "0.0%"
-    for r in list(range(8, 15)) + list(range(17, 22)):
-        ws.cell(r, 3).number_format = "#,##0"
-        ws.cell(r, 4).number_format = "#,##0"
-
-    ws["B24"] = "Cómo leer las dos opciones"
-    ws["B24"].font = h2
-    notes = [
-        "Solo categoría C: clase C de margen y clase C de rotación, con 5 unidades o más, y cobertura de 6 meses o más (o sin venta reciente). El descuento es 20%, 25%, 30%, 35% o 40% según ese plazo. Lo que no vendió en el trimestre entra al 40%.",
-        "C + lentos de clase B: todo lo anterior, más los modelos clase B de margen y C de rotación con 18 meses o más de cobertura. Usan la misma escalera. Zenit y Maxi Tote están aquí porque no son C, y concentran capital dormido.",
-        "En las dos, el precio promocional no baja de costo × 1.10. Si el margen no alcanza, el porcentaje se recorta de 5 en 5. Por eso el descuento efectivo puede ser menor que el de la escalera.",
-        "No entra la clase A ni la B. Tampoco entra la clase C de margen que sí rota (lanyard, cuadro band, overgrip, medias): son baratos, no lentos. Esos se reponen; no se descuentan.",
-        "El ritmo sale de las tiendas y de la web. Pedidos y Corporativo quedan fuera porque son bultos mayoristas y cambian la foto de rotación.",
-        "Cobertura: si los últimos 3 meses se aceleraron, se usa ese ritmo para no castigar un producto que está despertando. Si se frenaron a menos de la mitad, se usa el ritmo nuevo. Si no hubo venta en el trimestre, queda dormido.",
-        "Precios y costos son el promedio ponderado del dashboard ABC (octubre 2025–julio 2026). El cuadro de ventas nuevo trae unidades, no precios.",
-        "CHACAO del inventario se lee como Sambil Chacao y SAMBIL como Sambil Valencia, igual que las ubicaciones del dashboard ABC.",
-    ]
-    for i, t in enumerate(notes):
-        ws.merge_cells(start_row=25 + i, start_column=2, end_row=25 + i, end_column=7)
-        ws.cell(25 + i, 2, t).font = body
-        ws.cell(25 + i, 2).alignment = Alignment(wrap_text=True, vertical="center")
-        ws.row_dimensions[25 + i].height = 32
-    ws.column_dimensions["A"].width = 3
-    ws.column_dimensions["B"].width = 62
-    ws.column_dimensions["C"].width = 28
-    ws.column_dimensions["D"].width = 28
-    ws.column_dimensions["E"].width = 18
-    ws.column_dimensions["F"].width = 18
-    ws.column_dimensions["G"].width = 18
-    ws.row_dimensions[2].height = 26
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.print_title_rows = "1:3"
-    ws.oddHeader.left.text = "Propuesta directiva"
-    ws.oddFooter.left.text = "Categoría C · manufactura y equipamiento"
-    ws.oddFooter.right.text = "Confidencial interno"
-
-    # mark recommendation
-    mark_row = 6
-    ws.cell(mark_row, 3, "RECOMENDADA" if payload["recomendacion"]["id"] == "impulso" else "Alternativa")
-    ws.cell(mark_row, 4, "RECOMENDADA" if payload["recomendacion"]["id"] == "desatasco" else "Alternativa")
-    for col, fid in ((3, "impulso"), (4, "desatasco")):
-        ws.cell(mark_row, col).font = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
-        ws.cell(mark_row, col).fill = green if payload["recomendacion"]["id"] == fid else PatternFill("solid", fgColor="94A3B8")
-        ws.cell(mark_row, col).alignment = Alignment(horizontal="center")
-
-    write_option_sheet(wb, "02_Solo_C", sk, mod, ok_i, "d_impulso", "en_impulso", green, white, thin, body, ice)
-    write_option_sheet(wb, "03_C_mas_B", sk, mod, ok_d, "d_desatasco", "en_desatasco", amber, white, thin, body, sand)
-    write_sku_sheet(wb, sk, mod, white, navy, thin, body, ice)
-    write_moves_sheet(wb, moves_i, moves_d, white, navy, thin, body)
-    write_notocar(wb, payload, mod, white, pink, thin, body, ice)
-    write_sinprecio(wb, payload, white, navy, thin, body)
-    write_matriz(wb, mod, white, navy, thin, body, ice)
-    write_abasto_tienda(wb, payload, white, navy, thin, body, ice)
-
-    # chart data already on decision sheet — add a small bar via a helper sheet
-    add_chart(wb, payload)
-
-    wb.save(XLSX_OUT)
-
-
-def write_option_sheet(wb, name, sk, mod, models, dcol, flag, fill, white, thin, body, zebra):
-    ws = wb.create_sheet(name)
-    ws.sheet_view.showGridLines = False
-    headers = [
-        "Modelo",
-        "Línea",
-        "Categoría",
-        "Estado",
-        "Cobertura (meses)",
-        "Venta 12 meses",
-        "Venta últimos 3 meses",
-        "Ritmo usado (u/mes)",
-        "Stock total",
-        "Stock tienda",
-        "Stock taller",
-        "Precio promedio",
-        "Costo unitario",
-        "Descuento",
-        "Precio Black Friday",
-        "Tope de costo",
-        "Capital a costo",
-        "Inventario a precio",
-        "SKUs en promo",
-    ]
-    for i, h in enumerate(headers, 1):
-        ws.cell(1, i, h)
-    for c in range(1, len(headers) + 1):
-        ws.cell(1, c).fill = fill
-        ws.cell(1, c).font = white
-        ws.cell(1, c).alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[1].height = 32
-    m = mod.set_index("modelo")
-    sub = sk[(sk.modelo.isin(models)) & (sk[flag])].copy()
-    recs = []
-    for modelo, part in sub.groupby("modelo"):
-        r = m.loc[modelo]
-        pvp = float((part.stock * part.uprice).sum())
-        promo = float((part.stock * part.uprice * (1 - part[dcol])).sum())
-        costo = float((part.stock * part.ucost).sum())
-        recs.append((costo, [
-            modelo,
-            r.macro,
-            r.categoria,
-            r.estado,
-            None if r.cover >= 900 else round(float(r.cover), 1),
-            round(float(r.qty_12), 1),
-            round(float(r.qty_3m), 1),
-            round(float(r.rate), 2),
-            round(float(part.stock.sum()), 0),
-            round(float(part.stock_tienda.sum()), 0),
-            round(float(part.stock_taller.sum()), 0),
-            round(pvp / part.stock.sum(), 2) if part.stock.sum() else None,
-            round(costo / part.stock.sum(), 2) if part.stock.sum() else None,
-            round(1 - promo / pvp, 4) if pvp else None,
-            round(promo / part.stock.sum(), 2) if part.stock.sum() else None,
-            "Sí" if bool(part["tope_impulso" if "impulso" in dcol else "tope_desatasco"].any()) else "No",
-            round(costo, 0),
-            round(pvp, 0),
-            int(part.sku.nunique()),
-        ]))
-    recs.sort(key=lambda x: -x[0])
-    for i, (_, vals) in enumerate(recs, 2):
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-            if i % 2 == 0:
-                cell.fill = zebra
-        ws.cell(i, 14).number_format = "0%"
-        for col in (5, 6, 7, 8, 12, 13, 15):
-            ws.cell(i, col).number_format = "#,##0.00"
-        for col in (9, 10, 11, 17, 18, 19):
-            ws.cell(i, col).number_format = "#,##0"
-    widths = [38, 16, 38, 14, 16, 16, 18, 16, 14, 14, 14, 16, 14, 12, 18, 14, 16, 18, 14]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{max(1, len(recs)+1)}"
-    ws.freeze_panes = "B2"
-    ws.auto_filter.ref = ws.dimensions
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.page_setup.horizontalCentered = True
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_title_rows = "1:1"
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.oddHeader.left.text = name
-    last = max(1, len(recs) + 1)
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{last}"
-    if "Solo" in name:
-        ws.sheet_properties.tabColor = "0F6E56"
-    else:
-        ws.sheet_properties.tabColor = "8A5A00"
-
-
-def write_sku_sheet(wb, sk, mod, white, navy, thin, body, zebra):
-    ws = wb.create_sheet("04_Detalle_SKU")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "334155"
-    headers = [
-        "Modelo", "Línea", "SKU", "Género", "Color", "Talla",
-        "Stock total", "Stock tienda", "Stock taller", "Precio", "Costo",
-        "En Solo C", "Descuento Solo C", "Precio Solo C",
-        "En C+B", "Descuento C+B", "Precio C+B",
-        "Venta 12 meses", "Venta 3 meses", "Origen precio",
-    ]
-    for i, h in enumerate(headers, 1):
-        cell = ws.cell(1, i, h)
-        cell.fill = navy
-        cell.font = white
-        cell.alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[1].height = 30
-    show = sk.sort_values(["modelo", "stock"], ascending=[True, False])
-    for i, r in enumerate(show.itertuples(index=False), 2):
-        promo_i = round(r.uprice * (1 - r.d_impulso), 2) if r.en_impulso else None
-        promo_d = round(r.uprice * (1 - r.d_desatasco), 2) if r.en_desatasco else None
-        vals = [
-            r.modelo, r.macro, r.sku,
-            None if str(r.genero) in ("nan", "None") else r.genero,
-            None if str(r.color) in ("nan", "None") else r.color,
-            None if str(r.talla) in ("nan", "None") else r.talla,
-            round(r.stock, 0), round(r.stock_tienda, 0), round(r.stock_taller, 0),
-            round(r.uprice, 2), round(r.ucost, 2),
-            "Sí" if r.en_impulso else "No",
-            round(r.d_impulso, 4) if r.en_impulso else None,
-            promo_i,
-            "Sí" if r.en_desatasco else "No",
-            round(r.d_desatasco, 4) if r.en_desatasco else None,
-            promo_d,
-            round(r.qty_12, 1), round(r.qty_3m, 1), r.precio_origen,
-        ]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-            if i % 2 == 0:
-                cell.fill = zebra
-        ws.cell(i, 13).number_format = "0%"
-        ws.cell(i, 16).number_format = "0%"
-    widths = [32, 16, 20, 12, 18, 10, 12, 12, 12, 12, 12, 12, 16, 14, 14, 18, 16, 14, 12, 14]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "C2"
-    ws.auto_filter.ref = f"A1:T{max(1, len(show)+1)}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.print_title_rows = "1:1"
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-
-
-def write_moves_sheet(wb, moves_i, moves_d, white, navy, thin, body):
-    ws = wb.create_sheet("05_Movimientos")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "1D4ED8"
-    headers = ["Aplica a", "Modelo", "Línea", "SKU", "Desde", "Hacia", "Unidades"]
-    for i, h in enumerate(headers, 1):
-        cell = ws.cell(1, i, h)
-        cell.fill = navy
-        cell.font = white
-    # tag
-    a = moves_i.copy() if len(moves_i) else pd.DataFrame(columns=["sku", "modelo", "macro", "desde", "hacia", "unidades"])
-    b = moves_d.copy() if len(moves_d) else pd.DataFrame(columns=["sku", "modelo", "macro", "desde", "hacia", "unidades"])
-    a["op"] = "Solo C"
-    b["op"] = "C + B"
-    # SKUs in both: mark Desatasco rows as such and Impulso-only stays Impulso.
-    # A warehouse executing the recommended option filters this column.
-    both = pd.concat([a, b], ignore_index=True)
-    both = both.sort_values(["op", "unidades"], ascending=[True, False])
-    for i, r in enumerate(both.itertuples(index=False), 2):
-        vals = [r.op, r.modelo, r.macro, r.sku, r.desde, r.hacia, int(r.unidades)]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-    ws.cell(1, 1).alignment = Alignment(wrap_text=True)
-    note_row = len(both) + 3
-    ws.cell(note_row, 1, "Regla: primero se baja del taller. Entre tiendas solo se mueve lo que sobra por encima de la meta. Cada tienda que ya vendió el SKU queda con al menos 1 unidad. El tope por tienda es cerca de 2 meses de su propia venta. Si el SKU nunca se vendió, se siembran hasta 2 unidades en las 3 tiendas que más venden el modelo.")
-    ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=7)
-    ws.cell(note_row, 1).alignment = Alignment(wrap_text=True)
-    ws.row_dimensions[note_row].height = 48
-    for i, w in enumerate([18, 36, 16, 20, 20, 20, 12], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:G{max(1, len(both)+1)}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.print_title_rows = "1:1"
-
-
-def write_notocar(wb, payload, mod, white, fill, thin, body, zebra):
-    ws = wb.create_sheet("06_No_descontar")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "8C3A62"
-    headers = ["Modelo", "Línea", "Rotación", "Venta 12 meses", "Stock", "En taller", "Precio", "Capital a costo", "Por qué no"]
-    for i, h in enumerate(headers, 1):
-        cell = ws.cell(1, i, h)
-        cell.fill = fill
-        cell.font = white
-        cell.alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[1].height = 30
-    row = 2
-    for r in payload["noTocar"]:
-        why = "Clase C de margen porque el precio es bajo, pero la rotación es alta. Descontarlo no sube la rotación: ya sale. Si el taller está lleno, la acción es repartir, no bajar el precio."
-        vals = [r["modelo"], r["macro"], r["rot"], r["qty12"], r["stock"], r["taller"], r["precio"], r["costo"], why]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(row, c, v)
-            cell.font = body
-            cell.border = thin
-            cell.alignment = Alignment(wrap_text=True, vertical="center")
-        row += 1
-    for r in payload["sana"]:
-        vals = [r["modelo"], "", "", r["qty12"], r["stock"], None, None, None, f"Sí es baja rotación histórica, pero la cobertura real es {r['cover']} meses ({r['estado']}). No necesita descuento."]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(row, c, v)
-            cell.font = body
-            cell.border = thin
-            cell.alignment = Alignment(wrap_text=True)
-        row += 1
-    for i, w in enumerate([36, 16, 12, 16, 12, 12, 12, 18, 70], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:I{max(1, row-1)}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.page_setup.fitToPage = True
-
-
-def write_sinprecio(wb, payload, white, navy, thin, body):
-    ws = wb.create_sheet("07_Sin_precio")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "B45309"
-    headers = ["Modelo", "Línea", "Categoría", "Cómo se clasificó", "Stock", "En tienda", "En taller", "Venta 12 meses", "Nota"]
-    amber = PatternFill("solid", fgColor="B45309")
-    for i, h in enumerate(headers, 1):
-        cell = ws.cell(1, i, h)
-        cell.fill = amber
-        cell.font = white
-    for i, r in enumerate(payload["sinPrecio"], 2):
-        nota = "Hay inventario y casi no hay salida, pero el ABC no trae precio ni costo de este modelo. No se propone un porcentaje hasta cargar el precio. Si se aprueba la campaña, este bulto se decide aparte."
-        vals = [r["modelo"], r["macro"], r["categoria"], r["origen"], r["stock"], r["tienda"], r["taller"], r["qty12"], nota]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-            cell.alignment = Alignment(wrap_text=True, vertical="center")
-        ws.row_dimensions[i].height = 32
-    for i, w in enumerate([28, 16, 32, 18, 12, 12, 12, 16, 78], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "A2"
-    last = max(1, len(payload["sinPrecio"]) + 1)
-    ws.auto_filter.ref = f"A1:I{last}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.page_setup.fitToPage = True
-
-
-def write_matriz(wb, mod, white, navy, thin, body, zebra):
-    ws = wb.create_sheet("08_Matriz_ABC")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "64748B"
-    headers = ["Modelo", "Línea", "Categoría", "Clase margen", "Clase rotación", "Matriz", "Venta 12 meses", "Margen USD", "Stock", "Capital costo", "Cobertura", "Estado"]
-    for i, h in enumerate(headers, 1):
-        cell = ws.cell(1, i, h)
-        cell.fill = navy
-        cell.font = white
-        cell.alignment = Alignment(wrap_text=True, vertical="center")
-    ordered = mod.sort_values(["abc_m", "margin"], ascending=[True, False])
-    fills = {"A": PatternFill("solid", fgColor="CFFAFE"), "B": PatternFill("solid", fgColor="FEF3C7"), "C": PatternFill("solid", fgColor="FCE7F3")}
-    for i, r in enumerate(ordered.itertuples(index=False), 2):
-        vals = [
-            r.modelo, r.macro, r.categoria, r.abc_m, r.abc_r, r.matriz,
-            round(float(r.qty_12), 1), round(float(r.margin), 0), round(float(r.stock), 0),
-            round(float(r.stock_cost), 0), None if r.cover >= 900 else round(float(r.cover), 1), r.estado,
-        ]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-        ws.cell(i, 4).fill = fills.get(r.abc_m, zebra)
-        ws.cell(i, 5).fill = fills.get(r.abc_r, zebra)
-    for i, w in enumerate([36, 16, 40, 14, 14, 12, 16, 14, 12, 16, 12, 14], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = "B2"
-    ws.auto_filter.ref = f"A1:L{len(ordered)+1}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.page_setup.fitToPage = True
-    ws.print_title_rows = "1:1"
-
-
-def write_abasto_tienda(wb, payload, white, navy, thin, body, zebra):
-    ws = wb.create_sheet("09_Abasto_tiendas")
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "1D4ED8"
-    ws["A1"] = "Tienda"
-    ws["B1"] = "Solo C · stock hoy"
-    ws["C1"] = "Solo C · venta 12m"
-    ws["D1"] = "Solo C · entran"
-    ws["E1"] = "Solo C · salen"
-    ws["F1"] = "Solo C · desde taller"
-    ws["G1"] = "Solo C · modelos en quiebre"
-    ws["H1"] = "C+B · stock hoy"
-    ws["I1"] = "C+B · entran"
-    ws["J1"] = "C+B · desde taller"
-    ws["K1"] = "C+B · modelos en quiebre"
-    for c in range(1, 12):
-        ws.cell(1, c).fill = navy
-        ws.cell(1, c).font = white
-        ws.cell(1, c).alignment = Alignment(wrap_text=True, vertical="center")
-    ws.row_dimensions[1].height = 32
-    ti_i = {t["tienda"]: t for t in payload["opciones"]["impulso"]["tiendas"]}
-    ti_d = {t["tienda"]: t for t in payload["opciones"]["desatasco"]["tiendas"]}
-    for i, s in enumerate(STORES, 2):
-        a, b = ti_i[s], ti_d[s]
-        vals = [s, a["stock"], a["venta"], a["entrar"], a["salir"], a["desdeTaller"], a["quiebres"], b["stock"], b["entrar"], b["desdeTaller"], b["quiebres"]]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = body
-            cell.border = thin
-            if i % 2 == 0:
-                cell.fill = zebra
-            if c > 1:
-                cell.number_format = "#,##0"
-    ws.cell(10, 1, "Quiebre = la tienda vendió el modelo en el año y hoy no tiene ninguna unidad de los SKU en promo.")
-    ws.merge_cells("A10:K10")
-    for i, w in enumerate([20, 18, 18, 16, 16, 18, 22, 20, 16, 20, 24], 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.page_setup.paperSize = ws.PAPERSIZE_TABLOID
-    ws.page_setup.fitToPage = True
-    ws.freeze_panes = "B2"
-
-
-def add_chart(wb, payload):
-    ws = wb.create_sheet("10_Grafico", 1)
-    ws.sheet_view.showGridLines = False
-    ws.sheet_properties.tabColor = "0F6E56"
-    ws["A1"] = "Concepto"
-    ws["B1"] = "Impulso"
-    ws["C1"] = "Desatasco"
-    ri = payload["opciones"]["impulso"]["resumen"]
-    rd = payload["opciones"]["desatasco"]["resumen"]
-    data = [
-        ("Unidades", ri["unidades"], rd["unidades"]),
-        ("Capital a costo", ri["costo"], rd["costo"]),
-        ("Capital sobre 6 meses", ri["capital6"], rd["capital6"]),
-        ("Bajar de taller", ri["bajar"], rd["bajar"]),
-    ]
-    for i, row in enumerate(data, 2):
-        for c, v in enumerate(row, 1):
-            ws.cell(i, c, v)
-    chart = BarChart()
-    chart.type = "col"
-    chart.grouping = "clustered"
-    chart.title = "Las dos opciones, en la misma escala de cada indicador"
-    chart.y_axis.title = None
-    chart.style = 10
-    chart.y_axis.majorGridlines = None
-    data_ref = Reference(ws, min_col=2, max_col=3, min_row=1, max_row=5)
-    cats = Reference(ws, min_col=1, min_row=2, max_row=5)
-    chart.add_data(data_ref, titles_from_data=True)
-    chart.set_categories(cats)
-    chart.shape = 4
-    chart.legend.position = "b"
-    chart.y_axis.numFmt = "#,##0"
-    chart.dataLabels = DataLabelList()
-    chart.dataLabels.showVal = False
-    chart.width = 18
-    chart.height = 8
-    # Two different units on one axis would lie. Split: units chart and money chart.
-    ws["A8"] = "Unidades y movimientos"
-    ws["B8"] = "Impulso"
-    ws["C8"] = "Desatasco"
-    for i, key in enumerate(["unidades", "bajar", "mover"], 9):
-        labels = {"unidades": "Unidades en inventario", "bajar": "Bajar de taller", "mover": "Mover entre tiendas"}
-        ws.cell(i, 1, labels[key])
-        ws.cell(i, 2, ri[key])
-        ws.cell(i, 3, rd[key])
-    chart1 = BarChart()
-    chart1.type = "col"
-    chart1.grouping = "clustered"
-    chart1.title = "Unidades"
-    chart1.style = 10
-    chart1.add_data(Reference(ws, min_col=2, max_col=3, min_row=8, max_row=11), titles_from_data=True)
-    chart1.set_categories(Reference(ws, min_col=1, min_row=9, max_row=11))
-    chart1.shape = 4
-    chart1.legend.position = "b"
-    chart1.y_axis.numFmt = "#,##0"
-    chart1.width = 15
-    chart1.height = 7
-    ws.add_chart(chart1, "E8")
-
-    ws["A16"] = "Dólares a costo"
-    ws["B16"] = "Impulso"
-    ws["C16"] = "Desatasco"
-    for i, (lab, key) in enumerate([
-        ("Capital a costo", "costo"),
-        ("Sobra sobre 6 meses", "capital6"),
-        ("Margen que se entrega en 1 mes", "costo_mes"),
-        ("Margen promo de lo que sobra", "margen_atrapado"),
-    ], 17):
-        ws.cell(i, 1, lab)
-        ws.cell(i, 2, ri[key])
-        ws.cell(i, 3, rd[key])
-    chart2 = BarChart()
-    chart2.type = "bar"
-    chart2.grouping = "clustered"
-    chart2.title = "Capital y margen (USD)"
-    chart2.style = 10
-    chart2.add_data(Reference(ws, min_col=2, max_col=3, min_row=16, max_row=20), titles_from_data=True)
-    chart2.set_categories(Reference(ws, min_col=1, min_row=17, max_row=20))
-    chart2.shape = 4
-    chart2.legend.position = "b"
-    chart2.y_axis.numFmt = "$#,##0"
-    chart2.width = 18
-    chart2.height = 8
-    ws.add_chart(chart2, "E16")
-    ws.column_dimensions["A"].width = 42
-    ws.column_dimensions["B"].width = 16
-    ws.column_dimensions["C"].width = 16
-    # The first combined chart would mix scales; do not add it.
-    ws["A1"] = "Respaldo de gráficos. La lectura para directiva está en 01_Decision y en el dashboard."
-    ws.merge_cells("A1:C1")
+    print(texto)
+    print("--- foco ---")
+    print(focus[["stock", "tienda", "taller", "rotacion", "cover", "descuento", "rango", "skus"]].to_string())
+    print("--- rotación (15 más lentos) ---")
+    print(models.sort_values("rotacion")[["modelo", "rotacion", "stock", "cover", "descuento"]].head(15).to_string(index=False))
+    print("--- inventario (12 más grandes) ---")
+    print(models.sort_values("stock", ascending=False)[["modelo", "rotacion", "stock", "cover", "descuento", "origen"]].head(12).to_string(index=False))
+    print("excluidos", [(r["motivo"], r["modelo"], r["stock"]) for r in excl])
+    print("polvo", len(polvo_list), "modelos", payload["polvo"]["unidades"], "u")
+    print("sin precio", models.loc[models.sinPrecio, "modelo"].tolist())
+    print("modelos", res["modelos"], "skus", res["skus"], "uds", res["unidades"], "bajar", bajar, "mover", mover)
+    print("html", HTML_OUT, "xlsx", XLSX_OUT)
 
 
 if __name__ == "__main__":
