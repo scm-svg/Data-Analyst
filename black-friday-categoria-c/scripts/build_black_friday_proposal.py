@@ -512,7 +512,6 @@ def main() -> None:
     write_excel(payload)
     write_js(payload)
     write_html(payload)
-    DASHBOARD_APP_OUT.write_text(DASHBOARD_APP_SRC.read_text(encoding="utf-8"), encoding="utf-8")
 
     print(f"SKUs propuesta (stock>0, margen C, rotación C): {len(candidates)}")
     print(f"Período ventas: {period_label} ({sales_months} meses)")
@@ -590,9 +589,17 @@ def write_js(payload: dict) -> None:
     OUT_JS.write_text(f"window.BF_PROPOSAL_DATA={blob};\n", encoding="utf-8")
 
 
+def json_for_script_tag(payload: dict) -> str:
+    """JSON seguro dentro de <script type=\"application/json\">."""
+    raw = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    return raw.replace("</script>", "<\\/script>")
+
+
 def write_html(payload: dict) -> None:
     rules_html = "".join(f"<li>{r}</li>" for r in payload["meta"]["rules"])
-    html = f"""<!DOCTYPE html>
+    embedded = json_for_script_tag(payload)
+    app_js = DASHBOARD_APP_SRC.read_text(encoding="utf-8")
+    html_head = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -719,12 +726,17 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
     </tr></thead><tbody id="bodyAll"></tbody></table></div></div>
   </section>
 </main>
-<footer class="footer">Datos: bf_proposal_data.js + dashboard_app.js (misma carpeta que este HTML)</footer>
-<script src="bf_proposal_data.js"></script>
-<script src="dashboard_app.js"></script>
-</body>
-</html>"""
-    OUT_HTML.write_text(html, encoding="utf-8")
+<footer class="footer">Archivo autocontenido · datos embebidos · {payload["summary"]["skus_c_total"]} SKUs</footer>
+"""
+    html_tail = (
+        '<script type="application/json" id="bf-embedded-data">'
+        + embedded
+        + "</script>\n<script>\n"
+        + app_js
+        + "\n</script>\n</body>\n</html>"
+    )
+    OUT_HTML.write_text(html_head + html_tail, encoding="utf-8")
+    DASHBOARD_APP_OUT.write_text(app_js, encoding="utf-8")
 
 
 if __name__ == "__main__":

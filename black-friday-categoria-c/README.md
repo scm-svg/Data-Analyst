@@ -48,9 +48,9 @@ Por tienda retail (Cerro Verde, Chacao, Grandplaz, Grieta, Sambil, Tolon, Vela):
 
 ## Ver el dashboard
 
-Abrí **`black_friday_propuesta_categoria_c.html`** desde la carpeta `black-friday-categoria-c/` (debe estar junto a **`bf_proposal_data.js`** y **`dashboard_app.js`**). Si falta el `.js`, verás un mensaje de error claro.
+Descargá **`black_friday_propuesta_categoria_c.html`**: es **autocontenido** (toda la data va embebida). Abrilo con doble clic en Chrome/Edge/Firefox; no necesitás archivos extra.
 
-Alternativa: `python3 -m http.server 8765` en esa carpeta.
+Opcional: `bf_proposal_data.js` + `dashboard_app.js` en la misma carpeta si preferís datos separados.
 
 ## Regenerar
 

@@ -24,12 +24,26 @@
     if (sub) sub.textContent = "No se pudieron cargar los datos.";
   }
 
+  function loadPayload() {
+    var embedded = document.getElementById("bf-embedded-data");
+    if (embedded && embedded.textContent) {
+      try {
+        return JSON.parse(embedded.textContent);
+      } catch (e) {
+        showError("Error al leer datos embebidos: " + e.message);
+        return null;
+      }
+    }
+    if (window.BF_PROPOSAL_DATA) return window.BF_PROPOSAL_DATA;
+    showError(
+      "Sin datos. Usá el HTML autocontenido generado por build_black_friday_proposal.py o colocá bf_proposal_data.js junto al HTML."
+    );
+    return null;
+  }
+
   function boot() {
-    var DATA = window.BF_PROPOSAL_DATA;
+    var DATA = loadPayload();
     if (!DATA || !DATA.skus) {
-      showError(
-        "No se encontró bf_proposal_data.js. Abrí el HTML desde la carpeta black-friday-categoria-c (junto al .js) o usá: python3 -m http.server"
-      );
       return;
     }
 
