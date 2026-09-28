@@ -398,6 +398,49 @@ def _construir_colas(eventos: Sequence[EventoLinea]) -> Dict[str, deque]:
     return colas
 
 
+def _lineas_modelo(s: str) -> List[str]:
+    out = []
+    for part in str(s or "").replace(";", ",").split(","):
+        t = part.strip()
+        if t.isdigit() and t in "12345":
+            out.append(t)
+    return out
+
+
+def _agregar_remanente(colas: Dict[str, deque], eventos: Sequence[EventoLinea], modelos: Dict[str, ModeloInfo]) -> float:
+    """El faltante que no está en el tablero sigue al final de la cola de su línea."""
+    prog = defaultdict(lambda: defaultdict(float))
+    for e in eventos:
+        if e.especial:
+            continue
+        prog[e.modelo][e.linea] += e.qty
+    total = 0.0
+    for nom, info in modelos.items():
+        if info.especial:
+            continue
+        hecho = sum(prog[nom].values())
+        rest = info.faltante - hecho
+        if rest <= 0.001:
+            continue
+        shares = dict(prog[nom])
+        if not shares:
+            lins = _lineas_modelo(info.lineas)
+            if not lins:
+                continue
+            each = rest / len(lins)
+            for lin in lins:
+                colas[lin].append({"modelo": nom, "qty": each, "fecha_orig": None, "remanente": True})
+                total += each
+            continue
+        tot = sum(shares.values()) or 1.0
+        for lin, q in shares.items():
+            parte = rest * (q / tot)
+            if parte > 0.001:
+                colas[lin].append({"modelo": nom, "qty": parte, "fecha_orig": None, "remanente": True})
+                total += parte
+    return total
+
+
 def _capacidad_diaria_regular(eventos: Sequence[EventoLinea]) -> Dict[Tuple[str, date], float]:
     cap: Dict[Tuple[str, date], float] = defaultdict(float)
     for e in eventos:
@@ -407,14 +450,18 @@ def _capacidad_diaria_regular(eventos: Sequence[EventoLinea]) -> Dict[Tuple[str,
     return cap
 
 
-def _consumir(cola: deque, amount: float) -> List[Tuple[str, float]]:
-    hecho: List[Tuple[str, float]] = []
+def semana_plan(d: date, lunes_base: date = LUNES_BASE) -> int:
+    return ((d - lunes_base).days // 7) + 1
+
+
+def _consumir(cola: deque, amount: float) -> List[Tuple[str, float, bool]]:
+    hecho: List[Tuple[str, float, bool]] = []
     left = amount
     while left > 0.001 and cola:
         c = cola[0]
         take = min(c["qty"], left)
         if take > 0:
-            hecho.append((c["modelo"], take))
+            hecho.append((c["modelo"], take, bool(c.get("remanente"))))
             c["qty"] -= take
             left -= take
         if c["qty"] <= 0.001:
@@ -465,6 +512,7 @@ def simular_nocturnos(
     noche_set = set(noches)
 
     colas = _construir_colas(eventos)
+    remanente_total = _agregar_remanente(colas, eventos, modelos)
     cap_dia = _capacidad_diaria_regular(eventos)
     fechas = sorted({e.fecha for e in eventos if not e.especial})
     if noches:
@@ -477,16 +525,38 @@ def simular_nocturnos(
     idle_dia: Dict[str, float] = defaultdict(float)
     noches_usadas_linea: Dict[str, int] = defaultdict(int)
     noches_idle_linea: Dict[str, int] = defaultdict(int)
+    remanente_usado = 0.0
+    celdas: Dict[Tuple, dict] = {}
 
-    def aplicar(hechos: List[Tuple[str, float]], d: date, nocturno: bool) -> float:
+    def registrar(d: date, lin: str, nocturno: bool, nom: str, q: float, rem: bool) -> None:
+        nonlocal remanente_usado
+        turno = "noche" if nocturno else "dia"
+        key = (d, lin, turno, nom)
+        if key not in celdas:
+            celdas[key] = {
+                "fecha": d,
+                "semana": semana_plan(d, lunes_base),
+                "linea": lin,
+                "turno": turno,
+                "modelo": nom,
+                "qty": 0.0,
+                "remanente": False,
+            }
+        celdas[key]["qty"] += q
+        if rem:
+            celdas[key]["remanente"] = True
+            remanente_usado += q
+
+    def aplicar(hechos: List[Tuple[str, float, bool]], d: date, nocturno: bool, lin: str) -> float:
         total = 0.0
-        for nom, q in hechos:
+        for nom, q, rem in hechos:
             if q <= 0:
                 continue
             total += q
             timeline[nom].append((d, q))
             if nocturno:
                 pzas_noct[nom] += q
+            registrar(d, lin, nocturno, nom, q, rem)
         return total
 
     for d in fechas:
@@ -494,7 +564,7 @@ def simular_nocturnos(
             qty_dia = cap_dia.get((lin, d), 0.0)
             if qty_dia > 0:
                 hechos = _consumir(colas[lin], qty_dia)
-                usado = aplicar(hechos, d, False)
+                usado = aplicar(hechos, d, False, lin)
                 if usado + 0.001 < qty_dia:
                     idle_dia[lin] += qty_dia - usado
         if d in noche_set:
@@ -505,7 +575,7 @@ def simular_nocturnos(
                     continue
                 front = colas[lin][0]["modelo"]
                 extra = cap_nocturna(_cap_modelo(modelos, front, lin))
-                usados = aplicar(_consumir(colas[lin], extra), d, True)
+                usados = aplicar(_consumir(colas[lin], extra), d, True, lin)
                 extra_linea[lin] += usados
                 if usados > 0.001:
                     noches_usadas_linea[lin] += 1
@@ -517,7 +587,7 @@ def simular_nocturnos(
             # L1 noche: 100% del cupo nocturno sobre la cola de L2.
             if colas["2"]:
                 extra1 = cap_nocturna(_cap_modelo(modelos, colas["2"][0]["modelo"], "2"))
-                usados1 = aplicar(_consumir(colas["2"], extra1), d, True)
+                usados1 = aplicar(_consumir(colas["2"], extra1), d, True, "1")
                 extra_linea["1"] += usados1
                 if usados1 > 0.001:
                     noches_usadas_linea["1"] += 1
@@ -596,6 +666,7 @@ def simular_nocturnos(
     resultados.sort(key=lambda r: (r.termino_esc or date.max, r.modelo))
 
     n_noches = len(noches)
+    cal = sorted(celdas.values(), key=lambda c: (c["fecha"], c["linea"], c["turno"], c["modelo"]))
     return {
         "semanas": n_semanas,
         "noches": noches,
@@ -608,10 +679,13 @@ def simular_nocturnos(
         "pzas_por_linea": {k: round(v, 1) for k, v in extra_linea.items()},
         "idle_noche": {k: round(v, 1) for k, v in idle_noche.items()},
         "idle_dia": {k: round(v, 1) for k, v in idle_dia.items()},
+        "remanente_total": round(remanente_total, 1),
+        "remanente_usado": round(remanente_usado, 1),
         "noches_usadas_linea": dict(noches_usadas_linea),
         "noches_idle_linea": dict(noches_idle_linea),
         "restante_lineas": restantes_cola,
         "resultados": resultados,
+        "calendario": cal,
         "corte": corte,
         "corte_costura": corte_costura,
         "corte_dic": corte_dic,
@@ -668,7 +742,81 @@ def kpis_escenario(sim: dict) -> dict:
         "pzas_lotes_dic_esc": round(sum(r.pzas_dic_esc for r in lotes), 1),
         "modelos_adelantados": sum(1 for r in rows if (r.dias_ganados or 0) > 0),
         "lotes_adelantados": sum(1 for r in lotes if (r.dias_ganados or 0) > 0),
+        "remanente_total": sim.get("remanente_total") or 0.0,
+        "remanente_usado": sim.get("remanente_usado") or 0.0,
     }
+
+
+def celdas_a_dict(celdas: Sequence[dict]) -> List[dict]:
+    out = []
+    for c in celdas:
+        d = c["fecha"]
+        out.append(
+            {
+                "fecha": fmt_fecha(d),
+                "fecha_iso": d.isoformat() if hasattr(d, "isoformat") else str(d),
+                "semana": int(c["semana"]),
+                "dow": d.weekday() if hasattr(d, "weekday") else 0,
+                "linea": str(c["linea"]),
+                "turno": c["turno"],
+                "modelo": c["modelo"],
+                "qty": round(float(c["qty"]), 1),
+                "remanente": bool(c.get("remanente")),
+            }
+        )
+    return out
+
+
+def etiquetas_semana(lunes_base: date = LUNES_BASE, n: int = 12) -> List[dict]:
+    out = []
+    for i in range(1, n + 1):
+        ini = lunes_base + timedelta(days=7 * (i - 1))
+        fin = ini + timedelta(days=4)
+        out.append(
+            {
+                "semana": i,
+                "lunes": fmt_fecha(ini),
+                "viernes": fmt_fecha(fin),
+                "lunes_iso": ini.isoformat(),
+                "label": f"Semana {i} · {ini.strftime('%d/%m')}–{fin.strftime('%d/%m')}",
+            }
+        )
+    return out
+
+
+def resumen_semanas(celdas: Sequence[dict]) -> List[dict]:
+    weeks: Dict[int, dict] = {}
+    for c in celdas:
+        w = int(c["semana"])
+        if w not in weeks:
+            weeks[w] = {
+                "semana": w,
+                "pzas_dia": 0.0,
+                "pzas_noche": 0.0,
+                "pzas_remanente": 0.0,
+                "modelos": set(),
+            }
+        if c["turno"] == "noche":
+            weeks[w]["pzas_noche"] += c["qty"]
+        else:
+            weeks[w]["pzas_dia"] += c["qty"]
+        if c.get("remanente"):
+            weeks[w]["pzas_remanente"] += c["qty"]
+        weeks[w]["modelos"].add(c["modelo"])
+    out = []
+    for w in sorted(weeks):
+        x = weeks[w]
+        out.append(
+            {
+                "semana": w,
+                "pzas_dia": round(x["pzas_dia"], 1),
+                "pzas_noche": round(x["pzas_noche"], 1),
+                "pzas_remanente": round(x["pzas_remanente"], 1),
+                "pzas": round(x["pzas_dia"] + x["pzas_noche"], 1),
+                "n_modelos": len(x["modelos"]),
+            }
+        )
+    return out
 
 
 def _mediana(vals: List[int]) -> Optional[float]:

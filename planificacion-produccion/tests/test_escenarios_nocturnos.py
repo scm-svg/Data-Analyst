@@ -26,7 +26,7 @@ from escenarios_nocturnos import (  # noqa: E402
 )
 
 
-NUEVO_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_LOTE_NUEVO_1678.xlsx"
+NUEVO_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_LOTE_NUEVO_f414.xlsx"
 ACTUAL_XLSX = "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_ACTUAL_15df.xlsx"
 
 
@@ -133,6 +133,41 @@ class MotorSintetico(unittest.TestCase):
         fechas = [r.termino_esc for r in rows]
         self.assertEqual(fechas, sorted(fechas, key=lambda d: d or date.max))
 
+    def test_remanente_ocupa_cupo_diurno(self):
+        eventos = [
+            EventoLinea(date(2026, 9, 29), "2", "RIO DAMA", 100.0, False, 0),
+            EventoLinea(date(2026, 10, 2), "2", "RIO DAMA", 100.0, False, 1),
+        ]
+        modelos = {
+            "RIO DAMA": ModeloInfo("RIO DAMA", faltante=200, cap=100, lineas="2"),
+            "RIO KIDS": ModeloInfo("RIO KIDS", faltante=80, cap=100, lineas="2"),
+        }
+        plan = _plan(eventos, modelos)
+        s0 = simular_nocturnos(plan, 0)
+        s1 = simular_nocturnos(plan, 1)
+        by0 = {r.modelo: r for r in s0["resultados"]}
+        by1 = {r.modelo: r for r in s1["resultados"]}
+        self.assertEqual(by0["RIO DAMA"].termino_esc, date(2026, 10, 2))
+        self.assertGreater(s0.get("remanente_total") or 0, 0)
+        self.assertEqual(s0.get("remanente_usado") or 0, 0)
+        self.assertGreater(s1.get("remanente_usado") or 0, 0)
+        self.assertLessEqual(by1["RIO KIDS"].termino_esc, date(2026, 10, 2))
+        self.assertLess(sum(s1["idle_dia"].values()), 100)
+
+    def test_calendario_marca_noches(self):
+        eventos = [
+            EventoLinea(date(2026, 9, 29), "2", "RIO DAMA", 100.0, False, 0),
+            EventoLinea(date(2026, 10, 2), "2", "RIO DAMA", 100.0, False, 1),
+        ]
+        modelos = {"RIO DAMA": ModeloInfo("RIO DAMA", faltante=200, cap=100, lineas="2")}
+        s0 = simular_nocturnos(_plan(eventos, modelos), 0)
+        s1 = simular_nocturnos(_plan(eventos, modelos), 1)
+        self.assertFalse(any(c["turno"] == "noche" for c in s0["calendario"]))
+        noches = [c for c in s1["calendario"] if c["turno"] == "noche"]
+        self.assertTrue(noches)
+        self.assertTrue(any(c["linea"] == "1" for c in noches))
+        self.assertTrue(any(c["semana"] == 1 for c in s1["calendario"]))
+
 
 @unittest.skipUnless(os.path.isfile(NUEVO_XLSX), "Excel lote nuevo no disponible")
 class IntegracionExcel(unittest.TestCase):
@@ -150,7 +185,16 @@ class IntegracionExcel(unittest.TestCase):
         self.assertEqual(k["pzas_nocturno"], 0)
         self.assertEqual(k["extra_alm16"], 0)
         self.assertEqual(k["modelos_adelantados"], 0)
-        self.assertEqual(k["cubre_almacen_base"], k["cubre_almacen_esc"])
+        self.assertEqual(k["remanente_usado"], 0)
+        self.assertGreater(k["remanente_total"], 0)
+
+    def test_remanente_en_d_baja_ociosidad(self):
+        s0 = self.sims[0]
+        sd = self.sims[4]
+        self.assertGreater(sd["remanente_usado"], s0["remanente_usado"])
+        idle_d = sum((sd["idle_dia"] or {}).values())
+        idle_sin_cola = sd["pzas_nocturno"]
+        self.assertLess(idle_d, idle_sin_cola)
 
     def test_lotes_nuevos_y_corte_almacen(self):
         lotes = [m for m in self.nuevo["modelos"].values() if m.lote_nuevo]

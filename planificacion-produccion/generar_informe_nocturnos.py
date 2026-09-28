@@ -22,18 +22,21 @@ from escenarios_nocturnos import (
     CORTE_COSTURA_DICIEMBRE,
     ESCENARIOS,
     PERSONAS,
+    celdas_a_dict,
     comparar_lotes,
     cargar_plan,
+    etiquetas_semana,
     fmt_fecha,
     kpis_escenario,
     modelos_a_dict,
     personas_total,
+    resumen_semanas,
     simular_nocturnos,
 )
 
 NUEVO_XLSX = os.environ.get(
     "PLAN_NUEVO_XLSX",
-    "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_LOTE_NUEVO_1678.xlsx",
+    "/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion_LOTE_NUEVO_f414.xlsx",
 )
 ACTUAL_XLSX = os.environ.get(
     "PLAN_ACTUAL_XLSX",
@@ -140,10 +143,18 @@ def _pros_contras(sid: str, k: dict, sim: dict) -> Dict[str, List[str]]:
             f"{k['lotes_adelantados']} de 6 lotes nuevos cierran antes "
             f"(mediana {k['dias_ganados_lotes']} días de costura)."
         )
-    if idle > 0:
+    rem_u = k.get("remanente_usado") or 0
+    rem_t = k.get("remanente_total") or 0
+    if rem_u > 0:
         pros.append(
-            f"Se liberan {fmt_n(idle)} pzas de cupo diurno posterior: flexibilidad para retrabajo, "
-            "especiales o más demanda de tienda."
+            f"El cupo diurno que deja el nocturno se rellena con lo que sigue en cola: "
+            f"{fmt_n(rem_u)} pzas de faltante no tablero entran al horizonte "
+            f"(remanente total {fmt_n(rem_t)} pzas)."
+        )
+    if idle > 0:
+        cons.append(
+            f"Tras rellenar la cola quedan {fmt_n(idle)} pzas de ociosidad diurna "
+            "(sin modelo asignado en esa línea, p.ej. MOTION LOOP o holgura de L5)."
         )
     if l1:
         pros.append(
@@ -185,20 +196,37 @@ def _pros_contras(sid: str, k: dict, sim: dict) -> Dict[str, List[str]]:
     return {"pros": pros, "contras": cons}
 
 
+def _pick_modelo(items: List[dict], nombre: str) -> dict:
+    for m in items:
+        if m.get("modelo") == nombre:
+            return m
+    return {}
+
+
 def _lectura(payload: dict) -> str:
     k = payload["kpis"]
     kd, kc, kb, ka = k["D"], k["C"], k["B"], k["A"]
+    md = payload["modelos"]["D"]
+    m0 = payload["modelos"]["0"]
+    cab = _pick_modelo(md, "MAR LOTE NUEVO CAB")
+    cab0 = _pick_modelo(m0, "MAR LOTE NUEVO CAB")
+    kids = _pick_modelo(md, "RIO LOTE NUEVO KIDS")
+    kids0 = _pick_modelo(m0, "RIO LOTE NUEVO KIDS")
+    rem = kd.get("remanente_usado") or 0
     return (
         f"Insertar los 6 lotes nuevos (~{fmt_n(payload['pzas_lotes'])} pzas) sin nocturnos deja "
         f"el almacén del {fmt_fecha(CORTE_ALMACEN)} cubierto solo con el plan actual: 0 de 6 lotes "
         f"nuevos llegan completos. Con D se costuran {fmt_n(kd['pzas_lotes_alm16_esc'])} pzas de esos "
         f"lotes a tiempo para el 16/11 (vs {fmt_n(k['0']['pzas_lotes_alm16_esc'])} sin noches) y "
         f"{fmt_n(kd['pzas_lotes_dic_esc'])} pzas para diciembre/tienda nueva. "
-        f"MAR LOTE NUEVO CAB pasa de entrar el 25/11 al 18/11 y RIO LOTE NUEVO KIDS del 27/11 al 19/11: "
-        f"quedan a 2–3 días del corte. C logra el 73% del adelanto de D ({fmt_n(kc['extra_alm16'])} vs "
-        f"{fmt_n(kd['extra_alm16'])} pzas) al 73% del costo ({fmt_usd(kc['costo_usd'])} vs {fmt_usd(kd['costo_usd'])}). "
-        f"A ({fmt_usd(ka['costo_usd'])}) y B ({fmt_usd(kb['costo_usd'])}) sirven de piloto, pero no mueven "
-        f"diciembre. Recomendación: D si el criterio es tiendas + diciembre + tienda nueva; C si se quiere "
+        f"MAR LOTE NUEVO CAB pasa de entrar el {cab0.get('entrada_base') or cab0.get('entrada_esc') or '--'} "
+        f"al {cab.get('entrada_esc') or '--'} y RIO LOTE NUEVO KIDS del "
+        f"{kids0.get('entrada_base') or kids0.get('entrada_esc') or '--'} al {kids.get('entrada_esc') or '--'}. "
+        f"El cupo diurno que libera la noche se rellena con la cola (remanente absorbido: {fmt_n(rem)} pzas). "
+        f"C logra parte del adelanto de D ({fmt_n(kc['extra_alm16'])} vs "
+        f"{fmt_n(kd['extra_alm16'])} pzas) a menor costo ({fmt_usd(kc['costo_usd'])} vs {fmt_usd(kd['costo_usd'])}). "
+        f"A ({fmt_usd(ka['costo_usd'])}) y B ({fmt_usd(kb['costo_usd'])}) sirven de piloto. "
+        f"Recomendación: D si el criterio es tiendas + diciembre + tienda nueva; C si se quiere "
         f"limitar fatiga y caja. A no alcanza el objetivo de almacén."
     )
 
@@ -214,6 +242,16 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
         kpis[spec["id"]] = _kpis_plain(kpis_escenario(sim))
         modelos[spec["id"]] = modelos_a_dict(sim["resultados"])
     pc = {spec["id"]: _pros_contras(spec["id"], kpis[spec["id"]], sims[spec["id"]]) for spec in ESCENARIOS}
+    calendario = {sid: celdas_a_dict(sims[sid].get("calendario") or []) for sid in sims}
+    base_idx = {}
+    for c in calendario.get("0") or []:
+        key = (c["fecha_iso"], c["linea"], c["turno"], c["modelo"])
+        base_idx[key] = base_idx.get(key, 0.0) + c["qty"]
+    for rows in calendario.values():
+        for c in rows:
+            c["qty_base"] = base_idx.get((c["fecha_iso"], c["linea"], c["turno"], c["modelo"]), 0.0)
+            c["delta"] = round(c["qty"] - c["qty_base"], 1)
+    resumen_cal = {sid: resumen_semanas(rows) for sid, rows in calendario.items()}
     payload = {
         "corte_almacen": fmt_fecha(CORTE_ALMACEN),
         "corte_costura": fmt_fecha(CORTE_COSTURA_ALMACEN),
@@ -244,6 +282,16 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
         "noches": {spec["id"]: [fmt_fecha(d) for d in sims[spec["id"]]["noches"]] for spec in ESCENARIOS},
         "pzas_linea": {spec["id"]: sims[spec["id"]]["pzas_por_linea"] for spec in ESCENARIOS},
         "idle_dia": {spec["id"]: sims[spec["id"]]["idle_dia"] for spec in ESCENARIOS},
+        "remanente": {
+            spec["id"]: {
+                "total": sims[spec["id"]].get("remanente_total") or 0,
+                "usado": sims[spec["id"]].get("remanente_usado") or 0,
+            }
+            for spec in ESCENARIOS
+        },
+        "calendario": calendario,
+        "resumen_cal": resumen_cal,
+        "etiquetas_semana": etiquetas_semana(),
         "pros_contras": pc,
         "escenarios": ESCENARIOS,
     }
@@ -511,8 +559,9 @@ def escribir_excel(payload: dict, path: str):
         )
         _header(wsx, f"Escenario {sid} — {spec['titulo']}", sub, 15)
         r = 4
-        kpi_h = ["Noches", "Costo US$", "Pzas nocturno", "US$/pza", "Extra 16/11", "Lote nuevo 16/11", "Lote nuevo dic", "Días ganados (lotes)", "Cupo diurno liberado"]
+        kpi_h = ["Noches", "Costo US$", "Pzas nocturno", "US$/pza", "Extra 16/11", "Lote nuevo 16/11", "Lote nuevo dic", "Días ganados (lotes)", "Remanente en cola", "Ociosidad diurna"]
         idle = sum((payload["idle_dia"].get(sid) or {}).values())
+        rem_u = (payload.get("remanente") or {}).get(sid, {}).get("usado") or k[sid].get("remanente_usado") or 0
         kpi_v = [
             k[sid]["n_noches"],
             k[sid]["costo_usd"],
@@ -522,6 +571,7 @@ def escribir_excel(payload: dict, path: str):
             k[sid]["pzas_lotes_alm16_esc"],
             k[sid]["pzas_lotes_dic_esc"],
             k[sid]["dias_ganados_lotes"],
+            rem_u,
             idle,
         ]
         r = _write_table(wsx, r, kpi_h, [kpi_v])
@@ -562,7 +612,7 @@ def escribir_excel(payload: dict, path: str):
         r = _write_table(
             wsx,
             r,
-            ["Línea", "Personas", "Pzas nocturno", "Cupo diurno liberado"],
+            ["Línea", "Personas", "Pzas nocturno", "Ociosidad diurna"],
             [
                 [
                     f"Línea {x}",
@@ -583,6 +633,84 @@ def escribir_excel(payload: dict, path: str):
         wsx.page_setup.fitToHeight = 0
         wsx.sheet_properties.pageSetUpPr.fitToPage = True
 
+    wsc = wb.create_sheet("Calendario")
+    _header(
+        wsc,
+        "Calendario de planificación · escenarios A–D",
+        "Filtrar por escenario y semana. Delta = piezas del escenario menos la base sin nocturnos. Remanente = faltante que no estaba en el tablero y ahora ocupa cupo diurno.",
+        12,
+    )
+    cal_headers = [
+        "Escenario",
+        "Semana",
+        "Fecha",
+        "Día",
+        "Línea",
+        "Turno",
+        "Modelo",
+        "Pzas escenario",
+        "Pzas base",
+        "Delta",
+        "¿Remanente?",
+        "¿Cambio?",
+    ]
+    dias_nom = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    cal_rows = []
+    for spec in payload["escenarios"]:
+        sid = spec["id"]
+        label = "Base" if sid == "0" else sid
+        for c in payload.get("calendario", {}).get(sid) or []:
+            delta = c.get("delta")
+            cal_rows.append(
+                [
+                    label,
+                    c.get("semana"),
+                    c.get("fecha"),
+                    dias_nom[c.get("dow") or 0],
+                    f"Línea {c.get('linea')}",
+                    "Noche" if c.get("turno") == "noche" else "Día",
+                    c.get("modelo"),
+                    c.get("qty"),
+                    c.get("qty_base"),
+                    delta,
+                    "Sí" if c.get("remanente") else "",
+                    "Sí" if abs(delta or 0) > 0.001 or c.get("turno") == "noche" else "",
+                ]
+            )
+    r = _write_table(wsc, 4, cal_headers, cal_rows)
+    if cal_rows:
+        wsc.auto_filter.ref = f"A4:L{3 + len(cal_rows)}"
+    r += 2
+    wsc.cell(r, 1, "Resumen por escenario y semana").font = FONT_T
+    r += 1
+    sum_headers = ["Escenario", "Semana", "Pzas día", "Pzas noche", "Pzas remanente", "Pzas total", "Modelos"]
+    sum_rows = []
+    for spec in payload["escenarios"]:
+        sid = spec["id"]
+        label = "Base" if sid == "0" else sid
+        for w in payload.get("resumen_cal", {}).get(sid) or []:
+            sum_rows.append(
+                [
+                    label,
+                    w["semana"],
+                    w["pzas_dia"],
+                    w["pzas_noche"],
+                    w["pzas_remanente"],
+                    w["pzas"],
+                    w["n_modelos"],
+                ]
+            )
+    r = _write_table(wsc, r, sum_headers, sum_rows)
+    for col in range(1, 13):
+        wsc.column_dimensions[get_column_letter(col)].width = 18
+    wsc.column_dimensions["G"].width = 36
+    wsc.freeze_panes = "A5"
+    wsc.page_setup.orientation = "landscape"
+    wsc.page_setup.fitToPage = True
+    wsc.page_setup.fitToWidth = 1
+    wsc.page_setup.fitToHeight = 0
+    wsc.sheet_properties.pageSetUpPr.fitToPage = True
+
     wss = wb.create_sheet("Supuestos")
     _header(wss, "Supuestos del modelo", "Qué entra, qué no, y cómo se calculan fechas y costo.", 8)
     rows = [
@@ -594,13 +722,15 @@ def escribir_excel(payload: dict, path: str):
         ["Capacidad noche", "50% de la cap diurna del modelo que está al frente de esa línea. Cap según Por Hacer (máquinas nuevas aún no a 130)."],
         ["L5", "Cap diurna 40 → noche 20. El resto L2–L4 usa 101 o 124 según modelo."],
         ["Cómo se simula", "Se respeta el orden cronológico del tablero 12 semanas. Cada noche consume de la cola regular; los días siguientes fabrican lo que queda, así se adelantan los lotes de atrás."],
+        ["Cupos diurnos libres", "El cupo diurno que deja el nocturno no se deja ocioso: se rellena con lo que sigue en cola (siguiente modelo del tablero y el faltante no programado de esa línea)."],
         ["Almacén", "Entrada = salida de costura + 4 días hábiles. El corte 16/11 (lunes) exige terminar costura el 10/11."],
         ["Diciembre / tienda nueva", "Se cuenta costura al 25/11 (entra a almacén ~01/12) como proxy de reposición diciembre y tienda nueva."],
         ["Costo", "US$ 15 por persona por noche. L1–L3 = 4; L4–L5 = 5; total 22. Se paga el equipo completo aunque una línea no llene el cupo."],
         ["Plan ACTUAL vs NUEVO", "ACTUAL = planificación vigente. NUEVO = misma base + 6 lotes MAR/RIO LOTE NUEVO CAB-DAMA-KIDS (~8.912 pzas) que las proyecciones de tienda van a pedir."],
         ["Qué no se mueve", "Pedidos especiales, satélite, días de cobro, sábados y domingos. No se reordena prioridad: se adelanta la cola tal cual está."],
         ["Cuello L1", "Como L1 noche trabaja para L2, RIO LOTE NUEVO CAB y DAMA no adelantan su cierre: el remanente sigue en el día de L1."],
-        ["Piezas no programadas", "MOTION LOOP (sin línea), resto de LITE PANT y Basic Line Pant / SEMI MOTION no caben en el horizonte: la noche libera cupo diurno posterior que podría absorberlos, pero no se reasigna en este modelo."],
+        ["Piezas no programadas", "MOTION LOOP (sin línea) no entra. El resto de LITE PANT, Basic Line Pant y SEMI MOTION se encolan al final de su línea y ocupan el cupo diurno que libera el nocturno."],
+        ["Calendario", "La hoja Calendario y la pestaña HTML filtran por escenario y semana. Cada celda compara el plan del escenario contra la base (sin noches). Amarillo = remanente; azul = cambio vs base; navy = turno noche."],
         ["Conservadurismo", "Floor 50% de cap actual, no de 130. Si las máquinas nuevas llegan a régimen, el mismo esquema de noches rinde más."],
         ["Listas", "Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético."],
         ["Fuente", "Planificacion_Produccion_ACTUAL.xlsx y Planificacion_Produccion_LOTE_NUEVO.xlsx (Por Hacer, tablero Semana 1–12, Proyeccion, Entrada de Almacen)."],
@@ -677,7 +807,7 @@ def _kpis_html(sid: str, payload: dict) -> str:
       <div class="kpi"><span>Lote nuevo p/ 16/11</span><b>{fmt_n(x['pzas_lotes_alm16_esc'])}</b></div>
       <div class="kpi"><span>US$ / pza</span><b>{usd_p}</b></div>
       <div class="kpi"><span>Lotes que cierran antes</span><b>{x['lotes_adelantados']} / 6</b></div>
-      <div class="kpi"><span>Cupo diurno liberado</span><b>{fmt_n(idle)}</b></div>
+      <div class="kpi"><span>Remanente absorbido</span><b>{fmt_n(x.get('remanente_usado') or 0)}</b></div>
     </div>"""
 
 
@@ -708,7 +838,7 @@ def _sec_esc(sid: str, payload: dict) -> str:
       {_tabla_modelos(payload['modelos'][sid])}</div>
     <div class="card"><h3>Lotes nuevos (orden por días ganados)</h3>{_tabla_modelos(lotes)}</div>
     <div class="card"><h3>Aprovechamiento por línea</h3>
-      <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Cupo diurno liberado</th></tr></thead>
+      <table><thead><tr><th>Línea</th><th>Personas</th><th>Pzas nocturno</th><th>Ociosidad diurna</th></tr></thead>
       <tbody>{lin_rows}</tbody></table>
     </div>
     """
@@ -816,6 +946,25 @@ tr.lote td {{ background: var(--ambar-bg); }}
 .wrap {{ overflow: auto; max-height: 520px; }}
 .cw {{ height: 280px; position: relative; background: #fff; }}
 .foot {{ text-align: center; color: var(--gris); font-size: 12.5px; padding: 18px 20px 28px; }}
+.cal-tools {{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }}
+.cal-tools .lab {{ font-size:12px; font-weight:700; color:var(--gris); text-transform:uppercase; letter-spacing:.3px; }}
+.cal-tools button {{
+  background:#fff; border:1px solid var(--borde); border-radius:999px; padding:6px 12px;
+  font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; color:var(--navy);
+}}
+.cal-tools button.on {{ background:var(--navy); color:#fff; border-color:var(--navy); }}
+.cal-week {{ display:flex; gap:6px; flex-wrap:wrap; }}
+table.cal {{ font-size:12.5px; }}
+table.cal th {{ text-align:center; }}
+table.cal td {{ min-width:110px; vertical-align:top; }}
+.cell-mod {{ font-weight:700; color:var(--navy); }}
+.cell-qty {{ color:var(--gris); }}
+.chip-n {{ display:block; margin-top:6px; padding:4px 6px; border-radius:6px; background:var(--navy); color:#fff; font-size:11px; }}
+.chip-r {{ display:inline-block; margin-left:4px; padding:1px 6px; border-radius:999px; background:var(--ambar-bg); color:var(--ambar); font-size:10px; font-weight:700; }}
+td.chg {{ background:#e8f0fe; }}
+td.rem {{ background:var(--ambar-bg); }}
+.legend span {{ display:inline-block; margin-right:12px; font-size:12.5px; color:var(--gris); }}
+.sw {{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:4px; vertical-align:middle; border:1px solid var(--borde); }}
 @media (max-width: 900px) {{ .g5, .g4, .g2 {{ grid-template-columns: 1fr 1fr; }} }}
 </style>
 </head>
@@ -836,6 +985,7 @@ tr.lote td {{ background: var(--ambar-bg); }}
       <button class="tab" data-id="B">Escenario B</button>
       <button class="tab" data-id="C">Escenario C</button>
       <button class="tab" data-id="D">Escenario D</button>
+      <button class="tab" data-id="cal">Calendario</button>
       <button class="tab" data-id="sup">Supuestos</button>
     </nav>
   </div>
@@ -872,6 +1022,35 @@ tr.lote td {{ background: var(--ambar-bg); }}
     </div>
   </section>
   {secs}
+  <section class="sec" id="sec-cal">
+    <div class="card">
+      <h3>Calendario de producción · filtro por escenario y semana</h3>
+      <p style="color:var(--gris);font-size:13.5px;margin:0 0 10px">
+        El plan diurno se recorre en cola: lo que la noche adelanta deja cupo al día siguiente,
+        y ese cupo lo toma el siguiente modelo (tablero o remanente no programado).
+        Azul = distinto a la base sin nocturnos. Amarillo = remanente. Navy = turno noche.
+      </p>
+      <div class="cal-tools">
+        <span class="lab">Escenario</span>
+        <span id="cal-esc"></span>
+      </div>
+      <div class="cal-tools">
+        <span class="lab">Semana</span>
+        <span class="cal-week" id="cal-week"></span>
+      </div>
+      <div class="legend">
+        <span><i class="sw" style="background:#fff"></i>Igual a la base</span>
+        <span><i class="sw" style="background:#e8f0fe"></i>Modificado vs base</span>
+        <span><i class="sw" style="background:#fef7e0"></i>Remanente en cola</span>
+        <span><i class="sw" style="background:#12203c"></i>Turno noche</span>
+      </div>
+    </div>
+    <div class="g g4" id="cal-kpis"></div>
+    <div class="card">
+      <h3 id="cal-title">Semana</h3>
+      <div class="wrap" id="cal-grid"></div>
+    </div>
+  </section>
   <section class="sec" id="sec-sup">
     <div class="card"><h3>Supuestos</h3>
       <table><tbody>
@@ -882,7 +1061,9 @@ tr.lote td {{ background: var(--ambar-bg); }}
         <tr><td>Capacidad</td><td>50% de la cap diurna actual del modelo al frente. Máquinas nuevas aún no a 130 pzas/día.</td></tr>
         <tr><td>Alcance</td><td>Solo Por Hacer. Por Hacer – Especial queda en el turno diurno.</td></tr>
         <tr><td>Almacén</td><td>Salida costura + 4 días hábiles. 16/11 exige costura el 10/11. Diciembre se mide con costura al 25/11.</td></tr>
-        <tr><td>Simulación</td><td>Cola cronológica del tablero 12 semanas. La noche consume el frente; los días siguientes fabrican lo que queda (el plan se corre hacia adelante).</td></tr>
+        <tr><td>Simulación</td><td>Cola cronológica del tablero 12 semanas. La noche consume el frente; los días siguientes fabrican lo que sigue en cola (el plan se corre hacia adelante).</td></tr>
+        <tr><td>Cupos diurnos</td><td>El cupo que deja el nocturno se rellena con el siguiente modelo de la línea y con el faltante no programado (remanente). No se deja ocioso a propósito.</td></tr>
+        <tr><td>Calendario</td><td>Pestaña Calendario: filtrar escenario (Base/A–D) y semana 1–12. Cada celda muestra día y noche contra la base.</td></tr>
         <tr><td>Listas</td><td>Las tablas de modelos van por días ganados (mayor impacto primero), no por calendario ni alfabético.</td></tr>
         <tr><td>Fuente</td><td>Planificacion Produccion ACTUAL.xlsx y LOTE NUEVO.xlsx.</td></tr>
       </tbody></table>
@@ -893,6 +1074,7 @@ tr.lote td {{ background: var(--ambar-bg); }}
 <script>
 const EXTRA = {extras};
 const COSTO = {costos};
+const CAL = null;/*CAL_JSON*/
 document.querySelectorAll(".tab").forEach(function(b){{
   b.onclick = function(){{
     document.querySelectorAll(".tab").forEach(function(x){{x.classList.remove("on");}});
@@ -925,6 +1107,102 @@ document.querySelectorAll(".tab").forEach(function(b){{
     }}
   }});
 }})();
+(function(){{
+  if(!CAL || !CAL.celdas) return;
+  var esc = "D";
+  var week = 1;
+  var escBox = document.getElementById("cal-esc");
+  var weekBox = document.getElementById("cal-week");
+  var labels = {{"0":"Base","A":"A","B":"B","C":"C","D":"D"}};
+  ["0","A","B","C","D"].forEach(function(id){{
+    var b = document.createElement("button");
+    b.textContent = labels[id];
+    b.dataset.id = id;
+    if(id==="D") b.className = "on";
+    b.onclick = function(){{ esc = id; mark(escBox, b); render(); }};
+    escBox.appendChild(b);
+  }});
+  (CAL.etiquetas || []).forEach(function(e){{
+    var b = document.createElement("button");
+    b.textContent = "S"+e.semana;
+    b.title = e.label;
+    b.dataset.w = e.semana;
+    if(e.semana===1) b.className = "on";
+    b.onclick = function(){{ week = e.semana; mark(weekBox, b); render(); }};
+    weekBox.appendChild(b);
+  }});
+  function mark(box, b){{
+    box.querySelectorAll("button").forEach(function(x){{x.classList.remove("on");}});
+    b.classList.add("on");
+  }}
+  function idx(rows){{
+    var m = {{}};
+    (rows||[]).forEach(function(c){{
+      var k = c.fecha_iso+"|"+c.linea+"|"+c.turno;
+      if(!m[k]) m[k] = [];
+      m[k].push(c);
+    }});
+    return m;
+  }}
+  function fmt(n){{
+    return Math.round(n).toString().replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ".");
+  }}
+  function render(){{
+    var et = (CAL.etiquetas||[]).filter(function(e){{return e.semana===week;}})[0];
+    document.getElementById("cal-title").textContent = et ? et.label : ("Semana "+week);
+    var days = [];
+    if(et && et.lunes_iso){{
+      var d0 = new Date(et.lunes_iso+"T00:00:00Z");
+      for(var i=0;i<5;i++){{
+        var dx = new Date(d0.getTime()+i*86400000);
+        var iso = dx.toISOString().slice(0,10);
+        var dd = iso.slice(8,10)+"/"+iso.slice(5,7);
+        days.push({{iso:iso, label:["Lun","Mar","Mié","Jue","Vie"][i]+" "+dd}});
+      }}
+    }}
+    var base = idx(CAL.celdas["0"]);
+    var escM = idx(CAL.celdas[esc]||[]);
+    var kpis = (CAL.resumen[esc]||[]).filter(function(w){{return w.semana===week;}})[0] || {{pzas:0,pzas_noche:0,pzas_remanente:0,n_modelos:0}};
+    var kb = (CAL.resumen["0"]||[]).filter(function(w){{return w.semana===week;}})[0] || {{pzas:0}};
+    document.getElementById("cal-kpis").innerHTML =
+      '<div class="kpi"><span>Pzas semana</span><b>'+fmt(kpis.pzas||0)+'</b></div>'+
+      '<div class="kpi"><span>Pzas noche</span><b>'+fmt(kpis.pzas_noche||0)+'</b></div>'+
+      '<div class="kpi"><span>Remanente</span><b>'+fmt(kpis.pzas_remanente||0)+'</b></div>'+
+      '<div class="kpi"><span>Delta vs base</span><b>'+fmt((kpis.pzas||0)-(kb.pzas||0))+'</b></div>';
+    var html = '<table class="cal"><thead><tr><th>Línea</th>';
+    days.forEach(function(d){{ html += "<th>"+d.label+"</th>"; }});
+    html += "</tr></thead><tbody>";
+    ["1","2","3","4","5"].forEach(function(lin){{
+      html += "<tr><td><b>Línea "+lin+"</b></td>";
+      days.forEach(function(d){{
+        var kd = d.iso+"|"+lin+"|dia";
+        var kn = d.iso+"|"+lin+"|noche";
+        var dia = escM[kd]||[];
+        var noche = escM[kn]||[];
+        var bDia = JSON.stringify((base[kd]||[]).map(function(x){{return x.modelo+"|"+x.qty;}}));
+        var eDia = JSON.stringify(dia.map(function(x){{return x.modelo+"|"+x.qty;}}));
+        var cls = "";
+        if(dia.some(function(x){{return x.remanente;}})) cls = "rem";
+        else if(bDia !== eDia) cls = "chg";
+        html += "<td class='"+cls+"'>";
+        if(!dia.length && !noche.length) html += "<span class='cell-qty'>—</span>";
+        dia.forEach(function(x){{
+          html += "<div><span class='cell-mod'>"+x.modelo+"</span> <span class='cell-qty'>"+fmt(x.qty)+"</span>";
+          if(x.remanente) html += "<span class='chip-r'>cola</span>";
+          html += "</div>";
+        }});
+        noche.forEach(function(x){{
+          html += "<span class='chip-n'>Noche · "+x.modelo+" "+fmt(x.qty)+"</span>";
+        }});
+        html += "</td>";
+      }});
+      html += "</tr>";
+    }});
+    html += "</tbody></table>";
+    document.getElementById("cal-grid").innerHTML = html;
+  }}
+  render();
+}})();
 </script>
 </body></html>
 """
@@ -938,6 +1216,16 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     escribir_excel(payload, OUT_XLSX)
     escribir_html(payload, OUT_HTML)
+    with open(OUT_HTML, "r", encoding="utf-8") as f:
+        html = f.read()
+    cal_payload = {
+        "celdas": payload.get("calendario") or {},
+        "etiquetas": payload.get("etiquetas_semana") or [],
+        "resumen": payload.get("resumen_cal") or {},
+    }
+    html = html.replace("null;/*CAL_JSON*/", json.dumps(cal_payload, ensure_ascii=False) + ";")
+    with open(OUT_HTML, "w", encoding="utf-8") as f:
+        f.write(html)
     json_path = os.path.join(OUT_DIR, "informe_nocturnos.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
