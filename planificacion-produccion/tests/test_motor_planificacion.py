@@ -3343,12 +3343,29 @@ class TestLotesGeneroColor(unittest.TestCase):
         self.assertEqual(len(lineas_usadas), 1, lineas_usadas)
 
     def test_secuencia_no_negro_dama_antes_que_blanco_cab(self):
-        """CAB=No con Negro+Blanco: termina sus colores y recién entonces entra DAMA."""
+        """CAB=No con Negro+Blanco: no cede a DAMA entre colores; DAMA entra al terminar CAB."""
         tareas = [
-            self._t("CN", "RIO CAB", "Negro", 130, ["4"]),
-            self._t("CB", "RIO CAB", "Blanco", 130, ["4"]),
-            self._t("DN", "RIO DAMA", "Negro", 130, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("CN", "RIO CAB", "Negro", 130, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("CB", "RIO CAB", "Blanco", 130, ["4"], fechaKey=20260901, prioridadNum=1),
+            self._t("DN", "RIO DAMA", "Negro", 130, ["4"], fechaKey=20260920, prioridadNum=3),
         ]
+        out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO CAB": "No"})
+        d0 = self._por_dia_linea(out, "4", 0)
+        self.assertEqual(d0, {"RIO CAB": 130}, d0)
+        negro_cab_d0 = sum(
+            t["plan"]["4"][0] for t in out
+            if t["modelo"] == "RIO CAB" and t["color"] == "Negro"
+        )
+        self.assertEqual(negro_cab_d0, 130)
+        d1 = self._por_dia_linea(out, "4", 1)
+        self.assertEqual(d1, {"RIO CAB": 130}, d1)
+        blanco_cab_d1 = sum(
+            t["plan"]["4"][1] for t in out
+            if t["modelo"] == "RIO CAB" and t["color"] == "Blanco"
+        )
+        self.assertEqual(blanco_cab_d1, 130)
+        d2 = self._por_dia_linea(out, "4", 2)
+        self.assertEqual(d2, {"RIO DAMA": 130}, d2)
         out = planificar(tareas, {}, total_dias=5, mapa_secuencia={"RIO CAB": "No"})
         d0 = self._por_dia_linea(out, "4", 0)
         self.assertEqual(d0, {"RIO CAB": 130}, d0)
