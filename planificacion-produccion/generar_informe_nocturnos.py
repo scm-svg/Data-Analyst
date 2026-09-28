@@ -32,6 +32,7 @@ from escenarios_nocturnos import (
     personas_total,
     resumen_semanas,
     simular_nocturnos,
+    delta_dias,
 )
 
 NUEVO_XLSX = os.environ.get(
@@ -239,8 +240,27 @@ def construir_payload(plan_nuevo: dict, plan_actual: dict) -> dict:
     for spec in ESCENARIOS:
         sim = simular_nocturnos(plan_nuevo, spec["semanas"])
         sims[spec["id"]] = sim
-        kpis[spec["id"]] = _kpis_plain(kpis_escenario(sim))
-        modelos[spec["id"]] = modelos_a_dict(sim["resultados"])
+    base_res = {r.modelo: r for r in sims["0"]["resultados"]}
+    for sid, sim in sims.items():
+        if sid == "0":
+            continue
+        for r in sim["resultados"]:
+            b = base_res.get(r.modelo)
+            if not b:
+                continue
+            r.termino_base = b.termino_esc
+            r.entrada_base = b.entrada_esc
+            r.primer_base = b.primer_esc
+            r.pzas_alm16_base = b.pzas_alm16_esc
+            r.pzas_dic_base = b.pzas_dic_esc
+            r.dias_ganados = delta_dias(r.termino_base, r.termino_esc)
+            r.cubre_almacen_base = b.cubre_almacen_esc
+            r.a_tiempo_base = b.a_tiempo_esc
+        sim["resultados"].sort(key=lambda x: (x.termino_esc or date.max, x.modelo))
+    for spec in ESCENARIOS:
+        sid = spec["id"]
+        kpis[sid] = _kpis_plain(kpis_escenario(sims[sid]))
+        modelos[sid] = modelos_a_dict(sims[sid]["resultados"])
     pc = {spec["id"]: _pros_contras(spec["id"], kpis[spec["id"]], sims[spec["id"]]) for spec in ESCENARIOS}
     calendario = {sid: celdas_a_dict(sims[sid].get("calendario") or []) for sid in sims}
     base_idx = {}

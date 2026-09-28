@@ -531,7 +531,7 @@ def simular_nocturnos(
     def registrar(d: date, lin: str, nocturno: bool, nom: str, q: float, rem: bool) -> None:
         nonlocal remanente_usado
         turno = "noche" if nocturno else "dia"
-        key = (d, lin, turno, nom)
+        key = (d, lin, turno, nom, bool(rem))
         if key not in celdas:
             celdas[key] = {
                 "fecha": d,
