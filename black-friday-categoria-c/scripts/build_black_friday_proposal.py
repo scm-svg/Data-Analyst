@@ -22,12 +22,13 @@ ABC_HTML = UPLOADS / "abc_ver_fcbe.html"
 INV_XLSX = UPLOADS / "INVENTARIO_TOTAL_CUADRO_PARA_ABC_-_PROPUESTA_1e41.xlsx"
 SALES_XLSX = UPLOADS / "VENTAS_CUADRO_ACTUALIZADAS_ARREGLADO_29b1.xlsx"
 OUT_JSON = ROOT / "bf_proposal_data.json"
+OUT_JS = ROOT / "bf_proposal_data.js"
 OUT_HTML = ROOT / "black_friday_propuesta_categoria_c.html"
 OUT_XLSX = ROOT / "BLACK_FRIDAY_PROPUESTA_CATEGORIA_C.xlsx"
+DASHBOARD_APP_SRC = Path(__file__).resolve().parent / "dashboard_app.js"
+DASHBOARD_APP_OUT = ROOT / "dashboard_app.js"
 
 TH_A, TH_B = 0.8, 0.95
-SALES_PERIOD_LABEL = "Octubre 2025 → Julio 2026"
-SALES_MONTHS = 10
 BF_UPLIFT = 4.0
 RESERVE_PCT = 0.15
 RETAIL_LOCS = [
@@ -155,13 +156,30 @@ def is_excluded_model(modelo: str, producto: str = "") -> bool:
     return False
 
 
-def sales_in_analysis_period(df: pd.DataFrame) -> pd.DataFrame:
+def sales_scope(df: pd.DataFrame) -> tuple[pd.DataFrame, str, int, list[str]]:
+    """Todos los meses presentes en el Excel de ventas."""
     df = df.copy()
     df["m"] = df["Mes"].astype(str).str.lower().str.strip().map(MONTH_ORDER)
-    return df[
-        ((df["Año"] == 2025) & (df["m"] >= 10))
-        | ((df["Año"] == 2026) & (df["m"] <= 7))
-    ]
+    df["Año"] = pd.to_numeric(df["Año"], errors="coerce")
+    df = df.dropna(subset=["m", "Año"])
+    periods = (
+        df.groupby(["Año", "m"], as_index=False)
+        .agg(mes_label=("Mes", "first"))
+        .sort_values(["Año", "m"])
+    )
+    if periods.empty:
+        return df.iloc[0:0], "Sin datos de ventas", 1, []
+
+    def cap_month(s: str) -> str:
+        return str(s).strip().capitalize()
+
+    first, last = periods.iloc[0], periods.iloc[-1]
+    label = (
+        f"{cap_month(first.mes_label)} {int(first.Año)} → "
+        f"{cap_month(last.mes_label)} {int(last.Año)}"
+    )
+    months_list = [f"{cap_month(r.mes_label)} {int(r.Año)}" for r in periods.itertuples()]
+    return df, label, len(periods), months_list
 
 
 def max_discount_for_margin_floor(unit_price: float, unit_cost: float, floor_rate: float) -> float:
@@ -272,7 +290,7 @@ def main() -> None:
 
     sales_df = pd.read_excel(SALES_XLSX)
     sales_df["SKU"] = sales_df["SKU"].astype(str).str.strip()
-    sales_period = sales_in_analysis_period(sales_df)
+    sales_period, period_label, sales_months, months_list = sales_scope(sales_df)
     qty_by_sku = sales_period.groupby("SKU")["Cant. ordenada"].sum().to_dict()
     modelo_sales = sales_period.groupby("SKU")["modelo"].first().to_dict()
 
@@ -308,7 +326,7 @@ def main() -> None:
 
         matrix = "C" + rot
         qty = float(qty_by_sku.get(sku, 0))
-        monthly = qty / SALES_MONTHS
+        monthly = qty / sales_months
         stock_r = float(stock_retail.get(sku, 0))
 
         unit_price = abc["revenue"] / abc["qty"] if abc["qty"] > 0 else 0.0
@@ -393,7 +411,7 @@ def main() -> None:
                 "segmento": v["segmento"],
                 "skus_c": v["skus"],
                 "stock_total": int(v["stock"]),
-                "unidades_vendidas_10m": int(v["qty"]),
+                "unidades_vendidas_periodo": int(v["qty"]),
                 "margen_10m": round(v["margin"], 2),
                 "matriz_dominante": dom,
             }
@@ -431,7 +449,8 @@ def main() -> None:
 
     summary = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "periodo_ventas": SALES_PERIOD_LABEL,
+        "periodo_ventas": period_label,
+        "meses_analisis": sales_months,
         "skus_c_total": len(candidates),
         "skus_con_stock": len(candidates),
         "unidades_stock": int(sum(c["stock_total"] for c in candidates)),
@@ -451,9 +470,10 @@ def main() -> None:
             "abc_source": str(ABC_HTML.name),
             "inventory_source": str(INV_XLSX.name),
             "sales_source": str(SALES_XLSX.name),
+            "meses_incluidos": months_list,
             "rules": [
                 "Inventario Excel: solo SKUs con stock > 0",
-                "Ventas Excel Oct 2025 – Jul 2026: rotación C (baja salida)",
+                f"Ventas Excel ({period_label}): rotación C (baja salida)",
                 "Guía ABC: margen C + categoría Manufactura/Equipamiento",
                 "Excluidos: CUADRO BAND, SHORT PLAYA, CLASICA GC SUBLIMADO KIDS",
             ],
@@ -490,9 +510,12 @@ def main() -> None:
         encoding="utf-8",
     )
     write_excel(payload)
+    write_js(payload)
     write_html(payload)
+    DASHBOARD_APP_OUT.write_text(DASHBOARD_APP_SRC.read_text(encoding="utf-8"), encoding="utf-8")
 
     print(f"SKUs propuesta (stock>0, margen C, rotación C): {len(candidates)}")
+    print(f"Período ventas: {period_label} ({sales_months} meses)")
     print(f"Excluidos: {dict(excluded_stats)}")
     print(f"JSON: {OUT_JSON}")
     print(f"Excel: {OUT_XLSX}")
@@ -562,8 +585,12 @@ def write_excel(payload: dict) -> None:
         ws.freeze_panes(1, 0)
 
 
+def write_js(payload: dict) -> None:
+    blob = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    OUT_JS.write_text(f"window.BF_PROPOSAL_DATA={blob};\n", encoding="utf-8")
+
+
 def write_html(payload: dict) -> None:
-    data_json = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     rules_html = "".join(f"<li>{r}</li>" for r in payload["meta"]["rules"])
     html = f"""<!DOCTYPE html>
 <html lang="es">
@@ -615,11 +642,13 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .tag.C{{background:rgba(244,114,182,.15);color:var(--c);border:1px solid rgba(244,114,182,.35)}}
 .diag{{font-size:.72rem;line-height:1.45;color:var(--mu);padding:10px;border-radius:8px;background:var(--s2);border:1px solid var(--brd);margin-top:10px}}
 .diag ul{{margin:8px 0 0 18px}}
+#loadErr{{display:none;margin:12px 28px;padding:12px;border-radius:8px;background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.4);color:#f472b6;font-size:.78rem}}
 .footer{{text-align:center;color:var(--mu);font-size:.62rem;padding:14px;border-top:1px solid var(--brd)}}
 @media(max-width:960px){{.g2{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
+<div id="loadErr"></div>
 <header class="hdr">
   <div>
     <h1>Black Friday · <em>Categoría C</em></h1>
@@ -656,7 +685,7 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
       <div class="card"><h3>SKUs por segmento</h3><div class="cw" style="height:220px"><canvas id="cSeg"></canvas></div></div>
       <div class="card"><h3>Período ventas</h3><div class="cs">Fuente: Excel ventas</div>
         <p style="font-size:1.1rem;font-family:var(--fh);font-weight:800;margin-top:12px" id="periodLabel"></p>
-        <p style="font-size:.72rem;color:var(--mu);margin-top:8px">Rotación calculada sobre unidades vendidas en este rango (no incluye ago–sep 2026).</p>
+        <p style="font-size:.72rem;color:var(--mu);margin-top:8px" id="monthsList"></p>
       </div>
     </div>
     <div class="card"><h3>Top 15 modelos por stock</h3><div class="tscroll"><table><thead><tr>
@@ -686,68 +715,13 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
   </section>
   <section class="sec" id="sec-detalle">
     <div class="card"><h3>Listado ofertable</h3><div class="tscroll"><table><thead><tr>
-      <th>Prior.</th><th>SKU</th><th>Modelo</th><th>Stock</th><th>Vta 10m</th><th>%A</th><th>%B</th>
+      <th>Prior.</th><th>SKU</th><th>Modelo</th><th>Stock</th><th>Vta período</th><th>%A</th><th>%B</th>
     </tr></thead><tbody id="bodyAll"></tbody></table></div></div>
   </section>
 </main>
-<footer class="footer">Inventario y ventas: Excel · Margen C: guía ABC · Período ventas Oct 2025 – Jul 2026</footer>
-<script id="bf-data" type="application/json">{data_json}</script>
-<script>
-const DATA=JSON.parse(document.getElementById('bf-data').textContent);
-const state={{seg:'',search:''}};
-function $(id){{return document.getElementById(id);}}
-function fmt(n,d=0){{return n==null?'—':Number(n).toLocaleString('es-VE',{{minimumFractionDigits:d,maximumFractionDigits:d}});}}
-function filtered(){{
-  return DATA.skus.filter(r=>{{
-    if(state.seg && r.segmento!==state.seg) return false;
-    if(state.search){{
-      const q=state.search.toLowerCase();
-      if(!(r.sku+' '+r.modelo+' '+r.producto).toLowerCase().includes(q)) return false;
-    }}
-    return true;
-  }});
-}}
-function tab(name){{
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
-  document.querySelectorAll('.sec').forEach(s=>s.classList.toggle('active',s.id==='sec-'+name));
-}}
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>tab(t.dataset.tab));
-function renderKpis(){{
-  const s=DATA.summary;
-  $('subtitle').textContent=DATA.meta.subtitle+' · '+s.periodo_ventas;
-  $('periodLabel').textContent=s.periodo_ventas;
-  $('kpis').innerHTML=[
-    ['SKUs ofertables',s.skus_c_total],['Und. stock',s.unidades_stock],['En tiendas',s.unidades_tiendas],
-    ['Manufactura',s.manufactura_skus],['Brecha BF',s.brecha_total_unidades]
-  ].map(([l,v])=>'<div class="kpi"><div class="v">'+fmt(v)+'</div><div class="l">'+l+'</div></div>').join('');
-  $('cardA').innerHTML='<h4>'+DATA.option_a.name+'</h4><div class="big">'+DATA.option_a.avg_discount+'%</div><p>'+DATA.option_a.description+'</p>';
-  $('cardB').innerHTML='<h4>'+DATA.option_b.name+'</h4><div class="big">'+DATA.option_b.avg_discount+'%</div><p>'+DATA.option_b.description+'</p>';
-  const as=DATA.meta.assumptions;
-  $('assumptions').innerHTML='Uplift BF ×'+as.bf_uplift_vs_mes+' vs venta mensual (Excel). Reserva '+Math.round(as.reserve_pct*100)+'%.';
-}}
-function renderTables(){{
-  const rows=filtered();
-  $('bodyA').innerHTML=rows.map(r=>'<tr><td>'+r.sku+'</td><td>'+r.modelo+'</td><td><strong>'+fmt(r.stock_total)+'</strong></td><td>'+fmt(r.venta_mensual_prom,1)+'</td><td>'+(r.meses_cobertura??'—')+'</td><td><strong>'+r.descuento_opcion_a+'%</strong></td></tr>').join('');
-  $('bodyB').innerHTML=rows.map(r=>'<tr><td>'+r.sku+'</td><td>'+r.modelo+'</td><td><strong>'+fmt(r.stock_total)+'</strong></td><td>'+(r.meses_cobertura??'—')+'</td><td><strong>'+r.descuento_opcion_b+'%</strong></td><td>'+fmt(r.brecha_abastecimiento)+'</td></tr>').join('');
-  $('bodyAll').innerHTML=rows.map(r=>'<tr><td>'+r.prioridad+'</td><td>'+r.sku+'</td><td>'+r.modelo+'</td><td><strong>'+fmt(r.stock_total)+'</strong></td><td>'+fmt(r.qty)+'</td><td>'+r.descuento_opcion_a+'%</td><td>'+r.descuento_opcion_b+'%</td></tr>').join('');
-  $('bodySupply').innerHTML=DATA.supply.filter(r=>{{
-    if(!state.search) return true;
-    const q=state.search.toLowerCase();
-    return (r.sku+' '+r.modelo+' '+r.tienda).toLowerCase().includes(q);
-  }}).slice(0,800).map(r=>'<tr><td>'+r.tienda+'</td><td>'+r.sku+'</td><td>'+r.modelo+'</td><td>'+fmt(r.stock_actual)+'</td><td>'+fmt(r.objetivo_bf)+'</td><td>'+fmt(r.brecha)+'</td></tr>').join('');
-  $('topModels').innerHTML=DATA.models.slice(0,15).map(m=>'<tr><td>'+m.modelo+'</td><td>'+m.segmento+'</td><td>'+m.skus_c+'</td><td>'+fmt(m.stock_total)+'</td><td>'+fmt(m.unidades_vendidas_10m)+'</td><td>'+fmt(m.margen_10m,0)+'</td></tr>').join('');
-}}
-let charts={{}};
-function renderCharts(){{
-  const seg={{Manufactura:0,Equipamiento:0}};
-  DATA.skus.forEach(r=>{{seg[r.segmento]=(seg[r.segmento]||0)+1;}});
-  if(charts.seg) charts.seg.destroy();
-  charts.seg=new Chart($('cSeg'),{{type:'doughnut',data:{{labels:Object.keys(seg),datasets:[{{data:Object.values(seg),backgroundColor:['rgba(34,211,238,.8)','rgba(251,191,36,.8)']}}]}},options:{{plugins:{{legend:{{position:'bottom'}}}},maintainAspectRatio:false}}}});
-}}
-['fSeg'].forEach(id=>$(id).onchange=e=>{{state.seg=e.target.value;renderTables();}});
-$('fSearch').oninput=e=>{{state.search=e.target.value;renderTables();}};
-renderKpis();renderTables();renderCharts();
-</script>
+<footer class="footer">Datos: bf_proposal_data.js + dashboard_app.js (misma carpeta que este HTML)</footer>
+<script src="bf_proposal_data.js"></script>
+<script src="dashboard_app.js"></script>
 </body>
 </html>"""
     OUT_HTML.write_text(html, encoding="utf-8")

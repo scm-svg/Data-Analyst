@@ -46,10 +46,16 @@ Por tienda retail (Cerro Verde, Chacao, Grandplaz, Grieta, Sambil, Tolon, Vela):
 - **Objetivo** = venta mensual promedio × **4** (hipótesis pico BF) × **1,15** (reserva).
 - **Brecha** = max(0, objetivo − stock en tienda).
 
+## Ver el dashboard
+
+Abrí **`black_friday_propuesta_categoria_c.html`** desde la carpeta `black-friday-categoria-c/` (debe estar junto a **`bf_proposal_data.js`** y **`dashboard_app.js`**). Si falta el `.js`, verás un mensaje de error claro.
+
+Alternativa: `python3 -m http.server 8765` en esa carpeta.
+
 ## Regenerar
 
 ```bash
 python3 scripts/build_black_friday_proposal.py
 ```
 
-Colocar en `uploads/` los mismos nombres de archivo ABC e inventario, o editar rutas al inicio del script.
+Colocar en `uploads/` los Excel actualizados, o editar rutas al inicio del script.
