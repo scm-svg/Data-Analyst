@@ -385,11 +385,12 @@ def customize_html(head: str, tail: str, data: dict) -> str:
         "<p>Dashboard de Ventas · Oct 25 — Ago 26</p>",
         f"<p>Dashboard de Ventas · {periodo}</p>",
     )
+    # Use single-quoted data-m so inch marks (") do not break HTML attributes; pass via dataset.
     mbar = (
         '<div class="mbar"><span class="mbar-lbl">🏃 Línea:</span>'
-        '<button class="mbtn active" data-m="" onclick="setModelo(\'\')">🏃 Todas <span class="mcnt" id="mcnt_all">0</span></button>'
-        '<button class="mbtn" data-m="R2 SPORT 5\\"" onclick="setModelo(\'R2 SPORT 5\\"\')">⚡ Sport 5\\" <span class="mcnt" id="mcnt_SPORT5">0</span></button>'
-        '<button class="mbtn" data-m="R2 RUNNING 3,5\\"" onclick="setModelo(\'R2 RUNNING 3,5\\"\')">🏃 Running 3,5\\" <span class="mcnt" id="mcnt_RUNNING35">0</span></button></div>\n<div class="fbar">'
+        '<button class="mbtn active" data-m="" onclick="setModelo(this.dataset.m)">🏃 Todas <span class="mcnt" id="mcnt_all">0</span></button>'
+        '<button class="mbtn" data-m=\'R2 SPORT 5"\' onclick="setModelo(this.dataset.m)">⚡ Sport 5" <span class="mcnt" id="mcnt_SPORT5">0</span></button>'
+        '<button class="mbtn" data-m=\'R2 RUNNING 3,5"\' onclick="setModelo(this.dataset.m)">🏃 Running 3,5" <span class="mcnt" id="mcnt_RUNNING35">0</span></button></div>\n<div class="fbar">'
     )
     head = re.sub(r"<div class=\"mbar\">.*?</div>\n<div class=\"fbar\">", mbar, head, count=1, flags=re.DOTALL)
     head = head.replace(
