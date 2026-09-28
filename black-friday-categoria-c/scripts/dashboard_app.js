@@ -14,6 +14,15 @@
     });
   }
 
+  function fmtNum(n, d) {
+    d = d === undefined ? 0 : d;
+    if (n == null || n === "" || Number.isNaN(Number(n))) return "—";
+    return Number(n).toLocaleString("en-US", {
+      minimumFractionDigits: d,
+      maximumFractionDigits: d,
+    });
+  }
+
   function esc(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -107,38 +116,40 @@
           (open ? "▼" : "▶") +
           '</span></td><td>' +
           esc(m.modelo) +
-          "</td><td>" +
+          '</td><td class="num">' +
           esc(m.matriz) +
-          "</td><td>" +
-          fmt(m.skus_count) +
-          "</td><td>" +
-          fmt(m.rotacion_mes, 1) +
-          "</td><td><strong>" +
-          fmt(m.stock_total) +
-          "</strong></td><td>" +
-          fmt(m.stock_tiendas) +
-          "</td><td>" +
-          fmt(m.stock_taller) +
-          "</td><td>" +
-          (m.meses_cobertura != null ? m.meses_cobertura : "—") +
+          '</td><td class="num">' +
+          fmtNum(m.skus_count) +
+          '</td><td class="num">' +
+          fmtNum(m.rotacion_mes, 1) +
+          '</td><td class="num"><strong>' +
+          fmtNum(m.stock_total) +
+          '</strong></td><td class="num">' +
+          fmtNum(m.stock_tiendas) +
+          '</td><td class="num">' +
+          fmtNum(m.stock_taller) +
+          '</td><td class="num">' +
+          (m.meses_cobertura != null ? fmtNum(m.meses_cobertura, 1) : "—") +
           "</td></tr>";
         if (open) {
           (m.variants || []).forEach(function (v) {
             html +=
-              '<tr class="row-variant"><td></td><td colspan="2"><span class="sku">' +
+              '<tr class="row-variant"><td></td><td><div class="sku">' +
               esc(v.sku) +
-              "</span> · " +
+              '</div><div class="var-meta">' +
               esc(variantLabel(v)) +
-              "</td><td>" +
-              fmt(v.rotacion_mes, 1) +
-              "</td><td>" +
-              fmt(v.stock_total) +
-              "</td><td>" +
-              fmt(v.stock_tiendas) +
-              "</td><td>" +
-              fmt(v.stock_taller) +
-              "</td><td>" +
-              (v.meses_cobertura != null ? v.meses_cobertura : "—") +
+              '</div></td><td class="num">' +
+              esc(v.matriz || "—") +
+              '</td><td class="num">—</td><td class="num">' +
+              fmtNum(v.rotacion_mes, 1) +
+              '</td><td class="num">' +
+              fmtNum(v.stock_total) +
+              '</td><td class="num">' +
+              fmtNum(v.stock_tiendas) +
+              '</td><td class="num">' +
+              fmtNum(v.stock_taller) +
+              '</td><td class="num">' +
+              (v.meses_cobertura != null ? fmtNum(v.meses_cobertura, 1) : "—") +
               "</td></tr>";
           });
         }
@@ -199,6 +210,26 @@
 
       if ($("titleInv")) $("titleInv").textContent = view.name;
       if ($("subInv")) $("subInv").textContent = view.description;
+      var sug = DATA.meta.sugeridos_revision || [];
+      var card = $("sugeridosCard");
+      if (card && sug.length) {
+        card.style.display = "block";
+        $("bodySugeridos").innerHTML = sug
+          .map(function (s) {
+            return (
+              "<tr><td>" +
+              esc(s.modelo) +
+              '</td><td class="num">' +
+              esc(s.sku) +
+              '</td><td class="num">' +
+              fmtNum(s.stock) +
+              '</td><td class="num">' +
+              fmtNum(s.rotacion_mes, 1) +
+              "</td></tr>"
+            );
+          })
+          .join("");
+      }
     }
 
     function renderFlatSkus() {
@@ -221,13 +252,13 @@
             "</td><td>" +
             esc([r.genero, r.color, r.talla].filter(Boolean).join(" · ")) +
             "</td><td>" +
-            fmt(r.rotacion_mes, 1) +
-            "</td><td>" +
-            fmt(r.stock_total) +
-            "</td><td>" +
-            fmt(r.stock_tiendas) +
-            "</td><td>" +
-            fmt(r.stock_taller) +
+            fmtNum(r.rotacion_mes, 1) +
+            '</td><td class="num">' +
+            fmtNum(r.stock_total) +
+            '</td><td class="num">' +
+            fmtNum(r.stock_tiendas) +
+            '</td><td class="num">' +
+            fmtNum(r.stock_taller) +
             "</td></tr>"
           );
         })

@@ -164,10 +164,31 @@ def is_excluded_model(modelo: str, producto: str = "") -> bool:
     return any(x in m for x in excluded_fragments)
 
 
-def is_jacket_legacy_line(modelo: str) -> bool:
-    """Jacket 1.0: CAB, DAMA y KIDS — todas las variantes SKU."""
+PRIORITY_MODELS_EXACT = frozenset(
+    {
+        "JACKET CAB",
+        "JACKET DAMA",
+        "JACKET KIDS",
+        "ANDRE MOTION DAMA",
+        "NOAH SPORT LITE CAB",
+        "MAXI TOTE",
+        "BASIC LINE SHORT DAMA",
+        "MAFE ADVANCE DAMA",
+        "CLASICA ADVANCE CAB",
+        "RETRO VZLA CAB",
+        "RETRO VZLA DAMA",
+        "RETRO VZLA KIDS",
+    }
+)
+PRIORITY_MODEL_PREFIXES = ("ANKLE SOCKS", "CREW SOCKS", "NO SHOW SOCKS")
+
+
+def is_priority_full_variant(modelo: str) -> bool:
+    """Modelos con todas las variantes SKU (reglas ABC relajadas)."""
     m = clean_cell(modelo).upper()
-    return m in ("JACKET CAB", "JACKET DAMA", "JACKET KIDS")
+    if m in PRIORITY_MODELS_EXACT:
+        return True
+    return any(m.startswith(p) for p in PRIORITY_MODEL_PREFIXES)
 
 
 def sales_scope(df: pd.DataFrame) -> tuple[pd.DataFrame, str, int, list[str]]:
@@ -200,6 +221,68 @@ def coverage_months(stock: float, monthly_qty: float) -> float:
     if monthly_qty <= 0:
         return 999.0 if stock > 0 else 0.0
     return stock / monthly_qty
+
+
+def build_sku_candidate(
+    sku: str,
+    stock: float,
+    modelo: str,
+    inv_row,
+    abc: dict | None,
+    *,
+    sales_months: int,
+    qty_by_sku: dict,
+    stock_retail: dict,
+    stock_taller: dict,
+    margin_abc: dict,
+    rot_abc: dict,
+    priority: bool,
+) -> dict | None:
+    if stock <= 0:
+        return None
+    if not priority and stock < MIN_STOCK_UNITS:
+        return None
+    if not abc:
+        return None
+    seg = segment(abc.get("categoria") or "")
+    if not seg:
+        return None
+    mcls = margin_abc.get(sku, "C")
+    if mcls != "C" and not priority:
+        return None
+    rot = rot_abc.get(sku, "C")
+    if rot != "C" and not priority:
+        return None
+    qty = float(qty_by_sku.get(sku, 0))
+    rotacion_mes = qty / sales_months
+    stock_r = float(stock_retail.get(sku, 0))
+    stock_t = float(stock_taller.get(sku, 0))
+    cov = coverage_months(stock, rotacion_mes)
+    return {
+        "sku": sku,
+        "producto": clean_cell(getattr(inv_row, "producto_inv", "")) or clean_cell(abc.get("producto"), sku),
+        "modelo": modelo,
+        "categoria": clean_cell(abc.get("categoria")),
+        "genero": clean_cell(getattr(inv_row, "genero_inv", "")) or clean_cell(abc.get("genero")),
+        "color": clean_cell(getattr(inv_row, "color_inv", "")) or clean_cell(abc.get("color")),
+        "talla": clean_cell(getattr(inv_row, "talla_inv", "")) or clean_cell(abc.get("talla")),
+        "qty": qty,
+        "margin": abc.get("margin", 0),
+        "segmento": seg,
+        "abc_margen": mcls,
+        "abc_rotacion": rot,
+        "matriz": mcls + rot,
+        "stock_total": stock,
+        "stock_tiendas": stock_r,
+        "stock_taller": stock_t,
+        "rotacion_mes": round(rotacion_mes, 2),
+        "meses_cobertura": round(cov, 2) if cov < 900 else None,
+        "prioridad": round(
+            100 + (min(cov, 24) * 4 if cov < 900 else 0) + (stock_r * 0.08) + (rotacion_mes * 0.5 if rotacion_mes > 0 else 0),
+            1,
+        ),
+        "priority_line": priority,
+    }
 
 
 def build_abc_margin_guide(data: dict) -> tuple[dict[str, dict], dict[str, str]]:
@@ -283,77 +366,133 @@ def main() -> None:
     candidates: list[dict] = []
     excluded_stats = Counter()
 
+    stock_lookup = {r.SKU: r for r in stock_by_sku.itertuples()}
+
     for row in stock_by_sku.itertuples():
         sku = row.SKU
         stock = float(row.stock_total)
-        if stock <= 0:
-            continue
-
         abc = abc_metrics.get(sku)
         modelo = (
             clean_cell(row.modelo_inv)
             or (clean_cell(abc["modelo"]) if abc else "")
             or clean_cell(modelo_sales.get(sku), sku)
         )
-        jacket_line = is_jacket_legacy_line(modelo)
-
-        if stock < MIN_STOCK_UNITS and not jacket_line:
+        priority = is_priority_full_variant(modelo)
+        if is_excluded_model(modelo, row.producto_inv):
+            excluded_stats["modelo_excluido"] += 1
+            continue
+        if stock < MIN_STOCK_UNITS and not priority:
             excluded_stats["stock_bajo_28"] += 1
             continue
-
-        if margin_abc.get(sku) != "C" and not jacket_line:
+        if margin_abc.get(sku) != "C" and not priority:
             excluded_stats["margen_no_c"] += 1
             continue
-
         if not abc:
             excluded_stats["sin_guia_abc"] += 1
             continue
-
-        seg = segment(abc["categoria"])
-        if not seg:
+        if not segment(abc["categoria"]):
             excluded_stats["fuera_segmento"] += 1
             continue
-        rot = rot_abc.get(sku, "C")
-        if rot != "C" and not jacket_line:
+        if rot_abc.get(sku, "C") != "C" and not priority:
             excluded_stats["rotacion_no_c"] += 1
             continue
-
-        matrix = "C" + rot
-        qty = float(qty_by_sku.get(sku, 0))
-        rotacion_mes = qty / sales_months
-        stock_r = float(stock_retail.get(sku, 0))
-        stock_t = float(stock_taller.get(sku, 0))
-        cov = coverage_months(stock, rotacion_mes)
-
-        candidates.append(
-            {
-                "sku": sku,
-                "producto": clean_cell(row.producto_inv) or clean_cell(abc["producto"], sku),
-                "modelo": modelo,
-                "categoria": clean_cell(abc["categoria"]),
-                "genero": clean_cell(row.genero_inv) or clean_cell(abc["genero"]),
-                "color": clean_cell(row.color_inv) or clean_cell(abc["color"]),
-                "talla": clean_cell(row.talla_inv) or clean_cell(abc["talla"]),
-                "qty": qty,
-                "margin": abc["margin"],
-                "segmento": seg,
-                "abc_margen": "C",
-                "abc_rotacion": rot,
-                "matriz": matrix,
-                "stock_total": stock,
-                "stock_tiendas": stock_r,
-                "stock_taller": stock_t,
-                "rotacion_mes": round(rotacion_mes, 2),
-                "meses_cobertura": round(cov, 2) if cov < 900 else None,
-                "prioridad": round(
-                    100
-                    + (min(cov, 24) * 4 if cov < 900 else 0)
-                    + (stock_r * 0.08)
-                    + (rotacion_mes * 0.5 if rotacion_mes > 0 else 0),
-                    1,
-                ),
-            }
+        rec = build_sku_candidate(
+            sku,
+            stock,
+            modelo,
+            row,
+            abc,
+            sales_months=sales_months,
+            qty_by_sku=qty_by_sku,
+            stock_retail=stock_retail,
+            stock_taller=stock_taller,
+            margin_abc=margin_abc,
+            rot_abc=rot_abc,
+            priority=priority,
         )
+        if rec:
+            candidates.append(rec)
+
+    # Prioridad: sumar SKUs faltantes del inventario (todas las variantes del modelo)
+    have = {c["sku"] for c in candidates}
+    for mod in inv_df["MODELO"].astype(str).unique():
+        mod_clean = clean_cell(mod)
+        if not is_priority_full_variant(mod_clean) or is_excluded_model(mod_clean):
+            continue
+        mod_skus = inv_df[inv_df["MODELO"] == mod].groupby("SKU", as_index=False).agg(
+            stock=("Cantidad en inventario", "sum"),
+            producto=("Producto", "first"),
+            genero=("GENERO", "first"),
+            color=("COLOR", "first"),
+            talla=("TALLA", "first"),
+        )
+        for ms in mod_skus.itertuples():
+            if ms.SKU in have:
+                continue
+            if ms.stock <= 0:
+                continue
+            inv_row = type("R", (), {"producto_inv": ms.producto, "genero_inv": ms.genero, "color_inv": ms.color, "talla_inv": ms.talla})()
+            abc = abc_metrics.get(ms.SKU)
+            rec = build_sku_candidate(
+                ms.SKU,
+                float(ms.stock),
+                mod_clean,
+                inv_row,
+                abc,
+                sales_months=sales_months,
+                qty_by_sku=qty_by_sku,
+                stock_retail=stock_retail,
+                stock_taller=stock_taller,
+                margin_abc=margin_abc,
+                rot_abc=rot_abc,
+                priority=True,
+            )
+            if rec:
+                candidates.append(rec)
+                have.add(ms.SKU)
+
+    # Modelos ya en catálogo: completar variantes desde inventario (stock > 0)
+    models_active = {c["modelo"] for c in candidates}
+    for mod in models_active:
+        mod_inv = inv_df[inv_df["MODELO"].astype(str).str.upper() == mod.upper()]
+        for sku, grp in mod_inv.groupby("SKU"):
+            if sku in have:
+                continue
+            st = float(grp["Cantidad en inventario"].sum())
+            if st <= 0:
+                continue
+            row = stock_lookup.get(sku)
+            if row is None:
+                inv_row = type(
+                    "R",
+                    (),
+                    {
+                        "producto_inv": grp["Producto"].iloc[0],
+                        "genero_inv": grp["GENERO"].iloc[0],
+                        "color_inv": grp["COLOR"].iloc[0],
+                        "talla_inv": grp["TALLA"].iloc[0],
+                    },
+                )()
+            else:
+                inv_row = row
+            abc = abc_metrics.get(sku)
+            rec = build_sku_candidate(
+                sku,
+                st,
+                mod,
+                inv_row,
+                abc,
+                sales_months=sales_months,
+                qty_by_sku=qty_by_sku,
+                stock_retail=stock_retail,
+                stock_taller=stock_taller,
+                margin_abc=margin_abc,
+                rot_abc=rot_abc,
+                priority=True,
+            )
+            if rec:
+                candidates.append(rec)
+                have.add(sku)
 
     candidates.sort(key=lambda x: (-x["prioridad"], -x["stock_total"], -x["margin"]))
 
@@ -420,9 +559,17 @@ def main() -> None:
         )
 
     # Vista inventario: ocultar modelos con stock total ≤ 28 (excepto ya filtrados en SKUs)
-    catalog = [c for c in catalog if c["stock_total"] >= MIN_STOCK_UNITS]
+    catalog = [
+        c
+        for c in catalog
+        if c["stock_total"] >= MIN_STOCK_UNITS or is_priority_full_variant(c["modelo"])
+    ]
     catalog.sort(key=lambda x: (-(x["stock_tiendas"] + x["stock_taller"]), -x["stock_total"]))
-    model_rows = [m for m in model_rows if m["stock_total"] >= MIN_STOCK_UNITS]
+    model_rows = [
+        m
+        for m in model_rows
+        if m["stock_total"] >= MIN_STOCK_UNITS or is_priority_full_variant(m["modelo"])
+    ]
     model_rows.sort(key=lambda x: (-(x["stock_tiendas"] + x["stock_taller"]), -x["stock_total"]))
 
     assert all(c["stock_total"] > 0 for c in candidates), "Hay SKUs sin stock en la propuesta"
@@ -443,6 +590,43 @@ def main() -> None:
         "excluidos": dict(excluded_stats),
     }
 
+    in_catalog = {c["modelo"] for c in catalog}
+    sugeridos: list[dict] = []
+    for row in stock_by_sku.itertuples():
+        sku = row.SKU
+        stock = float(row.stock_total)
+        if stock < MIN_STOCK_UNITS:
+            continue
+        abc = abc_metrics.get(sku)
+        if not abc:
+            continue
+        mod = clean_cell(row.modelo_inv) or clean_cell(abc.get("modelo"), sku)
+        if mod in in_catalog or is_excluded_model(mod) or is_priority_full_variant(mod):
+            continue
+        if margin_abc.get(sku) != "C" or rot_abc.get(sku, "C") != "C":
+            continue
+        if not segment(abc.get("categoria") or ""):
+            continue
+        qty = float(qty_by_sku.get(sku, 0))
+        sugeridos.append(
+            {
+                "modelo": mod,
+                "sku": sku,
+                "stock": int(stock),
+                "rotacion_mes": round(qty / sales_months, 2),
+            }
+        )
+    sugeridos.sort(key=lambda x: (-x["stock"], x["rotacion_mes"]))
+    seen_mod: set[str] = set()
+    sugeridos_modelos: list[dict] = []
+    for s in sugeridos:
+        if s["modelo"] in seen_mod:
+            continue
+        seen_mod.add(s["modelo"])
+        sugeridos_modelos.append(s)
+        if len(sugeridos_modelos) >= 15:
+            break
+
     payload = {
         "meta": {
             "title": "Propuesta Black Friday · Categoría C",
@@ -451,12 +635,8 @@ def main() -> None:
             "inventory_source": str(INV_XLSX.name),
             "sales_source": str(SALES_XLSX.name),
             "meses_incluidos": months_list,
-            "rules": [
-                f"Inventario: stock ≥ {MIN_STOCK_UNITS} unidades",
-                f"Ventas Excel ({period_label}): rotación C (Jacket 1.0 CAB/DAMA/KIDS incluye variantes)",
-                "Guía ABC: margen C + Manufactura/Equipamiento",
-                "Excluidos: Cuadro Band, Short Playa, Motion Loop, Rio/Mar Original, Explore Pants, Jacket 2.0",
-            ],
+            "priority_models": sorted(PRIORITY_MODELS_EXACT) + list(PRIORITY_MODEL_PREFIXES),
+            "sugeridos_revision": sugeridos_modelos,
         },
         "summary": summary,
         "inventario_view": {
@@ -490,7 +670,9 @@ def write_excel(payload: dict) -> None:
     skus = pd.DataFrame(payload["skus"])
     models = pd.DataFrame(payload["models"])
     summary = pd.DataFrame([payload["summary"]])
-    rules = pd.DataFrame({"Regla": payload["meta"]["rules"]})
+    rules = pd.DataFrame({"Regla": payload["meta"].get("rules", [])})
+    if rules.empty:
+        rules = pd.DataFrame({"Modelo prioridad": payload["meta"].get("priority_models", [])})
 
     col_order = [
         "sku",
@@ -593,8 +775,12 @@ body{{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100v
 .fbar{{padding:8px 28px;background:var(--surf);border-bottom:1px solid var(--brd);display:flex;flex-wrap:wrap;gap:8px;align-items:center}}
 .fbar select,.fbar input{{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:.76rem}}
 table{{width:100%;border-collapse:collapse;font-size:.73rem}}
-th{{text-align:left;font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:6px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf)}}
-td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
+.cat-table{{table-layout:fixed}}
+.cat-table th:nth-child(1){{width:28px}}
+.cat-table th:nth-child(2){{width:22%}}
+.cat-table th.num,.cat-table td.num{{text-align:right;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}}
+th{{text-align:left;font-size:.58rem;text-transform:uppercase;color:var(--mu);padding:6px 8px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--surf)}}
+td{{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 .tscroll{{max-height:520px;overflow:auto}}
 .tag{{display:inline-block;padding:2px 7px;border-radius:6px;font-size:.65rem;font-weight:700;font-family:var(--fh)}}
 .tag.C{{background:rgba(244,114,182,.15);color:var(--c);border:1px solid rgba(244,114,182,.35)}}
@@ -603,8 +789,9 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
 #loadErr{{display:none;margin:12px 28px;padding:12px;border-radius:8px;background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.4);color:#f472b6;font-size:.78rem}}
 .expander{{cursor:pointer;color:var(--a);font-weight:800;width:24px;display:inline-block;user-select:none}}
 .row-model td{{background:rgba(255,255,255,.03);font-weight:600}}
-.row-variant td{{padding-left:28px!important;font-size:.7rem;color:var(--mu)}}
+.row-variant td{{font-size:.72rem}}
 .row-variant .sku{{color:var(--tx);font-weight:600}}
+.row-variant .var-meta{{color:var(--mu);font-size:.66rem;margin-top:2px}}
 .footer{{text-align:center;color:var(--mu);font-size:.62rem;padding:14px;border-top:1px solid var(--brd)}}
 @media(max-width:960px){{.g2{{grid-template-columns:1fr}}}}
 </style>
@@ -635,6 +822,9 @@ td{{padding:6px;border-bottom:1px solid var(--brd);vertical-align:middle}}
         <p style="font-size:1.1rem;font-family:var(--fh);font-weight:800;margin-top:12px" id="periodLabel"></p>
         <p style="font-size:.72rem;color:var(--mu);margin-top:8px" id="monthsList"></p>
       </div>
+    </div>
+    <div class="card" id="sugeridosCard" style="margin-top:12px;display:none"><h3>Otros candidatos a revisar</h3><div class="cs">Margen C · rotación C · stock ≥29 · aún no en lista prioritaria</div>
+      <div class="tscroll"><table><thead><tr><th>Modelo</th><th>SKU ejemplo</th><th class="num">Stock</th><th class="num">Rotación/mes</th></tr></thead><tbody id="bodySugeridos"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-inventario">
