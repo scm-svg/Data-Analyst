@@ -602,7 +602,7 @@ function renderSalida(){
   var keys=weekKeys();
   var weekVals=keys.map(function(k){ return cargaFiltrada(k).reduce(function(a,c){ return a+(Number(c.total)||0); },0); });
   var html='<div class="card"><h3>Volumen por semana</h3><p class="sub">Total a fabricar según el plan (filtros aplicados).</p><div class="cw"><canvas id="cSalida"></canvas></div></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las variantes se listan como salen de costura (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). Las cantidades salen de Proyeccion - SKUS.</p>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las variantes se agrupan por color (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). El día de arranque no parte un color. Las cantidades salen de Proyeccion - SKUS.</p>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaFiltrada(k), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
@@ -740,12 +740,6 @@ function cmpColorVolCli(a,b,vol){
   return String(a.color||'').localeCompare(String(b.color||''),'es');
 }
 function cmpSkuSalidaProd(a, b, vol){
-  var wa=primerSemSku(a), wb=primerSemSku(b);
-  if(wa!==wb) return wa-wb;
-  var da=primerDiaSku(a), db=primerDiaSku(b);
-  if(da!==db) return da-db;
-  var ta=msSalidaSku(a), tb=msSalidaSku(b);
-  if(ta!==tb) return ta-tb;
   var pa=a.esSkuPrio?0:1, pb=b.esSkuPrio?0:1;
   if(pa!==pb) return pa-pb;
   if(a.esSkuPrio && b.esSkuPrio){
@@ -756,6 +750,12 @@ function cmpSkuSalidaProd(a, b, vol){
   if(cmpCol) return cmpCol;
   var xa=ordenTallaCli(a.talla), xb=ordenTallaCli(b.talla);
   if(xa!==xb) return xa-xb;
+  var wa=primerSemSku(a), wb=primerSemSku(b);
+  if(wa!==wb) return wa-wb;
+  var da=primerDiaSku(a), db=primerDiaSku(b);
+  if(da!==db) return da-db;
+  var ta=msSalidaSku(a), tb=msSalidaSku(b);
+  if(ta!==tb) return ta-tb;
   var ca=cantSkuCli(a), cb=cantSkuCli(b);
   if(cb!==ca) return cb-ca;
   return String(a.sku||'').localeCompare(String(b.sku||''),'es');
@@ -986,7 +986,7 @@ function renderImp(){
   window._impCarga={};
   var keys=weekKeys();
   var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → SKU en orden de salida de costura (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → SKU agrupados por color (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
   html+='<div class="note imp-leyenda">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaImp(k, wi), wi);

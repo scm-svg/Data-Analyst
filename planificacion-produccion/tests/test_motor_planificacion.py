@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.44 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.45 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -106,13 +106,13 @@ def ms_salida_sku(s):
 
 def sku_salida_key(s, vol_map=None):
     return (
-        primer_sem_sku(s),
-        primer_dia_sku(s),
-        ms_salida_sku(s),
         0 if s.get("esSkuPrio") else 1,
         s.get("skuPrioOrden", 0) if s.get("esSkuPrio") else 0,
     ) + color_vol_key(s, vol_map) + (
         orden_talla(s.get("talla")),
+        primer_sem_sku(s),
+        primer_dia_sku(s),
+        ms_salida_sku(s),
         -qty_sku(s),
         s.get("sku") or "",
     )
@@ -1215,7 +1215,7 @@ def max_ocupantes(lin):
 
 
 def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.44: Secuencia=No sale del lote familiar; Division=Si; paralelo L1-4."""
+    """Motor v5.9.45: color exacto en el lote; Secuencia=No sale del lote familiar; Division=Si; paralelo L1-4."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -1800,7 +1800,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 if not explota and restante_modelo(m) <= cap_owned + 1e-6:
                     break
 
-    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_rank=None, vuelta_filtro=0, techo_carga=1):
+    def producir_lote(m, lin, d, overflow, max_lote=0, solo_minima=False, color_norm=None, vuelta_filtro=0, techo_carga=1):
         techo = techo_carga if 0 < techo_carga < 1 else 1.0
         for t in m["tareas"]:
             if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
@@ -1811,7 +1811,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 continue
             if (not solo_minima) and vuelta_filtro > 0 and (t.get("vuelta") or 0) not in (0, vuelta_filtro):
                 continue
-            if color_rank is not None and rango_color(t.get("color")) != color_rank:
+            if color_norm is not None and clave_color_norm(t.get("color")) != color_norm:
                 continue
             mo = t.get("mo") or t["sku"]
             if not t.get("esEspecial"):
@@ -1847,7 +1847,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         while carga[lin][d] < techo - 0.001:
             solo_minima = restante_minima(m) > 0
             vuelta_filtro = 0 if solo_minima else vuelta_activa(m)
-            rank = None
+            color_norm = None
             if not explota:
                 for t in m["tareas"]:
                     if t["restante"] <= 0:
@@ -1862,9 +1862,9 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                         continue
                     if lin not in elegibles(t, overflow):
                         continue
-                    rank = rango_color(t.get("color"))
+                    color_norm = clave_color_norm(t.get("color"))
                     break
-            if producir_lote(m, lin, d, overflow, 0, solo_minima, rank, vuelta_filtro, techo) <= 0:
+            if producir_lote(m, lin, d, overflow, 0, solo_minima, color_norm, vuelta_filtro, techo) <= 0:
                 break
             if restante_minima(m) <= 0 and tuvo_minima(m):
                 break
@@ -3517,7 +3517,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.45"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3939,7 +3939,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.45"', gs)
         self.assertIn("function cmpSkuSalidaProduccion_(", gs)
         self.assertIn("function ordenarSkusPorSalidaEnLista_(", gs)
         self.assertIn("function estadoProdAlm_(", gs)
@@ -4241,13 +4241,14 @@ class TestSkuOrdenSalida(unittest.TestCase):
         out = [s["sku"] for s in ordenar_skus_salida(rows)]
         self.assertEqual(out, ["P", "N"])
 
-    def test_arranca_antes_sale_antes(self):
+    def test_color_agrupa_aunque_arranque_despues(self):
+        """El Negro no se lista después del Blanco aunque el Blanco arranque antes."""
         rows = [
             {"sku": "Tarde", "color": "Negro", "talla": "M", "weeks": [0, 0, 12]},
             {"sku": "Temprano", "color": "Blanco", "talla": "M", "weeks": [12, 0, 0]},
         ]
         out = [s["sku"] for s in ordenar_skus_salida(rows)]
-        self.assertEqual(out, ["Temprano", "Tarde"])
+        self.assertEqual(out, ["Tarde", "Temprano"])
 
     def test_mismo_rango_mantiene_color_junto(self):
         rows = [
@@ -4258,6 +4259,44 @@ class TestSkuOrdenSalida(unittest.TestCase):
         ]
         out = [s["sku"] for s in ordenar_skus_salida(rows)]
         self.assertEqual(out, ["R8", "R12", "T8", "T12"])
+
+    def test_rio_kids_excel41_no_salta_entre_colores(self):
+        """Excel 41 Proyeccion - SKUS: Lila 14 no se mete entre Azul Rey; Amarillo no se parte."""
+        rows = [
+            {"sku": "L2", "color": "LILA", "talla": "2", "weeks": [0, 10], "cant": 20, "modelo": "RIO KIDS"},
+            {"sku": "L4", "color": "LILA", "talla": "4", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "L6", "color": "LILA", "talla": "6", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "L8", "color": "LILA", "talla": "8", "weeks": [0, 15], "cant": 30, "modelo": "RIO KIDS"},
+            {"sku": "L10", "color": "LILA", "talla": "10", "weeks": [0, 15], "cant": 30, "modelo": "RIO KIDS"},
+            {"sku": "L12", "color": "LILA", "talla": "12", "weeks": [0, 14], "cant": 27, "modelo": "RIO KIDS"},
+            {"sku": "R2", "color": "AZUL REY", "talla": "2", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R4", "color": "AZUL REY", "talla": "4", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "L14", "color": "LILA", "talla": "14", "weeks": [0, 14], "cant": 27, "modelo": "RIO KIDS"},
+            {"sku": "A2", "color": "AGUAMARINA", "talla": "2", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "A4", "color": "AGUAMARINA", "talla": "4", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "A6", "color": "AGUAMARINA", "talla": "6", "weeks": [0, 12], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R6", "color": "AZUL REY", "talla": "6", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R8", "color": "AZUL REY", "talla": "8", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R10", "color": "AZUL REY", "talla": "10", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R12", "color": "AZUL REY", "talla": "12", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "R14", "color": "AZUL REY", "talla": "14", "weeks": [0, 13], "cant": 25, "modelo": "RIO KIDS"},
+            {"sku": "A8", "color": "AGUAMARINA", "talla": "8", "weeks": [0, 0, 8], "cant": 15, "modelo": "RIO KIDS"},
+            {"sku": "AM2", "color": "AMARILLO NEON", "talla": "2", "weeks": [0, 0, 3], "cant": 5, "modelo": "RIO KIDS"},
+            {"sku": "AM8", "color": "AMARILLO NEON", "talla": "8", "weeks": [0, 0, 10], "cant": 20, "modelo": "RIO KIDS"},
+            {"sku": "VM2", "color": "VERDE MILITAR", "talla": "2", "weeks": [0, 0, 9], "cant": 50, "modelo": "RIO KIDS"},
+            {"sku": "AM10", "color": "AMARILLO NEON", "talla": "10", "weeks": [0, 0, 10], "cant": 20, "modelo": "RIO KIDS"},
+        ]
+        ordered = ordenar_skus_salida(rows)
+        colors = [s["color"] for s in ordered]
+        grouped = []
+        for c in colors:
+            if not grouped or grouped[-1] != c:
+                grouped.append(c)
+        self.assertEqual(grouped, ["LILA", "AZUL REY", "AGUAMARINA", "VERDE MILITAR", "AMARILLO NEON"], grouped)
+        lila = [s["sku"] for s in ordered if s["color"] == "LILA"]
+        self.assertEqual(lila, ["L2", "L4", "L6", "L8", "L10", "L12", "L14"])
+        rey = [s["sku"] for s in ordered if s["color"] == "AZUL REY"]
+        self.assertEqual(rey, ["R2", "R4", "R6", "R8", "R10", "R12", "R14"])
 
     def test_talla_y_fecha_salida(self):
         rows = [
@@ -4282,6 +4321,7 @@ class TestSkuOrdenSalida(unittest.TestCase):
         self.assertIn("por salida de producción", html)
         self.assertIn("orden de salida de costura", html)
         self.assertIn("prioridad SKU → Negro → Blanco → Marino", html)
+        self.assertIn("El día de arranque no parte un color", html)
 
     def test_gs_publica_skus_ordenados(self):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
@@ -4289,8 +4329,10 @@ class TestSkuOrdenSalida(unittest.TestCase):
             gs = f.read()
         self.assertIn("resp.proySku = ordenarSkusPorSalidaEnLista_(resp.proySku);", gs)
         self.assertIn("resp.almacenSku = ordenarSkusPorSalidaEnLista_(resp.almacenSku);", gs)
-        self.assertIn("return cmpSkuSalidaProduccion_(ia, ib);", gs)
-        self.assertIn("return cmpSkuSalidaProduccion_(a, b);", gs)
+        self.assertIn("skusOrdenados = ordenarSkusPorSalidaEnLista_(listaSkuProy);", gs)
+        self.assertIn("listAlmacenSku = ordenarSkusPorSalidaEnLista_(listAlmacenSku);", gs)
+        self.assertIn("groups[k].sort(cmpSkuSalidaProduccion_);", gs)
+        self.assertIn("claveColorNorm_(t.color) !== colorNormFiltro", gs)
         self.assertIn("function expandirTareasPorDivision_", gs)
         self.assertIn("function modeloSinLote_", gs)
         self.assertIn("BLOQUEO DE LOTE", gs)
@@ -4376,6 +4418,48 @@ class TestLotesYDivision(unittest.TestCase):
         self.assertNotEqual(
             clave_lote_mo("MARMIKI01T10", "Producción", "02765", "MAR LOTE 1 KIDS"),
             clave_lote_mo("MARMIKI01T10", "Producción", "02999", "MAR LOTE 2 KIDS"),
+        )
+
+    def test_division_lista_skus_sin_saltar_color(self):
+        """Con Division=Si el listado sigue agrupando Lila completo y luego Azul Rey."""
+        def t(sku, color, talla, cant):
+            return {
+                "sku": sku, "modelo": "RIO KIDS", "mo": "MO-" + sku,
+                "cantidad": cant, "cap": 130, "lineas": ["2"],
+                "color": color, "talla": talla, "prioridadNum": 1,
+                "esEspecial": False, "diaIngreso": 0, "fechaKey": 20260929,
+                "solicitadaOrig": cant, "genero": "KIDS",
+            }
+        tareas = []
+        for talla, cant in [("2", 20), ("4", 25), ("6", 25), ("8", 30), ("10", 30), ("12", 27), ("14", 27)]:
+            tareas.append(t("L" + talla, "Lila", talla, cant))
+        for talla in ["2", "4", "6", "8", "10", "12", "14"]:
+            tareas.append(t("R" + talla, "Azul Rey", talla, 25))
+        out = planificar(
+            tareas, {}, total_dias=20,
+            mapa_division={"RIO KIDS": "si"}, mapa_secuencia={"RIO KIDS": "no"},
+        )
+        by_sku = {}
+        for task in out:
+            rec = by_sku.setdefault(task["sku"], {
+                "sku": task["sku"], "color": task["color"], "talla": task["talla"],
+                "modelo": task["modelo"], "cant": 0, "diaInicio": 9999, "weeks": [0] * 5,
+            })
+            rec["cant"] += task["cantidad"]
+            for _lin, arr in task["plan"].items():
+                for i, q in enumerate(arr):
+                    if q > 0:
+                        rec["diaInicio"] = min(rec["diaInicio"], i)
+                        rec["weeks"][i // 5] += q
+        ordered = ordenar_skus_salida(list(by_sku.values()))
+        grouped = []
+        for s in ordered:
+            if not grouped or grouped[-1] != s["color"]:
+                grouped.append(s["color"])
+        self.assertEqual(grouped, ["Lila", "Azul Rey"], grouped)
+        self.assertEqual(
+            [s["sku"] for s in ordered if s["color"] == "Lila"],
+            ["L2", "L4", "L6", "L8", "L10", "L12", "L14"],
         )
 
     def test_resto_de_colores_por_volumen(self):
@@ -4484,7 +4568,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.45"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4725,7 +4809,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.44"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.45"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
