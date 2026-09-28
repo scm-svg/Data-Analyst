@@ -746,65 +746,6 @@ def main() -> None:
         if len(sugeridos_modelos) >= 15:
             break
 
-    inv_model_stock = (
-        inv_df.groupby("MODELO", as_index=False)
-        .agg(stock_total=("Cantidad en inventario", "sum"))
-        .sort_values("stock_total", ascending=False)
-    )
-    inventario_fuera_lista: list[dict] = []
-    for row in inv_model_stock.itertuples():
-        mod = clean_cell(row.MODELO)
-        if not mod or row.stock_total < 200:
-            continue
-        if mod in in_catalog or is_excluded_model(mod):
-            continue
-        mod_skus = inv_df[inv_df["MODELO"] == row.MODELO]["SKU"].unique()
-        seg_ok = False
-        could_cc = 0
-        reasons: Counter = Counter()
-        for sku in mod_skus:
-            lk = stock_lookup.get(sku)
-            st = float(lk.stock_total) if lk else 0.0
-            if st <= 0:
-                continue
-            abc = abc_metrics.get(sku)
-            if not abc or not segment(abc.get("categoria") or ""):
-                reasons["fuera_segmento"] += 1
-                continue
-            seg_ok = True
-            qty = float(qty_by_sku.get(sku, 0))
-            rm = qty / sales_months if sales_months else 0.0
-            m = margin_abc.get(sku, "C")
-            r = rot_abc.get(sku, "C")
-            mo = operative_margin_class(m, st, rm)
-            ro = operative_rotation_class(r, st, rm)
-            mat = mo + ro
-            if mat in EXCLUDED_MATRICES:
-                reasons["matriz_excluida"] += 1
-            elif mat[0] != "C":
-                reasons["margen_no_c_operativo"] += 1
-            elif st < MIN_STOCK_UNITS:
-                reasons["stock_bajo"] += 1
-            else:
-                could_cc += 1
-        if not seg_ok:
-            continue
-        motivo = "Sin variantes CC operativas (cobertura ≥12m → margen/rot C)"
-        if could_cc:
-            motivo = f"{could_cc} SKU(s) CC operativos — revisar reglas de modelo"
-        elif reasons:
-            top = reasons.most_common(2)
-            motivo = "; ".join(f"{k}: {v}" for k, v in top)
-        inventario_fuera_lista.append(
-            {
-                "modelo": mod,
-                "stock_total": int(row.stock_total),
-                "motivo": motivo,
-            }
-        )
-        if len(inventario_fuera_lista) >= 18:
-            break
-
     payload = {
         "meta": {
             "title": "Propuesta Black Friday · Categoría C",
@@ -815,7 +756,6 @@ def main() -> None:
             "meses_incluidos": months_list,
             "priority_models": sorted(PRIORITY_MODELS_EXACT) + list(PRIORITY_MODEL_PREFIXES),
             "sugeridos_revision": sugeridos_modelos,
-            "inventario_fuera_lista": inventario_fuera_lista,
         },
         "summary": summary,
         "inventario_view": {
@@ -1033,9 +973,6 @@ html[data-theme="dark"] .row-model td{{background:rgba(255,255,255,.03)}}
     </div>
     <div class="card" style="margin-bottom:12px"><h3>Top modelos por inventario</h3><div class="cs">Ordenado por stock en tiendas + taller</div>
       <div class="tscroll" style="max-height:320px"><table><thead><tr><th>Modelo</th><th class="mat">Matriz</th><th class="num">SKUs</th><th class="num">Stock tiendas</th><th class="num">Stock taller</th><th class="num">Cobertura (meses)</th></tr></thead><tbody id="bodyTopModelos"></tbody></table></div>
-    </div>
-    <div class="card" id="fueraListaCard" style="margin-top:12px;display:none"><h3>Inventario alto fuera del listado</h3><div class="cs">Manufactura/equipamiento · stock modelo ≥200 · no excluidos por reglas fijas</div>
-      <div class="tscroll" style="max-height:280px"><table><thead><tr><th>Modelo</th><th class="num">Stock total</th><th>Motivo / nota</th></tr></thead><tbody id="bodyFueraLista"></tbody></table></div>
     </div>
     <div class="card" id="sugeridosCard" style="margin-top:12px;display:none"><h3>Otros candidatos a revisar</h3><div class="cs">Margen C · rotación C · stock ≥29 · aún no en lista prioritaria</div>
       <div class="tscroll"><table><thead><tr><th>Modelo</th><th>SKU ejemplo</th><th class="num">Stock</th><th class="num">Rotación/mes</th></tr></thead><tbody id="bodySugeridos"></tbody></table></div>

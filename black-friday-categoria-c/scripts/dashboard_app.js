@@ -290,25 +290,6 @@
           .join("");
       }
 
-      var fuera = DATA.meta.inventario_fuera_lista || [];
-      var fueraCard = $("fueraListaCard");
-      if (fueraCard && fuera.length) {
-        fueraCard.style.display = "block";
-        $("bodyFueraLista").innerHTML = fuera
-          .map(function (r) {
-            return (
-              "<tr><td>" +
-              esc(r.modelo) +
-              '</td><td class="num">' +
-              fmtNum(r.stock_total) +
-              "</td><td>" +
-              esc(r.motivo) +
-              "</td></tr>"
-            );
-          })
-          .join("");
-      }
-
       if (card && sug.length) {
         card.style.display = "block";
         $("bodySugeridos").innerHTML = sug
