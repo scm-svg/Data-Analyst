@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Plan Prioridades Mar/Rio — Análisis Final</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;color:#1a1a2e;line-height:1.5}
+  h1{color:#1F4E79;border-bottom:3px solid #2E75B6;padding-bottom:.5rem}
+  h2{color:#2E75B6;margin-top:2rem}
+  table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:0.88rem}
+  th,td{border:1px solid #ccc;padding:7px 10px;text-align:left}
+  th{background:#1F4E79;color:#fff}
+  .kids{background:#FFF2CC}
+  .ok{background:#E2EFDA}
+  .alert{background:#FCE4D6}
+  .box{background:#f0f4f8;border-left:4px solid #2E75B6;padding:1rem;margin:1rem 0}
+  .stat{display:inline-block;background:#1F4E79;color:#fff;padding:4px 12px;border-radius:4px;margin:2px;font-size:0.85rem}
+</style>
+</head>
+<body>
+<h1>Plan de prioridades Mar / Rio</h1>
+<p>Basado en <strong>MAR/RIO PROYECCION CANTIDADES SUGERIDAS (2).xlsx</strong> + inventario tela Jabón + lote Mar Kids ya cortado.</p>
+
+<div class="box">
+  <span class="stat">Tela total: 2.991 kg</span>
+  <span class="stat">Lote cortado: 337 kg</span>
+  <span class="stat">Tela neta: 2.778 kg</span>
+  <span class="stat">Plan: 6.124 und / 2.670 kg</span>
+</div>
+
+<h2>Premisas aplicadas</h2>
+<ol>
+  <li>Descontado lote Mar Kids: <strong>1.300 und</strong> (8=260, 10=260, 12=260, 14=520) en 11 colores (~118 und/color)</li>
+  <li><strong>KIDS primero</strong> al 50% del pendiente (meta máx Excel − ya cortado)</li>
+  <li>Tela restante → CAB/DAMA Mar y Rio con <strong>flexibilidad proporcional por color</strong></li>
+  <li>Metas = <strong>máximos sugeridos</strong> del Excel</li>
+  <li>Consumo: Mar KIDS 0,26 · Rio KIDS 0,32 · Mar CAB 0,50 · Mar DAMA 0,40 · Rio CAB 0,66 · Rio DAMA 0,52 kg/und</li>
+</ol>
+
+<h2>Orden de producción</h2>
+<table>
+  <tr><th>Prioridad</th><th>Línea</th><th>Meta máx Excel</th><th>Objetivo</th><th>Und a producir</th><th>Kg tela</th></tr>
+  <tr class="kids"><td>P1</td><td>MAR KIDS</td><td>3.101</td><td>50% pendiente</td><td><strong>906</strong></td><td>236</td></tr>
+  <tr class="kids"><td>P2</td><td>RIO KIDS</td><td>2.952</td><td>50% meta máx</td><td><strong>1.192</strong></td><td>381</td></tr>
+  <tr><td>P3</td><td>MAR CAB</td><td>2.900</td><td>máx con tela</td><td><strong>1.082</strong></td><td>541</td></tr>
+  <tr><td>P4</td><td>MAR DAMA</td><td>2.700</td><td>máx con tela</td><td><strong>1.087</strong></td><td>435</td></tr>
+  <tr><td>P5</td><td>RIO CAB</td><td>2.782</td><td>máx con tela</td><td><strong>797</strong></td><td>526</td></tr>
+  <tr><td>P6</td><td>RIO DAMA</td><td>2.893</td><td>máx con tela</td><td><strong>1.060</strong></td><td>551</td></tr>
+  <tr><td colspan="4"><strong>TOTAL</strong></td><td><strong>6.124</strong></td><td><strong>2.670</strong></td></tr>
+</table>
+
+<h2>Mar Kids — detalle por color</h2>
+<table>
+  <tr><th>Color</th><th>Meta máx</th><th>Ya cortado</th><th>Pendiente</th><th>Objetivo 50%</th><th>Producir</th></tr>
+  <tr><td>Azul Marino</td><td>409</td><td>118</td><td>290</td><td>145</td><td class="ok">145</td></tr>
+  <tr><td>Negro</td><td>379</td><td>118</td><td>260</td><td>130</td><td class="ok">130</td></tr>
+  <tr><td>Blanco</td><td>460</td><td>0</td><td>460</td><td>230</td><td class="ok">230</td></tr>
+  <tr><td>Aguamarina</td><td>243</td><td>118</td><td>124</td><td>62</td><td class="ok">62</td></tr>
+  <tr><td>Azul Rey</td><td>232</td><td>118</td><td>113</td><td>56</td><td class="ok">56</td></tr>
+  <tr><td>Lila</td><td>254</td><td>118</td><td>135</td><td>67</td><td class="ok">67</td></tr>
+  <tr><td>Verde Militar</td><td>224</td><td>118</td><td>105</td><td>52</td><td class="ok">52</td></tr>
+  <tr><td>Amarillo Neón</td><td>114</td><td>0</td><td>114</td><td>57</td><td class="ok">57</td></tr>
+  <tr><td>Azul Lavanda</td><td>153</td><td>118</td><td>34</td><td>17</td><td class="ok">17</td></tr>
+  <tr><td>Púrpura/Morado</td><td>180</td><td>0</td><td>180</td><td>90</td><td class="ok">90</td></tr>
+  <tr class="alert"><td>Rojo</td><td>239</td><td>118</td><td>120</td><td>60</td><td>0 — sin tela</td></tr>
+  <tr class="alert"><td>Rosado Pastel</td><td>214</td><td>118</td><td>95</td><td>47</td><td>0 — sin tela</td></tr>
+</table>
+
+<h2>Colores excluidos o muy limitados</h2>
+<ul>
+  <li class="alert"><strong>Rojo</strong> (0,18 kg): no producir en ningún modelo hasta compra de tela</li>
+  <li class="alert"><strong>Rosado Pastel</strong> (0,7 kg neto): agotado por lote cortado — no producir</li>
+  <li class="alert"><strong>Verde Militar</strong> (15 kg neto): solo kids parcial; adultos sin tela</li>
+  <li class="alert"><strong>Gris Claro</strong> (17 kg neto): solo CAB parcial Rio/Mar</li>
+</ul>
+
+<h2>Flexibilidad entre modelos (colores con stock alto)</h2>
+<table>
+  <tr><th>Color</th><th>Tela neta kg</th><th>Estrategia</th></tr>
+  <tr class="ok"><td>Azul Marino</td><td>659</td><td>Kids Mar+Rio → repartir excedente CAB/DAMA ambos modelos</td></tr>
+  <tr class="ok"><td>Negro</td><td>626</td><td>Igual — máxima flexibilidad Mar ↔ Rio</td></tr>
+  <tr><td>Aguamarina</td><td>318</td><td>Kids + adultos proporcional</td></tr>
+  <tr><td>Azul Rey / Lavanda</td><td>241 / 190</td><td>Kids prioritario + balance adultos</td></tr>
+</table>
+
+<p><em>Detalle completo: <strong>PLAN_PRIORIDADES_MAR_RIO_KIDS.xlsx</strong> (6 hojas)</em></p>
+</body>
+</html>
