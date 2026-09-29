@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOMOS CUADRO — Manuales de Proceso · Producto Terminado</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface2: #f0f3fa;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --green: #059669;
+  --green-bg: #d1fae5;
+  --orange: #d97706;
+  --orange-bg: #fef3c7;
+  --purple: #7c3aed;
+  --purple-bg: #ede9fe;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --shadow: 0 1px 3px rgba(15,23,42,.08), 0 4px 16px rgba(15,23,42,.06);
+  --radius: 14px;
+  --font-head: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font-body); background:var(--bg); color:var(--text); line-height:1.6; min-height:100vh; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+  color: #fff;
+  padding: 28px 32px 0;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 4px 24px rgba(37,99,235,.25);
+}
+.header-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; padding-bottom:20px; }
+.brand-tag { font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-bottom:4px; }
+.header h1 { font-family:var(--font-head); font-size:1.65rem; font-weight:800; letter-spacing:-.02em; }
+.header p { font-size:.88rem; opacity:.85; margin-top:4px; max-width:560px; }
+.header-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.meta-chip { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:5px 14px; font-size:.75rem; font-weight:600; backdrop-filter:blur(4px); }
+
+/* Main tabs */
+.main-tabs { display:flex; gap:4px; overflow-x:auto; padding-bottom:0; scrollbar-width:none; }
+.main-tabs::-webkit-scrollbar { display:none; }
+.main-tab {
+  background:transparent; border:none; color:rgba(255,255,255,.7);
+  font-family:var(--font-head); font-size:.82rem; font-weight:700;
+  padding:10px 18px; cursor:pointer; white-space:nowrap;
+  border-bottom:3px solid transparent; transition:all .2s;
+  border-radius:8px 8px 0 0;
+}
+.main-tab:hover { color:#fff; background:rgba(255,255,255,.1); }
+.main-tab.active { color:#fff; border-bottom-color:#fff; background:rgba(255,255,255,.15); }
+
+/* Layout */
+.container { max-width:1200px; margin:0 auto; padding:28px 24px 60px; }
+.panel { display:none; animation: fadeIn .3s ease; }
+.panel.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+/* Hero cards on home */
+.hero-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; margin-bottom:28px; }
+.hero-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:24px; box-shadow:var(--shadow); cursor:pointer; transition:all .2s;
+  position:relative; overflow:hidden;
+}
+.hero-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
+.hero-card.blue::before { background:var(--accent); }
+.hero-card.green::before { background:var(--green); }
+.hero-card.purple::before { background:var(--purple); }
+.hero-card:hover { transform:translateY(-3px); box-shadow:0 8px 28px rgba(15,23,42,.12); border-color:var(--accent); }
+.hero-card .icon { font-size:2rem; margin-bottom:10px; }
+.hero-card h3 { font-family:var(--font-head); font-size:1.05rem; font-weight:800; margin-bottom:6px; }
+.hero-card p { font-size:.84rem; color:var(--muted); }
+.hero-card .arrow { position:absolute; bottom:20px; right:20px; color:var(--accent); font-size:1.2rem; font-weight:700; }
+
+/* Section title */
+.section-title { font-family:var(--font-head); font-size:1.3rem; font-weight:800; margin-bottom:6px; letter-spacing:-.02em; }
+.section-sub { color:var(--muted); font-size:.88rem; margin-bottom:22px; }
+
+/* Sub tabs */
+.sub-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:22px; }
+.sub-tab {
+  background:var(--surface); border:1.5px solid var(--border); color:var(--muted);
+  font-family:var(--font-head); font-size:.78rem; font-weight:700;
+  padding:7px 16px; border-radius:999px; cursor:pointer; transition:all .2s;
+}
+.sub-tab:hover { border-color:var(--accent); color:var(--accent); }
+.sub-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Cards */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:18px; }
+.card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+
+/* Steps timeline */
+.steps { display:flex; flex-direction:column; gap:0; }
+.step {
+  display:grid; grid-template-columns:44px 1fr; gap:0 16px;
+  position:relative; padding-bottom:20px;
+}
+.step:not(:last-child)::before {
+  content:''; position:absolute; left:21px; top:44px; bottom:0;
+  width:2px; background:var(--border);
+}
+.step-num {
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-weight:800; font-size:.9rem; flex-shrink:0; z-index:1;
+}
+.step-body { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+.step-body h5 { font-family:var(--font-head); font-size:.88rem; font-weight:700; margin-bottom:4px; }
+.step-body p { font-size:.82rem; color:var(--muted); }
+
+/* Role badges */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  margin-top:8px;
+}
+.badge.supervisor { background:#dbeafe; color:#1d4ed8; }
+.badge.operador { background:#d1fae5; color:#065f46; }
+.badge.qa { background:#fef3c7; color:#92400e; }
+.badge.compras { background:#ede9fe; color:#5b21b6; }
+.badge.solicitante { background:#fce7f3; color:#9d174d; }
+.badge.consumibles { background:#ffedd5; color:#c2410c; }
+
+/* Flowchart */
+.flowchart-wrap { text-align:center; margin:16px 0; }
+.flowchart-wrap img { max-width:100%; border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow); }
+.flowchart-caption { font-size:.82rem; color:var(--muted); margin-top:10px; font-style:italic; }
+
+/* Legend */
+.legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.legend-item { display:flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; color:var(--muted); }
+.legend-dot { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+.legend-dot.start { background:var(--green-bg); border:2px solid var(--green); }
+.legend-dot.process { background:var(--accent-light); border:2px solid var(--accent); }
+.legend-dot.decision { background:var(--orange-bg); border:2px solid var(--orange); transform:rotate(45deg); border-radius:2px; width:12px; height:12px; }
+.legend-dot.end { background:var(--purple-bg); border:2px solid var(--purple); }
+.legend-dot.note { background:#f1f5f9; border:2px dashed #94a3b8; }
+
+/* Roles table */
+.roles-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+.role-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+.role-card h5 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin-bottom:4px; }
+.role-card .rel { font-size:.72rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.role-card ul { list-style:none; }
+.role-card li { font-size:.82rem; color:var(--muted); padding:4px 0; padding-left:16px; position:relative; }
+.role-card li::before { content:'→'; position:absolute; left:0; color:var(--accent); font-weight:700; }
+
+/* Records table */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th { background:var(--surface2); color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; padding:10px 14px; text-align:left; border-bottom:2px solid var(--border); font-weight:700; }
+td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(37,99,235,.03); }
+
+/* Systems pills */
+.systems { display:flex; flex-wrap:wrap; gap:10px; }
+.system-pill { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; flex:1; min-width:180px; box-shadow:var(--shadow); }
+.system-pill strong { display:block; font-family:var(--font-head); font-size:.85rem; font-weight:800; margin-bottom:4px; color:var(--accent); }
+.system-pill span { font-size:.78rem; color:var(--muted); }
+
+/* Alert / info box */
+.info-box { background:var(--accent-light); border:1px solid #93c5fd; border-radius:12px; padding:14px 18px; font-size:.84rem; color:#1e40af; margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+.info-box .ico { font-size:1.1rem; flex-shrink:0; }
+
+/* Process map visual */
+.process-map { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:20px 0; }
+@media(max-width:768px){ .process-map { grid-template-columns:1fr; } }
+.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; }
+.map-node:hover, .map-node.highlight { border-color:var(--accent); background:var(--accent-light); }
+.map-node .num { font-family:var(--font-head); font-size:2rem; font-weight:800; color:var(--accent); opacity:.3; }
+.map-node h4 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin:6px 0; }
+.map-node p { font-size:.76rem; color:var(--muted); }
+.map-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem; }
+@media(max-width:768px){ .map-arrow { transform:rotate(90deg); } }
+
+/* Footer */
+.footer { text-align:center; padding:24px; color:var(--muted); font-size:.78rem; border-top:1px solid var(--border); margin-top:40px; }
+
+/* Split layout: steps + flowchart side by side on wide screens */
+.split { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+@media(max-width:900px){ .split { grid-template-columns:1fr; } }
+
+.sub-panel { display:none; }
+.sub-panel.active { display:block; animation: fadeIn .25s ease; }
+
+/* Search */
+.search-box { margin-bottom:20px; }
+.search-box input {
+  width:100%; max-width:400px; padding:10px 16px 10px 40px;
+  border:1.5px solid var(--border); border-radius:999px; font-family:var(--font-body);
+  font-size:.88rem; outline:none; transition:border .2s; background:var(--surface);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242 1.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:14px center;
+}
+.search-box input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+
+/* Recommendations & Analysis */
+.rec-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:22px; }
+.rec-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); border-left:4px solid var(--accent); }
+.rec-card.priority-high { border-left-color:var(--red); }
+.rec-card.priority-med { border-left-color:var(--orange); }
+.rec-card.priority-low { border-left-color:var(--green); }
+.rec-card .rec-tag { font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+.rec-card.priority-high .rec-tag { color:var(--red); }
+.rec-card.priority-med .rec-tag { color:var(--orange); }
+.rec-card.priority-low .rec-tag { color:var(--green); }
+.rec-card h5 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:8px; }
+.rec-card p, .rec-card li { font-size:.84rem; color:var(--muted); }
+.rec-card ul { margin-top:8px; padding-left:18px; }
+.rec-card li { margin-bottom:4px; }
+
+.analysis-table td:first-child { font-weight:700; white-space:nowrap; }
+.status-auto { display:inline-block; font-size:.68rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+.status-auto.alto { background:#fee2e2; color:#991b1b; }
+.status-auto.medio { background:#fef3c7; color:#92400e; }
+.status-auto.bajo { background:#d1fae5; color:#065f46; }
+
+.meeting-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+.meeting-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+.meeting-card .num-big { font-family:var(--font-head); font-size:1.8rem; font-weight:800; color:var(--accent); opacity:.25; line-height:1; }
+.meeting-card h5 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin:6px 0; }
+.meeting-card p { font-size:.82rem; color:var(--muted); }
+
+.gap-card { background:linear-gradient(135deg,#fef2f2,#fff7ed); border:1px solid #fecaca; border-radius:var(--radius); padding:18px; margin-bottom:18px; }
+.gap-card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; color:#991b1b; margin-bottom:8px; }
+.gap-card p { font-size:.84rem; color:#7f1d1d; }
+
+/* 5S */
+.s5-intro { background:linear-gradient(135deg,#eff6ff,#f0fdf4); border:1px solid #bfdbfe; border-radius:var(--radius); padding:18px 20px; margin-bottom:22px; font-size:.88rem; color:#1e3a5f; }
+.s5-pillars { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-bottom:24px; }
+.s5-pillar { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+.s5-pillar .s5-num { font-family:var(--font-head); font-size:1.5rem; font-weight:800; color:var(--accent); opacity:.35; line-height:1; }
+.s5-pillar h5 { font-family:var(--font-head); font-size:.88rem; font-weight:800; margin:6px 0 8px; }
+.s5-pillar p { font-size:.8rem; color:var(--muted); margin-bottom:8px; }
+.s5-pillar ul { font-size:.78rem; color:var(--muted); padding-left:16px; margin:0; }
+.s5-pillar li { margin-bottom:4px; }
+.s5-dual th { font-size:.68rem; }
+.s5-dual td { font-size:.8rem; vertical-align:top; }
+.s5-dual td:first-child { font-weight:800; color:var(--accent); width:88px; }
+.s5-checklist td:first-child { width:22%; font-weight:600; }
+.s5-checklist td:nth-child(2) { width:14%; }
+.s5-tag { display:inline-block; font-size:.65rem; font-weight:800; padding:2px 8px; border-radius:999px; background:#e0e7ff; color:#3730a3; margin-right:4px; }
+.s5-tag--log { background:#dbeafe; color:#1e40af; }
+.s5-tag--tt { background:#fce7f3; color:#9d174d; }
+.s5-tag--both { background:#d1fae5; color:#065f46; }
+.s5-zones td:first-child { font-weight:700; color:var(--accent); width:26%; }
+.s5-zones td { font-size:.8rem; vertical-align:top; }
+
+.step-num.blue { background:var(--accent-light); color:var(--accent); }
+.step-num.green { background:var(--green-bg); color:var(--green); }
+.step-num.orange { background:var(--orange-bg); color:var(--orange); }
+.step-num.purple { background:var(--purple-bg); color:var(--purple); }
+.flow-pre { font-family:ui-monospace,monospace; font-size:.78rem; background:#0f172a; color:#e2e8f0; padding:18px; border-radius:12px; line-height:1.55; overflow-x:auto; white-space:pre; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-top">
+    <div>
+      <div class="brand-tag">SOMOS CUADRO · Producto Terminado</div>
+      <h1>Manual de Proceso — Supervisor PT</h1>
+      <p>Manufacturado &amp; Equipamiento · Reabastecimiento, picking unitario, control de SKUs, despacho a tiendas e inventario cíclico (SOP-PT-001).</p>
+    </div>
+    <div class="header-meta">
+      <span class="meta-chip">SOP-PT-001</span>
+      <span class="meta-chip">Solo Producto Terminado</span>
+      <span class="meta-chip">Base: SOP Operativo Word</span>
+    </div>
+  </div>
+  <nav class="main-tabs" id="mainTabs">
+    <button class="main-tab active" data-panel="inicio">🏠 Inicio</button>
+    <button class="main-tab" data-panel="operacion-pt">📦 Producto Terminado</button>
+    <button class="main-tab" data-panel="equipamiento">🛒 Equipamiento</button>
+    <button class="main-tab" data-panel="solicitudes">📋 Solicitudes Tienda</button>
+    <button class="main-tab" data-panel="roles">👥 Roles</button>
+    <button class="main-tab" data-panel="registros">📊 Registros</button>
+    <button class="main-tab" data-panel="recomendaciones">💡 Recomendaciones</button>
+    <button class="main-tab" data-panel="analisis">⚡ Análisis / Automatización</button>
+    <button class="main-tab" data-panel="cinco-s">📐 Metodología 5S</button>
+  </nav>
+</header>
+
+<main class="container">
+
+  <section class="panel active" id="inicio">
+    <div class="info-box"><span class="ico">ℹ️</span><div>Este manual cubre <strong>únicamente Producto Terminado</strong> (prendas manufacturadas y equipamiento en almacén PT). No incluye materia prima ni procesos de planta.</div></div>
+    <div class="hero-grid">
+      <div class="hero-card blue" onclick="goTo('operacion-pt','fase-1')">
+        <div class="icon">📋</div><h3>Solicitud y Picking Lists</h3><p>Matriz Sheets, validación SKU Odoo/web e impresión de listas de recolección PT.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('operacion-pt','fase-2')">
+        <div class="icon">🚚</div><h3>Priorización de Despachos</h3><p>Tolón/Grand Plaz, ruta Valencia (martes, Sambil 10:00 a.m.) y resto de la red.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card purple" onclick="goTo('operacion-pt','fase-3')">
+        <div class="icon">📦</div><h3>Picking 1 a 1</h3><p>Escaneo con pistola, verificación supervisoria de SKUs y discrepancias.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card blue" onclick="goTo('equipamiento')">
+        <div class="icon">🛒</div><h3>Equipamiento PT</h3><p>Misma cadena operativa; zonas y controles específicos para ítems de equipamiento.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('recomendaciones')">
+        <div class="icon">💡</div><h3>Mejoras</h3><p>Tablets en picking, etiquetas Odoo y cierre de trazabilidad en despacho.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card purple" onclick="goTo('cinco-s')">
+        <div class="icon">📐</div><h3>Metodología 5S</h3><p>Orden en almacén PT y ubicaciones lógicas en Odoo.</p><span class="arrow">→</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Objetivo del SOP</h2>
+    <p class="section-sub">Texto formal del Manual de Procedimiento Operativo (Word).</p>
+    <div class="card"><p style="font-size:.88rem;color:var(--muted)">Gestionar reabastecimiento a tiendas, picking unitario, verificación de SKUs en Odoo, embalaje, despacho a Operaciones, inventario cíclico, conciliación de reservas y optimización del layout del <strong>almacén de producto terminado</strong>.</p></div>
+
+    <h2 class="section-title">Mapa del proceso PT</h2>
+    <p class="section-sub">Flujo de punta a punta — desde solicitud de tienda hasta carga de camión e inventario semanal.</p>
+    <div class="process-map">
+      <div class="map-node" onclick="goTo('solicitudes')"><div class="num">1</div><h4>Solicitud</h4><p>Matriz Google Sheets · tiendas</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('operacion-pt','fase-1')"><div class="num">2</div><h4>Validación SKU</h4><p>Odoo + somoscuadro.com</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('operacion-pt','fase-3')"><div class="num">3</div><h4>Picking + Embalaje</h4><p>1 a 1 · SENCAMER</p></div>
+    </div>
+
+    <div class="card">
+      <h4>🎨 Leyenda</h4>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot start"></div> Inicio</div>
+        <div class="legend-item"><div class="legend-dot process"></div> Actividad</div>
+        <div class="legend-item"><div class="legend-dot decision"></div> Decisión</div>
+        <div class="legend-item"><div class="legend-dot end"></div> Fin</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>📄 Flujo documental (SOP Word)</h4>
+      <div class="flow-pre">[Solicitud Tiendas (Sheets)]
+           │
+           ▼
+[Verificación Variantes Odoo/Web — Supervisor PT]
+           │
+           ▼
+[Impresión Listas Picking] → [Prioridad Tolón/Grand Plaz | Valencia | Resto]
+           │
+           ▼
+[Picking 1 a 1 · Pistola] → [Verificación SKUs Supervisor PT]
+           │
+           ▼
+[Embalaje: Bolsa + Hablador + SENCAMER]
+           │
+           ▼
+[NE + Transferencias + Conteo] → [Operaciones] → [Carga camión día anterior]
+           │
+           └──► [Inventario cíclico / Odoo / Layout semanal]</div>
+    </div>
+
+    <div class="card">
+      <h4>🔧 Sistemas</h4>
+      <div class="systems">
+        <div class="system-pill"><strong>Odoo</strong><span>SKUs, transferencias, reservas, ubicaciones PT</span></div>
+        <div class="system-pill"><strong>Google Sheets</strong><span>Matriz de solicitudes de tiendas</span></div>
+        <div class="system-pill"><strong>Pistola scanner</strong><span>Picking unitario 1 a 1</span></div>
+        <div class="system-pill"><strong>somoscuadro.com</strong><span>Validación de variantes publicadas</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="operacion-pt">
+    <h2 class="section-title">Operación de Producto Terminado</h2>
+    <p class="section-sub">Procedimiento detallado — Fases I a VII del SOP Word.</p>
+    <div class="sub-tabs" id="ptSubTabs">
+      <button class="sub-tab active" data-sub="fase-1">Fase I · Solicitud</button>
+      <button class="sub-tab" data-sub="fase-2">Fase II · Prioridad</button>
+      <button class="sub-tab" data-sub="fase-3">Fase III · Picking</button>
+      <button class="sub-tab" data-sub="fase-4">Fase IV · Banderas</button>
+      <button class="sub-tab" data-sub="fase-5">Fase V · Embalaje</button>
+      <button class="sub-tab" data-sub="fase-6">Fase VI · Documentos</button>
+      <button class="sub-tab" data-sub="fase-7">Fase VII · Inventario</button>
+    </div>
+
+    <div class="sub-panel active" id="fase-1">
+      <div class="card"><h4>FASE I: Solicitud, verificación de fichas e impresión</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Registro de solicitud</h5><p>La red de tiendas genera requerimientos de reposición en la <strong>matriz oficial Google Sheets</strong>.</p><span class="badge solicitante">Tiendas</span></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Validación variantes y SKUs</h5><p>El supervisor cruza ítems vs <strong>Odoo</strong> y <strong>somoscuadro.com</strong> (manufacturado y equipamiento).</p><span class="badge supervisor">Supervisor PT</span></div></div>
+          <div class="step"><div class="step-num orange">3</div><div class="step-body"><h5>Control preventivo</h5><p>Si piden variantes inexistentes (ej. Short Basic Line gris), <strong>frenar y corregir</strong> — solo Negro y Marrón en ese ejemplo.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+          <div class="step"><div class="step-num green">4</div><div class="step-body"><h5>Listas de picking</h5><p>Impresión para almacenistas. <em>Migración planificada:</em> tablets/móviles.</p><span class="badge operador">Almacenistas</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-2">
+      <div class="card"><h4>FASE II: Priorización y programación de despachos</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num orange">P1</div><div class="step-body"><h5>CC El Tolón y Grand Plaz</h5><p>Grand Plaz sin depósito propio (comparte Tolón). Notificar <strong>número exacto de cajas 1 día antes</strong> a administración Tolón. Armado y conteo a primera hora.</p></div></div>
+          <div class="step"><div class="step-num orange">P2</div><div class="step-body"><h5>Ruta Valencia — martes</h5><p>Sambil Valencia + CC La Grieta. Sambil: ventana matutina <strong>hasta 10:00 a.m.</strong></p></div></div>
+          <div class="step"><div class="step-num green">P3</div><div class="step-body"><h5>Resto de la red</h5><p>Completar surtido lunes y martes temprano para evitar desabastecimiento.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-3">
+      <div class="card"><h4>FASE III: Picking unitario, escaneo y discrepancias</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Picking 1 a 1</h5><p>Recorrido en pasillos PT; lectura <strong>pieza por pieza</strong> con pistola scanner.</p><span class="badge operador">Almacenistas</span></div></div>
+          <div class="step"><div class="step-num purple">2</div><div class="step-body"><h5>Verificación supervisoria SKUs</h5><p>Cruce final: SKUs recolectados vs saldos <strong>Odoo</strong> antes del empaque.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-4">
+      <div class="card"><h4>FASE IV: Contingencias — «Levantar la bandera»</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num orange">!</div><div class="step-body"><h5>Alerta en anaquel</h5><p>Stock bajo/crítico durante picking → almacenista detiene y reporta.</p><span class="badge operador">Almacenistas</span></div></div>
+          <div class="step"><div class="step-num purple">→</div><div class="step-body"><h5>Resolución supervisoria</h5><p>Evaluar existencias reales y decidir a qué tienda va el producto restante (cobertura de red).</p><span class="badge supervisor">Supervisor PT</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-5">
+      <div class="card"><h4>FASE V: Embalaje, calidad y viaje</h4>
+        <ul style="margin-left:18px;font-size:.84rem;color:var(--muted);line-height:1.7">
+          <li><strong>Bolsa plástica</strong> separadora prenda–caja (obligatoria).</li>
+          <li>Prendas <strong>etiquetadas</strong> y empaquetadas limpias.</li>
+          <li>Cajas selladas, sin deformación, peso ergonómico.</li>
+          <li><strong>Hablador único</strong> de tienda destino + código <strong>SENCAMER</strong> visible.</li>
+        </ul>
+        <span class="badge supervisor">Inspección por muestreo — Supervisor PT</span>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-6">
+      <div class="card"><h4>FASE VI: Documentación, notas de entrega y camión</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Notas de entrega</h5><p>Impresión oficial por tienda.</p></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Verificación transferencia × transferencia</h5><p>Cruce físico tienda por tienda + soportes impresos.</p></div></div>
+          <div class="step"><div class="step-num green">3</div><div class="step-body"><h5>Conteo y traspaso</h5><p>Conteo total de cajas → entrega formal a <strong>Operaciones</strong>.</p></div></div>
+          <div class="step"><div class="step-num purple">4</div><div class="step-body"><h5>Carga anticipada</h5><p>Camión cargado <strong>día anterior</strong> al despacho para salida matutina.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-7">
+      <div class="card"><h4>FASE VII: Inventario cíclico, Odoo y layout (semanal)</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num green">A</div><div class="step-body"><h5>Inventario cíclico</h5><p>Conteo por familias/zonas PT; conciliación supervisor vs teórico Odoo.</p></div></div>
+          <div class="step"><div class="step-num orange">B</div><div class="step-body"><h5>Reservas y salidas</h5><p>Auditar salidas pendientes, reservas, transferencias en borrador.</p></div></div>
+          <div class="step"><div class="step-num blue">C</div><div class="step-body"><h5>Layout y ubicaciones</h5><p>Mejoras de espacio, etiquetado físico y altas de ubicaciones lógicas en Odoo.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="equipamiento">
+    <h2 class="section-title">Equipamiento en almacén PT</h2>
+    <p class="section-sub">Mismo SOP operativo; criterios adicionales para la línea equipamiento dentro de Producto Terminado.</p>
+    <div class="card">
+      <h4>¿Qué cambia vs prendas manufacturadas?</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Aspecto</th><th>Manufacturado</th><th>Equipamiento</th></tr></thead>
+        <tbody>
+          <tr><td>Ubicación física</td><td>Racks PT por familia/colección</td><td>Zona equipamiento señalizada (no mezclar con apparel sin etiqueta)</td></tr>
+          <tr><td>Picking</td><td>1 a 1 con scanner; mismas listas Sheets/Odoo</td><td>Verificar kits/accesorios completos antes de cerrar caja</td></tr>
+          <tr><td>Embalaje</td><td>Bolsa interna + hablador tienda + SENCAMER</td><td>Protección reforzada si aplica; integridad de empaque comercial</td></tr>
+          <tr><td>Validación SKU</td><td>Odoo + web</td><td>Mismo cruce; atención a SKUs de equipamiento no publicados en web</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="info-box"><span class="ico">✓</span><div>Las <strong>7 fases</strong> del SOP (pestaña Producto Terminado) aplican igual; el supervisor diferencia solo zona, completitud de kit e inspección de empaque.</div></div>
+  </section>
+
+  <section class="panel" id="solicitudes">
+    <h2 class="section-title">Solicitudes de tienda</h2>
+    <p class="section-sub">Equivalente operativo a «Requisición» en el dashboard base — aquí es la matriz Sheets de reposición PT.</p>
+    <div class="card">
+      <h4>Flujo de solicitud</h4>
+      <div class="steps">
+        <div class="step"><div class="step-num green">1</div><div class="step-body"><h5>Tienda completa matriz</h5><p>Requerimiento de SKUs PT (manufacturado/equipamiento).</p><span class="badge solicitante">Tiendas</span></div></div>
+        <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Supervisor valida</h5><p>Variantes reales Odoo + web; corrige o rechaza líneas inválidas.</p><span class="badge supervisor">Supervisor PT</span></div></div>
+        <div class="step"><div class="step-num purple">3</div><div class="step-body"><h5>Emisión picking</h5><p>Lista impresa (futuro: tablet).</p><span class="badge operador">Almacenistas</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="roles">
+    <h2 class="section-title">Roles y responsabilidades</h2>
+    <p class="section-sub">Matriz SOP — ejecución directa vs supervisión de piso.</p>
+    <div class="roles-grid">
+      <div class="role-card"><div class="rel">Rol principal</div><h5>Supervisor de Producto Terminado</h5><ul>
+        <li>Validación fichas Odoo / web</li><li>Cruce SKUs post-picking</li><li>Decisiones «bandera»</li><li>Notas de entrega y transferencias</li><li>Conciliación inventario cíclico</li><li>Layout y ubicaciones Odoo PT</li></ul></div>
+      <div class="role-card"><div class="rel">Equipo a cargo</div><h5>Almacenistas PT</h5><ul>
+        <li>Picking 1 a 1 con pistola</li><li>Empaque y sellado de cajas</li><li>Apilado por tienda en acopio</li><li>Conteo ciego en inventario cíclico</li><li>Etiquetado físico de estantes</li></ul></div>
+      <div class="role-card"><div class="rel">Interfaz</div><h5>Operaciones / Transporte</h5><ul>
+        <li>Recibe lote + carpeta documental</li><li>Carga camión día anterior</li><li>Despacho según prioridad de ruta</li></ul></div>
+      <div class="role-card"><div class="rel">Origen demanda</div><h5>Red de tiendas</h5><ul>
+        <li>Matriz Sheets de reposición</li><li>Recepción en tienda de cajas PT</li></ul></div>
+    </div>
+    <div class="card"><h4>Matriz de atribuciones (resumen Word)</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Área</th><th>Supervisor PT</th><th>Almacenistas</th></tr></thead>
+        <tbody>
+          <tr><td>Validación fichas</td><td>Cruce Sheets vs Odoo/web</td><td>—</td></tr>
+          <tr><td>Picking</td><td>Atajada discrepancias SKU</td><td>Recolección 1 a 1 scanner</td></tr>
+          <tr><td>Contingencias</td><td>Reasignación stock</td><td>Reporte bandera</td></tr>
+          <tr><td>Embalaje</td><td>Muestreo SENCAMER/hablador</td><td>Bolsas, empaque, sellado</td></tr>
+          <tr><td>Documentos</td><td>NE + verificación transferencias</td><td>Orden cajas acopio</td></tr>
+          <tr><td>Inventario</td><td>Conciliación Odoo</td><td>Conteo ciego</td></tr>
+          <tr><td>Layout</td><td>Nuevas ubicaciones Odoo</td><td>Señalización física</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="registros">
+    <h2 class="section-title">Registros y soportes</h2>
+    <p class="section-sub">Documentación del flujo PT según SOP.</p>
+    <div class="table-wrap card" style="padding:0;overflow:hidden"><table>
+      <thead><tr><th>Registro</th><th>Uso</th><th>Responsable</th></tr></thead>
+      <tbody>
+        <tr><td>Matriz Google Sheets (tiendas)</td><td>Solicitud de reposición PT</td><td>Tiendas / Supervisor valida</td></tr>
+        <tr><td>Listas de picking impresas</td><td>Recolección en piso</td><td>Supervisor emite · Almacenistas ejecutan</td></tr>
+        <tr><td>Odoo — transferencias / reservas</td><td>Stock teórico PT, salidas a tienda</td><td>Supervisor PT</td></tr>
+        <tr><td>Notas de entrega</td><td>Documento oficial por tienda</td><td>Supervisor PT</td></tr>
+        <tr><td>Soportes impresos por transferencia</td><td>Cruce transferencia × transferencia</td><td>Supervisor PT</td></tr>
+        <tr><td>Acta entrega a Operaciones</td><td>Conteo cajas + carpeta</td><td>Supervisor → Operaciones</td></tr>
+        <tr><td>Inventario cíclico (hoja/registro)</td><td>Conteo físico vs Odoo</td><td>Equipo piso + Supervisor concilia</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="recomendaciones">
+    <h2 class="section-title">Recomendaciones de mejora</h2>
+    <p class="section-sub">Alineadas al SOP Word y operación PT.</p>
+    <div class="rec-grid">
+      <div class="rec-card priority-med"><div class="rec-tag">Planificado en SOP</div><h5>Tablets / móviles en picking</h5><p>Reemplazar listas impresas por dispositivos en piso para reducir errores y reimpresiones.</p></div>
+      <div class="rec-card priority-high"><div class="rec-tag">Prioridad operativa</div><h5>Cierre trazabilidad Odoo en despacho PT</h5><p>Confirmar transferencias al mismo tiempo que empaque para que reservas reflejen realidad.</p></div>
+      <div class="rec-card priority-low"><div class="rec-tag">Mediano plazo</div><h5>Etiquetas código de barras desde Odoo</h5><p>Hablador con SKU/lote escaneable en picking y recepción tienda.</p></div>
+    </div>
+  </section>
+
+  <section class="panel" id="analisis">
+    <h2 class="section-title">Análisis y automatización</h2>
+    <p class="section-sub">Enfoque Producto Terminado — despacho e inventario.</p>
+    <div class="card"><h4>Estado deseado vs actual (PT)</h4>
+      <div class="table-wrap"><table class="analysis-table">
+        <thead><tr><th>Etapa</th><th>Hoy</th><th>Objetivo</th><th>Impacto</th></tr></thead>
+        <tbody>
+          <tr><td>Solicitud tienda</td><td>Google Sheets</td><td>Mantener + validación automática SKU</td><td><span class="status-auto medio">Medio</span></td></tr>
+          <tr><td>Picking</td><td>Pistola + listas impresas</td><td>Tablets Odoo</td><td><span class="status-auto alto">Alto</span></td></tr>
+          <tr><td>Descuento stock</td><td>Odoo + controles supervisor</td><td>Confirmación en tiempo real al cerrar caja</td><td><span class="status-auto alto">Alto</span></td></tr>
+          <tr><td>Inventario cíclico</td><td>Conteo + conciliación manual</td><td>Conteo por zona con scanner</td><td><span class="status-auto medio">Medio</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="cinco-s">
+    <h2 class="section-title">Metodología 5S — Almacén PT</h2>
+    <p class="section-sub">Solo producto terminado (manufacturado y equipamiento). Sin materia prima.</p>
+    <div class="s5-intro"><strong>Doble capa:</strong> cada S aplica en <span class="s5-tag">PISO PT</span> y en <span class="s5-tag">ODOO</span> (ubicaciones, SKUs, transferencias).</div>
+    <div class="s5-pillars">
+      <div class="s5-pillar"><div class="s5-num">1S</div><h5>Clasificar</h5><p>Separar manufacturado vs equipamiento; cuarentena vs apto despacho; obsoleto aparte.</p></div>
+      <div class="s5-pillar"><div class="s5-num">2S</div><h5>Ordenar</h5><p>Zona acopio por tienda; racks por familia; equipamiento en tramo fijo.</p></div>
+      <div class="s5-pillar"><div class="s5-num">3S</div><h5>Limpiar</h5><p>Acopio sin cajas sin hablador; pasillos libres para picking 1 a 1.</p></div>
+      <div class="s5-pillar"><div class="s5-num">4S</div><h5>Estandarizar</h5><p>Mismo checklist embalaje (bolsa, SENCAMER, hablador único) en todas las rutas.</p></div>
+      <div class="s5-pillar"><div class="s5-num">5S</div><h5>Sostener</h5><p>Auditoría semanal alineada a Fase VII del SOP (layout + Odoo).</p></div>
+    </div>
+    <div class="card"><h4>Mapa zona física ↔ Odoo (PT)</h4>
+      <div class="table-wrap"><table class="s5-zones">
+        <thead><tr><th>Zona física</th><th>Contenido</th><th>Odoo</th></tr></thead>
+        <tbody>
+          <tr><td>Racks PT manufacturado</td><td>Prendas por familia/SKU</td><td>Ubicación teórica PT</td></tr>
+          <tr><td>Zona equipamiento</td><td>Kits y accesorios PT</td><td>Sub-ubicación equipamiento</td></tr>
+          <tr><td>Acopio pre-despacho</td><td>Cajas por tienda, habladores</td><td>Reservas / transferencias preparadas</td></tr>
+          <tr><td>Muelle / carga</td><td>Lote día anterior</td><td>NE + conteo → Operaciones</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="flujo-doc" style="display:none"></section>
+
+  <div class="footer">Somos Cuadro · SOP-PT-001 · Supervisor Producto Terminado (Manufacturado &amp; Equipamiento) · Manual interactivo</div>
+</main>
+
+<script>
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
+function setupSubTabs(id) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  container.querySelectorAll('.sub-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const parentPanel = container.closest('.panel');
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      parentPanel.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.sub).classList.add('active');
+    });
+  });
+}
+setupSubTabs('ptSubTabs');
+
+function goTo(panel, sub) {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-panel="${panel}"]`).classList.add('active');
+  document.getElementById(panel).classList.add('active');
+  if (sub) {
+    const container = document.getElementById('ptSubTabs');
+    if (container) {
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(panel).querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      const targetTab = container.querySelector(`[data-sub="${sub}"]`);
+      if (targetTab) {
+        targetTab.classList.add('active');
+        document.getElementById(sub).classList.add('active');
+      }
+    }
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
