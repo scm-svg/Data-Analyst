@@ -187,6 +187,18 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertIn("border: none", src)
         self.assertIn('table cellspacing=\'0\'', src)
 
+    def test_resumen_copia_tablero_completo_detalle_solo_nuevo(self):
+        with open(GS, encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn("function aplicarDeltasEnTablero_(", src)
+        self.assertNotIn("function deltasPorLineaDia_(", src)
+        self.assertIn(
+            "construirHtmlTableroTracking_(datosTracking, fondosTracking, coloresTracking)",
+            src,
+        )
+        self.assertIn("construirHtmlDetalle_(filasNuevas", src)
+        self.assertIn("tal cual está en la hoja", src)
+
     def test_historial_diario_en_script(self):
         with open(GS, encoding="utf-8") as f:
             src = f.read()

@@ -1,12 +1,13 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.3 (CORREO DIARIO)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.4 (CORREO DIARIO)
  * =====================================================================
  *  Cambios de esta versión:
- *   - Asunto y nota de almacén sin emojis (Gmail los mostraba como �).
- *   - Resumen General (Tracking) sin líneas de cuadrícula.
- *   - Correo diario: solo modelos/cantidades nuevas. Lo ya enviado
- *     queda en la hoja oculta "_Correo Enviado" y no se reenvía.
+ *   - Resumen General (Tracking) copia el tablero de la hoja tal cual.
+ *     El detalle sí filtra solo lo nuevo desde el último correo.
+ *   - Asunto y nota de almacén sin emojis.
+ *   - Resumen sin líneas de cuadrícula.
+ *   - Lo ya enviado queda en la hoja oculta "_Correo Enviado".
  * =====================================================================
  */
 
@@ -1339,66 +1340,6 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
   return { nuevos: nuevos, persistir: persistir };
 }
 
-function deltasPorLineaDia_(filasNuevas) {
-  var out = {};
-  for (var i = 0; i < filasNuevas.length; i++) {
-    var f = filasNuevas[i];
-    var lin = lineaClaveCorreo_(f.linea);
-    var dia = diaClaveCorreo_(f.dia);
-    if (!out[lin]) out[lin] = {};
-    out[lin][dia] = (out[lin][dia] || 0) + (Number(f.cantidad) || 0);
-  }
-  return out;
-}
-
-function detectarMapaRealesTablero_(datos) {
-  var mapa = {};
-  var filaDias = -1;
-  var tope = Math.min(25, datos.length);
-  for (var i = 0; i < tope; i++) {
-    var celdas = (datos[i] || []).map(function(x) {
-      return quitarTildes_(String(x == null ? "" : x).toLowerCase().trim());
-    });
-    if (celdas.indexOf("lunes") !== -1 && celdas.indexOf("martes") !== -1) {
-      filaDias = i;
-      break;
-    }
-  }
-  if (filaDias === -1) return { mapa: mapa, filaDias: -1, filaPlanReal: -1, colTotalReal: -1 };
-
-  var filaPR = filaDias + 1;
-  var celdasDias = (datos[filaDias] || []).map(function(x) {
-    return quitarTildes_(String(x == null ? "" : x).toLowerCase().trim());
-  });
-  var celdasPR = filaPR < datos.length ? (datos[filaPR] || []).map(function(x) {
-    return quitarTildes_(String(x == null ? "" : x).toLowerCase().trim());
-  }) : [];
-
-  var dias = ["lunes", "martes", "miercoles", "jueves", "viernes"];
-  for (var d = 0; d < dias.length; d++) {
-    var nombre = dias[d];
-    var idxDia = -1;
-    for (var j = 0; j < celdasDias.length; j++) {
-      if (celdasDias[j].indexOf(nombre) === 0) { idxDia = j; break; }
-    }
-    if (idxDia === -1) continue;
-    if (celdasPR[idxDia] && celdasPR[idxDia].indexOf("real") !== -1) mapa[nombre] = idxDia;
-    else if (celdasPR[idxDia + 1] && celdasPR[idxDia + 1].indexOf("real") !== -1) mapa[nombre] = idxDia + 1;
-    else mapa[nombre] = idxDia;
-  }
-
-  var colTotalReal = -1;
-  for (var t = celdasPR.length - 1; t >= 0; t--) {
-    if (celdasPR[t].indexOf("real") !== -1) { colTotalReal = t; break; }
-  }
-  if (colTotalReal === -1) {
-    for (var u = celdasDias.length - 1; u >= 0; u--) {
-      if (celdasDias[u].indexOf("total") !== -1) { colTotalReal = u; break; }
-    }
-  }
-  return { mapa: mapa, filaDias: filaDias, filaPlanReal: filaPR, colTotalReal: colTotalReal };
-}
-
 function esFilaLineaTablero_(fila) {
   var nom = String(fila && fila[1] != null ? fila[1] : "").trim().toLowerCase();
   return nom.indexOf("linea") !== -1 || nom.indexOf("línea") !== -1;
@@ -1432,50 +1373,6 @@ function limitesTableroCorreo_(datos) {
   return { first: first, last: last, lastCol: lastCol };
 }
 
-function aplicarDeltasEnTablero_(datos, detReales) {
-  var copia = [];
-  for (var i = 0; i < datos.length; i++) copia.push((datos[i] || []).slice());
-  var mapaInfo = detectarMapaRealesTablero_(copia);
-  var mapa = mapaInfo.mapa;
-  var colTotal = mapaInfo.colTotalReal;
-  var filasOcultar = {};
-
-  for (var r = 0; r < copia.length && r < 40; r++) {
-    if (!esFilaLineaTablero_(copia[r])) continue;
-    var lin = lineaClaveCorreo_(copia[r][1]);
-    var deltas = detReales[lin] || {};
-    var suma = 0;
-    for (var dia in mapa) {
-      if (!Object.prototype.hasOwnProperty.call(mapa, dia)) continue;
-      var col = mapa[dia];
-      var val = Number(deltas[dia]) || 0;
-      suma += val;
-      copia[r][col] = val > 0 ? String(val) : "";
-    }
-    if (colTotal !== -1) copia[r][colTotal] = suma > 0 ? String(suma) : "";
-    if (suma <= 0) filasOcultar[r] = true;
-  }
-
-  for (var t = 0; t < copia.length && t < 40; t++) {
-    if (!esFilaTotalTablero_(copia[t])) continue;
-    var tot = 0;
-    for (var diaT in mapa) {
-      if (!Object.prototype.hasOwnProperty.call(mapa, diaT)) continue;
-      var colT = mapa[diaT];
-      var acc = 0;
-      for (var rr = 0; rr < copia.length && rr < 40; rr++) {
-        if (filasOcultar[rr]) continue;
-        if (!esFilaLineaTablero_(copia[rr])) continue;
-        acc += Number(copia[rr][colT]) || 0;
-      }
-      copia[t][colT] = acc > 0 ? String(acc) : "";
-      tot += acc;
-    }
-    if (colTotal !== -1) copia[t][colTotal] = tot > 0 ? String(tot) : "";
-  }
-  return { datos: copia, ocultar: filasOcultar };
-}
-
 function columnasUsadasTablero_(datos, first, last, lastCol, ocultar) {
   var usadas = [];
   for (var j = 1; j <= lastCol; j++) {
@@ -1501,27 +1398,23 @@ function htmlCeldaTablero_(tag, val, bg, fg, bold, conBorde) {
     escapeHtml_(val == null ? "" : val) + "</" + tag + ">";
 }
 
-function construirHtmlTableroTracking_(datos, fondos, colores, detReales) {
-  var aplicado = aplicarDeltasEnTablero_(datos, detReales);
-  var tab = aplicado.datos;
-  var ocultar = aplicado.ocultar;
-  var lim = limitesTableroCorreo_(tab);
+function construirHtmlTableroTracking_(datos, fondos, colores) {
+  var lim = limitesTableroCorreo_(datos);
   if (lim.last < lim.first) return "";
-  var cols = columnasUsadasTablero_(tab, lim.first, lim.last, lim.lastCol, ocultar);
+  var cols = columnasUsadasTablero_(datos, lim.first, lim.last, lim.lastCol, {});
   if (!cols.length) return "";
 
   var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; border: none; width: 100%; font-size: 13px; margin-bottom: 20px;'>";
   for (var i = lim.first; i <= lim.last; i++) {
     if (String((datos[i] || []).join("")).trim() === "") continue;
-    if (ocultar[i]) continue;
-    var esLinea = esFilaLineaTablero_(tab[i]);
-    var esTotal = esFilaTotalTablero_(tab[i]);
+    var esLinea = esFilaLineaTablero_(datos[i]);
+    var esTotal = esFilaTotalTablero_(datos[i]);
     var isHeader = !esLinea && !esTotal;
     var tag = isHeader ? "th" : "td";
     html += "<tr>";
     for (var c = 0; c < cols.length; c++) {
       var j = cols[c];
-      var val = tab[i][j];
+      var val = datos[i][j];
       var bg = (fondos[i] && fondos[i][j]) ? fondos[i][j] : "";
       var fg = (colores[i] && colores[i][j]) ? colores[i][j] : "";
       html += htmlCeldaTablero_(tag, val, bg, fg, isHeader || esTotal, false);
@@ -1566,7 +1459,7 @@ function enviarReporteProduccion() {
 
   var confirm = ui.alert(
     "Enviar Reporte de Producción",
-    "Se enviará solo la producción nueva (la que no haya salido ya en un correo anterior). El tablero de Tracking irá sin cuadrícula.\n\n¿Continuar?",
+    "El resumen copiará el tablero 'Tracking - Produccion' tal cual está en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
@@ -1628,14 +1521,13 @@ function enviarReporteProduccion() {
 
   ss.toast("Generando tablas HTML...", "Enviando Reporte", 10);
 
-  var detReales = deltasPorLineaDia_(filasNuevas);
-  var htmlTablero = construirHtmlTableroTracking_(datosTracking, fondosTracking, coloresTracking, detReales);
+  var htmlTablero = construirHtmlTableroTracking_(datosTracking, fondosTracking, coloresTracking);
   var htmlDetalle = construirHtmlDetalle_(filasNuevas, "#434343", "#FFFFFF");
 
   var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
   htmlBody += "<h2 style='color: #2b5797;'>Reporte de Producción Diaria</h2>";
   htmlBody += "<p>Estimado equipo,</p>";
-  htmlBody += "<p>A continuación se presenta solo la producción nueva desde el último correo:</p>";
+  htmlBody += "<p>El resumen general copia el tablero de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
 
   htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen General (Tracking)</h3>";
   htmlBody += "<div style='overflow-x: auto;'>" + htmlTablero + "</div>";
