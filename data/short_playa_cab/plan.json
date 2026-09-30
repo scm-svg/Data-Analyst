@@ -1,0 +1,3942 @@
+{
+  "as_of": "2026-09-11",
+  "modelo": "SHORT PLAYA CAB",
+  "consumo": 0.75,
+  "tallas": [
+    "S",
+    "M",
+    "L",
+    "XL",
+    "2XL"
+  ],
+  "colores": [
+    "Azul Pizarra",
+    "Azul Verdoso",
+    "Cereza",
+    "Marron",
+    "Verde Pino"
+  ],
+  "retail": [
+    "CERRO VERDE",
+    "GRIETA",
+    "SAMBIL CHACAO",
+    "SAMBIL VALENCIA",
+    "TOLON",
+    "VELA",
+    "GRAND PLAZ"
+  ],
+  "scenarios": {
+    "recomendado": {
+      "label": "Recomendado · temporada alta",
+      "hs": 1.3,
+      "cov": 4.0,
+      "vela_stockout": 1.3,
+      "mgta_mult": 2.0,
+      "note": "4 meses de cobertura (dic–mar), VELA ×1.30 por quiebres, MGTA 2× GRIETA por ser zona de playa.",
+      "totals": {
+        "produce": 564,
+        "produce_unconst": 620,
+        "stk": 270,
+        "deficit": 3,
+        "v_base": 125.4,
+        "v_hs": 163.02,
+        "v_mgta": 53.48571428571428,
+        "v_total": 216.5057142857143,
+        "metros": 423.0,
+        "cob": 1.66,
+        "cob_post": 3.85
+      },
+      "rows": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "S",
+          "sku": "SHOUNCA187TS",
+          "stk": 22,
+          "deficit": 0,
+          "cob": 4.79,
+          "cob_mgta": 3.44,
+          "sev": "ok",
+          "produce": 4,
+          "produce_unconst": 4,
+          "v_base": 3.54,
+          "v_hs": 4.6,
+          "v_mgta": 1.8,
+          "v_total": 6.39,
+          "need": 3.6,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 3
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 7,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 3,
+            "VELA": 6,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.93,
+            "GRIETA": 0.56,
+            "SAMBIL CHACAO": 1.67,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.33,
+            "VELA": 0.0,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "sku": "SHOUNCA187TM",
+          "stk": 9,
+          "deficit": 0,
+          "cob": 0.99,
+          "cob_mgta": 0.75,
+          "sev": "crit",
+          "produce": 39,
+          "produce_unconst": 39,
+          "v_base": 6.98,
+          "v_hs": 9.08,
+          "v_mgta": 2.99,
+          "v_total": 12.07,
+          "need": 39.3,
+          "dist": {
+            "CERRO VERDE": 3,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 5,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 0,
+            "VELA": 8,
+            "GRAND PLAZ": 0,
+            "MGTA": 12
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 6,
+            "VELA": 2,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.11,
+            "GRIETA": 2.04,
+            "SAMBIL CHACAO": 1.49,
+            "SAMBIL VALENCIA": 1.67,
+            "TOLON": 0.33,
+            "VELA": 2.25,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "sku": "SHOUNCA187TL",
+          "stk": 3,
+          "deficit": 2,
+          "cob": 0.3,
+          "cob_mgta": 0.22,
+          "sev": "crit",
+          "produce": 52,
+          "produce_unconst": 53,
+          "v_base": 7.59,
+          "v_hs": 9.86,
+          "v_mgta": 3.52,
+          "v_total": 13.38,
+          "need": 52.5,
+          "dist": {
+            "CERRO VERDE": 6,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 5,
+            "SAMBIL VALENCIA": 7,
+            "TOLON": 0,
+            "VELA": 11,
+            "GRAND PLAZ": 2,
+            "MGTA": 15
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.86,
+            "GRIETA": 1.86,
+            "SAMBIL CHACAO": 1.67,
+            "SAMBIL VALENCIA": 2.04,
+            "TOLON": 0.0,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.56
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "sku": "SHOUNCA187TXL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.67,
+          "cob_mgta": 0.5,
+          "sev": "crit",
+          "produce": 28,
+          "produce_unconst": 28,
+          "v_base": 4.58,
+          "v_hs": 5.96,
+          "v_mgta": 2.09,
+          "v_total": 8.05,
+          "need": 28.2,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 4,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 6,
+            "GRAND PLAZ": 0,
+            "MGTA": 9
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.11,
+            "GRIETA": 1.11,
+            "SAMBIL CHACAO": 1.49,
+            "SAMBIL VALENCIA": 1.11,
+            "TOLON": 0.0,
+            "VELA": 1.13,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "2XL",
+          "sku": "SHOUNCA187T2XL",
+          "stk": 7,
+          "deficit": 0,
+          "cob": 1.11,
+          "cob_mgta": 0.86,
+          "sev": "alta",
+          "produce": 26,
+          "produce_unconst": 26,
+          "v_base": 4.84,
+          "v_hs": 6.29,
+          "v_mgta": 1.87,
+          "v_total": 8.16,
+          "need": 25.7,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 0,
+            "VELA": 7,
+            "GRAND PLAZ": 1,
+            "MGTA": 8
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 4,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 1.67,
+            "SAMBIL CHACAO": 0.74,
+            "SAMBIL VALENCIA": 1.11,
+            "TOLON": 0.33,
+            "VELA": 2.25,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "S",
+          "sku": "SHOUNCA186TS",
+          "stk": 25,
+          "deficit": 0,
+          "cob": 9.09,
+          "cob_mgta": 7.14,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 2.12,
+          "v_hs": 2.75,
+          "v_mgta": 0.75,
+          "v_total": 3.5,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 6,
+            "TOLON": 3,
+            "VELA": 4,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 0.37,
+            "SAMBIL CHACAO": 0.37,
+            "SAMBIL VALENCIA": 0.37,
+            "TOLON": 0.33,
+            "VELA": 1.13,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "M",
+          "sku": "SHOUNCA186TM",
+          "stk": 18,
+          "deficit": 0,
+          "cob": 3.54,
+          "cob_mgta": 2.77,
+          "sev": "ok",
+          "produce": 8,
+          "produce_unconst": 8,
+          "v_base": 3.91,
+          "v_hs": 5.08,
+          "v_mgta": 1.42,
+          "v_total": 6.5,
+          "need": 8.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 1,
+            "VELA": 3,
+            "GRAND PLAZ": 0,
+            "MGTA": 2
+          },
+          "store_stk": {
+            "CERRO VERDE": 10,
+            "GRIETA": 5,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 1,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.56,
+            "GRIETA": 0.19,
+            "SAMBIL CHACAO": 0.93,
+            "SAMBIL VALENCIA": 0.74,
+            "TOLON": 0.98,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "sku": "SHOUNCA186TL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.41,
+          "cob_mgta": 0.32,
+          "sev": "crit",
+          "produce": 46,
+          "produce_unconst": 46,
+          "v_base": 7.46,
+          "v_hs": 9.69,
+          "v_mgta": 2.77,
+          "v_total": 12.46,
+          "need": 45.8,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 5,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 4,
+            "VELA": 17,
+            "GRAND PLAZ": 0,
+            "MGTA": 12
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.74,
+            "GRIETA": 0.93,
+            "SAMBIL CHACAO": 1.49,
+            "SAMBIL VALENCIA": 1.86,
+            "TOLON": 1.3,
+            "VELA": 3.38,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "sku": "SHOUNCA186TXL",
+          "stk": 6,
+          "deficit": 1,
+          "cob": 0.9,
+          "cob_mgta": 0.7,
+          "sev": "crit",
+          "produce": 29,
+          "produce_unconst": 29,
+          "v_base": 5.13,
+          "v_hs": 6.67,
+          "v_mgta": 1.87,
+          "v_total": 8.54,
+          "need": 29.2,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 1,
+            "VELA": 14,
+            "GRAND PLAZ": 0,
+            "MGTA": 7
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.74,
+            "GRIETA": 0.56,
+            "SAMBIL CHACAO": 0.93,
+            "SAMBIL VALENCIA": 1.3,
+            "TOLON": 0.33,
+            "VELA": 2.82,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "2XL",
+          "sku": "SHOUNCA186T2XL",
+          "stk": 8,
+          "deficit": 0,
+          "cob": 1.81,
+          "cob_mgta": 1.34,
+          "sev": "alta",
+          "produce": 16,
+          "produce_unconst": 16,
+          "v_base": 3.4,
+          "v_hs": 4.42,
+          "v_mgta": 1.57,
+          "v_total": 5.99,
+          "need": 16.0,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 3,
+            "GRAND PLAZ": 0,
+            "MGTA": 6
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.11,
+            "GRIETA": 0.0,
+            "SAMBIL CHACAO": 1.3,
+            "SAMBIL VALENCIA": 1.11,
+            "TOLON": 0.33,
+            "VELA": 0.56,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "S",
+          "sku": "SHOUNCA170TS",
+          "stk": 22,
+          "deficit": 0,
+          "cob": 5.44,
+          "cob_mgta": 4.02,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.11,
+          "v_hs": 4.05,
+          "v_mgta": 1.42,
+          "v_total": 5.47,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 3,
+            "VELA": 5,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.37,
+            "GRIETA": 0.74,
+            "SAMBIL CHACAO": 1.11,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.33,
+            "VELA": 0.56,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "M",
+          "sku": "SHOUNCA170TM",
+          "stk": 12,
+          "deficit": 0,
+          "cob": 1.44,
+          "cob_mgta": 1.09,
+          "sev": "alta",
+          "produce": 23,
+          "produce_unconst": 32,
+          "v_base": 6.41,
+          "v_hs": 8.34,
+          "v_mgta": 2.69,
+          "v_total": 11.03,
+          "need": 32.1,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 8,
+            "GRAND PLAZ": 0,
+            "MGTA": 8
+          },
+          "store_stk": {
+            "CERRO VERDE": 5,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.67,
+            "GRIETA": 0.93,
+            "SAMBIL CHACAO": 1.3,
+            "SAMBIL VALENCIA": 1.49,
+            "TOLON": 0.33,
+            "VELA": 2.25,
+            "GRAND PLAZ": 0.37
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "sku": "SHOUNCA170TL",
+          "stk": 2,
+          "deficit": 0,
+          "cob": 0.18,
+          "cob_mgta": 0.14,
+          "sev": "crit",
+          "produce": 41,
+          "produce_unconst": 56,
+          "v_base": 8.34,
+          "v_hs": 10.84,
+          "v_mgta": 3.74,
+          "v_total": 14.58,
+          "need": 56.3,
+          "dist": {
+            "CERRO VERDE": 3,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 6,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 2,
+            "VELA": 7,
+            "GRAND PLAZ": 0,
+            "MGTA": 13
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.67,
+            "GRIETA": 2.41,
+            "SAMBIL CHACAO": 2.23,
+            "SAMBIL VALENCIA": 1.67,
+            "TOLON": 0.98,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "sku": "SHOUNCA170TXL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.78,
+          "cob_mgta": 0.57,
+          "sev": "crit",
+          "produce": 18,
+          "produce_unconst": 24,
+          "v_base": 3.97,
+          "v_hs": 5.16,
+          "v_mgta": 1.87,
+          "v_total": 7.03,
+          "need": 24.1,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 1,
+            "VELA": 2,
+            "GRAND PLAZ": 0,
+            "MGTA": 6
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.74,
+            "GRIETA": 1.11,
+            "SAMBIL CHACAO": 0.93,
+            "SAMBIL VALENCIA": 1.49,
+            "TOLON": 0.33,
+            "VELA": 0.56,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "2XL",
+          "sku": "SHOUNCA170T2XL",
+          "stk": 13,
+          "deficit": 0,
+          "cob": 3.88,
+          "cob_mgta": 2.86,
+          "sev": "ok",
+          "produce": 4,
+          "produce_unconst": 5,
+          "v_base": 2.58,
+          "v_hs": 3.35,
+          "v_mgta": 1.2,
+          "v_total": 4.55,
+          "need": 5.2,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 1,
+            "GRAND PLAZ": 0,
+            "MGTA": 2
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 2,
+            "VELA": 1,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.37,
+            "GRIETA": 0.56,
+            "SAMBIL CHACAO": 0.74,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.0,
+            "VELA": 0.56,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "S",
+          "sku": "SHOUNCA38TS",
+          "stk": 27,
+          "deficit": 0,
+          "cob": 6.9,
+          "cob_mgta": 5.21,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.01,
+          "v_hs": 3.91,
+          "v_mgta": 1.27,
+          "v_total": 5.18,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 7,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 4,
+            "VELA": 3,
+            "GRAND PLAZ": 4
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.37,
+            "GRIETA": 0.56,
+            "SAMBIL CHACAO": 0.37,
+            "SAMBIL VALENCIA": 1.3,
+            "TOLON": 0.0,
+            "VELA": 1.13,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "M",
+          "sku": "SHOUNCA38TM",
+          "stk": 13,
+          "deficit": 0,
+          "cob": 1.43,
+          "cob_mgta": 1.1,
+          "sev": "alta",
+          "produce": 34,
+          "produce_unconst": 34,
+          "v_base": 6.99,
+          "v_hs": 9.09,
+          "v_mgta": 2.69,
+          "v_total": 11.78,
+          "need": 34.1,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 0,
+            "VELA": 14,
+            "GRAND PLAZ": 0,
+            "MGTA": 10
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 6,
+            "VELA": 0,
+            "GRAND PLAZ": 2
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.11,
+            "GRIETA": 1.86,
+            "SAMBIL CHACAO": 1.11,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.33,
+            "VELA": 3.38,
+            "GRAND PLAZ": 0.37
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "sku": "SHOUNCA38TL",
+          "stk": 2,
+          "deficit": 0,
+          "cob": 0.18,
+          "cob_mgta": 0.14,
+          "sev": "crit",
+          "produce": 57,
+          "produce_unconst": 57,
+          "v_base": 8.52,
+          "v_hs": 11.08,
+          "v_mgta": 3.59,
+          "v_total": 14.67,
+          "need": 56.7,
+          "dist": {
+            "CERRO VERDE": 6,
+            "GRIETA": 5,
+            "SAMBIL CHACAO": 8,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 1,
+            "VELA": 15,
+            "GRAND PLAZ": 1,
+            "MGTA": 16
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.86,
+            "GRIETA": 1.3,
+            "SAMBIL CHACAO": 2.41,
+            "SAMBIL VALENCIA": 1.49,
+            "TOLON": 0.65,
+            "VELA": 2.82,
+            "GRAND PLAZ": 0.37
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "sku": "SHOUNCA38TXL",
+          "stk": 9,
+          "deficit": 0,
+          "cob": 1.86,
+          "cob_mgta": 1.42,
+          "sev": "alta",
+          "produce": 16,
+          "produce_unconst": 16,
+          "v_base": 3.73,
+          "v_hs": 4.85,
+          "v_mgta": 1.5,
+          "v_total": 6.34,
+          "need": 16.4,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 0,
+            "VELA": 6,
+            "GRAND PLAZ": 0,
+            "MGTA": 4
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 5,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.3,
+            "GRIETA": 1.3,
+            "SAMBIL CHACAO": 0.0,
+            "SAMBIL VALENCIA": 0.56,
+            "TOLON": 0.0,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "2XL",
+          "sku": "SHOUNCA38T2XL",
+          "stk": 6,
+          "deficit": 0,
+          "cob": 1.13,
+          "cob_mgta": 0.87,
+          "sev": "alta",
+          "produce": 22,
+          "produce_unconst": 22,
+          "v_base": 4.09,
+          "v_hs": 5.31,
+          "v_mgta": 1.57,
+          "v_total": 6.88,
+          "need": 21.5,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 4,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 2,
+            "VELA": 8,
+            "GRAND PLAZ": 0,
+            "MGTA": 6
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.37,
+            "GRIETA": 0.74,
+            "SAMBIL CHACAO": 1.49,
+            "SAMBIL VALENCIA": 0.37,
+            "TOLON": 0.65,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "S",
+          "sku": "SHOUNCA69TS",
+          "stk": 24,
+          "deficit": 0,
+          "cob": 6.45,
+          "cob_mgta": 4.74,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 2.86,
+          "v_hs": 3.72,
+          "v_mgta": 1.35,
+          "v_total": 5.07,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 5,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 4,
+            "VELA": 3,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.93,
+            "GRIETA": 0.56,
+            "SAMBIL CHACAO": 0.74,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.0,
+            "VELA": 0.56,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "sku": "SHOUNCA69TM",
+          "stk": 7,
+          "deficit": 0,
+          "cob": 0.67,
+          "cob_mgta": 0.5,
+          "sev": "crit",
+          "produce": 39,
+          "produce_unconst": 49,
+          "v_base": 8.05,
+          "v_hs": 10.47,
+          "v_mgta": 3.44,
+          "v_total": 13.91,
+          "need": 48.6,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 1,
+            "VELA": 10,
+            "GRAND PLAZ": 0,
+            "MGTA": 12
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.67,
+            "GRIETA": 2.23,
+            "SAMBIL CHACAO": 1.3,
+            "SAMBIL VALENCIA": 2.04,
+            "TOLON": 0.98,
+            "VELA": 2.25,
+            "GRAND PLAZ": 0.19
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "L",
+          "sku": "SHOUNCA69TL",
+          "stk": 6,
+          "deficit": 0,
+          "cob": 0.66,
+          "cob_mgta": 0.49,
+          "sev": "crit",
+          "produce": 35,
+          "produce_unconst": 43,
+          "v_base": 6.97,
+          "v_hs": 9.07,
+          "v_mgta": 3.29,
+          "v_total": 12.36,
+          "need": 43.4,
+          "dist": {
+            "CERRO VERDE": 5,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 6,
+            "TOLON": 0,
+            "VELA": 5,
+            "GRAND PLAZ": 0,
+            "MGTA": 12
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 2.23,
+            "GRIETA": 1.3,
+            "SAMBIL CHACAO": 1.3,
+            "SAMBIL VALENCIA": 2.41,
+            "TOLON": 0.33,
+            "VELA": 1.13,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "XL",
+          "sku": "SHOUNCA69TXL",
+          "stk": 3,
+          "deficit": 0,
+          "cob": 0.59,
+          "cob_mgta": 0.43,
+          "sev": "crit",
+          "produce": 20,
+          "produce_unconst": 25,
+          "v_base": 3.93,
+          "v_hs": 5.11,
+          "v_mgta": 1.94,
+          "v_total": 7.05,
+          "need": 25.2,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 7
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.56,
+            "GRIETA": 1.11,
+            "SAMBIL CHACAO": 1.11,
+            "SAMBIL VALENCIA": 1.67,
+            "TOLON": 0.65,
+            "VELA": 0.0,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "2XL",
+          "sku": "SHOUNCA69T2XL",
+          "stk": 14,
+          "deficit": 0,
+          "cob": 3.26,
+          "cob_mgta": 2.52,
+          "sev": "ok",
+          "produce": 7,
+          "produce_unconst": 8,
+          "v_base": 3.3,
+          "v_hs": 4.29,
+          "v_mgta": 1.27,
+          "v_total": 5.56,
+          "need": 8.2,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 4,
+            "GRAND PLAZ": 0,
+            "MGTA": 3
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 3,
+            "VELA": 1,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 0.74,
+            "SAMBIL CHACAO": 0.93,
+            "SAMBIL VALENCIA": 0.93,
+            "TOLON": 0.0,
+            "VELA": 1.69,
+            "GRAND PLAZ": 0.0
+          }
+        }
+      ],
+      "by_color": [
+        {
+          "color": "Azul Pizarra",
+          "stk": 45,
+          "v_hs": 35.78404761904762,
+          "v_mgta": 12.268051948051946,
+          "need": 149,
+          "produce": 149,
+          "produce_unconst": 150,
+          "cob": 1.26,
+          "tela_m": 163.3,
+          "tela_pcs": 217,
+          "tela_uso": 111.8,
+          "tela_sobra": 51.6,
+          "tallas": {
+            "S": 4,
+            "M": 39,
+            "L": 52,
+            "XL": 28,
+            "2XL": 26
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "stk": 61,
+          "v_hs": 28.612380952380956,
+          "v_mgta": 8.378181818181817,
+          "need": 99,
+          "produce": 99,
+          "produce_unconst": 99,
+          "cob": 2.13,
+          "tela_m": 163.94,
+          "tela_pcs": 218,
+          "tela_uso": 74.2,
+          "tela_sobra": 89.7,
+          "tallas": {
+            "S": 0,
+            "M": 8,
+            "L": 46,
+            "XL": 29,
+            "2XL": 16
+          }
+        },
+        {
+          "color": "Cereza",
+          "stk": 53,
+          "v_hs": 31.726190476190478,
+          "v_mgta": 10.92155844155844,
+          "need": 118,
+          "produce": 86,
+          "produce_unconst": 117,
+          "cob": 1.67,
+          "tela_m": 65.0,
+          "tela_pcs": 86,
+          "tela_uso": 64.5,
+          "tela_sobra": 0.5,
+          "tallas": {
+            "S": 0,
+            "M": 23,
+            "L": 41,
+            "XL": 18,
+            "2XL": 4
+          }
+        },
+        {
+          "color": "Marron",
+          "stk": 57,
+          "v_hs": 34.24261904761905,
+          "v_mgta": 10.622337662337662,
+          "need": 129,
+          "produce": 129,
+          "produce_unconst": 129,
+          "cob": 1.66,
+          "tela_m": 200.83,
+          "tela_pcs": 267,
+          "tela_uso": 96.8,
+          "tela_sobra": 104.1,
+          "tallas": {
+            "S": 0,
+            "M": 34,
+            "L": 57,
+            "XL": 16,
+            "2XL": 22
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "stk": 54,
+          "v_hs": 32.654761904761905,
+          "v_mgta": 11.295584415584415,
+          "need": 126,
+          "produce": 101,
+          "produce_unconst": 125,
+          "cob": 1.65,
+          "tela_m": 76.33,
+          "tela_pcs": 101,
+          "tela_uso": 75.8,
+          "tela_sobra": 0.6,
+          "tallas": {
+            "S": 0,
+            "M": 39,
+            "L": 35,
+            "XL": 20,
+            "2XL": 7
+          }
+        }
+      ],
+      "by_talla": [
+        {
+          "talla": "S",
+          "ventas": 88,
+          "ventas_pct": 12.3,
+          "stk": 120,
+          "stk_pct": 44.4,
+          "produce": 4,
+          "produce_pct": 0.7,
+          "cob": 6.31
+        },
+        {
+          "talla": "M",
+          "ventas": 177,
+          "ventas_pct": 24.8,
+          "stk": 59,
+          "stk_pct": 21.9,
+          "produce": 143,
+          "produce_pct": 25.4,
+          "cob": 1.4
+        },
+        {
+          "talla": "L",
+          "ventas": 226,
+          "ventas_pct": 31.6,
+          "stk": 17,
+          "stk_pct": 6.3,
+          "produce": 231,
+          "produce_pct": 41.0,
+          "cob": 0.34
+        },
+        {
+          "talla": "XL",
+          "ventas": 124,
+          "ventas_pct": 17.3,
+          "stk": 26,
+          "stk_pct": 9.6,
+          "produce": 111,
+          "produce_pct": 19.7,
+          "cob": 0.94
+        },
+        {
+          "talla": "2XL",
+          "ventas": 100,
+          "ventas_pct": 14.0,
+          "stk": 48,
+          "stk_pct": 17.8,
+          "produce": 75,
+          "produce_pct": 13.3,
+          "cob": 2.03
+        }
+      ],
+      "tela_alert": [
+        {
+          "color": "Cereza",
+          "need": 118,
+          "cap": 86,
+          "faltan": 32,
+          "metros_faltan": 23.8
+        },
+        {
+          "color": "Verde Pino",
+          "need": 126,
+          "cap": 101,
+          "faltan": 25,
+          "metros_faltan": 18.4
+        }
+      ],
+      "grieta_base": 20.57,
+      "mgta_month": 53.49
+    },
+    "conservador": {
+      "label": "Conservador",
+      "hs": 1.25,
+      "cov": 3.0,
+      "vela_stockout": 1.0,
+      "mgta_mult": 1.5,
+      "note": "3 meses de cobertura, sin inflar VELA, MGTA 1.5× GRIETA (misma regla de otras líneas).",
+      "totals": {
+        "produce": 349,
+        "produce_unconst": 350,
+        "stk": 270,
+        "deficit": 3,
+        "v_base": 118.5,
+        "v_hs": 148.125,
+        "v_mgta": 38.57142857142857,
+        "v_total": 186.69642857142856,
+        "metros": 261.8,
+        "cob": 1.82,
+        "cob_post": 3.32
+      },
+      "rows": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "S",
+          "sku": "SHOUNCA187TS",
+          "stk": 22,
+          "deficit": 0,
+          "cob": 4.98,
+          "cob_mgta": 3.85,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.54,
+          "v_hs": 4.42,
+          "v_mgta": 1.29,
+          "v_total": 5.71,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 7,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 3,
+            "VELA": 6,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.89,
+            "GRIETA": 0.54,
+            "SAMBIL CHACAO": 1.61,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.31,
+            "VELA": 0.0,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "sku": "SHOUNCA187TM",
+          "stk": 9,
+          "deficit": 0,
+          "cob": 1.09,
+          "cob_mgta": 0.87,
+          "sev": "alta",
+          "produce": 22,
+          "produce_unconst": 22,
+          "v_base": 6.58,
+          "v_hs": 8.23,
+          "v_mgta": 2.16,
+          "v_total": 10.39,
+          "need": 22.2,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 0,
+            "VELA": 3,
+            "GRAND PLAZ": 0,
+            "MGTA": 6
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 6,
+            "VELA": 2,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.07,
+            "GRIETA": 1.96,
+            "SAMBIL CHACAO": 1.43,
+            "SAMBIL VALENCIA": 1.61,
+            "TOLON": 0.31,
+            "VELA": 1.67,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "sku": "SHOUNCA187TL",
+          "stk": 3,
+          "deficit": 2,
+          "cob": 0.33,
+          "cob_mgta": 0.26,
+          "sev": "crit",
+          "produce": 34,
+          "produce_unconst": 34,
+          "v_base": 7.29,
+          "v_hs": 9.11,
+          "v_mgta": 2.54,
+          "v_total": 11.64,
+          "need": 33.9,
+          "dist": {
+            "CERRO VERDE": 4,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 4,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 0,
+            "VELA": 8,
+            "GRAND PLAZ": 1,
+            "MGTA": 8
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.79,
+            "GRIETA": 1.79,
+            "SAMBIL CHACAO": 1.61,
+            "SAMBIL VALENCIA": 1.96,
+            "TOLON": 0.0,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.54
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "sku": "SHOUNCA187TXL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.73,
+          "cob_mgta": 0.57,
+          "sev": "crit",
+          "produce": 17,
+          "produce_unconst": 17,
+          "v_base": 4.38,
+          "v_hs": 5.48,
+          "v_mgta": 1.51,
+          "v_total": 6.99,
+          "need": 17.0,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 0,
+            "VELA": 3,
+            "GRAND PLAZ": 0,
+            "MGTA": 5
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.07,
+            "GRIETA": 1.07,
+            "SAMBIL CHACAO": 1.43,
+            "SAMBIL VALENCIA": 1.07,
+            "TOLON": 0.0,
+            "VELA": 0.83,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "2XL",
+          "sku": "SHOUNCA187T2XL",
+          "stk": 7,
+          "deficit": 0,
+          "cob": 1.26,
+          "cob_mgta": 1.01,
+          "sev": "alta",
+          "produce": 14,
+          "produce_unconst": 14,
+          "v_base": 4.44,
+          "v_hs": 5.55,
+          "v_mgta": 1.35,
+          "v_total": 6.9,
+          "need": 13.7,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 1,
+            "GRAND PLAZ": 0,
+            "MGTA": 5
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 4,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 1.61,
+            "SAMBIL CHACAO": 0.71,
+            "SAMBIL VALENCIA": 1.07,
+            "TOLON": 0.31,
+            "VELA": 1.67,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "S",
+          "sku": "SHOUNCA186TS",
+          "stk": 25,
+          "deficit": 0,
+          "cob": 10.43,
+          "cob_mgta": 8.52,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 1.92,
+          "v_hs": 2.4,
+          "v_mgta": 0.54,
+          "v_total": 2.94,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 6,
+            "TOLON": 3,
+            "VELA": 4,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 0.36,
+            "SAMBIL CHACAO": 0.36,
+            "SAMBIL VALENCIA": 0.36,
+            "TOLON": 0.31,
+            "VELA": 0.83,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "M",
+          "sku": "SHOUNCA186TM",
+          "stk": 18,
+          "deficit": 0,
+          "cob": 3.99,
+          "cob_mgta": 3.25,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.61,
+          "v_hs": 4.51,
+          "v_mgta": 1.02,
+          "v_total": 5.53,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 10,
+            "GRIETA": 5,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 1,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.54,
+            "GRIETA": 0.18,
+            "SAMBIL CHACAO": 0.89,
+            "SAMBIL VALENCIA": 0.71,
+            "TOLON": 0.94,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "sku": "SHOUNCA186TL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.47,
+          "cob_mgta": 0.38,
+          "sev": "crit",
+          "produce": 28,
+          "produce_unconst": 28,
+          "v_base": 6.86,
+          "v_hs": 8.57,
+          "v_mgta": 2.0,
+          "v_total": 10.57,
+          "need": 27.7,
+          "dist": {
+            "CERRO VERDE": 2,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 3,
+            "VELA": 10,
+            "GRAND PLAZ": 0,
+            "MGTA": 6
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.71,
+            "GRIETA": 0.89,
+            "SAMBIL CHACAO": 1.43,
+            "SAMBIL VALENCIA": 1.79,
+            "TOLON": 1.25,
+            "VELA": 2.5,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "sku": "SHOUNCA186TXL",
+          "stk": 6,
+          "deficit": 1,
+          "cob": 1.04,
+          "cob_mgta": 0.84,
+          "sev": "alta",
+          "produce": 16,
+          "produce_unconst": 16,
+          "v_base": 4.63,
+          "v_hs": 5.79,
+          "v_mgta": 1.35,
+          "v_total": 7.14,
+          "need": 16.4,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 1,
+            "VELA": 7,
+            "GRAND PLAZ": 0,
+            "MGTA": 4
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.71,
+            "GRIETA": 0.54,
+            "SAMBIL CHACAO": 0.89,
+            "SAMBIL VALENCIA": 1.25,
+            "TOLON": 0.31,
+            "VELA": 2.08,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "2XL",
+          "sku": "SHOUNCA186T2XL",
+          "stk": 8,
+          "deficit": 0,
+          "cob": 1.94,
+          "cob_mgta": 1.52,
+          "sev": "alta",
+          "produce": 8,
+          "produce_unconst": 8,
+          "v_base": 3.3,
+          "v_hs": 4.12,
+          "v_mgta": 1.13,
+          "v_total": 5.25,
+          "need": 7.8,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 0,
+            "VELA": 1,
+            "GRAND PLAZ": 0,
+            "MGTA": 3
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.07,
+            "GRIETA": 0.0,
+            "SAMBIL CHACAO": 1.25,
+            "SAMBIL VALENCIA": 1.07,
+            "TOLON": 0.31,
+            "VELA": 0.42,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "S",
+          "sku": "SHOUNCA170TS",
+          "stk": 22,
+          "deficit": 0,
+          "cob": 5.84,
+          "cob_mgta": 4.59,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.01,
+          "v_hs": 3.76,
+          "v_mgta": 1.02,
+          "v_total": 4.79,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 1,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 3,
+            "VELA": 5,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.36,
+            "GRIETA": 0.71,
+            "SAMBIL CHACAO": 1.07,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.31,
+            "VELA": 0.42,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "M",
+          "sku": "SHOUNCA170TM",
+          "stk": 12,
+          "deficit": 0,
+          "cob": 1.6,
+          "cob_mgta": 1.27,
+          "sev": "alta",
+          "produce": 16,
+          "produce_unconst": 16,
+          "v_base": 6.01,
+          "v_hs": 7.51,
+          "v_mgta": 1.94,
+          "v_total": 9.46,
+          "need": 16.4,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 0,
+            "VELA": 5,
+            "GRAND PLAZ": 0,
+            "MGTA": 5
+          },
+          "store_stk": {
+            "CERRO VERDE": 5,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.61,
+            "GRIETA": 0.89,
+            "SAMBIL CHACAO": 1.25,
+            "SAMBIL VALENCIA": 1.43,
+            "TOLON": 0.31,
+            "VELA": 1.67,
+            "GRAND PLAZ": 0.36
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "sku": "SHOUNCA170TL",
+          "stk": 2,
+          "deficit": 0,
+          "cob": 0.2,
+          "cob_mgta": 0.16,
+          "sev": "crit",
+          "produce": 36,
+          "produce_unconst": 36,
+          "v_base": 8.04,
+          "v_hs": 10.04,
+          "v_mgta": 2.7,
+          "v_total": 12.74,
+          "need": 36.2,
+          "dist": {
+            "CERRO VERDE": 3,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 6,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 2,
+            "VELA": 5,
+            "GRAND PLAZ": 0,
+            "MGTA": 10
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.61,
+            "GRIETA": 2.32,
+            "SAMBIL CHACAO": 2.14,
+            "SAMBIL VALENCIA": 1.61,
+            "TOLON": 0.94,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "sku": "SHOUNCA170TXL",
+          "stk": 4,
+          "deficit": 0,
+          "cob": 0.83,
+          "cob_mgta": 0.65,
+          "sev": "crit",
+          "produce": 15,
+          "produce_unconst": 15,
+          "v_base": 3.87,
+          "v_hs": 4.84,
+          "v_mgta": 1.35,
+          "v_total": 6.18,
+          "need": 14.6,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 1,
+            "VELA": 2,
+            "GRAND PLAZ": 0,
+            "MGTA": 4
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.71,
+            "GRIETA": 1.07,
+            "SAMBIL CHACAO": 0.89,
+            "SAMBIL VALENCIA": 1.43,
+            "TOLON": 0.31,
+            "VELA": 0.42,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Cereza",
+          "talla": "2XL",
+          "sku": "SHOUNCA170T2XL",
+          "stk": 13,
+          "deficit": 0,
+          "cob": 4.2,
+          "cob_mgta": 3.28,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 2.48,
+          "v_hs": 3.1,
+          "v_mgta": 0.86,
+          "v_total": 3.96,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 3,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 2,
+            "VELA": 1,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.36,
+            "GRIETA": 0.54,
+            "SAMBIL CHACAO": 0.71,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.0,
+            "VELA": 0.42,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "S",
+          "sku": "SHOUNCA38TS",
+          "stk": 27,
+          "deficit": 0,
+          "cob": 7.69,
+          "cob_mgta": 6.1,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 2.81,
+          "v_hs": 3.51,
+          "v_mgta": 0.92,
+          "v_total": 4.43,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 7,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 4,
+            "VELA": 3,
+            "GRAND PLAZ": 4
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.36,
+            "GRIETA": 0.54,
+            "SAMBIL CHACAO": 0.36,
+            "SAMBIL VALENCIA": 1.25,
+            "TOLON": 0.0,
+            "VELA": 0.83,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "M",
+          "sku": "SHOUNCA38TM",
+          "stk": 13,
+          "deficit": 0,
+          "cob": 1.63,
+          "cob_mgta": 1.31,
+          "sev": "alta",
+          "produce": 17,
+          "produce_unconst": 17,
+          "v_base": 6.39,
+          "v_hs": 7.99,
+          "v_mgta": 1.94,
+          "v_total": 9.93,
+          "need": 16.8,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 2,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 0,
+            "VELA": 7,
+            "GRAND PLAZ": 0,
+            "MGTA": 5
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 6,
+            "VELA": 0,
+            "GRAND PLAZ": 2
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.07,
+            "GRIETA": 1.79,
+            "SAMBIL CHACAO": 1.07,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.31,
+            "VELA": 2.5,
+            "GRAND PLAZ": 0.36
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "sku": "SHOUNCA38TL",
+          "stk": 2,
+          "deficit": 0,
+          "cob": 0.2,
+          "cob_mgta": 0.16,
+          "sev": "crit",
+          "produce": 36,
+          "produce_unconst": 36,
+          "v_base": 8.02,
+          "v_hs": 10.03,
+          "v_mgta": 2.59,
+          "v_total": 12.62,
+          "need": 35.9,
+          "dist": {
+            "CERRO VERDE": 5,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 6,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 0,
+            "VELA": 8,
+            "GRAND PLAZ": 1,
+            "MGTA": 9
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.79,
+            "GRIETA": 1.25,
+            "SAMBIL CHACAO": 2.32,
+            "SAMBIL VALENCIA": 1.43,
+            "TOLON": 0.62,
+            "VELA": 2.08,
+            "GRAND PLAZ": 0.36
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "sku": "SHOUNCA38TXL",
+          "stk": 9,
+          "deficit": 0,
+          "cob": 2.1,
+          "cob_mgta": 1.68,
+          "sev": "media",
+          "produce": 7,
+          "produce_unconst": 7,
+          "v_base": 3.43,
+          "v_hs": 4.29,
+          "v_mgta": 1.08,
+          "v_total": 5.36,
+          "need": 7.1,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 0,
+            "VELA": 2,
+            "GRAND PLAZ": 0,
+            "MGTA": 2
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 5,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 3,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.25,
+            "GRIETA": 1.25,
+            "SAMBIL CHACAO": 0.0,
+            "SAMBIL VALENCIA": 0.54,
+            "TOLON": 0.0,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Marron",
+          "talla": "2XL",
+          "sku": "SHOUNCA38T2XL",
+          "stk": 6,
+          "deficit": 0,
+          "cob": 1.27,
+          "cob_mgta": 1.02,
+          "sev": "alta",
+          "produce": 11,
+          "produce_unconst": 12,
+          "v_base": 3.79,
+          "v_hs": 4.73,
+          "v_mgta": 1.13,
+          "v_total": 5.87,
+          "need": 11.6,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 1,
+            "VELA": 3,
+            "GRAND PLAZ": 0,
+            "MGTA": 3
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.36,
+            "GRIETA": 0.71,
+            "SAMBIL CHACAO": 1.43,
+            "SAMBIL VALENCIA": 0.36,
+            "TOLON": 0.62,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "S",
+          "sku": "SHOUNCA69TS",
+          "stk": 24,
+          "deficit": 0,
+          "cob": 6.95,
+          "cob_mgta": 5.43,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 2.76,
+          "v_hs": 3.45,
+          "v_mgta": 0.97,
+          "v_total": 4.42,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 5,
+            "GRIETA": 6,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 2,
+            "TOLON": 4,
+            "VELA": 3,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.89,
+            "GRIETA": 0.54,
+            "SAMBIL CHACAO": 0.71,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.0,
+            "VELA": 0.42,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "sku": "SHOUNCA69TM",
+          "stk": 7,
+          "deficit": 0,
+          "cob": 0.73,
+          "cob_mgta": 0.58,
+          "sev": "crit",
+          "produce": 29,
+          "produce_unconst": 29,
+          "v_base": 7.65,
+          "v_hs": 9.57,
+          "v_mgta": 2.48,
+          "v_total": 12.05,
+          "need": 29.1,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 5,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 1,
+            "VELA": 6,
+            "GRAND PLAZ": 0,
+            "MGTA": 8
+          },
+          "store_stk": {
+            "CERRO VERDE": 4,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 1.61,
+            "GRIETA": 2.14,
+            "SAMBIL CHACAO": 1.25,
+            "SAMBIL VALENCIA": 1.96,
+            "TOLON": 0.94,
+            "VELA": 1.67,
+            "GRAND PLAZ": 0.18
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "L",
+          "sku": "SHOUNCA69TL",
+          "stk": 6,
+          "deficit": 0,
+          "cob": 0.71,
+          "cob_mgta": 0.55,
+          "sev": "crit",
+          "produce": 27,
+          "produce_unconst": 27,
+          "v_base": 6.77,
+          "v_hs": 8.47,
+          "v_mgta": 2.37,
+          "v_total": 10.84,
+          "need": 26.5,
+          "dist": {
+            "CERRO VERDE": 4,
+            "GRIETA": 3,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 5,
+            "TOLON": 0,
+            "VELA": 4,
+            "GRAND PLAZ": 0,
+            "MGTA": 8
+          },
+          "store_stk": {
+            "CERRO VERDE": 2,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 1,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 1
+          },
+          "store_vhs": {
+            "CERRO VERDE": 2.14,
+            "GRIETA": 1.25,
+            "SAMBIL CHACAO": 1.25,
+            "SAMBIL VALENCIA": 2.32,
+            "TOLON": 0.31,
+            "VELA": 0.83,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "XL",
+          "sku": "SHOUNCA69TXL",
+          "stk": 3,
+          "deficit": 0,
+          "cob": 0.61,
+          "cob_mgta": 0.48,
+          "sev": "crit",
+          "produce": 16,
+          "produce_unconst": 16,
+          "v_base": 3.93,
+          "v_hs": 4.91,
+          "v_mgta": 1.4,
+          "v_total": 6.31,
+          "need": 15.9,
+          "dist": {
+            "CERRO VERDE": 1,
+            "GRIETA": 1,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 4,
+            "TOLON": 2,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 5
+          },
+          "store_stk": {
+            "CERRO VERDE": 1,
+            "GRIETA": 2,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.54,
+            "GRIETA": 1.07,
+            "SAMBIL CHACAO": 1.07,
+            "SAMBIL VALENCIA": 1.61,
+            "TOLON": 0.62,
+            "VELA": 0.0,
+            "GRAND PLAZ": 0.0
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "2XL",
+          "sku": "SHOUNCA69T2XL",
+          "stk": 14,
+          "deficit": 0,
+          "cob": 3.73,
+          "cob_mgta": 3.0,
+          "sev": "ok",
+          "produce": 0,
+          "produce_unconst": 0,
+          "v_base": 3.0,
+          "v_hs": 3.75,
+          "v_mgta": 0.92,
+          "v_total": 4.67,
+          "need": 0.0,
+          "dist": {
+            "CERRO VERDE": 0,
+            "GRIETA": 0,
+            "SAMBIL CHACAO": 0,
+            "SAMBIL VALENCIA": 0,
+            "TOLON": 0,
+            "VELA": 0,
+            "GRAND PLAZ": 0,
+            "MGTA": 0
+          },
+          "store_stk": {
+            "CERRO VERDE": 0,
+            "GRIETA": 4,
+            "SAMBIL CHACAO": 3,
+            "SAMBIL VALENCIA": 3,
+            "TOLON": 3,
+            "VELA": 1,
+            "GRAND PLAZ": 0
+          },
+          "store_vhs": {
+            "CERRO VERDE": 0.0,
+            "GRIETA": 0.71,
+            "SAMBIL CHACAO": 0.89,
+            "SAMBIL VALENCIA": 0.89,
+            "TOLON": 0.0,
+            "VELA": 1.25,
+            "GRAND PLAZ": 0.0
+          }
+        }
+      ],
+      "by_color": [
+        {
+          "color": "Azul Pizarra",
+          "stk": 45,
+          "v_hs": 32.782738095238095,
+          "v_mgta": 8.847152847152847,
+          "need": 87,
+          "produce": 87,
+          "produce_unconst": 87,
+          "cob": 1.37,
+          "tela_m": 163.3,
+          "tela_pcs": 217,
+          "tela_uso": 65.2,
+          "tela_sobra": 98.1,
+          "tallas": {
+            "S": 0,
+            "M": 22,
+            "L": 34,
+            "XL": 17,
+            "2XL": 14
+          }
+        },
+        {
+          "color": "Azul Verdoso",
+          "stk": 61,
+          "v_hs": 25.38690476190476,
+          "v_mgta": 6.041958041958042,
+          "need": 52,
+          "produce": 52,
+          "produce_unconst": 52,
+          "cob": 2.4,
+          "tela_m": 163.94,
+          "tela_pcs": 218,
+          "tela_uso": 39.0,
+          "tela_sobra": 124.9,
+          "tallas": {
+            "S": 0,
+            "M": 0,
+            "L": 28,
+            "XL": 16,
+            "2XL": 8
+          }
+        },
+        {
+          "color": "Cereza",
+          "stk": 53,
+          "v_hs": 29.25595238095238,
+          "v_mgta": 7.876123876123875,
+          "need": 67,
+          "produce": 67,
+          "produce_unconst": 67,
+          "cob": 1.81,
+          "tela_m": 65.0,
+          "tela_pcs": 86,
+          "tela_uso": 50.2,
+          "tela_sobra": 14.8,
+          "tallas": {
+            "S": 0,
+            "M": 16,
+            "L": 36,
+            "XL": 15,
+            "2XL": 0
+          }
+        },
+        {
+          "color": "Marron",
+          "stk": 57,
+          "v_hs": 30.550595238095237,
+          "v_mgta": 7.66033966033966,
+          "need": 71,
+          "produce": 71,
+          "produce_unconst": 72,
+          "cob": 1.87,
+          "tela_m": 200.83,
+          "tela_pcs": 267,
+          "tela_uso": 53.2,
+          "tela_sobra": 147.6,
+          "tallas": {
+            "S": 0,
+            "M": 17,
+            "L": 36,
+            "XL": 7,
+            "2XL": 11
+          }
+        },
+        {
+          "color": "Verde Pino",
+          "stk": 54,
+          "v_hs": 30.148809523809526,
+          "v_mgta": 8.145854145854145,
+          "need": 72,
+          "produce": 72,
+          "produce_unconst": 72,
+          "cob": 1.79,
+          "tela_m": 76.33,
+          "tela_pcs": 101,
+          "tela_uso": 54.0,
+          "tela_sobra": 22.3,
+          "tallas": {
+            "S": 0,
+            "M": 29,
+            "L": 27,
+            "XL": 16,
+            "2XL": 0
+          }
+        }
+      ],
+      "by_talla": [
+        {
+          "talla": "S",
+          "ventas": 88,
+          "ventas_pct": 12.3,
+          "stk": 120,
+          "stk_pct": 44.4,
+          "produce": 0,
+          "produce_pct": 0.0,
+          "cob": 6.84
+        },
+        {
+          "talla": "M",
+          "ventas": 177,
+          "ventas_pct": 24.8,
+          "stk": 59,
+          "stk_pct": 21.9,
+          "produce": 84,
+          "produce_pct": 24.1,
+          "cob": 1.56
+        },
+        {
+          "talla": "L",
+          "ventas": 226,
+          "ventas_pct": 31.6,
+          "stk": 17,
+          "stk_pct": 6.3,
+          "produce": 161,
+          "produce_pct": 46.1,
+          "cob": 0.37
+        },
+        {
+          "talla": "XL",
+          "ventas": 124,
+          "ventas_pct": 17.3,
+          "stk": 26,
+          "stk_pct": 9.6,
+          "produce": 71,
+          "produce_pct": 20.3,
+          "cob": 1.03
+        },
+        {
+          "talla": "2XL",
+          "ventas": 100,
+          "ventas_pct": 14.0,
+          "stk": 48,
+          "stk_pct": 17.8,
+          "produce": 33,
+          "produce_pct": 9.5,
+          "cob": 2.26
+        }
+      ],
+      "tela_alert": [],
+      "grieta_base": 20.57,
+      "mgta_month": 38.57
+    }
+  },
+  "monthly": {
+    "order": [
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09"
+    ],
+    "labels": [
+      "Oct 25",
+      "Nov 25",
+      "Dic 25",
+      "Ene 26",
+      "Feb 26",
+      "Mar 26",
+      "Abr 26",
+      "May 26",
+      "Jun 26",
+      "Jul 26",
+      "Ago 26",
+      "Sep 26*"
+    ],
+    "all": [
+      55,
+      32,
+      41,
+      18,
+      100,
+      102,
+      88,
+      81,
+      99,
+      83,
+      198,
+      68
+    ],
+    "actual": [
+      0,
+      0,
+      0,
+      14,
+      92,
+      93,
+      87,
+      77,
+      95,
+      79,
+      194,
+      63
+    ],
+    "store": {
+      "CERRO VERDE": [
+        0,
+        0,
+        0,
+        5,
+        19,
+        19,
+        22,
+        15,
+        9,
+        13,
+        29,
+        10
+      ],
+      "GRIETA": [
+        0,
+        0,
+        0,
+        6,
+        22,
+        24,
+        15,
+        12,
+        29,
+        16,
+        27,
+        8
+      ],
+      "SAMBIL CHACAO": [
+        0,
+        0,
+        0,
+        1,
+        22,
+        29,
+        24,
+        22,
+        15,
+        14,
+        31,
+        9
+      ],
+      "SAMBIL VALENCIA": [
+        0,
+        0,
+        0,
+        2,
+        23,
+        18,
+        24,
+        18,
+        19,
+        16,
+        52,
+        13
+      ],
+      "TOLON": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        9,
+        10,
+        3,
+        8,
+        4
+      ],
+      "VELA": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        10,
+        14,
+        45,
+        16
+      ],
+      "GRAND PLAZ": [
+        0,
+        0,
+        0,
+        0,
+        4,
+        3,
+        1,
+        1,
+        2,
+        3,
+        2,
+        3
+      ]
+    },
+    "color": {
+      "Azul Pizarra": [
+        0,
+        0,
+        0,
+        6,
+        27,
+        22,
+        21,
+        16,
+        24,
+        19,
+        36,
+        3
+      ],
+      "Azul Verdoso": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        12,
+        16,
+        16,
+        14,
+        11,
+        43,
+        17
+      ],
+      "Cereza": [
+        0,
+        0,
+        0,
+        0,
+        25,
+        13,
+        19,
+        18,
+        16,
+        14,
+        42,
+        15
+      ],
+      "Marron": [
+        0,
+        0,
+        0,
+        5,
+        15,
+        21,
+        16,
+        13,
+        20,
+        21,
+        36,
+        17
+      ],
+      "Verde Pino": [
+        0,
+        0,
+        0,
+        3,
+        25,
+        25,
+        15,
+        14,
+        21,
+        14,
+        37,
+        11
+      ]
+    }
+  },
+  "stores": [
+    {
+      "tienda": "CERRO VERDE",
+      "stk": 60,
+      "deficit": 0,
+      "vel_hs": 23.4,
+      "cob": 2.56,
+      "aug": 29,
+      "recent3": 52,
+      "size_stk": {
+        "S": 18,
+        "M": 21,
+        "L": 3,
+        "XL": 11,
+        "2XL": 7
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 4,
+      "produce_in": 37
+    },
+    {
+      "tienda": "GRIETA",
+      "stk": 52,
+      "deficit": 0,
+      "vel_hs": 26.7,
+      "cob": 1.94,
+      "aug": 27,
+      "recent3": 51,
+      "size_stk": {
+        "S": 30,
+        "M": 11,
+        "L": 0,
+        "XL": 3,
+        "2XL": 8
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 10,
+      "produce_in": 59
+    },
+    {
+      "tienda": "SAMBIL CHACAO",
+      "stk": 22,
+      "deficit": 0,
+      "vel_hs": 29.2,
+      "cob": 0.75,
+      "aug": 31,
+      "recent3": 54,
+      "size_stk": {
+        "S": 9,
+        "M": 0,
+        "L": 0,
+        "XL": 6,
+        "2XL": 7
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 13,
+      "produce_in": 62
+    },
+    {
+      "tienda": "SAMBIL VALENCIA",
+      "stk": 32,
+      "deficit": 0,
+      "vel_hs": 31.4,
+      "cob": 1.02,
+      "aug": 51,
+      "recent3": 80,
+      "size_stk": {
+        "S": 17,
+        "M": 0,
+        "L": 4,
+        "XL": 0,
+        "2XL": 11
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 13,
+      "produce_in": 65
+    },
+    {
+      "tienda": "TOLON",
+      "stk": 55,
+      "deficit": 0,
+      "vel_hs": 9.8,
+      "cob": 5.64,
+      "aug": 8,
+      "recent3": 15,
+      "size_stk": {
+        "S": 17,
+        "M": 18,
+        "L": 8,
+        "XL": 3,
+        "2XL": 9
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 5,
+      "produce_in": 15
+    },
+    {
+      "tienda": "VELA",
+      "stk": 30,
+      "deficit": 3,
+      "vel_hs": 38.9,
+      "cob": 0.77,
+      "aug": 45,
+      "recent3": 75,
+      "size_stk": {
+        "S": 21,
+        "M": 3,
+        "L": 0,
+        "XL": 0,
+        "2XL": 6
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 2,
+        "XL": 1,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 2
+        },
+        {
+          "color": "Azul Pizarra",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Azul Verdoso",
+          "talla": "XL",
+          "stk": 0,
+          "def": 1
+        },
+        {
+          "color": "Cereza",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "M",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 13,
+      "produce_in": 149
+    },
+    {
+      "tienda": "GRAND PLAZ",
+      "stk": 19,
+      "deficit": 0,
+      "vel_hs": 3.0,
+      "cob": 6.39,
+      "aug": 2,
+      "recent3": 8,
+      "size_stk": {
+        "S": 8,
+        "M": 6,
+        "L": 2,
+        "XL": 3,
+        "2XL": 0
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [
+        {
+          "color": "Azul Pizarra",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Cereza",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "L",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Marron",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        },
+        {
+          "color": "Verde Pino",
+          "talla": "XL",
+          "stk": 0,
+          "def": 0
+        }
+      ],
+      "n_holes": 5,
+      "produce_in": 4
+    },
+    {
+      "tienda": "MGTA",
+      "stk": 0,
+      "deficit": 0,
+      "vel_hs": 53.5,
+      "cob": 0,
+      "aug": 0,
+      "recent3": 0,
+      "size_stk": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "size_def": {
+        "S": 0,
+        "M": 0,
+        "L": 0,
+        "XL": 0,
+        "2XL": 0
+      },
+      "holes": [],
+      "n_holes": 0,
+      "produce_in": 173,
+      "nueva": true,
+      "nota": "Tienda nueva zona de playa · 2× velocidad GRIETA · sin stock actual"
+    }
+  ],
+  "heat_sales": {
+    "Azul Pizarra": {
+      "S": 24,
+      "M": 40,
+      "L": 47,
+      "XL": 28,
+      "2XL": 25
+    },
+    "Azul Verdoso": {
+      "S": 10,
+      "M": 19,
+      "L": 37,
+      "XL": 25,
+      "2XL": 21
+    },
+    "Cereza": {
+      "S": 19,
+      "M": 36,
+      "L": 50,
+      "XL": 25,
+      "2XL": 16
+    },
+    "Marron": {
+      "S": 17,
+      "M": 36,
+      "L": 48,
+      "XL": 20,
+      "2XL": 21
+    },
+    "Verde Pino": {
+      "S": 18,
+      "M": 46,
+      "L": 44,
+      "XL": 26,
+      "2XL": 17
+    }
+  },
+  "heat_stk": {
+    "Azul Pizarra": {
+      "S": 22,
+      "M": 9,
+      "L": 3,
+      "XL": 4,
+      "2XL": 7
+    },
+    "Azul Verdoso": {
+      "S": 25,
+      "M": 18,
+      "L": 4,
+      "XL": 6,
+      "2XL": 8
+    },
+    "Cereza": {
+      "S": 22,
+      "M": 12,
+      "L": 2,
+      "XL": 4,
+      "2XL": 13
+    },
+    "Marron": {
+      "S": 27,
+      "M": 13,
+      "L": 2,
+      "XL": 9,
+      "2XL": 6
+    },
+    "Verde Pino": {
+      "S": 24,
+      "M": 7,
+      "L": 6,
+      "XL": 3,
+      "2XL": 14
+    }
+  },
+  "tela": [
+    {
+      "sku": "TUNCL135313MP",
+      "tela": "Aguamarina",
+      "color_prod": "Aguamarina",
+      "metros": 11.5,
+      "piezas": 15,
+      "kind": "remanente",
+      "code": "135313"
+    },
+    {
+      "sku": "TUNCL160421MP",
+      "tela": "Verde Oliva",
+      "color_prod": "Verde Oliva",
+      "metros": 29.13,
+      "piezas": 38,
+      "kind": "remanente",
+      "code": "160421"
+    },
+    {
+      "sku": "TUNCL193933MP",
+      "tela": "Azul Marino",
+      "color_prod": "Azul Marino",
+      "metros": 24.25,
+      "piezas": 32,
+      "kind": "remanente",
+      "code": "193933"
+    },
+    {
+      "sku": "TUNCL194316MP",
+      "tela": "Gris Azulado",
+      "color_prod": "Gris Azulado",
+      "metros": 28.67,
+      "piezas": 38,
+      "kind": "remanente",
+      "code": "194316"
+    },
+    {
+      "sku": "TUCL171022MP",
+      "tela": "Habano",
+      "color_prod": "Marron",
+      "metros": 200.83,
+      "piezas": 267,
+      "kind": "activa",
+      "code": "171022"
+    },
+    {
+      "sku": "TUCL184735MP",
+      "tela": "Azul Pizzarra",
+      "color_prod": "Azul Pizarra",
+      "metros": 163.3,
+      "piezas": 217,
+      "kind": "activa",
+      "code": "184735"
+    },
+    {
+      "sku": "TUCL194524MP",
+      "tela": "Azul Verdoso",
+      "color_prod": "Azul Verdoso",
+      "metros": 163.94,
+      "piezas": 218,
+      "kind": "activa",
+      "code": "194524"
+    },
+    {
+      "sku": "TUCL195920MP",
+      "tela": "Verde Pino",
+      "color_prod": "Verde Pino",
+      "metros": 76.33,
+      "piezas": 101,
+      "kind": "activa",
+      "code": "195920"
+    },
+    {
+      "sku": "TUCL191555MP",
+      "tela": "Rojo",
+      "color_prod": "Cereza",
+      "metros": 65.0,
+      "piezas": 86,
+      "kind": "activa",
+      "code": "191955"
+    }
+  ],
+  "vela": [
+    {
+      "color": "Azul Pizarra",
+      "talla": "S",
+      "sku": "SHOUNCA187TS",
+      "stk": 6,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 1,
+      "produce": 0
+    },
+    {
+      "color": "Azul Pizarra",
+      "talla": "M",
+      "sku": "SHOUNCA187TM",
+      "stk": 2,
+      "deficit": 0,
+      "aug": 3,
+      "recent": 3,
+      "produce": 8
+    },
+    {
+      "color": "Azul Pizarra",
+      "talla": "L",
+      "sku": "SHOUNCA187TL",
+      "stk": 0,
+      "deficit": 2,
+      "aug": 1,
+      "recent": 2,
+      "produce": 11
+    },
+    {
+      "color": "Azul Pizarra",
+      "talla": "XL",
+      "sku": "SHOUNCA187TXL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 0,
+      "produce": 6
+    },
+    {
+      "color": "Azul Pizarra",
+      "talla": "2XL",
+      "sku": "SHOUNCA187T2XL",
+      "stk": 4,
+      "deficit": 0,
+      "aug": 4,
+      "recent": 5,
+      "produce": 7
+    },
+    {
+      "color": "Azul Verdoso",
+      "talla": "S",
+      "sku": "SHOUNCA186TS",
+      "stk": 4,
+      "deficit": 0,
+      "aug": 1,
+      "recent": 2,
+      "produce": 0
+    },
+    {
+      "color": "Azul Verdoso",
+      "talla": "M",
+      "sku": "SHOUNCA186TM",
+      "stk": 1,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 5,
+      "produce": 3
+    },
+    {
+      "color": "Azul Verdoso",
+      "talla": "L",
+      "sku": "SHOUNCA186TL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 4,
+      "recent": 5,
+      "produce": 17
+    },
+    {
+      "color": "Azul Verdoso",
+      "talla": "XL",
+      "sku": "SHOUNCA186TXL",
+      "stk": 0,
+      "deficit": 1,
+      "aug": 5,
+      "recent": 5,
+      "produce": 14
+    },
+    {
+      "color": "Azul Verdoso",
+      "talla": "2XL",
+      "sku": "SHOUNCA186T2XL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 1,
+      "recent": 1,
+      "produce": 3
+    },
+    {
+      "color": "Cereza",
+      "talla": "S",
+      "sku": "SHOUNCA170TS",
+      "stk": 5,
+      "deficit": 0,
+      "aug": 1,
+      "recent": 1,
+      "produce": 0
+    },
+    {
+      "color": "Cereza",
+      "talla": "M",
+      "sku": "SHOUNCA170TM",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 6,
+      "produce": 8
+    },
+    {
+      "color": "Cereza",
+      "talla": "L",
+      "sku": "SHOUNCA170TL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 2,
+      "produce": 7
+    },
+    {
+      "color": "Cereza",
+      "talla": "XL",
+      "sku": "SHOUNCA170TXL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 1,
+      "produce": 2
+    },
+    {
+      "color": "Cereza",
+      "talla": "2XL",
+      "sku": "SHOUNCA170T2XL",
+      "stk": 1,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 1,
+      "produce": 1
+    },
+    {
+      "color": "Marron",
+      "talla": "S",
+      "sku": "SHOUNCA38TS",
+      "stk": 3,
+      "deficit": 0,
+      "aug": 1,
+      "recent": 3,
+      "produce": 0
+    },
+    {
+      "color": "Marron",
+      "talla": "M",
+      "sku": "SHOUNCA38TM",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 4,
+      "produce": 14
+    },
+    {
+      "color": "Marron",
+      "talla": "L",
+      "sku": "SHOUNCA38TL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 5,
+      "recent": 5,
+      "produce": 15
+    },
+    {
+      "color": "Marron",
+      "talla": "XL",
+      "sku": "SHOUNCA38TXL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 5,
+      "produce": 6
+    },
+    {
+      "color": "Marron",
+      "talla": "2XL",
+      "sku": "SHOUNCA38T2XL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 2,
+      "recent": 5,
+      "produce": 8
+    },
+    {
+      "color": "Verde Pino",
+      "talla": "S",
+      "sku": "SHOUNCA69TS",
+      "stk": 3,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 3,
+      "produce": 0
+    },
+    {
+      "color": "Verde Pino",
+      "talla": "M",
+      "sku": "SHOUNCA69TM",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 3,
+      "recent": 3,
+      "produce": 10
+    },
+    {
+      "color": "Verde Pino",
+      "talla": "L",
+      "sku": "SHOUNCA69TL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 1,
+      "recent": 2,
+      "produce": 5
+    },
+    {
+      "color": "Verde Pino",
+      "talla": "XL",
+      "sku": "SHOUNCA69TXL",
+      "stk": 0,
+      "deficit": 0,
+      "aug": 0,
+      "recent": 0,
+      "produce": 0
+    },
+    {
+      "color": "Verde Pino",
+      "talla": "2XL",
+      "sku": "SHOUNCA69T2XL",
+      "stk": 1,
+      "deficit": 0,
+      "aug": 3,
+      "recent": 5,
+      "produce": 4
+    }
+  ],
+  "alerts": [
+    {
+      "lvl": "crit",
+      "title": "Talla L en quiebre nacional",
+      "txt": "L es el 30% de la venta y solo el 6% del stock. Cobertura ~0,4 meses. Es la alerta #1 de corte."
+    },
+    {
+      "lvl": "crit",
+      "title": "La Vela: quiebres reales y venta perdida",
+      "txt": "Inventario negativo en L Azul Pizarra (−2) y XL Azul Verdoso (−1). Agosto vendió 45 und con 27 en piso, casi todas S. No hay M/L/XL en 4 de 5 colores."
+    },
+    {
+      "lvl": "alta",
+      "title": "Temporada alta de playa",
+      "txt": "Agosto 2026 = 194 und de colección actual (el doble de un mes normal). Septiembre ya lleva 63 und en 11 días (~172/mes). Dic–mar requiere cobertura, no reposición tardía."
+    },
+    {
+      "lvl": "alta",
+      "title": "MGTA (Margarita) sin stock · zona de playa",
+      "txt": "No hay inventario ni histórico. Se abre con 2× la velocidad de GRIETA en este modelo (más que otras líneas) porque MGTA es destino de playa."
+    },
+    {
+      "lvl": "alta",
+      "title": "Sambil Chacao y Valencia desbalanceados",
+      "txt": "Chacao: 0 L y 0 M. Valencia: 0 M y 0 XL. Son las dos tiendas que más venden el modelo."
+    },
+    {
+      "lvl": "media",
+      "title": "Sobre-stock de S",
+      "txt": "S es 13% de la venta y 45% del inventario (120 und). No cortar S salvo cupo mínimo para MGTA."
+    },
+    {
+      "lvl": "media",
+      "title": "Tela limita Cereza y Verde Pino",
+      "txt": "Consumo 0,75 m/pieza. Rojo→Cereza 65 m (86 pzas) y Verde Pino 76,3 m (101 pzas) no cubren la necesidad comercial. Habano/Marrón, Pizarra y Verdoso sí alcanzan."
+    }
+  ],
+  "sep_und": 63,
+  "sep_pace": 172.0,
+  "assumptions": [
+    "Colección activa: Azul Pizarra, Azul Verdoso, Cereza, Marrón, Verde Pino. Colores anteriores no se reproducen.",
+    "Rotación base: promedio mensual Feb–Ago 2026 (meses completos). Sep 2026 es parcial (corte 11-sep) y no entra al promedio.",
+    "VELA y Tolón se promedian solo por meses operativos (VELA jun–ago, Tolón may–ago) para no diluir tiendas nuevas.",
+    "Escenario recomendado: ×1,30 temporada alta, 4 meses de cobertura, VELA ×1,30 por quiebres reportados, MGTA = 2× GRIETA.",
+    "Inventario CHACAO → Sambil Chacao y SAMBIL → Sambil Valencia. Negativos se tratan como 0 físico + déficit a reponer.",
+    "Tela: Habano → Marrón, Rojo (191955) → Cereza. Consumo 0,75 m/pieza. El lote se recorta al cupo de tela y conserva proporción de talla de la necesidad.",
+    "Proporción de talla = mix real de ventas de la colección actual (no el mix del inventario). MGTA usa ese mix nacional."
+  ],
+  "colors_hex": {
+    "Azul Pizarra": "#64748b",
+    "Azul Verdoso": "#0f766e",
+    "Cereza": "#be123c",
+    "Marron": "#7c4a2d",
+    "Verde Pino": "#14532d",
+    "Aguamarina": "#2dd4bf",
+    "Verde Oliva": "#4d7c0f",
+    "Azul Marino": "#1e3a8a",
+    "Gris Azulado": "#475569"
+  }
+}
