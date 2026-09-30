@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Alerta producción · Short Playa CAB</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#f97316;--a2:#fb7185;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--bl:#38bdf8;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+body.light{--bg:#f5f6fa;--surf:#ffffff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;--tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5;--ac:#ea580c;--a2:#e11d48;--gr:#2e9e5e;--rd:#dc3545;--yw:#e6a800;--bl:#0284c7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#1a0e08 0%,#2a1810 55%,#0e0f14 100%);border-bottom:1px solid var(--brd);padding:18px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+body.light .hdr{background:linear-gradient(135deg,#fff7ed 0%,#f5f6fa 55%,#ffedd5 100%)}
+.hdr-l h1{font-family:var(--fh);font-size:1.5rem;font-weight:800;letter-spacing:-.5px}
+.hdr-l h1 em{color:var(--ac);font-style:normal}
+.hdr-l p{color:var(--mu);font-size:.78rem;margin-top:3px}
+.kpi-bar{display:flex;gap:8px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:8px 12px;text-align:center;min-width:72px}
+.kpib .kv{font-family:var(--fh);font-size:1.22rem;font-weight:800;color:var(--ac);line-height:1}
+.kpib .kl{font-size:.6rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.kpib.warn .kv{color:var(--rd)}
+.kpib.ok .kv{color:var(--gr)}
+.theme-btn,.vbtn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb)}
+.theme-btn:hover,.vbtn:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
+.abar{padding:10px 40px;display:flex;gap:8px;flex-wrap:wrap;background:var(--s2);border-bottom:1px solid var(--brd)}
+.al{border-radius:10px;padding:8px 12px;font-size:.74rem;line-height:1.35;flex:1;min-width:220px;border:1px solid transparent}
+.al b{display:block;font-size:.72rem;margin-bottom:2px}
+.al.red{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#fca5a5}
+.al.orange{background:rgba(249,115,22,.12);border-color:rgba(249,115,22,.35);color:#fdba74}
+.al.yellow{background:rgba(234,179,8,.1);border-color:rgba(234,179,8,.3);color:#fde68a}
+body.light .al.red{color:#9f1239}body.light .al.orange{color:#9a3412}body.light .al.yellow{color:#854d0e}
+.mbar{background:var(--s2);padding:10px 40px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--brd)}
+.mbar-lbl{font-size:.66rem;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.mbtn{background:var(--s3);border:1px solid var(--brd);color:var(--mu);border-radius:20px;padding:6px 14px;font-family:var(--fb);font-size:.76rem;cursor:pointer}
+.mbtn.active{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:700}
+.tabs{display:flex;gap:2px;padding:10px 40px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:8px 15px;font-family:var(--fh);font-size:.76rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;border-radius:6px 6px 0 0}
+.tab.active{color:var(--tx);border-bottom-color:var(--ac);background:var(--s2)}
+.content{padding:22px 40px;max-width:1600px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+.g1{margin-bottom:14px}
+@media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:780px){.g2,.g3{grid-template-columns:1fr}.content,.hdr,.abar,.mbar,.tabs{padding-left:16px;padding-right:16px}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px}
+.card h3{font-family:var(--fh);font-size:.88rem;font-weight:700;margin-bottom:2px}
+.sub{font-size:.7rem;color:var(--mu);margin-bottom:12px}
+.cw{position:relative;height:220px}.cw.t{height:280px}
+.tkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.tkpi{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:12px;text-align:center}
+.tkpi .tv{font-family:var(--fh);font-size:1.2rem;font-weight:800;color:var(--ac)}
+.tkpi .tl{font-size:.64rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.tkpi .ts{font-size:.66rem;color:var(--mu2);margin-top:2px}
+.ct{width:100%;border-collapse:collapse;font-size:.78rem}
+.ct th{color:var(--mu);padding:7px 8px;text-align:left;border-bottom:1px solid var(--brd);font-size:.63rem;text-transform:uppercase;position:sticky;top:0;background:var(--surf);z-index:1}
+.ct td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}
+.ct tr:hover td{background:rgba(249,115,22,.05)}
+.ct tfoot td{font-weight:800;font-family:var(--fh);background:var(--s2);border-top:2px solid var(--brd)}
+.num{text-align:right;font-family:var(--fh);font-weight:700;font-variant-numeric:tabular-nums}
+.chip{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px;border:1.5px solid rgba(255,255,255,.12);vertical-align:middle}
+.badge{display:inline-block;font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:99px}
+.b-p1{background:rgba(239,68,68,.18);color:#f87171}
+.b-p2{background:rgba(249,115,22,.18);color:#fb923c}
+.b-p3{background:rgba(234,179,8,.18);color:#facc15}
+.b-ok{background:rgba(16,185,129,.15);color:#34d399}
+.b-red{background:rgba(239,68,68,.18);color:#f87171}
+.b-playa{background:rgba(56,189,248,.16);color:#7dd3fc}
+.cscroll{max-height:440px;overflow:auto}
+.cscroll::-webkit-scrollbar{width:6px}.cscroll::-webkit-scrollbar-thumb{background:var(--ac);border-radius:2px}
+.hmt{border-collapse:separate;border-spacing:3px}
+.hmt th{font-size:.66rem;color:var(--mu);padding:3px 6px;text-align:center}
+.hmt td{padding:7px 6px;text-align:center;border-radius:6px;font-size:.76rem;font-weight:700;min-width:46px}
+.hmt .rl{text-align:left;white-space:nowrap;padding-right:10px;background:transparent!important;font-weight:500;color:var(--tx)}
+.layer{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.ly{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:14px}
+.ly h4{font-family:var(--fh);font-size:.8rem;margin-bottom:4px}
+.ly .n{font-family:var(--fh);font-size:1.6rem;font-weight:800;color:var(--ac)}
+.ly p{font-size:.7rem;color:var(--mu);line-height:1.4}
+.footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
+.ebar{padding:8px 40px;display:flex;gap:8px;background:var(--surf);border-bottom:1px solid var(--brd)}
+.ebar button{background:var(--s2);color:var(--mu);border:1px solid var(--brd);border-radius:7px;padding:5px 12px;font-family:var(--fb);font-size:.73rem;cursor:pointer}
+.ebar button:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
+.method{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;font-size:.72rem;color:var(--mu);line-height:1.45}
+.method b{color:var(--tx);display:block;margin-bottom:3px}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-l">
+    <h1>Alerta producción · <em>Short Playa CAB</em></h1>
+    <p>Temporada alta playa · VELA con quiebres · kit MGTA · consumo 0,75 m/pza · corte 27 ago 2026</p>
+  </div>
+  <div class="hdr-r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div class="kpi-bar" id="kpiBar"></div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☀️ Light</button>
+  </div>
+</div>
+<div class="abar" id="alertBar"></div>
+<div class="mbar">
+  <span class="mbar-lbl">Línea</span>
+  <button class="mbtn active" data-m="" onclick="setModelo('')">Todas</button>
+  <button class="mbtn" data-m="Short Playa" onclick="setModelo('Short Playa')">🩳 Liso</button>
+  <button class="mbtn" data-m="Short Playa Estampado" onclick="setModelo('Short Playa Estampado')">🎨 Estampado</button>
+</div>
+<div class="ebar">
+  <button onclick="exportCSV()">📥 CSV orden de producción</button>
+  <button onclick="window.print()">📄 Imprimir</button>
+  <span style="font-size:.66rem;color:var(--mu)">Excel: SHORT_PLAYA_CAB_PRODUCCION.xlsx</span>
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="st('alerta')">🚨 Alerta</button>
+  <button class="tab" onclick="st('op')">🧵 Orden de producción</button>
+  <button class="tab" onclick="st('tela')">🧶 Tela</button>
+  <button class="tab" onclick="st('vela')">⭐ VELA</button>
+  <button class="tab" onclick="st('dist')">🏖 MGTA / tiendas</button>
+  <button class="tab" onclick="st('tallas')">📐 Tallas</button>
+  <button class="tab" onclick="st('ventas')">📈 Ventas</button>
+</div>
+<div class="content">
+<div class="sec active" id="sec-alerta">
+  <div class="layer" id="layers"></div>
+  <div class="g1 card">
+    <h3>Cómo se armó el número</h3>
+    <div class="sub">Misma lógica de cobertura de otros tableros, con peso extra de playa</div>
+    <div class="method">
+      <div><b>Rotación base</b>Promedio mensual CAB de mar–ago 2026 (6 meses cerrados). Agosto ya vendió 277 und — el mes más alto de la serie.</div>
+      <div><b>Temporada alta ×1.40</b>Se viene la temporada de playa. La cobertura y el OP usan velocidad ajustada, no la media fría de julio.</div>
+      <div><b>Cobertura 3 meses</b>Se produce solo lo que queda por debajo de 3 meses, descontando stock tiendas + PT + WIP.</div>
+      <div><b>VELA 1.5× Grieta</b>La venta real es 0.37× Grieta porque hubo quiebre. El hueco se carga como buffer de ventas perdidas.</div>
+      <div><b>MGTA 2.0× Grieta</b>Margarita es área de playa y arranca en cero. Kit de apertura más grande, con la curva de talla CAB.</div>
+      <div><b>Tela 0.75 m/pza</b>Los metros disponibles están en colores que no rotan. Hay que comprar tela de Pizarra / Pino / Marrón / Cereza / Verdoso.</div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card"><h3>Tendencia CAB</h3><div class="sub">Unidades / mes · sombreado = ventana de velocidad</div><div class="cw t"><canvas id="cTend"></canvas></div></div>
+    <div class="card"><h3>Mix de talla (mar–ago)</h3><div class="sub">Curva para cortar el OP</div><div class="cw t"><canvas id="cTalla"></canvas></div></div>
+  </div>
+</div>
+<div class="sec" id="sec-op">
+  <div class="tkpis" id="opKpis"></div>
+  <div class="g1 card">
+    <h3>OP por color</h3>
+    <div class="sub">Cobertura + buffer VELA + kit MGTA · clic no aplica, tabla lista para corte</div>
+    <div class="cscroll"><table class="ct" id="opColor"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </div>
+  <div class="g1 card">
+    <h3>OP por SKU (color × talla)</h3>
+    <div class="sub">P1 = cortar ya · P2 = temporada alta · P3 = relleno de curva</div>
+    <div class="cscroll"><table class="ct" id="opSku"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </div>
+</div>
+<div class="sec" id="sec-tela">
+  <div class="tkpis" id="telaKpis"></div>
+  <div class="g2">
+    <div class="card"><h3>Tela vs necesidad CAB</h3><div class="sub">Consumo 0,75 m por pieza</div><div class="cw t"><canvas id="cTela"></canvas></div></div>
+    <div class="card"><h3>Acción por color</h3><div class="sub">Comprar activos / no cortar rezagados</div><div class="cscroll" style="max-height:280px" id="telaAccion"></div></div>
+  </div>
+  <div class="g1 card">
+    <h3>Inventario de tela</h3>
+    <div class="sub">Tela Universal Clororesistente · piezas = metros ÷ 0,75</div>
+    <div class="cscroll"><table class="ct" id="telaTable"><thead></thead><tbody></tbody></table></div>
+  </div>
+</div>
+<div class="sec" id="sec-vela">
+  <div class="tkpis" id="velaKpis"></div>
+  <div class="g1 card">
+    <h3>Quiebres y stock bajo en VELA</h3>
+    <div class="sub">La venta de VELA está censurada: 13.3/mes vs 54.5/mes objetivo. Lo que no se vendió no significa que no se hubiera vendido.</div>
+    <div class="cscroll"><table class="ct" id="velaTable"><thead></thead><tbody></tbody></table></div>
+  </div>
+</div>
+<div class="sec" id="sec-dist">
+  <div class="tkpis" id="distKpis"></div>
+  <div class="g2">
+    <div class="card"><h3>Peso de cada tienda en el OP</h3><div class="sub">VELA y MGTA van sobreponderadas por ser playa</div><div class="cw t"><canvas id="cDist"></canvas></div></div>
+    <div class="card"><h3>Kit MGTA por color</h3><div class="sub">2× Grieta × 1.40 × 3 meses</div><div class="cscroll" style="max-height:280px" id="mgtaColors"></div></div>
+  </div>
+  <div class="g1 card">
+    <h3>Distribución sugerida del lote</h3>
+    <div class="sub">No es un simple prorrateo histórico: VELA se eleva a 1.5× Grieta y MGTA entra con 2.0×</div>
+    <div class="cscroll"><table class="ct" id="distTable"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </div>
+</div>
+<div class="sec" id="sec-tallas">
+  <div class="g1 card"><h3>Heatmap color × talla · unidades a producir</h3><div class="sub" id="hmSub"></div><div class="hmw" id="hm"></div></div>
+</div>
+<div class="sec" id="sec-ventas">
+  <div class="g2">
+    <div class="card"><h3>Colores que sí rotan</h3><div class="sub">Velocidad mar–ago (und/mes)</div><div id="colRank"></div></div>
+    <div class="card"><h3>Notas de lectura</h3>
+      <div class="sub">Qué no hacer con este corte</div>
+      <div style="font-size:.78rem;color:var(--mu);line-height:1.55">
+        <p>No reponer Sombrero ni Rojo/Oliva/Gris/Aguamarina: o están sobrados o no venden.</p><br>
+        <p>Tucupido tiene mucho WIP; la cobertura ya lo descuenta. No dupliques ese corte.</p><br>
+        <p>La tela de 193 m no sirve para este OP salvo Coral/Marino puntuales. El cuello de botella es comprar tela de los 5 colores liso activos.</p><br>
+        <p>Si llega un Excel más nuevo de inventario/ventas/tela, se recarga el mismo modelo (0.75 m, VELA 1.5×, MGTA 2.0×, HS 1.40).</p>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="footer">Short Playa CAB · alerta de producción · datos al 27 ago 2026 · consumo 0,75 m/pza · MGTA 2× Grieta · VELA 1.5× Grieta · temporada alta ×1.40</div>
+<script>
+var DATA = {"nombre":"SHORT PLAYA CAB","periodo":"Oct 2025 — Ago 2026","as_of":"2026-08-27","generated":"2026-09-11","params":{"hs":1.4,"lead":3,"consumo":0.75,"vela_mult":1.5,"mgta_mult":2.0,"vel_months":["marzo-2026","abril-2026","mayo-2026","junio-2026","julio-2026","agosto-2026"],"vel_label":"mar–ago 2026","tallas":["S","M","L","XL","2XL"]},"kpis":{"ventas_total":1753,"vel_mes":180.2,"vel_hs":252.2,"sellable":768,"wip":311,"inv_total":1079,"cob_hs":3.0,"produce":711,"produce_cob":233,"produce_vela":173,"produce_mgta":305,"metros":533.25,"buy_m":335.25,"stranded_m":193.71,"liso":447,"estampado":264,"vela_quiebre":12,"agosto":277},"meses":[{"mes":"octubre-2025","label":"Oct 25","und":148,"vel":false},{"mes":"noviembre-2025","label":"Nov 25","und":100,"vel":false},{"mes":"diciembre-2025","label":"Dic 25","und":175,"vel":false},{"mes":"enero-2026","label":"Ene 26","und":39,"vel":false},{"mes":"febrero-2026","label":"Feb 26","und":210,"vel":false},{"mes":"marzo-2026","label":"Mar 26","und":227,"vel":true},{"mes":"abril-2026","label":"Abr 26","und":172,"vel":true},{"mes":"mayo-2026","label":"May 26","und":139,"vel":true},{"mes":"junio-2026","label":"Jun 26","und":177,"vel":true},{"mes":"julio-2026","label":"Jul 26","und":89,"vel":true},{"mes":"agosto-2026","label":"Ago 26","und":277,"vel":true}],"talla_mix":[{"talla":"S","und":131,"pct":12.2},{"talla":"M","und":278,"pct":25.9},{"talla":"L","und":325,"pct":30.2},{"talla":"XL","und":193,"pct":18.0},{"talla":"2XL","und":148,"pct":13.8}],"rows":[{"modelo":"Short Playa Estampado","color":"Sal","talla":"L","linea":"Estampado","v6":60.0,"vm":10.0,"vhs":14.0,"sell":11,"wip":10,"vela_stk":6,"vela_v6":3.0,"cob":0.8,"cob_wip":1.5,"produce_cob":21,"produce_vela":8,"produce_mgta":17,"produce":46,"metros":34.5,"prio":"P1"},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"L","linea":"Estampado","v6":47.0,"vm":7.8,"vhs":11.0,"sell":5,"wip":8,"vela_stk":1,"vela_v6":2.0,"cob":0.5,"cob_wip":1.2,"produce_cob":20,"produce_vela":9,"produce_mgta":16,"produce":45,"metros":33.75,"prio":"P1"},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"L","linea":"Liso","v6":35.0,"vm":5.8,"vhs":8.2,"sell":5,"wip":0,"vela_stk":0,"vela_v6":3.0,"cob":0.6,"cob_wip":0.6,"produce_cob":20,"produce_vela":8,"produce_mgta":12,"produce":40,"metros":30.0,"prio":"P1"},{"modelo":"Short Playa","color":"Verde Pino","talla":"M","linea":"Liso","v6":38.0,"vm":6.3,"vhs":8.9,"sell":9,"wip":0,"vela_stk":0,"vela_v6":4.0,"cob":1.0,"cob_wip":1.0,"produce_cob":18,"produce_vela":12,"produce_mgta":10,"produce":40,"metros":30.0,"prio":"P1"},{"modelo":"Short Playa","color":"Cereza","talla":"L","linea":"Liso","v6":37.0,"vm":6.2,"vhs":8.6,"sell":7,"wip":0,"vela_stk":0,"vela_v6":3.0,"cob":0.8,"cob_wip":0.8,"produce_cob":19,"produce_vela":9,"produce_mgta":10,"produce":38,"metros":28.5,"prio":"P1"},{"modelo":"Short Playa","color":"Marron","talla":"L","linea":"Liso","v6":35.0,"vm":5.8,"vhs":8.2,"sell":4,"wip":0,"vela_stk":0,"vela_v6":5.0,"cob":0.5,"cob_wip":0.5,"produce_cob":21,"produce_vela":7,"produce_mgta":10,"produce":38,"metros":28.5,"prio":"P1"},{"modelo":"Short Playa","color":"Verde Pino","talla":"L","linea":"Liso","v6":33.0,"vm":5.5,"vhs":7.7,"sell":8,"wip":0,"vela_stk":0,"vela_v6":2.0,"cob":1.0,"cob_wip":1.0,"produce_cob":16,"produce_vela":6,"produce_mgta":11,"produce":33,"metros":24.75,"prio":"P1"},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"L","linea":"Liso","v6":37.0,"vm":6.2,"vhs":8.6,"sell":11,"wip":0,"vela_stk":0,"vela_v6":6.0,"cob":1.3,"cob_wip":1.3,"produce_cob":15,"produce_vela":7,"produce_mgta":10,"produce":32,"metros":24.0,"prio":"P1"},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"XL","linea":"Liso","v6":26.0,"vm":4.3,"vhs":6.1,"sell":5,"wip":0,"vela_stk":0,"vela_v6":2.0,"cob":0.8,"cob_wip":0.8,"produce_cob":14,"produce_vela":8,"produce_mgta":7,"produce":29,"metros":21.75,"prio":"P1"},{"modelo":"Short Playa Estampado","color":"Sal","talla":"XL","linea":"Estampado","v6":24.0,"vm":4.0,"vhs":5.6,"sell":4,"wip":5,"vela_stk":0,"vela_v6":0.0,"cob":0.7,"cob_wip":1.6,"produce_cob":8,"produce_vela":10,"produce_mgta":10,"produce":28,"metros":21.0,"prio":"P1"},{"modelo":"Short Playa Estampado","color":"Sal","talla":"2XL","linea":"Estampado","v6":23.0,"vm":3.8,"vhs":5.4,"sell":5,"wip":0,"vela_stk":0,"vela_v6":0.0,"cob":0.9,"cob_wip":0.9,"produce_cob":12,"produce_vela":7,"produce_mgta":8,"produce":27,"metros":20.25,"prio":"P1"},{"modelo":"Short Playa","color":"Verde Pino","talla":"XL","linea":"Liso","v6":25.0,"vm":4.2,"vhs":5.8,"sell":6,"wip":0,"vela_stk":0,"vela_v6":0.0,"cob":1.0,"cob_wip":1.0,"produce_cob":12,"produce_vela":8,"produce_mgta":7,"produce":27,"metros":20.25,"prio":"P1"},{"modelo":"Short Playa","color":"Cereza","talla":"XL","linea":"Liso","v6":23.0,"vm":3.8,"vhs":5.4,"sell":8,"wip":0,"vela_stk":0,"vela_v6":1.0,"cob":1.5,"cob_wip":1.5,"produce_cob":9,"produce_vela":8,"produce_mgta":6,"produce":23,"metros":17.25,"prio":"P1"},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"M","linea":"Liso","v6":23.0,"vm":3.8,"vhs":5.4,"sell":11,"wip":0,"vela_stk":3,"vela_v6":1.0,"cob":2.0,"cob_wip":2.0,"produce_cob":6,"produce_vela":5,"produce_mgta":10,"produce":21,"metros":15.75,"prio":"P1"},{"modelo":"Short Playa","color":"Marron","talla":"M","linea":"Liso","v6":28.0,"vm":4.7,"vhs":6.5,"sell":18,"wip":0,"vela_stk":0,"vela_v6":5.0,"cob":2.8,"cob_wip":2.8,"produce_cob":2,"produce_vela":9,"produce_mgta":9,"produce":20,"metros":15.0,"prio":"P1"},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"M","linea":"Estampado","v6":52.0,"vm":8.7,"vhs":12.1,"sell":12,"wip":22,"vela_stk":7,"vela_v6":3.0,"cob":1.0,"cob_wip":2.8,"produce_cob":3,"produce_vela":2,"produce_mgta":14,"produce":19,"metros":14.25,"prio":"P2"},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"2XL","linea":"Liso","v6":25.0,"vm":4.2,"vhs":5.8,"sell":8,"wip":0,"vela_stk":5,"vela_v6":4.0,"cob":1.4,"cob_wip":1.4,"produce_cob":10,"produce_vela":3,"produce_mgta":5,"produce":18,"metros":13.5,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Sal","talla":"M","linea":"Estampado","v6":52.0,"vm":8.7,"vhs":12.1,"sell":21,"wip":16,"vela_stk":8,"vela_v6":2.0,"cob":1.7,"cob_wip":3.0,"produce_cob":0,"produce_vela":2,"produce_mgta":14,"produce":16,"metros":12.0,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"M","linea":"Estampado","v6":18.0,"vm":3.0,"vhs":4.2,"sell":2,"wip":52,"vela_stk":0,"vela_v6":0.0,"cob":0.5,"cob_wip":12.9,"produce_cob":0,"produce_vela":10,"produce_mgta":6,"produce":16,"metros":12.0,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"L","linea":"Estampado","v6":17.0,"vm":2.8,"vhs":4.0,"sell":0,"wip":36,"vela_stk":0,"vela_v6":0.0,"cob":0.0,"cob_wip":9.1,"produce_cob":0,"produce_vela":8,"produce_mgta":6,"produce":14,"metros":10.5,"prio":"P2"},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"XL","linea":"Liso","v6":22.0,"vm":3.7,"vhs":5.1,"sell":12,"wip":0,"vela_stk":2,"vela_v6":5.0,"cob":2.3,"cob_wip":2.3,"produce_cob":4,"produce_vela":1,"produce_mgta":6,"produce":11,"metros":8.25,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"XL","linea":"Estampado","v6":31.0,"vm":5.2,"vhs":7.2,"sell":20,"wip":15,"vela_stk":5,"vela_v6":2.0,"cob":2.8,"cob_wip":4.8,"produce_cob":0,"produce_vela":1,"produce_mgta":9,"produce":10,"metros":7.5,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"2XL","linea":"Estampado","v6":11.0,"vm":1.8,"vhs":2.6,"sell":6,"wip":0,"vela_stk":0,"vela_v6":1.0,"cob":2.3,"cob_wip":2.3,"produce_cob":2,"produce_vela":5,"produce_mgta":3,"produce":10,"metros":7.5,"prio":"P2"},{"modelo":"Short Playa","color":"Marron","talla":"XL","linea":"Liso","v6":17.0,"vm":2.8,"vhs":4.0,"sell":14,"wip":0,"vela_stk":2,"vela_v6":2.0,"cob":3.5,"cob_wip":3.5,"produce_cob":0,"produce_vela":4,"produce_mgta":6,"produce":10,"metros":7.5,"prio":"P2"},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"M","linea":"Liso","v6":19.0,"vm":3.2,"vhs":4.4,"sell":33,"wip":0,"vela_stk":3,"vela_v6":3.0,"cob":7.4,"cob_wip":7.4,"produce_cob":0,"produce_vela":1,"produce_mgta":8,"produce":9,"metros":6.75,"prio":"P2"},{"modelo":"Short Playa","color":"Cereza","talla":"M","linea":"Liso","v6":23.0,"vm":3.8,"vhs":5.4,"sell":18,"wip":0,"vela_stk":3,"vela_v6":2.0,"cob":3.4,"cob_wip":3.4,"produce_cob":0,"produce_vela":1,"produce_mgta":8,"produce":9,"metros":6.75,"prio":"P2"},{"modelo":"Short Playa","color":"Cereza","talla":"2XL","linea":"Liso","v6":12.0,"vm":2.0,"vhs":2.8,"sell":20,"wip":0,"vela_stk":0,"vela_v6":1.0,"cob":7.1,"cob_wip":7.1,"produce_cob":0,"produce_vela":4,"produce_mgta":5,"produce":9,"metros":6.75,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"2XL","linea":"Estampado","v6":20.0,"vm":3.3,"vhs":4.7,"sell":11,"wip":5,"vela_stk":1,"vela_v6":1.0,"cob":2.4,"cob_wip":3.4,"produce_cob":0,"produce_vela":1,"produce_mgta":7,"produce":8,"metros":6.0,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Sal","talla":"S","linea":"Estampado","v6":28.0,"vm":4.7,"vhs":6.5,"sell":33,"wip":15,"vela_stk":7,"vela_v6":1.0,"cob":5.1,"cob_wip":7.3,"produce_cob":0,"produce_vela":1,"produce_mgta":7,"produce":8,"metros":6.0,"prio":"P2"},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"S","linea":"Estampado","v6":22.0,"vm":3.7,"vhs":5.1,"sell":21,"wip":11,"vela_stk":1,"vela_v6":1.0,"cob":4.1,"cob_wip":6.2,"produce_cob":0,"produce_vela":1,"produce_mgta":6,"produce":7,"metros":5.25,"prio":"P3"},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"S","linea":"Liso","v6":20.0,"vm":3.3,"vhs":4.7,"sell":26,"wip":0,"vela_stk":7,"vela_v6":0.0,"cob":5.6,"cob_wip":5.6,"produce_cob":0,"produce_vela":1,"produce_mgta":5,"produce":6,"metros":4.5,"prio":"P3"},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"2XL","linea":"Liso","v6":19.0,"vm":3.2,"vhs":4.4,"sell":13,"wip":0,"vela_stk":0,"vela_v6":1.0,"cob":2.9,"cob_wip":2.9,"produce_cob":1,"produce_vela":1,"produce_mgta":4,"produce":6,"metros":4.5,"prio":"P2"},{"modelo":"Short Playa","color":"Marron","talla":"2XL","linea":"Liso","v6":18.0,"vm":3.0,"vhs":4.2,"sell":13,"wip":0,"vela_stk":3,"vela_v6":3.0,"cob":3.1,"cob_wip":3.1,"produce_cob":0,"produce_vela":1,"produce_mgta":5,"produce":6,"metros":4.5,"prio":"P3"},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"S","linea":"Estampado","v6":7.0,"vm":1.2,"vhs":1.6,"sell":19,"wip":16,"vela_stk":2,"vela_v6":0.0,"cob":11.6,"cob_wip":21.4,"produce_cob":0,"produce_vela":2,"produce_mgta":3,"produce":5,"metros":3.75,"prio":"P3"},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"XL","linea":"Estampado","v6":21.0,"vm":3.5,"vhs":4.9,"sell":30,"wip":12,"vela_stk":6,"vela_v6":4.0,"cob":6.1,"cob_wip":8.6,"produce_cob":0,"produce_vela":1,"produce_mgta":4,"produce":5,"metros":3.75,"prio":"P3"},{"modelo":"Short Playa","color":"Marron","talla":"S","linea":"Liso","v6":15.0,"vm":2.5,"vhs":3.5,"sell":36,"wip":0,"vela_stk":4,"vela_v6":2.0,"cob":10.3,"cob_wip":10.3,"produce_cob":0,"produce_vela":1,"produce_mgta":4,"produce":5,"metros":3.75,"prio":"P3"},{"modelo":"Short Playa","color":"Verde Pino","talla":"2XL","linea":"Liso","v6":13.0,"vm":2.2,"vhs":3.0,"sell":20,"wip":0,"vela_stk":5,"vela_v6":1.0,"cob":6.6,"cob_wip":6.6,"produce_cob":0,"produce_vela":0,"produce_mgta":5,"produce":5,"metros":3.75,"prio":"P3"},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"S","linea":"Liso","v6":10.0,"vm":1.7,"vhs":2.3,"sell":44,"wip":0,"vela_stk":4,"vela_v6":2.0,"cob":18.9,"cob_wip":18.9,"produce_cob":0,"produce_vela":0,"produce_mgta":4,"produce":4,"metros":3.0,"prio":"P3"},{"modelo":"Short Playa","color":"Cereza","talla":"S","linea":"Liso","v6":12.0,"vm":2.0,"vhs":2.8,"sell":34,"wip":0,"vela_stk":6,"vela_v6":0.0,"cob":12.1,"cob_wip":12.1,"produce_cob":0,"produce_vela":0,"produce_mgta":4,"produce":4,"metros":3.0,"prio":"P3"},{"modelo":"Short Playa","color":"Verde Pino","talla":"S","linea":"Liso","v6":12.0,"vm":2.0,"vhs":2.8,"sell":37,"wip":0,"vela_stk":5,"vela_v6":1.0,"cob":13.2,"cob_wip":13.2,"produce_cob":0,"produce_vela":0,"produce_mgta":4,"produce":4,"metros":3.0,"prio":"P3"}],"colors":[{"modelo":"Short Playa Estampado","color":"Sal","linea":"Estampado","vhs":43.6,"sell":74,"wip":46,"produce_cob":41,"produce_vela":28,"produce_mgta":56,"produce":125,"tallas":{"S":8,"M":16,"L":46,"XL":28,"2XL":27},"cob":1.7,"metros":93.75},{"modelo":"Short Playa","color":"Azul Pizarra","linea":"Liso","vhs":30.2,"sell":55,"wip":0,"produce_cob":50,"produce_vela":25,"produce_mgta":39,"produce":114,"tallas":{"S":6,"M":21,"L":40,"XL":29,"2XL":18},"cob":1.8,"metros":85.5},{"modelo":"Short Playa","color":"Verde Pino","linea":"Liso","vhs":28.2,"sell":80,"wip":0,"produce_cob":46,"produce_vela":26,"produce_mgta":37,"produce":109,"tallas":{"S":4,"M":40,"L":33,"XL":27,"2XL":5},"cob":2.8,"metros":81.75},{"modelo":"Short Playa Estampado","color":"Playuela","linea":"Estampado","vhs":40.1,"sell":69,"wip":61,"produce_cob":23,"produce_vela":14,"produce_mgta":52,"produce":89,"tallas":{"S":7,"M":19,"L":45,"XL":10,"2XL":8},"cob":1.7,"metros":66.75},{"modelo":"Short Playa","color":"Cereza","linea":"Liso","vhs":25.0,"sell":87,"wip":0,"produce_cob":28,"produce_vela":22,"produce_mgta":33,"produce":83,"tallas":{"S":4,"M":9,"L":38,"XL":23,"2XL":9},"cob":3.5,"metros":62.25},{"modelo":"Short Playa","color":"Marron","linea":"Liso","vhs":26.4,"sell":85,"wip":0,"produce_cob":23,"produce_vela":22,"produce_mgta":34,"produce":79,"tallas":{"S":5,"M":20,"L":38,"XL":10,"2XL":6},"cob":3.2,"metros":59.25},{"modelo":"Short Playa","color":"Azul Verdoso","linea":"Liso","vhs":24.8,"sell":113,"wip":0,"produce_cob":20,"produce_vela":10,"produce_mgta":32,"produce":62,"tallas":{"S":4,"M":9,"L":32,"XL":11,"2XL":6},"cob":4.6,"metros":46.5},{"modelo":"Short Playa Estampado","color":"Tucupido","linea":"Estampado","vhs":17.3,"sell":57,"wip":116,"produce_cob":2,"produce_vela":26,"produce_mgta":22,"produce":50,"tallas":{"S":5,"M":16,"L":14,"XL":5,"2XL":10},"cob":3.3,"metros":37.5}],"telas":[{"tela":"Tela Universal Clororesistente","color":"Azul Pizarra","disponible":0.0,"piezas":0,"need":114,"gap_und":114,"gap_m":85.5,"accion":"COMPRAR tela — color activo sin metros"},{"tela":"Tela Universal Clororesistente","color":"Verde Pino","disponible":0.0,"piezas":0,"need":109,"gap_und":109,"gap_m":81.75,"accion":"COMPRAR tela — color activo sin metros"},{"tela":"Tela Universal Clororesistente","color":"Cereza","disponible":0.0,"piezas":0,"need":83,"gap_und":83,"gap_m":62.25,"accion":"COMPRAR tela — color activo sin metros"},{"tela":"Tela Universal Clororesistente","color":"Marron","disponible":0.0,"piezas":0,"need":79,"gap_und":79,"gap_m":59.25,"accion":"COMPRAR tela — color activo sin metros"},{"tela":"Tela Universal Clororesistente","color":"Azul Verdoso","disponible":0.0,"piezas":0,"need":62,"gap_und":62,"gap_m":46.5,"accion":"COMPRAR tela — color activo sin metros"},{"tela":"Tela Universal Clororesistente","color":"Aguamarina","disponible":11.5,"piezas":15,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Verde Oliva","disponible":29.9,"piezas":39,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Coral","disponible":4.6,"piezas":6,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Azul Marino","disponible":26.64,"piezas":35,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Gris Azulado","disponible":30.27,"piezas":40,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Rojo","disponible":90.8,"piezas":121,"need":0,"gap_und":0,"gap_m":0.0,"accion":"NO cortar short playa CAB — color sin rotación; no usar en este OP"},{"tela":"Tela Universal Clororesistente","color":"Kaki","disponible":0.0,"piezas":0,"need":0,"gap_und":0,"gap_m":0.0,"accion":"Sin stock ni demanda"},{"tela":"Tela Universal Clororesistente","color":"Azul Rey","disponible":0.0,"piezas":0,"need":0,"gap_und":0,"gap_m":0.0,"accion":"Sin stock ni demanda"},{"tela":"Tela Universal Clororesistente","color":"Terracota","disponible":0.0,"piezas":0,"need":0,"gap_und":0,"gap_m":0.0,"accion":"Sin stock ni demanda"}],"vela":{"vm":13.3,"target":54.5,"gap":41.2,"inv":126,"buffer":173,"stockouts":[{"modelo":"Short Playa","color":"Azul Verdoso","talla":"L","stk":0,"v6":6,"vm":1.0,"cob":0.0,"status":"QUIEBRE","produce":32},{"modelo":"Short Playa","color":"Marron","talla":"M","stk":0,"v6":5,"vm":0.8,"cob":0.0,"status":"QUIEBRE","produce":20},{"modelo":"Short Playa","color":"Marron","talla":"L","stk":0,"v6":5,"vm":0.8,"cob":0.0,"status":"QUIEBRE","produce":38},{"modelo":"Short Playa","color":"Verde Pino","talla":"M","stk":0,"v6":4,"vm":0.7,"cob":0.0,"status":"QUIEBRE","produce":40},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"L","stk":0,"v6":3,"vm":0.5,"cob":0.0,"status":"QUIEBRE","produce":40},{"modelo":"Short Playa","color":"Cereza","talla":"L","stk":0,"v6":3,"vm":0.5,"cob":0.0,"status":"QUIEBRE","produce":38},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"XL","stk":0,"v6":2,"vm":0.3,"cob":0.0,"status":"QUIEBRE","produce":29},{"modelo":"Short Playa","color":"Verde Pino","talla":"L","stk":0,"v6":2,"vm":0.3,"cob":0.0,"status":"QUIEBRE","produce":33},{"modelo":"Short Playa","color":"Cereza","talla":"XL","stk":0,"v6":1,"vm":0.2,"cob":0.0,"status":"QUIEBRE","produce":23},{"modelo":"Short Playa","color":"Cereza","talla":"2XL","stk":0,"v6":1,"vm":0.2,"cob":0.0,"status":"QUIEBRE","produce":9},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"2XL","stk":0,"v6":1,"vm":0.2,"cob":0.0,"status":"QUIEBRE","produce":6},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"2XL","stk":0,"v6":1,"vm":0.2,"cob":0.0,"status":"QUIEBRE","produce":10},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"XL","stk":2,"v6":5,"vm":0.8,"cob":2.4,"status":"OK","produce":11},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"2XL","stk":5,"v6":4,"vm":0.7,"cob":7.5,"status":"OK","produce":18},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"XL","stk":6,"v6":4,"vm":0.7,"cob":9.0,"status":"OK","produce":5},{"modelo":"Short Playa","color":"Marron","talla":"2XL","stk":3,"v6":3,"vm":0.5,"cob":6.0,"status":"OK","produce":6},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"M","stk":3,"v6":3,"vm":0.5,"cob":6.0,"status":"OK","produce":9},{"modelo":"Short Playa Estampado","color":"Sal","talla":"L","stk":6,"v6":3,"vm":0.5,"cob":12.0,"status":"OK","produce":46},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"M","stk":7,"v6":3,"vm":0.5,"cob":14.0,"status":"OK","produce":19},{"modelo":"Short Playa","color":"Marron","talla":"S","stk":4,"v6":2,"vm":0.3,"cob":12.0,"status":"OK","produce":5},{"modelo":"Short Playa","color":"Marron","talla":"XL","stk":2,"v6":2,"vm":0.3,"cob":6.0,"status":"OK","produce":10},{"modelo":"Short Playa","color":"Cereza","talla":"M","stk":3,"v6":2,"vm":0.3,"cob":9.0,"status":"OK","produce":9},{"modelo":"Short Playa","color":"Azul Verdoso","talla":"S","stk":4,"v6":2,"vm":0.3,"cob":12.0,"status":"OK","produce":4},{"modelo":"Short Playa Estampado","color":"Sal","talla":"M","stk":8,"v6":2,"vm":0.3,"cob":24.0,"status":"OK","produce":16},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"L","stk":1,"v6":2,"vm":0.3,"cob":3.0,"status":"OK","produce":45},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"XL","stk":5,"v6":2,"vm":0.3,"cob":15.0,"status":"OK","produce":10},{"modelo":"Short Playa","color":"Azul Pizarra","talla":"M","stk":3,"v6":1,"vm":0.2,"cob":18.0,"status":"OK","produce":21},{"modelo":"Short Playa","color":"Verde Pino","talla":"S","stk":5,"v6":1,"vm":0.2,"cob":30.0,"status":"OK","produce":4},{"modelo":"Short Playa","color":"Verde Pino","talla":"2XL","stk":5,"v6":1,"vm":0.2,"cob":30.0,"status":"OK","produce":5},{"modelo":"Short Playa Estampado","color":"Sal","talla":"S","stk":7,"v6":1,"vm":0.2,"cob":42.0,"status":"OK","produce":8},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"S","stk":1,"v6":1,"vm":0.2,"cob":6.0,"status":"OK","produce":7},{"modelo":"Short Playa Estampado","color":"Playuela","talla":"2XL","stk":1,"v6":1,"vm":0.2,"cob":6.0,"status":"OK","produce":8},{"modelo":"Short Playa Estampado","color":"Sombrero","talla":"L","stk":8,"v6":1,"vm":0.2,"cob":48.0,"status":"OK","produce":0},{"modelo":"Short Playa","color":"Verde Pino","talla":"XL","stk":0,"v6":0,"vm":0.0,"cob":0.0,"status":"OK","produce":27},{"modelo":"Short Playa Estampado","color":"Sal","talla":"XL","stk":0,"v6":0,"vm":0.0,"cob":0.0,"status":"OK","produce":28},{"modelo":"Short Playa Estampado","color":"Sal","talla":"2XL","stk":0,"v6":0,"vm":0.0,"cob":0.0,"status":"OK","produce":27},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"S","stk":2,"v6":0,"vm":0.0,"cob":99.0,"status":"OK","produce":5},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"M","stk":0,"v6":0,"vm":0.0,"cob":0.0,"status":"OK","produce":16},{"modelo":"Short Playa Estampado","color":"Tucupido","talla":"L","stk":0,"v6":0,"vm":0.0,"cob":0.0,"status":"OK","produce":14}]},"mgta":{"vm":72.7,"kit":305,"by_color":[{"modelo":"Short Playa","color":"Azul Pizarra","qty":39,"tallas":{"S":5,"M":10,"L":12,"XL":7,"2XL":5}},{"modelo":"Short Playa","color":"Verde Pino","qty":37,"tallas":{"S":4,"M":10,"L":11,"XL":7,"2XL":5}},{"modelo":"Short Playa","color":"Marron","qty":34,"tallas":{"S":4,"M":9,"L":10,"XL":6,"2XL":5}},{"modelo":"Short Playa","color":"Cereza","qty":33,"tallas":{"S":4,"M":8,"L":10,"XL":6,"2XL":5}},{"modelo":"Short Playa","color":"Azul Verdoso","qty":32,"tallas":{"S":4,"M":8,"L":10,"XL":6,"2XL":4}},{"modelo":"Short Playa Estampado","color":"Sal","qty":56,"tallas":{"S":7,"M":14,"L":17,"XL":10,"2XL":8}},{"modelo":"Short Playa Estampado","color":"Playuela","qty":52,"tallas":{"S":6,"M":14,"L":16,"XL":9,"2XL":7}},{"modelo":"Short Playa Estampado","color":"Tucupido","qty":22,"tallas":{"S":3,"M":6,"L":6,"XL":4,"2XL":3}}]},"stores":[{"store":"CHACAO","label":"Chacao","playa":false,"vm_hist":43.8,"vm_adj":43.8,"vhs":61.4,"inv":88,"cob":1.4,"share":15.1,"allot":107},{"store":"SAMBIL","label":"Sambil","playa":false,"vm_hist":37.2,"vm_adj":37.2,"vhs":52.0,"inv":77,"cob":1.5,"share":12.8,"allot":91},{"store":"GRIETA","label":"Grieta","playa":false,"vm_hist":36.3,"vm_adj":36.3,"vhs":50.9,"inv":89,"cob":1.7,"share":12.5,"allot":89},{"store":"CERRO VERDE","label":"C.Verde","playa":false,"vm_hist":34.8,"vm_adj":34.8,"vhs":48.8,"inv":131,"cob":2.7,"share":12.0,"allot":85},{"store":"VELA","label":"Vela","playa":true,"vm_hist":13.3,"vm_adj":54.5,"vhs":76.3,"inv":126,"cob":1.7,"share":18.7,"allot":133},{"store":"TOLON","label":"Tolón","playa":false,"vm_hist":8.7,"vm_adj":8.7,"vhs":12.1,"inv":119,"cob":9.8,"share":3.0,"allot":21},{"store":"GRAND PLAZ","label":"Grand Plaz","playa":false,"vm_hist":3.0,"vm_adj":3.0,"vhs":4.2,"inv":40,"cob":9.5,"share":1.0,"allot":7},{"store":"MGTA","label":"Margarita","playa":true,"vm_hist":0.0,"vm_adj":72.7,"vhs":101.7,"inv":0,"cob":0.0,"share":25.0,"allot":178}],"alerts":[{"lvl":"red","title":"VELA: 12 quiebres CAB","txt":"Velocidad real 13.3/mes vs objetivo playa 54.5/mes (1.5× Grieta). Demanda censurada: se perdieron ventas. Buffer +173 und."},{"lvl":"red","title":"Tela de colores activos en cero","txt":"Pizarra, Pino, Marrón, Cereza y Verdoso concentran la rotación liso y no tienen metros. Rojo/Oliva/Gris sí tienen tela y NO deben cortarse para este OP."},{"lvl":"orange","title":"Temporada alta playa","txt":"Ago-26 ya vendió 277 und CAB. Factor ×1.4 sobre mar–ago. Cobertura objetivo 3 meses."},{"lvl":"orange","title":"MGTA (Margarita) sin stock","txt":"Área de playa: kit de apertura 305 und = 2× velocidad Grieta × temporada alta × 3 meses."},{"lvl":"yellow","title":"WIP estampado","txt":"311 und en post-producción (sobre todo Tucupido/Sombrero). Ya descontadas de la cobertura."}],"active_liso":["Azul Pizarra","Verde Pino","Marron","Cereza","Azul Verdoso"],"active_est":["Sal","Playuela","Tucupido"]};
+var _modelo = '';
+var _charts = {};
+function cn(n){
+  if(!n)return'#8b8ba0';
+  var s=String(n).toLowerCase();
+  if(s.indexOf('aguamarina')>=0)return'#2dd4bf';
+  if(s.indexOf('marino')>=0)return'#1e3a8a';
+  if(s.indexOf('rey')>=0)return'#2563eb';
+  if(s.indexOf('coral')>=0)return'#fb7185';
+  if(s.indexOf('gris')>=0)return'#64748b';
+  if(s.indexOf('kaki')>=0)return'#a16207';
+  if(s.indexOf('rojo')>=0)return'#ef4444';
+  if(s.indexOf('terracota')>=0)return'#c2410c';
+  if(s.indexOf('oliva')>=0)return'#65a30d';
+  if(s.indexOf('pino')>=0)return'#166534';
+  if(s.indexOf('cereza')>=0)return'#be123c';
+  if(s.indexOf('marron')>=0)return'#78350f';
+  if(s.indexOf('playuela')>=0)return'#f59e0b';
+  if(s.indexOf('tucupido')>=0)return'#7c3aed';
+  if(s.indexOf('sombrero')>=0)return'#d97706';
+  if(s.indexOf('sal')>=0)return'#94a3b8';
+  if(s.indexOf('pizarra')>=0)return'#475569';
+  if(s.indexOf('verdoso')>=0)return'#0f766e';
+  return'#8b8ba0';
+}
+function rows(){return DATA.rows.filter(function(r){return !_modelo||r.modelo===_modelo;});}
+function colors(){return DATA.colors.filter(function(r){return !_modelo||r.modelo===_modelo;});}
+function n(x){return (x||0).toLocaleString('es-VE');}
+function setModelo(m){
+  _modelo=m;
+  document.querySelectorAll('.mbtn').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-m')===m);});
+  render();
+}
+function st(id){
+  document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('sec-'+id).classList.add('active');
+  var tabs=[].slice.call(document.querySelectorAll('.tab'));
+  var map={alerta:0,op:1,tela:2,vela:3,dist:4,tallas:5,ventas:6};
+  if(tabs[map[id]])tabs[map[id]].classList.add('active');
+  render();
+}
+function toggleTheme(){
+  document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent=document.body.classList.contains('light')?'🌙 Dark':'☀️ Light';
+  render();
+}
+function kpi(val,lab,sub,cls){
+  return '<div class="kpib '+(cls||'')+'"><div class="kv">'+val+'</div><div class="kl">'+lab+'</div>'+(sub?'<div class="kl" style="text-transform:none;letter-spacing:0">'+sub+'</div>':'')+'</div>';
+}
+function mkChart(id,cfg){
+  if(_charts[id]){_charts[id].destroy();}
+  var el=document.getElementById(id); if(!el)return;
+  var dark=!document.body.classList.contains('light');
+  Chart.defaults.color=dark?'#7a7b95':'#6b6c85';
+  Chart.defaults.borderColor=dark?'#2a2b3a':'#d8d9e3';
+  _charts[id]=new Chart(el,cfg);
+}
+function render(){
+  var k=DATA.kpis, rs=rows(), cs=colors();
+  var prod=rs.reduce(function(a,r){return a+r.produce;},0);
+  var cob=rs.reduce(function(a,r){return a+r.produce_cob;},0);
+  var vel=rs.reduce(function(a,r){return a+r.produce_vela;},0);
+  var mg=rs.reduce(function(a,r){return a+r.produce_mgta;},0);
+  document.getElementById('kpiBar').innerHTML=
+    kpi(n(prod),'A producir','CAB temporada alta','warn')+
+    kpi(k.vel_hs+'/m','Vel. HS','base '+k.vel_mes)+
+    kpi(k.cob_hs+' m','Cobertura','tiendas+PT')+
+    kpi(k.vela_quiebre,'Quiebres VELA','','warn')+
+    kpi(k.buy_m+' m','Tela a comprar','colores activos');
+  document.getElementById('alertBar').innerHTML=DATA.alerts.map(function(a){
+    return '<div class="al '+a.lvl+'"><b>'+a.title+'</b>'+a.txt+'</div>';
+  }).join('');
+  document.getElementById('layers').innerHTML=
+    '<div class="ly"><h4>1 · Cobertura 3 meses</h4><div class="n">'+n(cob)+'</div><p>Variantes activas con cobertura HS &lt; 3 meses, ya descontado WIP.</p></div>'+
+    '<div class="ly"><h4>2 · Buffer VELA</h4><div class="n">'+n(vel)+'</div><p>Hueco entre 13.3/mes real y 54.5/mes objetivo (1.5× Grieta) × 1.40 × 3.</p></div>'+
+    '<div class="ly"><h4>3 · Kit MGTA</h4><div class="n">'+n(mg)+'</div><p>Margarita área de playa, stock cero. 2.0× Grieta × 1.40 × 3 meses.</p></div>';
+
+  mkChart('cTend',{type:'bar',data:{
+    labels:DATA.meses.map(function(m){return m.label;}),
+    datasets:[{label:'Und CAB',data:DATA.meses.map(function(m){return m.und;}),
+      backgroundColor:DATA.meses.map(function(m){return m.vel?'rgba(249,115,22,.85)':'rgba(91,106,247,.35)';}),borderRadius:6}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+
+  mkChart('cTalla',{type:'doughnut',data:{
+    labels:DATA.talla_mix.map(function(t){return t.talla+' '+t.pct+'%';}),
+    datasets:[{data:DATA.talla_mix.map(function(t){return t.und;}),
+      backgroundColor:['#38bdf8','#818cf8','#f97316','#f472b6','#34d399'],borderWidth:0}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right'}}}});
+
+  document.getElementById('opKpis').innerHTML=
+    '<div class="tkpi"><div class="tv">'+n(prod)+'</div><div class="tl">Total OP</div><div class="ts">'+ (prod*DATA.params.consumo).toFixed(0)+' m tela</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(cob)+'</div><div class="tl">Cobertura</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(vel)+'</div><div class="tl">Buffer VELA</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(mg)+'</div><div class="tl">Kit MGTA</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(cs.filter(function(c){return c.linea==='Liso';}).reduce(function(a,c){return a+c.produce;},0))+'</div><div class="tl">Liso</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(cs.filter(function(c){return c.linea==='Estampado';}).reduce(function(a,c){return a+c.produce;},0))+'</div><div class="tl">Estampado</div></div>';
+
+  var th='<tr><th>Color</th><th class="num">S</th><th class="num">M</th><th class="num">L</th><th class="num">XL</th><th class="num">2XL</th><th class="num">Total</th><th class="num">Cob</th><th class="num">VELA</th><th class="num">MGTA</th><th class="num">Metros</th></tr>';
+  document.querySelector('#opColor thead').innerHTML=th;
+  var ts={S:0,M:0,L:0,XL:0,'2XL':0}, tot=0, tc=0, tv=0, tm=0, tmet=0;
+  document.querySelector('#opColor tbody').innerHTML=cs.map(function(d){
+    tot+=d.produce; tc+=d.produce_cob; tv+=d.produce_vela; tm+=d.produce_mgta; tmet+=d.metros;
+    DATA.params.tallas.forEach(function(t){ts[t]+=d.tallas[t];});
+    return '<tr><td><span class="chip" style="background:'+cn(d.color)+'"></span>'+d.color+' <span style="color:var(--mu);font-size:.68rem">'+d.linea+'</span></td>'+
+      DATA.params.tallas.map(function(t){return '<td class="num">'+(d.tallas[t]||'')+'</td>';}).join('')+
+      '<td class="num">'+d.produce+'</td><td class="num">'+d.produce_cob+'</td><td class="num">'+d.produce_vela+'</td><td class="num">'+d.produce_mgta+'</td><td class="num">'+d.metros+'</td></tr>';
+  }).join('');
+  document.querySelector('#opColor tfoot').innerHTML='<tr><td>Total</td>'+DATA.params.tallas.map(function(t){return '<td class="num">'+ts[t]+'</td>';}).join('')+'<td class="num">'+tot+'</td><td class="num">'+tc+'</td><td class="num">'+tv+'</td><td class="num">'+tm+'</td><td class="num">'+tmet.toFixed(1)+'</td></tr>';
+
+  document.querySelector('#opSku thead').innerHTML='<tr><th>Prio</th><th>Color</th><th>Talla</th><th class="num">Vel HS</th><th class="num">Stock</th><th class="num">WIP</th><th class="num">Cob</th><th class="num">VELA stk</th><th class="num">OP</th></tr>';
+  var show=rs.filter(function(r){return r.produce>0;});
+  document.querySelector('#opSku tbody').innerHTML=show.map(function(r){
+    var bc=r.prio==='P1'?'b-p1':r.prio==='P2'?'b-p2':'b-p3';
+    return '<tr><td><span class="badge '+bc+'">'+r.prio+'</span></td><td><span class="chip" style="background:'+cn(r.color)+'"></span>'+r.color+'</td><td>'+r.talla+'</td><td class="num">'+r.vhs+'</td><td class="num">'+r.sell+'</td><td class="num">'+r.wip+'</td><td class="num">'+r.cob_wip+'m</td><td class="num">'+r.vela_stk+'</td><td class="num">'+r.produce+'</td></tr>';
+  }).join('');
+  document.querySelector('#opSku tfoot').innerHTML='<tr><td colspan="8">Total</td><td class="num">'+prod+'</td></tr>';
+
+  document.getElementById('telaKpis').innerHTML=
+    '<div class="tkpi"><div class="tv">'+k.buy_m+' m</div><div class="tl">Comprar</div><div class="ts">colores que sí venden</div></div>'+
+    '<div class="tkpi"><div class="tv">'+k.stranded_m+' m</div><div class="tl">No cortar</div><div class="ts">Rojo / Oliva / Gris…</div></div>'+
+    '<div class="tkpi"><div class="tv">0.75 m</div><div class="tl">Consumo</div><div class="ts">por pieza CAB</div></div>'+
+    '<div class="tkpi"><div class="tv">'+n(k.liso)+'</div><div class="tl">Pzas liso OP</div></div>';
+  var telas=DATA.telas;
+  mkChart('cTela',{type:'bar',data:{
+    labels:telas.map(function(t){return t.color;}),
+    datasets:[
+      {label:'Piezas posibles',data:telas.map(function(t){return t.piezas;}),backgroundColor:'rgba(56,189,248,.55)',borderRadius:4},
+      {label:'Need OP',data:telas.map(function(t){return t.need;}),backgroundColor:'rgba(249,115,22,.85)',borderRadius:4}
+    ]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{maxRotation:45,minRotation:45}},y:{beginAtZero:true}}}});
+  document.getElementById('telaAccion').innerHTML=telas.map(function(t){
+    var b=t.accion.indexOf('COMPRAR')>=0?'b-p1':t.accion.indexOf('NO cortar')>=0?'b-p2':'b-ok';
+    return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--brd)"><span class="chip" style="background:'+cn(t.color)+';margin-top:4px"></span><div><b>'+t.color+'</b> · '+t.disponible+' m · '+t.piezas+' pzas<div style="font-size:.7rem;color:var(--mu)">'+t.accion+'</div></div><span class="badge '+b+'" style="margin-left:auto">need '+t.need+'</span></div>';
+  }).join('');
+  document.querySelector('#telaTable thead').innerHTML='<tr><th>Color</th><th class="num">Metros</th><th class="num">Pzas @0.75</th><th class="num">Need</th><th class="num">Gap und</th><th class="num">Gap m</th><th>Acción</th></tr>';
+  document.querySelector('#telaTable tbody').innerHTML=telas.map(function(t){
+    return '<tr><td><span class="chip" style="background:'+cn(t.color)+'"></span>'+t.color+'</td><td class="num">'+t.disponible+'</td><td class="num">'+t.piezas+'</td><td class="num">'+t.need+'</td><td class="num">'+(t.gap_und>0?'+':'')+t.gap_und+'</td><td class="num">'+t.gap_m+'</td><td>'+t.accion+'</td></tr>';
+  }).join('');
+
+  var v=DATA.vela;
+  document.getElementById('velaKpis').innerHTML=
+    '<div class="tkpi"><div class="tv">'+v.vm+'</div><div class="tl">Vel real / mes</div></div>'+
+    '<div class="tkpi"><div class="tv">'+v.target+'</div><div class="tl">Objetivo 1.5× Grieta</div></div>'+
+    '<div class="tkpi"><div class="tv">'+v.gap+'</div><div class="tl">Hueco / mes</div><div class="ts">ventas perdidas</div></div>'+
+    '<div class="tkpi"><div class="tv">'+v.inv+'</div><div class="tl">Stock VELA CAB</div></div>'+
+    '<div class="tkpi"><div class="tv">'+v.buffer+'</div><div class="tl">Buffer en el OP</div></div>';
+  document.querySelector('#velaTable thead').innerHTML='<tr><th>Estado</th><th>Color</th><th>Talla</th><th class="num">Stock</th><th class="num">Venta 6m</th><th class="num">Vel/mes</th><th class="num">Cob</th><th class="num">OP</th></tr>';
+  var vs=v.stockouts.filter(function(x){return !_modelo||x.modelo===_modelo;});
+  document.querySelector('#velaTable tbody').innerHTML=vs.map(function(x){
+    var b=x.status==='QUIEBRE'?'b-p1':x.status==='CRÍTICO'?'b-p1':x.status==='BAJO'?'b-p2':'b-ok';
+    return '<tr><td><span class="badge '+b+'">'+x.status+'</span></td><td><span class="chip" style="background:'+cn(x.color)+'"></span>'+x.color+'</td><td>'+x.talla+'</td><td class="num">'+x.stk+'</td><td class="num">'+x.v6+'</td><td class="num">'+x.vm+'</td><td class="num">'+x.cob+'</td><td class="num">'+x.produce+'</td></tr>';
+  }).join('');
+
+  document.getElementById('distKpis').innerHTML=
+    '<div class="tkpi"><div class="tv">'+DATA.mgta.kit+'</div><div class="tl">Kit MGTA</div><div class="ts">'+DATA.mgta.vm+'/mes objetivo</div></div>'+
+    '<div class="tkpi"><div class="tv">2.0×</div><div class="tl">vs Grieta</div><div class="ts">área de playa</div></div>'+
+    '<div class="tkpi"><div class="tv">1.5×</div><div class="tl">VELA vs Grieta</div></div>';
+  mkChart('cDist',{type:'bar',data:{
+    labels:DATA.stores.map(function(s){return s.label;}),
+    datasets:[{label:'Und del OP',data:DATA.stores.map(function(s){return s.allot;}),
+      backgroundColor:DATA.stores.map(function(s){return s.playa?'rgba(56,189,248,.9)':'rgba(249,115,22,.7)';}),borderRadius:6}]
+  },options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+  document.getElementById('mgtaColors').innerHTML=DATA.mgta.by_color.filter(function(c){return !_modelo||c.modelo===_modelo;}).map(function(c){
+    var ts=DATA.params.tallas.map(function(t){return t+' '+((c.tallas||{})[t]||0);}).join(' · ');
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--brd)"><div><span class="chip" style="background:'+cn(c.color)+'"></span><b>'+c.color+'</b><div style="font-size:.66rem;color:var(--mu)">'+ts+'</div></div><div class="num">'+c.qty+'</div></div>';
+  }).join('');
+  document.querySelector('#distTable thead').innerHTML='<tr><th>Tienda</th><th></th><th class="num">Vel hist</th><th class="num">Vel obj</th><th class="num">Stock</th><th class="num">Cob HS</th><th class="num">% OP</th><th class="num">Recibe</th></tr>';
+  document.querySelector('#distTable tbody').innerHTML=DATA.stores.map(function(s){
+    return '<tr><td>'+s.label+'</td><td>'+(s.playa?'<span class="badge b-playa">PLAYA</span>':'')+'</td><td class="num">'+s.vm_hist+'</td><td class="num">'+s.vm_adj+'</td><td class="num">'+s.inv+'</td><td class="num">'+s.cob+'</td><td class="num">'+s.share+'%</td><td class="num">'+s.allot+'</td></tr>';
+  }).join('');
+  var sa=DATA.stores.reduce(function(a,s){return a+s.allot;},0);
+  document.querySelector('#distTable tfoot').innerHTML='<tr><td colspan="7">Total</td><td class="num">'+sa+'</td></tr>';
+
+  var hcs=cs;
+  var html='<table class="hmt"><thead><tr><th></th>'+DATA.params.tallas.map(function(t){return '<th>'+t+'</th>';}).join('')+'<th>Tot</th></tr></thead><tbody>';
+  var max=1; hcs.forEach(function(c){DATA.params.tallas.forEach(function(t){if(c.tallas[t]>max)max=c.tallas[t];});});
+  hcs.forEach(function(c){
+    html+='<tr><td class="rl"><span class="chip" style="background:'+cn(c.color)+'"></span>'+c.color+'</td>';
+    DATA.params.tallas.forEach(function(t){
+      var v=c.tallas[t]||0, a=v/max;
+      var bg=v===0?'transparent':'rgba(249,115,22,'+(0.15+a*0.75)+')';
+      html+='<td style="background:'+bg+'">'+(v||'·')+'</td>';
+    });
+    html+='<td>'+c.produce+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('hm').innerHTML=html;
+
+  var rank=cs.slice().sort(function(a,b){return b.vhs-a.vhs;});
+  var mx=rank[0]?rank[0].vhs:1;
+  document.getElementById('colRank').innerHTML=rank.map(function(c){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="chip" style="background:'+cn(c.color)+'"></span><span style="width:110px;font-size:.78rem">'+c.color+'</span><div class="rb" style="flex:1;background:var(--s2);height:6px;border-radius:4px;overflow:hidden"><div style="width:'+(100*c.vhs/mx)+'%;height:6px;background:'+cn(c.color)+'"></div></div><span class="num" style="width:70px">'+c.vhs+'/m</span></div>';
+  }).join('');
+}
+function exportCSV(){
+  var rs=rows().filter(function(r){return r.produce>0;});
+  var h=['prio','linea','color','talla','vel_hs','stock','wip','cob_wip','vela_stk','op_cob','op_vela','op_mgta','op_total','metros'];
+  var lines=[h.join(',')].concat(rs.map(function(r){return h.map(function(k){return k==='linea'?r.linea:r[k];}).join(',');}));
+  var blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='OP_SHORT_PLAYA_CAB.csv'; a.click();
+}
+document.addEventListener('DOMContentLoaded',render);
+</script>
+</body>
+</html>
