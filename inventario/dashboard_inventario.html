@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inventario S.S.G.G. — Panel</title>
+  <style>
+    :root {
+      --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+      --accent: #38bdf8; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 1.5rem 2rem; background: linear-gradient(135deg,#1e3a5f,#0f172a); border-bottom: 1px solid #334155; }
+    h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+    .sub { color: var(--muted); font-size: .9rem; }
+    main { padding: 1.5rem 2rem 3rem; max-width: 1400px; margin: 0 auto; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .kpi { background: var(--card); border-radius: 12px; padding: 1rem; border: 1px solid #334155; }
+    .kpi .val { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+    .kpi .lbl { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: .35rem; }
+    .kpi.bad .val { color: var(--bad); }
+    .kpi.warn .val { color: var(--warn); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+    section { background: var(--card); border-radius: 12px; padding: 1rem 1.25rem; border: 1px solid #334155; margin-bottom: 1rem; }
+    h2 { margin: 0 0 1rem; font-size: 1rem; color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { padding: .45rem .5rem; text-align: left; border-bottom: 1px solid #334155; }
+    th { color: var(--muted); font-weight: 600; }
+    .bar-wrap { display: flex; align-items: center; gap: .5rem; }
+    .bar { height: 8px; background: #334155; border-radius: 4px; flex: 1; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+    input { width: 100%; padding: .6rem .75rem; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: var(--text); margin-bottom: .75rem; }
+    .tag { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .7rem; }
+    .tag.neg { background: #7f1d1d; color: #fecaca; }
+    .tag.zero { background: #78350f; color: #fde68a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Inventario S.S.G.G. — Panel de control</h1>
+    <p class="sub">Generado: 2026-09-30 14:29 · Solo lectura (datos del Excel original)</p>
+  </header>
+  <main>
+    <div class="kpis">
+      <div class="kpi"><div class="val">1,274</div><div class="lbl">SKUs</div></div>
+      <div class="kpi"><div class="val">141,237</div><div class="lbl">Unidades ingresadas</div></div>
+      <div class="kpi"><div class="val">70,206</div><div class="lbl">Unidades egresadas</div></div>
+      <div class="kpi warn"><div class="val">245</div><div class="lbl">Sin stock</div></div>
+      <div class="kpi bad"><div class="val">132</div><div class="lbl">Stock negativo</div></div>
+      <div class="kpi"><div class="val">1,985</div><div class="lbl">Mov. salida</div></div>
+    </div>
+    <div class="grid2">
+      <section><h2>Salidas por tienda (top)</h2><div id="tiendas"></div></section>
+      <section><h2>Top consumo (salidas acumuladas)</h2><div id="top"></div></section>
+    </div>
+    <section>
+      <h2>Alertas — sin stock o negativo</h2>
+      <input type="search" id="q" placeholder="Buscar código o producto…" />
+      <table><thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Entradas</th><th>Salidas</th><th>Stock calc.</th></tr></thead><tbody id="alertas"></tbody></table>
+    </section>
+  </main>
+  <script>
+    const DATA = {"meta": {"generado": "2026-09-30 14:29", "total_skus": 1274, "total_entradas": 141237.12, "total_salidas": 70205.87, "sin_stock": 245, "negativos": 132, "mov_entrada": 2242, "mov_salida": 1985}, "by_cat": {"REFRIGERACION": {"items": 178, "stock": 932.5, "neg": 34}, "FERRETERIA": {"items": 266, "stock": 60550.75, "neg": 29}, "ILUMINACION": {"items": 60, "stock": 658.0, "neg": 4}, "ELECTRICIDAD": {"items": 133, "stock": 7516.5, "neg": 39}, "HERRAMIENTA": {"items": 143, "stock": 365.0, "neg": 1}, "OFICINA": {"items": 40, "stock": 532.0, "neg": 0}, "MISCELANEOS": {"items": 38, "stock": 372.5, "neg": 6}, "ELECTRONICO": {"items": 93, "stock": 202.0, "neg": 5}, "UNIFORME": {"items": 71, "stock": 4615.0, "neg": 0}, "AUTOMOTRIZ": {"items": 57, "stock": 121.5, "neg": 0}, "HERRERIA": {"items": 70, "stock": 2279.0, "neg": 5}, "PLOMERIA": {"items": 88, "stock": 129.0, "neg": 7}, "LIMPIEZA": {"items": 37, "stock": 1132.5, "neg": 2}}, "top_salidas": [["TORNILLO DRAYWALL 1.5\"", 12450.0, "00004-FER"], ["TORNILLO DRAYWALL 1\"", 9600.0, "00115-FER"], ["TIRRA BLANCO 4.8 X 250MM (UNIDAD)", 3800.0, "00209-FER"], ["CABLE N°12 BLANCO (METRO)", 3111.0, "00066-ELE"], ["TORNILLO DRAYWALL 7/16 GARRAPATA", 2646.0, "00116-FER"], ["CABLE N°12 AZUL (METRO)", 2000.0, "00089-ELE"], ["CABLE N° 10 AMARILLO (METRO)", 1700.0, "00118-ELE"], ["CABLE N°12 ROJO (METRO)", 1695.0, "00014-ELE"], ["TIRRA 300MM 5\"", 1500.0, "00237-FER"], ["RAMPLU NARANJA", 1239.0, "00141-FER"], ["CABLE N°12 NEGRO (METRO)", 1210.0, "00075-ELE"], ["CABLE N° 10 AZUL (METRO)", 1200.0, "00088-ELE"], ["CABLE N°12 AMARILLO (METRO)", 1200.0, "00117-ELE"], ["CABLE N° 10 NEGRO (METRO)", 1200.0, "00119-ELE"], ["TIRRA NEGRO 4.8 X 380MM (UNIDAD)", 1010.0, "00208-FER"]], "salidas_tienda": {"TURMERO": 37223.869999999995, "MAIQUETIA": 12154.0, "LA VIÑA": 10422.5, "PERIFERICO": 5690.75, "ISABELICA": 679.0, "TOCUYITO": 428.0, "NAGUANAGUA 1": 321.0, "LA VEGA (CARACAS)": 249.0, "LAS FERIAS": 234.5, "CEDI SECO": 220.5, "PARAPARAL": 215.0, "AV. CEDEÑO": 188.0, "EL BOSQUE": 180.75, "NAGUANAGUA 2": 177.5, "CORPORATIVO": 154.0, "SAN DIEGO": 138.0, "NAGUANAGUA 3": 129.0, "TAZAJAL": 128.0, "FLOR AMARILLO": 122.0, "GUACARA": 117.5}, "alertas": [{"codigo": "00066-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N°12 BLANCO (METRO)", "stock_excel": -909.0, "stock_calc": -909.0, "entradas": 2202.0, "salidas": 3111.0}, {"codigo": "00262-FER", "categoria": "FERRETERIA", "producto": "TORNILLO AUTOTALADRANTE 5/16 X 1", "stock_excel": -600.0, "stock_calc": -600.0, "entradas": 0, "salidas": 600.0}, {"codigo": "00111-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N°10 BLANCO (METRO)", "stock_excel": -500.0, "stock_calc": -500.0, "entradas": 500.0, "salidas": 1000.0}, {"codigo": "00118-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 10 AMARILLO (METRO)", "stock_excel": -500.0, "stock_calc": -500.0, "entradas": 1200.0, "salidas": 1700.0}, {"codigo": "00122-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 10 ROJO (METRO)", "stock_excel": -500.0, "stock_calc": -500.0, "entradas": 500.0, "salidas": 1000.0}, {"codigo": "00070-HRR", "categoria": "HERRERIA", "producto": "ABRAZADERA MOROCHA UNITRU 1\"", "stock_excel": -450.0, "stock_calc": -450.0, "entradas": 0, "salidas": 450.0}, {"codigo": "00089-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N°12 AZUL (METRO)", "stock_excel": -400.0, "stock_calc": -400.0, "entradas": 1600.0, "salidas": 2000.0}, {"codigo": "00117-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N°12 AMARILLO (METRO)", "stock_excel": -400.0, "stock_calc": -400.0, "entradas": 800.0, "salidas": 1200.0}, {"codigo": "00014-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N°12 ROJO (METRO)", "stock_excel": -387.5, "stock_calc": -387.5, "entradas": 1307.5, "salidas": 1695.0}, {"codigo": "00119-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 10 NEGRO (METRO)", "stock_excel": -300.0, "stock_calc": -300.0, "entradas": 900.0, "salidas": 1200.0}, {"codigo": "00035-MSC", "categoria": "MISCELANEOS", "producto": "PORTA HABLADORES", "stock_excel": -202.0, "stock_calc": -202.0, "entradas": 0, "salidas": 202.0}, {"codigo": "00109-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 10 VERDE  (METRO)", "stock_excel": -200.0, "stock_calc": -200.0, "entradas": 100.0, "salidas": 300.0}, {"codigo": "00082-ELE", "categoria": "ELECTRICIDAD", "producto": "TUBO ELECTRICO 1\" BLANCO 3 METRO", "stock_excel": -150.0, "stock_calc": -150.0, "entradas": 30.0, "salidas": 180.0}, {"codigo": "00141-FER", "categoria": "FERRETERIA", "producto": "RAMPLU NARANJA", "stock_excel": -142.0, "stock_calc": -142.0, "entradas": 1097.0, "salidas": 1239.0}, {"codigo": "00060-ELE", "categoria": "ELECTRICIDAD", "producto": "ADAPTADOR TERMINAL PLASTICO 3/4", "stock_excel": -140.0, "stock_calc": -140.0, "entradas": 34.0, "salidas": 174.0}, {"codigo": "00114-ELE", "categoria": "ELECTRICIDAD", "producto": "TOMA CORRIENTE DOBLE C/TIERRA P/EMPOTRAR", "stock_excel": -135.0, "stock_calc": -135.0, "entradas": 5.0, "salidas": 140.0}, {"codigo": "00094-FER", "categoria": "FERRETERIA", "producto": "CAJETIN 4 X 2", "stock_excel": -132.0, "stock_calc": -132.0, "entradas": 133.0, "salidas": 265.0}, {"codigo": "00073-ELE", "categoria": "ELECTRICIDAD", "producto": "TAPA CIEGA PVC OCTAGONAL", "stock_excel": -120.0, "stock_calc": -120.0, "entradas": 70.0, "salidas": 190.0}, {"codigo": "00128-ELE", "categoria": "ELECTRICIDAD", "producto": "CONECTOR 3\" PVC", "stock_excel": -120.0, "stock_calc": -120.0, "entradas": 0, "salidas": 120.0}, {"codigo": "00263-FER", "categoria": "FERRETERIA", "producto": "CADENA 1/8 METRO", "stock_excel": -120.0, "stock_calc": -120.0, "entradas": 0, "salidas": 120.0}, {"codigo": "00105-ELE", "categoria": "ELECTRICIDAD", "producto": "CONECTOR 2\" PVC", "stock_excel": -102.0, "stock_calc": -102.0, "entradas": 26.0, "salidas": 128.0}, {"codigo": "00018-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 4 NEGRO (METRO)", "stock_excel": -100.0, "stock_calc": -100.0, "entradas": 500.0, "salidas": 600.0}, {"codigo": "00079-ELE", "categoria": "ELECTRICIDAD", "producto": "CURVA PARA TUBERIA ELECTRICA 1\"", "stock_excel": -100.0, "stock_calc": -100.0, "entradas": 12.0, "salidas": 112.0}, {"codigo": "00120-ELE", "categoria": "ELECTRICIDAD", "producto": "CABLE N° 10 VERDE (METRO)", "stock_excel": -100.0, "stock_calc": -100.0, "entradas": 300.0, "salidas": 400.0}, {"codigo": "00091-FER", "categoria": "FERRETERIA", "producto": "CAJETIN EXAGONAL NEGRO", "stock_excel": -99.0, "stock_calc": -99.0, "entradas": 21.0, "salidas": 120.0}, {"codigo": "00076-FER", "categoria": "FERRETERIA", "producto": "1/4 GALON CATALIZADOR EPOXICO", "stock_excel": -95.0, "stock_calc": -95.0, "entradas": 8.0, "salidas": 103.0}, {"codigo": "00001-REF", "categoria": "REFRIGERACION", "producto": "VARILLA PLATA AL 5% 50CM", "stock_excel": -94.0, "stock_calc": -94.0, "entradas": 57.0, "salidas": 151.0}, {"codigo": "00124-REF", "categoria": "REFRIGERACION", "producto": "ARMAFLEX 3/4", "stock_excel": -80.0, "stock_calc": -80.0, "entradas": 70.0, "salidas": 150.0}, {"codigo": "00088-FER", "categoria": "FERRETERIA", "producto": "CAJETIN 4 X 4", "stock_excel": -76.0, "stock_calc": -76.0, "entradas": 54.0, "salidas": 130.0}, {"codigo": "00047-ELE", "categoria": "ELECTRICIDAD", "producto": "TAPA CIEGA 4 X 2 BLANCO", "stock_excel": -74.0, "stock_calc": -74.0, "entradas": 138.0, "salidas": 212.0}, {"codigo": "00040-HRR", "categoria": "HERRERIA", "producto": "ABRAZADERA MOROCHA UNITRU 2\"", "stock_excel": -70.0, "stock_calc": -70.0, "entradas": 14.0, "salidas": 84.0}, {"codigo": "00100-FER", "categoria": "FERRETERIA", "producto": "CURVA PARA TUBERIA ELECTRICA 3/4", "stock_excel": -69.0, "stock_calc": -69.0, "entradas": 26.0, "salidas": 95.0}, {"codigo": "00099-ELE", "categoria": "ELECTRICIDAD", "producto": "TUBO ELECTRICO 2\" 3 METROS", "stock_excel": -50.0, "stock_calc": -50.0, "entradas": 7.0, "salidas": 57.0}, {"codigo": "00258-FER", "categoria": "FERRETERIA", "producto": "CINTA AISLANTE PVC MOMIA", "stock_excel": -50.0, "stock_calc": -50.0, "entradas": 0, "salidas": 50.0}, {"codigo": "00165-REF", "categoria": "REFRIGERACION", "producto": "CODO DE COBRE 3/8 45°", "stock_excel": -45.0, "stock_calc": -45.0, "entradas": 0, "salidas": 45.0}, {"codigo": "00070-ELE", "categoria": "ELECTRICIDAD", "producto": "TAPA CIEGA PVC 4 X 4", "stock_excel": -41.0, "stock_calc": -41.0, "entradas": 84.0, "salidas": 125.0}, {"codigo": "00127-ELE", "categoria": "ELECTRICIDAD", "producto": "TUBO PVC ELECTRICIDAD 3\" 3 METROS", "stock_excel": -40.0, "stock_calc": -40.0, "entradas": 0, "salidas": 40.0}, {"codigo": "00069-HRR", "categoria": "HERRERIA", "producto": "ABRAZADERA MOROCHA UNITRU 3\"", "stock_excel": -40.0, "stock_calc": -40.0, "entradas": 0, "salidas": 40.0}, {"codigo": "00229-FER", "categoria": "FERRETERIA", "producto": "RAMPLUG MARIPOSA C/TORNILLO 1/4", "stock_excel": -35.0, "stock_calc": -35.0, "entradas": 85.0, "salidas": 120.0}, {"codigo": "00223-FER", "categoria": "FERRETERIA", "producto": "ARANDELA PLANA 1/2", "stock_excel": -30.0, "stock_calc": -30.0, "entradas": 90.0, "salidas": 120.0}, {"codigo": "00115-ELE", "categoria": "ELECTRICIDAD", "producto": "CAJA DE PASO METALICA 12 X 12 X 4", "stock_excel": -30.0, "stock_calc": -30.0, "entradas": 10.0, "salidas": 40.0}, {"codigo": "00001-ELE", "categoria": "ELECTRICIDAD", "producto": "TUBERIA CORRUGADA PVC NEGRO 3/4 METRO", "stock_excel": -26.0, "stock_calc": -26.0, "entradas": 29.0, "salidas": 55.0}, {"codigo": "00040-PLM", "categoria": "PLOMERIA", "producto": "TUBO 3/4 PVC X METRO", "stock_excel": -26.0, "stock_calc": -26.0, "entradas": 153.0, "salidas": 179.0}, {"codigo": "00028-REF", "categoria": "REFRIGERACION", "producto": "CODO DE COBRE SOLDABLE 90° 3/8", "stock_excel": -23.0, "stock_calc": -23.0, "entradas": 7.0, "salidas": 30.0}, {"codigo": "00030-REF", "categoria": "REFRIGERACION", "producto": "CODO DE COBRE SOLDABLE 90° 3/4", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 39.0, "salidas": 59.0}, {"codigo": "00049-REF", "categoria": "REFRIGERACION", "producto": "VARILLA PLATA 2% 50CM", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 10.0, "salidas": 30.0}, {"codigo": "00018-PLM", "categoria": "PLOMERIA", "producto": "CODO 90° 3/4 PVC", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 128.0, "salidas": 148.0}, {"codigo": "00097-FER", "categoria": "FERRETERIA", "producto": "ABRAZADERA 1\"", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 19.0, "salidas": 39.0}, {"codigo": "00103-ELE", "categoria": "ELECTRICIDAD", "producto": "CURVA PARA TUBERIA ELECTRICA 2\"", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 4.0, "salidas": 24.0}, {"codigo": "00083-PLM", "categoria": "PLOMERIA", "producto": "CONECTOR TERMINAL PVC 3/4", "stock_excel": -20.0, "stock_calc": -20.0, "entradas": 0, "salidas": 20.0}]};
+    const maxT = Math.max(...Object.values(DATA.salidas_tienda), 1);
+    document.getElementById('tiendas').innerHTML = Object.entries(DATA.salidas_tienda).map(([t,v]) => {
+      const pct = (100*v/maxT).toFixed(0);
+      return `<div class="bar-wrap"><span style="width:140px;font-size:.8rem">${t}</span><div class="bar"><i style="width:${pct}%"></i></div><strong>${v.toLocaleString('es')}</strong></div>`;
+    }).join('');
+    document.getElementById('top').innerHTML = '<table><thead><tr><th>Producto</th><th>Salidas</th></tr></thead><tbody>' +
+      DATA.top_salidas.map(([n,s,c]) => `<tr><td>${n}<br><small style="color:#94a3b8">${c}</small></td><td>${s.toLocaleString('es')}</td></tr>`).join('') + '</tbody></table>';
+    function renderAlertas(filter='') {
+      const f = filter.toLowerCase();
+      const rows = DATA.alertas.filter(p => !f || p.codigo.toLowerCase().includes(f) || p.producto.toLowerCase().includes(f));
+      document.getElementById('alertas').innerHTML = rows.map(p => {
+        const tag = p.stock_calc < 0 ? '<span class="tag neg">NEG</span>' : '<span class="tag zero">0</span>';
+        return `<tr><td>${p.codigo}</td><td>${p.producto}</td><td>${p.categoria}</td><td>${p.entradas}</td><td>${p.salidas}</td><td>${p.stock_calc} ${tag}</td></tr>`;
+      }).join('');
+    }
+    renderAlertas();
+    document.getElementById('q').addEventListener('input', e => renderAlertas(e.target.value));
+  </script>
+</body>
+</html>
