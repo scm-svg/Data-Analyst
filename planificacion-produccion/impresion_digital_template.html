@@ -78,8 +78,6 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .imp-grupo-l14{border-top:3px solid var(--ac)}
 .imp-grupo-l5{border-top:3px solid var(--l5)}
 .imp-grupo-l5 h3{color:var(--l5)}
-tr.imp-pd td{background:rgba(255,193,7,.10)}
-tr.imp-mod-pd td{box-shadow:inset 3px 0 0 var(--yw)}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 @media(max-width:780px){.content,.fbar,.hdr{padding-left:16px;padding-right:16px}}
 </style>
@@ -130,17 +128,8 @@ var _open={};
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
 function fmtN(n){ n=Number(n)||0; return n.toLocaleString('es-CO',{maximumFractionDigits:0}); }
-function linCls(l){ return 'c'+(String(l).replace(/\D/g,'')||'1'); }
 function q(){ return (document.getElementById('q').value||'').toLowerCase().trim(); }
 function matchQ(s){ var t=q(); return !t || String(s||'').toLowerCase().indexOf(t)!==-1; }
-function chipsLineas(lineas){
-  if(!lineas||!lineas.length) return '<span class="badge b-mut">Sin línea</span>';
-  return lineas.map(function(l){ return '<span class="chip '+linCls(l)+'">'+esc(l)+'</span>'; }).join(' ');
-}
-function badgePrio(p){
-  var map={Especial:'b-esp',Urgente:'b-urg',Alta:'b-alt',Media:'b-med',Baja:'b-baj'};
-  return '<span class="badge '+(map[p]||'b-mut')+'">'+esc(p||'Sin Asignar')+'</span>';
-}
 function impKey(sku, mo){
   var m=String(mo||'').trim().toUpperCase();
   var s=String(sku||'').trim().toUpperCase();
@@ -240,7 +229,7 @@ function htmlSkuTable(m){
   (m.skus||[]).forEach(function(s){
     var key=impKey(s.sku, s.mo);
     var on=!!_impChecks[key];
-    t+='<tr class="'+(s.pd?'imp-pd':'')+'">';
+    t+='<tr>';
     t+='<td class="left">'+(s.pd?'<span class="badge b-pd">PD</span> ':'')+esc(s.mo||'—')+'</td>';
     t+='<td class="left">'+esc(s.sku)+'</td>';
     t+='<td class="left">'+esc(s.detalle)+'</td>';
@@ -267,21 +256,17 @@ function htmlGrupo(id, titulo, sub, modelos, extraClass){
     html+='<p class="sub">No hay modelos en este grupo con el filtro actual.</p></div>';
     return html;
   }
-  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>Prioridad</th><th>Línea</th><th>MOs</th><th>Variantes</th><th>Faltante</th><th>Fecha</th><th>Logo</th></tr></thead><tbody>';
+  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Faltante</th><th>Logo</th></tr></thead><tbody>';
   modelos.forEach(function(m, i){
     var mid=id+'-'+i;
     var estM=estadoKeys(keysDeModelo(m));
     var pdTag=m.nPd?' <span class="badge b-pd">'+m.nPd+' PD</span>':'';
-    html+='<tr class="tr-exp'+(m.nPd?' imp-mod-pd':'')+'" data-open="'+mid+'"><td><span class="chev">▸</span></td>';
+    html+='<tr class="tr-exp" data-open="'+mid+'"><td><span class="chev">▸</span></td>';
     html+='<td class="left">'+esc(m.modelo)+pdTag+'</td>';
-    html+='<td>'+badgePrio(m.prioridad)+'</td>';
-    html+='<td>'+chipsLineas(m.lineas)+'</td>';
     html+='<td class="num">'+fmtN(m.nMos)+'</td>';
-    html+='<td class="num">'+fmtN(m.nSkus)+'</td>';
     html+='<td class="num">'+fmtN(m.faltante)+'</td>';
-    html+='<td>'+esc(m.fecha||'—')+'</td>';
     html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'"><input type="checkbox" data-imp-mod="'+mid+'" '+(estM.all?'checked ':'')+'></label></td></tr>';
-    html+='<tr id="'+mid+'" class="sku-row" style="display:'+(_open[mid]?'table-row':'none')+'"><td colspan="9">'+(_open[mid]?htmlSkuTable(m):'')+'</td></tr>';
+    html+='<tr id="'+mid+'" class="sku-row" style="display:'+(_open[mid]?'table-row':'none')+'"><td colspan="5">'+(_open[mid]?htmlSkuTable(m):'')+'</td></tr>';
   });
   html+='</tbody></table></div></div>';
   return html;

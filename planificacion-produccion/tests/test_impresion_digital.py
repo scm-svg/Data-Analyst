@@ -133,6 +133,13 @@ class TestReglasId(unittest.TestCase):
         self.assertIn("imp-grupo-l5", html)
         self.assertIn("imp-grupo-l14", html)
         self.assertIn("b-pd", html)
+        self.assertNotIn("imp-mod-pd", html)
+        self.assertNotIn("<th>Prioridad</th>", html)
+        self.assertNotIn("<th>Línea</th>", html)
+        self.assertNotIn("<th>Variantes</th>", html)
+        self.assertNotIn("<th>Fecha</th>", html)
+        self.assertIn("<th>MOs</th>", html)
+        self.assertIn("<th>Faltante</th>", html)
         self.assertNotIn("__DASH_JSON__", html)
         data = json.loads(html.split('id="dash-data">')[1].split("</script>")[0])
         self.assertEqual(data["lista"]["linea5"][0]["modelo"], "SHORT PLAYA CAB")
@@ -189,6 +196,11 @@ class TestExcelReal(unittest.TestCase):
         self.assertIn("SHORT PLAYA CAB", html)
         self.assertIn("lista fija", html)
         self.assertIn("M|", html)
+        self.assertNotIn("imp-mod-pd", html)
+        self.assertNotIn("<th>Prioridad</th>", html)
+        self.assertNotIn("<th>Línea</th>", html)
+        self.assertNotIn("<th>Variantes</th>", html)
+        self.assertNotIn("<th>Fecha</th>", html)
 
 
 if __name__ == "__main__":
