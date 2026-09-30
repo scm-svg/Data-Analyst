@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Orden de Manufactura · Taller &amp; Satélite</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;
+  --tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--a2:#f75b8a;
+  --gr:#4caf76;--rd:#ef4444;--yw:#ffc107;
+  --taller:#f97316;--sat:#22d3ee;
+  --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px;
+}
+body.light{
+  --bg:#f5f6fa;--surf:#ffffff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;
+  --tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5;--ac:#5b6af7;--a2:#f75b8a;
+  --gr:#2e9e5e;--rd:#dc3545;--yw:#e6a800;
+  --taller:#ea580c;--sat:#0891b2;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh;transition:background .3s,color .3s}
+.hdr{background:linear-gradient(135deg,#0d0e13 0%,#191a2d 55%,#0d0e13 100%);border-bottom:1px solid var(--brd);padding:18px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3 100%)}
+.hdr-l h1{font-family:var(--fh);font-size:1.55rem;font-weight:800;letter-spacing:-.5px}
+.hdr-l h1 em{color:var(--ac);font-style:normal}
+.hdr-l p{color:var(--mu);font-size:.8rem;margin-top:2px}
+.hdr-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kpi-bar{display:flex;gap:10px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:9px 14px;text-align:center;min-width:76px}
+.kpib .kv{font-family:var(--fh);font-size:1.3rem;font-weight:800;color:var(--ac);line-height:1}
+.kpib .kl{font-size:.64rem;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.theme-btn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb);transition:all .2s;white-space:nowrap}
+.theme-btn:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
+.content{padding:22px 40px;max-width:1600px;margin:0 auto}
+.g-lanes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:1100px){.g-lanes{grid-template-columns:1fr}}
+@media(max-width:780px){.content,.hdr{padding-left:16px;padding-right:16px}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;transition:border-color .2s,background .3s;position:relative;margin-bottom:14px}
+.card:hover{border-color:#3a3b55}
+.card h3{font-family:var(--fh);font-size:.92rem;font-weight:700;margin-bottom:2px}
+.sub{font-size:.7rem;color:var(--mu);margin-bottom:12px}
+.footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
+.btn{background:var(--ac);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:var(--fb);font-size:.78rem;font-weight:700;cursor:pointer}
+.btn:hover{opacity:.88}
+.btn.ghost{background:var(--s2);color:var(--tx);border:1px solid var(--brd)}
+
+.lane{border-radius:18px;padding:16px;min-height:420px;position:relative;overflow:hidden}
+.lane.taller{background:linear-gradient(180deg,rgba(249,115,22,.12),var(--surf));border:1px solid rgba(249,115,22,.35)}
+.lane.sat{background:linear-gradient(180deg,rgba(34,211,238,.1),var(--surf));border:1px solid rgba(34,211,238,.32)}
+.lane-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+.lane-badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:.68rem;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+.lane.taller .lane-badge{background:rgba(249,115,22,.2);color:var(--taller)}
+.lane.sat .lane-badge{background:rgba(34,211,238,.16);color:var(--sat)}
+.lane h3{font-family:var(--fh);font-size:1.15rem;font-weight:800}
+.hint{font-size:.68rem;color:var(--mu)}
+.flow{display:flex;flex-direction:column;gap:0;position:relative}
+.flow::before{content:"";position:absolute;left:23px;top:18px;bottom:18px;width:2px;background:linear-gradient(180deg,transparent,currentColor 12%,currentColor 88%,transparent);opacity:.28}
+.lane.taller .flow{color:var(--taller)}
+.lane.sat .flow{color:var(--sat)}
+.item{display:grid;grid-template-columns:46px 1fr auto;gap:10px;align-items:stretch;margin-bottom:10px;cursor:grab;position:relative;z-index:1}
+.item:active{cursor:grabbing}
+.item.dragging{opacity:.45}
+.num{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:800;font-size:1.05rem;color:#fff;flex-shrink:0;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.lane.taller .num{background:var(--taller)}
+.lane.sat .num{background:var(--sat);color:#042024}
+.item-body{background:var(--s2);border:1px solid var(--brd);border-radius:14px;padding:12px 14px;transition:transform .15s,border-color .15s}
+.item:hover .item-body{transform:translateX(3px);border-color:currentColor}
+.item-body h4{font-family:var(--fh);font-size:.95rem;font-weight:800}
+.item-body .meta{font-size:.7rem;color:var(--mu);margin-top:2px}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:.64rem;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.3px}
+.tag.cab{background:rgba(91,106,247,.18);color:#a5b4fc}
+.tag.dama{background:rgba(247,91,138,.18);color:#f9a8d4}
+.tag.kids{background:rgba(76,175,118,.18);color:#86efac}
+.tag.proc{background:rgba(91,106,247,.16);color:#c7d2fe}
+.tag.proc.sat{background:rgba(34,211,238,.16);color:var(--sat)}
+.tag.link a{color:inherit;text-decoration:none}
+.status{align-self:center;border:none;border-radius:999px;padding:6px 10px;font-size:.64rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.status.pendiente{background:var(--s3);color:var(--mu);border:1px solid var(--brd)}
+.status.proceso{background:rgba(255,193,7,.18);color:var(--yw)}
+.status.listo{background:rgba(76,175,118,.18);color:var(--gr)}
+.mini-seq{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.mini-step{background:var(--s3);border:1px solid var(--brd);border-radius:8px;padding:4px 8px;font-size:.68rem;font-weight:700}
+.mini-step.prio{border-color:rgba(76,175,118,.55);box-shadow:0 0 0 1px rgba(76,175,118,.25);font-weight:800}
+.prio-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.4px;color:var(--gr);margin-left:4px}
+.arrow{color:var(--mu);font-size:.7rem}
+
+.overview{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+@media(max-width:780px){.overview{grid-template-columns:1fr}}
+.ov-row{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:4px}
+.ov-chip{flex:0 1 auto;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:8px 10px;font-size:.72rem;font-weight:700}
+.ov-n{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:.7rem;font-weight:800;color:#fff}
+.ov-chip.taller .ov-n{background:var(--taller)}
+.ov-chip.sat .ov-n{background:var(--sat);color:#042024}
+
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:.7rem;color:var(--mu)}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%}
+.drop-hint{outline:2px dashed var(--ac);border-radius:14px}
+.note{margin-top:8px;background:rgba(255,193,7,.12);border:1px solid rgba(255,193,7,.35);color:var(--yw);border-radius:10px;padding:8px 10px;font-size:.72rem;font-weight:600;line-height:1.35}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-l">
+    <h1>Orden de <em>Manufactura</em></h1>
+    <p>Secuencia visual Taller y Satélite · en Río y Mar, KIDS va primero</p>
+  </div>
+  <div class="hdr-r">
+    <div class="kpi-bar">
+      <div class="kpib"><div class="kv" id="kpiTaller" style="color:var(--taller)">0</div><div class="kl">Líneas taller</div></div>
+      <div class="kpib"><div class="kv" id="kpiSat" style="color:var(--sat)">0</div><div class="kl">Líneas satélite</div></div>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button" onclick="toggleTheme()">☀️ Light</button>
+  </div>
+</div>
+
+<div class="content">
+  <div class="card">
+    <h3>Secuencia de producción</h3>
+    <div class="sub">Orden de manufactura en paralelo: Taller (interno) y Satélite. Arrastra las tarjetas para reordenar. Clic en el estado para cambiarlo.</div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--taller)"></i> Taller</span>
+      <span><i class="dot" style="background:var(--sat)"></i> Satélite</span>
+      <span><i class="dot" style="background:#86efac"></i> KIDS prioridad</span>
+      <span><i class="dot" style="background:#a5b4fc"></i> CAB</span>
+      <span><i class="dot" style="background:#f9a8d4"></i> DAMA</span>
+    </div>
+    <div class="overview">
+      <div>
+        <div class="hint" style="margin-bottom:6px;font-weight:700;color:var(--taller)">TALLER</div>
+        <div class="ov-row" id="ovTaller"></div>
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:6px;font-weight:700;color:var(--sat)">SATÉLITE</div>
+        <div class="ov-row" id="ovSat"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="g-lanes">
+    <section class="lane taller" id="laneTaller">
+      <div class="lane-head">
+        <div>
+          <span class="lane-badge">🏭 Manufactura taller</span>
+          <h3>Producción interna</h3>
+          <p class="hint">Río y Mar: KIDS primero · Lite Pant y Daily corte/confección acá</p>
+        </div>
+        <button class="btn ghost" type="button" onclick="resetLane('taller')">↺ Orden original</button>
+      </div>
+      <div class="flow" id="flowTaller"></div>
+    </section>
+    <section class="lane sat" id="laneSat">
+      <div class="lane-head">
+        <div>
+          <span class="lane-badge">🛰️ Manufactura satélite</span>
+          <h3>Producción satélite</h3>
+          <p class="hint">Chaqueta Lite acá · Daily 3.0 Kids: serigrafía</p>
+        </div>
+        <button class="btn ghost" type="button" onclick="resetLane('satelite')">↺ Orden original</button>
+      </div>
+      <div class="flow" id="flowSat"></div>
+    </section>
+  </div>
+</div>
+
+<div class="footer">Orden de manufactura · Taller &amp; Satélite · el orden y el estado se guardan en este navegador</div>
+
+<script>
+const LS = { order: 'om_order_v4', status: 'om_status_v1', theme: 'om_theme' };
+
+const LINKS = {
+  rio: 'Dashboard_Rio_Original_Actualizado (1).html',
+  basic: 'DASHBOARD BASIC LINE.html',
+  costa: 'SHORT PLAYA SUBL.html',
+  explore: 'dash_explorepants.html',
+  lite: 'sportlite.html',
+  daily: 'DAILY 3.0 DASHBOARD PARA ACTUALIZAR.html'
+};
+
+const DEFAULTS = {
+  taller: [
+    {id:'rio', name:'Río Original', meta:'KIDS prioridad · luego CAB y DAMA', genders:['KIDS','CAB','DAMA'], link:LINKS.rio},
+    {id:'mar', name:'Mar Original', meta:'KIDS prioridad · luego CAB y DAMA', genders:['KIDS','CAB','DAMA']},
+    {id:'basic', name:'Basic Line', meta:'Línea básica de continuidad', link:LINKS.basic},
+    {id:'short-r1', name:'Short R1 / S', meta:'Shorts de taller'},
+    {id:'microfibra', name:'Resto de modelos microfibra', meta:'Otras líneas de microfibra', note:'Evaluar variantes'},
+    {id:'cotton-kids', name:'Colección Cotton Kids', meta:'Kids · cotton', genders:['KIDS'], note:'Evaluar primera producción para activar 2ª ola'},
+    {id:'lite-pant', name:'Lite Pant', meta:'Colección Lite · interno', process:'Corte y confección', link:LINKS.lite},
+    {id:'daily-kids-corte', name:'Daily 3.0 Kids', meta:'Manufactura interna', process:'Corte y confección', link:LINKS.daily}
+  ],
+  satelite: [
+    {id:'costa', name:'Short Sublimado Costa', meta:'Short playa sublimado', link:LINKS.costa},
+    {id:'explore', name:'Explore Pants', meta:'Pantalón explore', link:LINKS.explore},
+    {id:'lite-chaqueta', name:'Chaqueta Lite', meta:'Colección Lite · satélite', link:LINKS.lite},
+    {id:'daily-kids-serigrafia', name:'Daily 3.0 Kids', meta:'Acabado en satélite', process:'Serigrafía', link:LINKS.daily},
+    {id:'motion', name:'Motion Loop Kids', meta:'Kids · motion loop'}
+  ]
+};
+
+const CATALOG = {};
+DEFAULTS.taller.concat(DEFAULTS.satelite).forEach(function(p){ CATALOG[p.id] = p; });
+
+const STATUSES = ['pendiente','proceso','listo'];
+const STATUS_LABEL = {pendiente:'Pendiente', proceso:'En proceso', listo:'Listo'};
+
+let order = loadJSON(LS.order, {taller: DEFAULTS.taller.map(p=>p.id), satelite: DEFAULTS.satelite.map(p=>p.id)});
+let statusMap = loadJSON(LS.status, {});
+
+function loadJSON(key, fallback){
+  try{
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  }catch(e){ return fallback; }
+}
+function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+function renderLanes(){
+  renderLane('taller', 'flowTaller', 'ovTaller');
+  renderLane('satelite', 'flowSat', 'ovSat');
+  document.getElementById('kpiTaller').textContent = (order.taller||[]).length;
+  document.getElementById('kpiSat').textContent = (order.satelite||[]).length;
+}
+function renderLane(lane, flowId, ovId){
+  const ids = order[lane] || [];
+  document.getElementById(flowId).innerHTML = ids.map(function(id, i){
+    const p = CATALOG[id]; if(!p) return '';
+    const st = statusMap[id] || 'pendiente';
+    const seq = p.genders && p.genders.length
+      ? '<div class="mini-seq">'+p.genders.map(function(g,gi){
+          const prio = g==='KIDS';
+          return (gi?'<span class="arrow">→</span>':'')+
+            '<span class="mini-step tag '+g.toLowerCase()+(prio?' prio':'')+'">'+g+(prio?'<span class="prio-lbl">prioridad</span>':'')+'</span>';
+        }).join('')+'</div>'
+      : '';
+    const proc = p.process ? '<span class="tag proc'+(lane==='satelite'?' sat':'')+'">'+esc(p.process)+'</span>' : '';
+    const link = (p.link || proc) ? '<div class="tags" style="margin-top:8px">'+proc+(p.link?'<span class="tag link"><a href="'+p.link+'">Ver dashboard</a></span>':'')+'</div>' : '';
+    const note = p.note ? '<div class="note">'+esc(p.note)+'</div>' : '';
+    return '<article class="item" draggable="true" data-lane="'+lane+'" data-id="'+p.id+'">'+
+      '<div class="num">'+(i+1)+'</div>'+
+      '<div class="item-body"><h4>'+esc(p.name)+'</h4><div class="meta">'+esc(p.meta||'')+'</div>'+
+      seq+note+link+'</div>'+
+      '<button class="status '+st+'" type="button" onclick="cycleStatus(\''+p.id+'\')">'+STATUS_LABEL[st]+'</button>'+
+    '</article>';
+  }).join('');
+  document.getElementById(ovId).innerHTML = ids.map(function(id,i){
+    const p = CATALOG[id]; if(!p) return '';
+    const extra = p.process ? ' · '+p.process : '';
+    return '<div class="ov-chip '+ (lane==='taller'?'taller':'sat') +'"><span class="ov-n">'+(i+1)+'</span>'+esc(p.name+extra)+'</div>';
+  }).join('');
+  bindDrag(flowId, lane);
+}
+
+function cycleStatus(id){
+  const cur = statusMap[id] || 'pendiente';
+  const next = STATUSES[(STATUSES.indexOf(cur)+1)%STATUSES.length];
+  statusMap[id] = next;
+  saveJSON(LS.status, statusMap);
+  renderLanes();
+}
+function resetLane(lane){
+  order[lane] = DEFAULTS[lane].map(function(p){ return p.id; });
+  saveJSON(LS.order, order);
+  renderLanes();
+}
+
+function bindDrag(flowId, lane){
+  const root = document.getElementById(flowId);
+  let dragId = null;
+  root.querySelectorAll('.item').forEach(function(el){
+    el.addEventListener('dragstart', function(){
+      dragId = el.getAttribute('data-id');
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', function(){ el.classList.remove('dragging'); dragId=null; });
+    el.addEventListener('dragover', function(e){
+      e.preventDefault();
+      el.classList.add('drop-hint');
+    });
+    el.addEventListener('dragleave', function(){ el.classList.remove('drop-hint'); });
+    el.addEventListener('drop', function(e){
+      e.preventDefault();
+      el.classList.remove('drop-hint');
+      const target = el.getAttribute('data-id');
+      if(!dragId || dragId===target) return;
+      const arr = order[lane].slice();
+      const from = arr.indexOf(dragId);
+      const to = arr.indexOf(target);
+      if(from<0 || to<0) return;
+      arr.splice(from,1);
+      arr.splice(to,0,dragId);
+      order[lane] = arr;
+      saveJSON(LS.order, order);
+      renderLanes();
+    });
+  });
+}
+
+function toggleTheme(){
+  const light = document.body.classList.toggle('light');
+  localStorage.setItem(LS.theme, light?'light':'dark');
+  document.getElementById('themeBtn').textContent = light ? '🌙 Dark' : '☀️ Light';
+}
+
+function esc(s){
+  return String(s||'').replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+(function init(){
+  if(localStorage.getItem(LS.theme)==='light'){
+    document.body.classList.add('light');
+    document.getElementById('themeBtn').textContent = '🌙 Dark';
+  }
+  renderLanes();
+})();
+</script>
+</body>
+</html>
