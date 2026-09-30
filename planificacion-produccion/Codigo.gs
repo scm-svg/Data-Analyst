@@ -1,10 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.45 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.46 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - IMPRESIÓN DIGITAL LISTA FIJA: la pestaña ya no sigue el plan
+ *     semanal de costura. Drill-down modelo → SKU ordenado por
+ *     prioridad (Especial → Urgente → Alta → Media → Baja), partido
+ *     en Líneas 1–4 vs Línea 5. Las PD se marcan; el check se guarda
+ *     igual (MO+SKU, botón Guardar, sin semana). El filtro de semana
+ *     del dashboard no vacía esta pestaña.
  *   - COLOR SIN SALTOS: Proyeccion - SKUS, Entrada de almacén y los
  *     drill-downs agrupan por color dentro del modelo. Primero
  *     Priorizacion - SKUs, luego Negro → Blanco → Azul Marino, el
@@ -249,7 +255,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.45";
+var VERSION_SISTEMA = "5.9.46";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -5321,9 +5327,9 @@ function supuestosDashboard_(capsModelo) {
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
-    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar.",
+    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
-    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
+    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
     ]
   };
 }
@@ -5829,6 +5835,7 @@ function obtenerDatosDashboardCompleto() {
 
   var skuToModelo = {};
   var setModelos = {}, setSkus = {}, setGeneros = {}, setColores = {}, setTallas = {}, setPrioridades = {}, setLineas = {};
+  var mapaSkuPrioDash = leerMinimasSku_(ss);
 
   function procesarHojaBacklog(hojaAct, esEspecial) {
     if (!hojaAct) return;
@@ -5887,14 +5894,19 @@ function obtenerDatosDashboardCompleto() {
         iProdQty !== -1,
         iFalt !== -1 && dph[i][iFalt] !== ""
       );
+      var recSkuDash = recSkuPrio_(mapaSkuPrioDash, s);
 
       resp.backlog.push({
         sku: s, modelo: m, detalle: arrDetalle.join("-"), mo: iMo !== -1 ? String(dph[i][iMo]) : "",
         genero: mGen, color: color, talla: talla, linea: linea, cap: cap,
         tipo: esEspecial ? "Especial" : "Producción",
         solicitada: cantSol, producida: prodQty, faltante: faltanteFinal,
-        prioridad: prioridadNormalizada, fechaSalida: fechaFila instanceof Date ? fechaFila.getTime() : fechaFila,
-        minima: pInfo.minima
+        prioridad: esEspecial ? "Especial" : prioridadNormalizada,
+        fechaSalida: fechaFila instanceof Date ? fechaFila.getTime() : fechaFila,
+        minima: pInfo.minima,
+        moStatus: iStatusPH !== -1 ? String(dph[i][iStatusPH] || "").trim() : "",
+        esSkuPrio: !!(recSkuDash && recSkuDash.min > 0),
+        skuPrioOrden: recSkuDash && recSkuDash.orden !== undefined ? recSkuDash.orden : 9999
       });
 
       if (m) setModelos[m] = true;
@@ -5903,6 +5915,7 @@ function obtenerDatosDashboardCompleto() {
       if (color && color !== "--") setColores[color] = true;
       if (talla && talla !== "--") setTallas[talla] = true;
       if (prioridadNormalizada) setPrioridades[prioridadNormalizada] = true;
+      if (esEspecial) setPrioridades["Especial"] = true;
       if (linea) {
         parsearLineas_(linea).forEach(function (l) { setLineas[l] = true; });
       }
@@ -5917,7 +5930,7 @@ function obtenerDatosDashboardCompleto() {
   resp.opcionesFiltro.generos = Object.keys(setGeneros).sort();
   resp.opcionesFiltro.colores = Object.keys(setColores).sort();
   resp.opcionesFiltro.tallas = Object.keys(setTallas).sort();
-  resp.opcionesFiltro.prioridades = ["Urgente", "Alta", "Media", "Baja", "Sin Asignar"].filter(function (p) { return setPrioridades[p]; });
+  resp.opcionesFiltro.prioridades = ["Especial", "Urgente", "Alta", "Media", "Baja", "Sin Asignar"].filter(function (p) { return setPrioridades[p]; });
   resp.opcionesFiltro.lineas = Object.keys(setLineas).sort();
 
   ss.getSheets().forEach(function (s) {

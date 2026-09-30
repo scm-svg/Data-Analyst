@@ -102,6 +102,7 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .b-yw{background:rgba(255,193,7,.22);color:var(--yw)}
 .b-bad{background:rgba(239,68,68,.2);color:var(--rd)}
 .b-mut{background:var(--s3);color:var(--mu)}
+.b-pd{background:rgba(255,193,7,.22);color:var(--yw);border:1px solid rgba(255,193,7,.45);letter-spacing:.4px;display:inline-block}
 .tr-exp{cursor:pointer}
 .tr-exp .chev{color:var(--ac);display:inline-block;width:14px}
 .sku-row td{background:var(--s2);font-size:.72rem}
@@ -126,6 +127,11 @@ body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-co
 .imp-save-msg{font-size:.75rem;color:var(--mu)}
 .imp-save-msg.dirty{color:var(--yw);font-weight:700}
 .imp-save-msg.ok{color:var(--gr)}
+.imp-grupo-l14{border-top:3px solid var(--ac)}
+.imp-grupo-l5{border-top:3px solid var(--l5)}
+.imp-grupo-l5 h3{color:var(--l5)}
+.imp-savebar label{font-size:.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
+.imp-savebar select{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:7px;padding:5px 10px;font-family:var(--fb);font-size:.78rem}
 .footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
 @media(max-width:1100px){.g3{grid-template-columns:1fr 1fr}}
 @media(max-width:780px){.g2,.g3,.cal-grid{grid-template-columns:1fr}.content,.fbar,.tabs,.hdr,.ebar,.mbar{padding-left:16px;padding-right:16px}}
@@ -300,6 +306,7 @@ function startUi(){
     return;
   }
   fusionarProducidaAlm();
+  window._impLista=null;
   var bf=document.getElementById('boot-fail'); if(bf) bf.remove();
   var n=nSem();
   var st=document.getElementById('status');
@@ -468,7 +475,7 @@ function kpis(){
   document.getElementById('k-alm').textContent=fmtN(aProd);
   document.getElementById('k-mod').textContent=String(nmod);
 }
-function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; toggleModelo(''); }
+function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; _impPrio=''; _impPd=''; toggleModelo(''); }
 function onFilter(){ kpis(); renderAll(); }
 function renderAll(){
   if(!D) return;
@@ -826,31 +833,195 @@ function filasImpRaw(modelo, wi){
   });
   return ordenarSkusSalida(rows);
 }
-function filasImp(modelo, wi){
-  return filasImpRaw(modelo, wi).filter(function(f){
-    return !q() || matchQ(f.mo+f.sku+f.detalle+f.color) || matchQ(modelo);
-  });
-}
-function cargaImp(k, wi){
-  var lin=fLin();
-  return (D.semanas[k]&&D.semanas[k].carga||[]).filter(function(c){
-    if(!matchModelo(c.modelo)) return false;
-    if(lin && String(c.linea).replace(/\D/g,'')!==lin) return false;
-    if(!q()) return true;
-    if(matchQ(c.modelo)) return true;
-    return filasImpRaw(c.modelo, wi).some(function(f){ return matchQ(f.mo+f.sku+f.detalle); });
-  });
-}
 function mosUnicas(filas){
   var set={};
   filas.forEach(function(f){ if(f.mo) set[f.mo]=1; });
   return Object.keys(set).length;
+}
+function esPdMo(mo){
+  var s=String(mo||'').trim().toUpperCase();
+  if(!s) return false;
+  if(s.indexOf('PD')===0) return true;
+  return /(^|[^A-Z0-9])PD($|[^A-Z0-9])/.test(s);
+}
+function prioNumImp(txt, especial){
+  if(especial) return 0;
+  var p=String(txt||'').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u');
+  if(p.indexOf('especial')!==-1) return 0;
+  if(p.indexOf('urgente')!==-1) return 1;
+  if(p.indexOf('alta')!==-1) return 2;
+  if(p.indexOf('media')!==-1) return 3;
+  if(p.indexOf('baja')!==-1) return 4;
+  return 5;
+}
+function prioLblImp(n, especial){
+  if(especial || n===0) return 'Especial';
+  return ({1:'Urgente',2:'Alta',3:'Media',4:'Baja',5:'Sin Asignar'})[n]||'Sin Asignar';
+}
+function fechaMsImp(v){
+  if(v==null||v==='') return Infinity;
+  if(typeof v==='number' && isFinite(v)){
+    if(v>1e11) return v;
+    if(v>20000 && v<80000) return Math.round((v-25569)*86400*1000);
+    return v;
+  }
+  if(Object.prototype.toString.call(v)==='[object Date]' && !isNaN(v.getTime())) return v.getTime();
+  var m=String(v).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(!m) return Infinity;
+  var y=Number(m[3]); if(y<100) y+=2000;
+  var d=new Date(y, Number(m[2])-1, Number(m[1]));
+  return isNaN(d.getTime())?Infinity:d.getTime();
+}
+function ordenarSkusImp(arr){
+  var list=(arr||[]).slice();
+  var vol=volColorListaCli(list);
+  list.sort(function(a,b){
+    var pa=a.esSkuPrio?0:1, pb=b.esSkuPrio?0:1;
+    if(pa!==pb) return pa-pb;
+    if(a.esSkuPrio && b.esSkuPrio){
+      var oa=a.skuPrioOrden!=null?a.skuPrioOrden:0, ob=b.skuPrioOrden!=null?b.skuPrioOrden:0;
+      if(oa!==ob) return oa-ob;
+    }
+    var cmpCol=cmpColorVolCli(a,b,vol);
+    if(cmpCol) return cmpCol;
+    var xa=ordenTallaCli(a.talla), xb=ordenTallaCli(b.talla);
+    if(xa!==xb) return xa-xb;
+    var ca=cantSkuCli(a), cb=cantSkuCli(b);
+    if(cb!==ca) return cb-ca;
+    return String(a.sku||'').localeCompare(String(b.sku||''),'es');
+  });
+  return list;
+}
+function agruparImpresionFija(backlog){
+  var grupos={}, orden=[];
+  (backlog||[]).forEach(function(row){
+    var modelo=String(row.modelo||'').trim();
+    if(!modelo) return;
+    if(!(Number(row.faltante)>0)) return;
+    if(!grupos[modelo]){
+      grupos[modelo]={
+        modelo:modelo,
+        tipo:(row.tipo==='Especial'||row.especial)?'Especial':(row.tipo||'Producción'),
+        especial:!!(row.especial||row.tipo==='Especial'),
+        prioridad:row.prioridad||'Sin Asignar',
+        prioridadNum:5,
+        fechaMs:Infinity,
+        fecha:'',
+        lineas:[],
+        skus:[],
+        solicitada:0,
+        producida:0,
+        faltante:0,
+        mos:{},
+        nPd:0
+      };
+      orden.push(modelo);
+    }
+    var g=grupos[modelo];
+    if(g.especial||row.especial||row.tipo==='Especial'){
+      g.especial=true; g.tipo='Especial';
+    }
+    var prio=row.prioridad||g.prioridad;
+    var pn=prioNumImp(g.especial?'Especial':prio, g.especial);
+    if(pn<g.prioridadNum){
+      g.prioridadNum=pn;
+      g.prioridad=prioLblImp(pn, g.especial);
+    }
+    var fms=fechaMsImp(row.fechaSalida!=null?row.fechaSalida:row.fecha);
+    if(fms<g.fechaMs){
+      g.fechaMs=fms;
+      g.fecha=isFinite(fms)?fmtMsAlm(fms):'';
+    }
+    lineasDeTxt_(row.linea||row.lineas).forEach(function(lin){
+      if(g.lineas.indexOf(lin)<0) g.lineas.push(lin);
+    });
+    g.lineas.sort(function(a,b){ return (parseInt(a,10)||99)-(parseInt(b,10)||99); });
+    var sku={
+      mo:String(row.mo||'').trim(),
+      sku:String(row.sku||'').trim(),
+      detalle:String(row.detalle||'').trim(),
+      color:String(row.color||'').trim(),
+      talla:String(row.talla||'').trim(),
+      genero:String(row.genero||'').trim(),
+      cant:Number(row.faltante)||0,
+      solicitada:Number(row.solicitada)||0,
+      producida:Number(row.producida)||0,
+      faltante:Number(row.faltante)||0,
+      moStatus:String(row.moStatus||row.status||'').trim(),
+      pd:esPdMo(row.mo),
+      linea:String(row.linea||'').trim(),
+      esSkuPrio:!!row.esSkuPrio,
+      skuPrioOrden:row.skuPrioOrden!=null?Number(row.skuPrioOrden):9999
+    };
+    g.skus.push(sku);
+    g.solicitada += sku.solicitada||sku.faltante;
+    g.producida += sku.producida;
+    g.faltante += sku.faltante;
+    if(sku.mo) g.mos[sku.mo]=1;
+    if(sku.pd) g.nPd++;
+  });
+  var modelos=orden.map(function(nombre){
+    var g=grupos[nombre];
+    g.skus=ordenarSkusImp(g.skus);
+    g.nMos=Object.keys(g.mos).length;
+    g.nSkus=g.skus.length;
+    g.grupo=(g.lineas.indexOf('5')>=0)?'linea5':'lineas14';
+    g.prioridad=prioLblImp(g.prioridadNum, g.especial);
+    delete g.mos;
+    return g;
+  });
+  function cmpMod(a,b){
+    if(a.prioridadNum!==b.prioridadNum) return a.prioridadNum-b.prioridadNum;
+    var fa=isFinite(a.fechaMs)?a.fechaMs:Infinity;
+    var fb=isFinite(b.fechaMs)?b.fechaMs:Infinity;
+    if(fa!==fb) return fa-fb;
+    if(b.faltante!==a.faltante) return b.faltante-a.faltante;
+    return String(a.modelo).localeCompare(String(b.modelo),'es');
+  }
+  var l14=modelos.filter(function(m){ return m.grupo==='lineas14'; }).sort(cmpMod);
+  var l5=modelos.filter(function(m){ return m.grupo==='linea5'; }).sort(cmpMod);
+  return {lineas14:l14, linea5:l5, modelos:l14.concat(l5)};
+}
+function listaImpresionFija(){
+  if(!window._impLista) window._impLista=agruparImpresionFija(D.backlog||[]);
+  return window._impLista;
+}
+function keysDeModeloImp(m){
+  return (m&&m.skus||[]).map(function(s){ return recordarOrdenImp_(s); });
+}
+function filtrarModeloImp(m){
+  if(!matchModelo(m.modelo)) return null;
+  var lin=fLin();
+  if(lin && (m.lineas||[]).indexOf(lin)===-1) return null;
+  var prio=_impPrio||'';
+  if(prio && m.prioridad!==prio) return null;
+  var pd=_impPd||'';
+  var skus=(m.skus||[]).filter(function(s){
+    if(pd==='pd' && !s.pd) return false;
+    if(pd==='odoo' && s.pd) return false;
+    if(!q()) return true;
+    return matchQ(m.modelo)||matchQ(s.sku)||matchQ(s.mo)||matchQ(s.detalle)||matchQ(s.color);
+  });
+  if(!skus.length) return null;
+  var nPd=skus.filter(function(s){ return s.pd; }).length;
+  var mos={};
+  skus.forEach(function(s){ if(s.mo) mos[s.mo]=1; });
+  return {
+    modelo:m.modelo, tipo:m.tipo, especial:m.especial, prioridad:m.prioridad,
+    fecha:m.fecha, lineas:m.lineas, skus:skus,
+    solicitada:skus.reduce(function(a,s){ return a+(Number(s.solicitada)||0); },0),
+    faltante:skus.reduce(function(a,s){ return a+(Number(s.faltante)||0); },0),
+    nMos:Object.keys(mos).length, nSkus:skus.length, nPd:nPd, grupo:m.grupo
+  };
 }
 var _impChecks = {};
 var _impSaved = {};
 var _impMeta = {};
 var _impDirty = false;
 var _impGuardando = false;
+var _impOpen = {};
+var _impPrio = '';
+var _impPd = '';
 var _almSem = 0;
 function impKey(sku, mo){
   var m=String(mo||'').trim().toUpperCase();
@@ -860,7 +1031,7 @@ function impKey(sku, mo){
 }
 function recordarOrdenImp_(f, wi){
   var k=impKey(f.sku, f.mo);
-  _impMeta[k]={sku:String(f.sku||'').trim().toUpperCase(), mo:String(f.mo||'').trim().toUpperCase(), semana:String(wi)};
+  _impMeta[k]={sku:String(f.sku||'').trim().toUpperCase(), mo:String(f.mo||'').trim().toUpperCase(), semana:wi==null?'':String(wi)};
   return k;
 }
 function clonarChecks_(st){
@@ -935,16 +1106,6 @@ function persistCheckItems(items, alOk, alErr){
     .withFailureHandler(function(err){ if(alErr) alErr(err); })
     .guardarChecksImpresion(items);
 }
-function keysImpModelo(wi, mi){
-  var c=(window._impCarga[wi]||[])[mi];
-  if(!c) return [];
-  return filasImp(c.modelo, wi).map(function(f){ return recordarOrdenImp_(f, wi); });
-}
-function keysImpSemana(wi){
-  var keys=[], carga=window._impCarga[wi]||[];
-  for(var mi=0; mi<carga.length; mi++) keys=keys.concat(keysImpModelo(wi, mi));
-  return keys;
-}
 function setImpKeys(keys, on){
   var st=impLoad();
   keys.forEach(function(k){ if(on) st[k]=1; else delete st[k]; });
@@ -968,80 +1129,131 @@ function syncImpChecks(){
     el.checked=!!st[el.getAttribute('data-imp-sku')];
   });
   document.querySelectorAll('input[data-imp-mod]').forEach(function(el){
-    var p=String(el.getAttribute('data-imp-mod')||'').split(',');
-    var est=estadoKeys(keysImpModelo(Number(p[0]), Number(p[1])));
-    applyImpBox(el, est);
+    var m=(window._impMods||{})[el.getAttribute('data-imp-mod')];
+    applyImpBox(el, estadoKeys(m?keysDeModeloImp(m):[]));
   });
-  document.querySelectorAll('input[data-imp-week]').forEach(function(el){
-    var wi=Number(el.getAttribute('data-imp-week'));
-    var est=estadoKeys(keysImpSemana(wi));
-    applyImpBox(el, est);
-    var note=el.closest('.imp-week');
-    if(note) note.classList.toggle('imp-done', !!est.all);
+  document.querySelectorAll('input[data-imp-grp]').forEach(function(el){
+    var arr=(window._impGrupos||{})[el.getAttribute('data-imp-grp')]||[];
+    var keys=[];
+    arr.forEach(function(m){ keys=keys.concat(keysDeModeloImp(m)); });
+    applyImpBox(el, estadoKeys(keys));
+    var note=el.closest('.imp-grphead');
+    if(note) note.classList.toggle('imp-done', estadoKeys(keys).all);
   });
+}
+function htmlSkuTableImp(m){
+  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
+  (m.skus||[]).forEach(function(s){
+    var key=recordarOrdenImp_(s);
+    var on=!!impLoad()[key];
+    t+='<tr>';
+    t+='<td class="left">'+(s.pd?'<span class="badge b-pd">PD</span> ':'')+esc(s.mo||'—')+'</td>';
+    t+='<td class="left">'+esc(s.sku)+'</td>';
+    t+='<td class="left">'+esc(s.detalle)+'</td>';
+    t+='<td>'+esc(s.color)+'</td><td>'+esc(s.talla)+'</td>';
+    t+='<td class="num">'+fmtN(s.faltante)+'</td>';
+    t+='<td>'+esc(s.moStatus||'—')+'</td>';
+    t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,this)"></label></td>';
+    t+='</tr>';
+  });
+  t+='</tbody></table>';
+  return t;
+}
+function htmlGrupoImp(id, titulo, sub, modelos, extraClass){
+  var keys=[];
+  modelos.forEach(function(m){ keys=keys.concat(keysDeModeloImp(m)); });
+  var est=estadoKeys(keys);
+  var tot=modelos.reduce(function(a,m){ return a+(Number(m.faltante)||0); },0);
+  var nPd=modelos.reduce(function(a,m){ return a+(Number(m.nPd)||0); },0);
+  var html='<div class="card '+extraClass+'">';
+  html+='<div class="imp-grphead" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+  html+='<div><h3>'+esc(titulo)+'</h3><p class="sub" style="margin:0">'+esc(sub)+' · <b>'+modelos.length+'</b> modelos · <b>'+fmtN(tot)+'</b> pzas'+(nPd?' · <span class="badge b-pd">'+nPd+' PD</span>':'')+'</p></div>';
+  html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Grupo listo"><input type="checkbox" data-imp-grp="'+id+'" '+(est.all?'checked ':'')+'onchange="chkImpGrupo(event,\''+id+'\')"><span>Listo</span></label></div>';
+  if(!modelos.length){
+    html+='<p class="sub">No hay modelos en este grupo con el filtro actual.</p></div>';
+    return html;
+  }
+  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Faltante</th><th>Logo</th></tr></thead><tbody>';
+  modelos.forEach(function(m, i){
+    var mid=id+'-'+i;
+    var estM=estadoKeys(keysDeModeloImp(m));
+    var pdTag=m.nPd?' <span class="badge b-pd">'+m.nPd+' PD</span>':'';
+    html+='<tr class="tr-exp" onclick="togImpSku(\''+mid+'\')"><td><span class="chev">'+(_impOpen[mid]?'▾':'▸')+'</span></td>';
+    html+='<td class="left">'+esc(m.modelo)+pdTag+'</td>';
+    html+='<td class="num">'+fmtN(m.nMos)+'</td>';
+    html+='<td class="num">'+fmtN(m.faltante)+'</td>';
+    html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'"><input type="checkbox" data-imp-mod="'+mid+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,\''+mid+'\')"></label></td></tr>';
+    html+='<tr id="'+mid+'" class="sku-row" style="display:'+(_impOpen[mid]?'table-row':'none')+'"><td colspan="5">'+(_impOpen[mid]?htmlSkuTableImp(m):'')+'</td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+  return html;
+}
+function optsImpSelect_(id, val, items, todasLbl){
+  var h='<select id="'+id+'" onchange="onImpFiltro()">';
+  h+='<option value="">'+esc(todasLbl)+'</option>';
+  (items||[]).forEach(function(p){
+    h+='<option value="'+esc(p)+'"'+(val===p?' selected':'')+'>'+esc(p)+'</option>';
+  });
+  h+='</select>';
+  return h;
 }
 function renderImp(){
   var el=document.getElementById('sec-imp');
   if(!el) return;
-  window._impCarga={};
-  var keys=weekKeys();
-  var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Logotipos según el plan. Drill-down semana → modelo → SKU agrupados por color (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). Marca el logo y pulsa Guardar: el registro queda en Planificación de Producción por orden (MO + SKU). Si la orden cambia de semana, el check se mantiene para todo el equipo.</p>';
-  html+='<div class="note imp-leyenda">Las Ordenes de Produccion con siglas "PD", estan a la esperas de ser creadas en Odoo.</div>';
-  keys.forEach(function(k, wi){
-    var carga=agruparCarga(cargaImp(k, wi), wi);
-    var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
-    if(!tot && fLin()) return;
-    var filasSem=[];
-    carga.forEach(function(c){ filasSem=filasSem.concat(filasImp(c.modelo, wi)); });
-    var nMos=mosUnicas(filasSem);
-    var est=estadoKeys(filasSem.map(function(f){ return recordarOrdenImp_(f, wi); }));
-    html+='<div class="note expand imp-week'+(est.all?' imp-done':'')+'" data-open="impw'+wi+'" onclick="tog(this)"><span class="imp-meta">'+(k)+' · '+(D.fechasSemanas[k]||'')+' · <b>'+fmtN(tot)+'</b> pzas · '+carga.length+' modelos · '+fmtN(nMos)+' MOs</span>';
-    html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Semana cubierta" onclick="event.stopPropagation()"><input type="checkbox" data-imp-week="'+wi+'" '+(est.all?'checked ':'')+'onchange="chkImpSemana(event,'+wi+')"><span>Listo</span></label></div>';
-    html+='<div id="impw'+wi+'" style="display:none;margin:0 0 12px 8px">';
-    html+='<table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>Línea</th><th>MOs</th><th>Solicitada</th><th>A fabricar</th><th>Logo</th></tr></thead><tbody>';
-    carga.forEach(function(c, mi){
-      var id='impw'+wi+'m'+mi;
-      var filas=filasImp(c.modelo, wi);
-      var nMo=mosUnicas(filas);
-      var estM=estadoKeys(filas.map(function(f){ return recordarOrdenImp_(f, wi); }));
-      html+='<tr class="tr-exp" onclick="togImpSku(\''+id+'\','+wi+','+mi+')"><td><span class="chev">▸</span></td>';
-      html+='<td class="left">'+esc(c.modelo)+'</td><td>'+chipsLineas(c.lineas)+'</td><td class="num">'+fmtN(nMo)+'</td><td class="num">'+fmtN(c.solicitada)+'</td><td class="num">'+fmtN(c.total)+'</td>';
-      html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'" title="Modelo listo"><input type="checkbox" data-imp-mod="'+wi+','+mi+'" '+(estM.all?'checked ':'')+'onchange="chkImpModelo(event,'+wi+','+mi+')"></label></td></tr>';
-      html+='<tr id="'+id+'" class="sku-row" style="display:none"><td colspan="7">Cargando MOs…</td></tr>';
-    });
-    html+='</tbody></table></div>';
-    window._impCarga[wi]=carga;
-  });
-  html+='</div>';
+  var lista=listaImpresionFija();
+  var l14=(lista.lineas14||[]).map(filtrarModeloImp).filter(Boolean);
+  var l5=(lista.linea5||[]).map(filtrarModeloImp).filter(Boolean);
+  window._impGrupos={l14:l14, l5:l5};
+  window._impMods={};
+  l14.forEach(function(m,i){ window._impMods['l14-'+i]=m; });
+  l5.forEach(function(m,i){ window._impMods['l5-'+i]=m; });
+  var nPd=l14.concat(l5).reduce(function(a,m){ return a+(Number(m.nPd)||0); },0);
+  var pris=(D.opcionesFiltro&&D.opcionesFiltro.prioridades)||['Especial','Urgente','Alta','Media','Baja','Sin Asignar'];
+  var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span>';
+  html+='<label>Prioridad</label>'+optsImpSelect_('f-imp-prio', _impPrio, pris, 'Todas');
+  html+='<label>PD</label><select id="f-imp-pd" onchange="onImpFiltro()">';
+  html+='<option value=""'+(!_impPd?' selected':'')+'>Todas</option>';
+  html+='<option value="pd"'+( _impPd==='pd'?' selected':'')+'>Solo PD</option>';
+  html+='<option value="odoo"'+( _impPd==='odoo'?' selected':'')+'>Sin PD (ya en Odoo)</option>';
+  html+='</select></div>';
+  html+='<div class="tkpis">';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(l14.length)+'</div><div class="tl">Modelos L1–4</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(l5.length)+'</div><div class="tl">Modelos L5</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(nPd)+'</div><div class="tl">Variantes PD</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(Object.keys(_impChecks).length)+'</div><div class="tl">Logos listos</div></div></div>';
+  html+='<div class="note">Lista fija de Impresión Digital: drill-down <b>modelo → SKU</b> por prioridad (Especial → Urgente → Alta → Media → Baja), partido en Líneas 1–4 y Línea 5. No se reordena si el taller mueve la semana de costura o la entrada a almacén. Las variantes van Negro → Blanco → Marino → resto por volumen → talla. Marca el logo y pulsa Guardar (clave MO + SKU, sin semana).</div>';
+  html+='<div class="note imp-leyenda">Las órdenes con siglas <b>PD</b> están a la espera de ser creadas en Odoo. Van con la etiqueta PD; el check del logo se guarda igual (MO + SKU).</div>';
+  html+=htmlGrupoImp('l14','Líneas 1–4','Costura regular (un modelo a la vez en esas líneas)', l14, 'imp-grupo-l14');
+  html+=htmlGrupoImp('l5','Línea 5','Flujo aparte de L1–4 (shorts / prendas de L5)', l5, 'imp-grupo-l5');
   el.innerHTML=html;
   syncImpChecks();
   pintarEstadoGuardarImp_();
 }
-window.togImpSku=function(id, wi, mi){
+window.onImpFiltro=function(){
+  var p=document.getElementById('f-imp-prio');
+  var d=document.getElementById('f-imp-pd');
+  _impPrio=p?p.value:'';
+  _impPd=d?d.value:'';
+  renderImp();
+};
+window.togImpSku=function(id){
   var row=document.getElementById(id);
   if(!row) return;
-  if(row.style.display!=='none' && row.getAttribute('data-ok')){ row.style.display='none'; return; }
-  var c=(window._impCarga[wi]||[])[mi]||{};
-  var filas=filasImp(c.modelo, wi);
-  if(!filas.length){ row.innerHTML='<td colspan="7" class="sub">Sin SKUs con cantidad en esta semana.</td>'; }
-  else {
-    var t='<td colspan="7"><table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Cant. semana</th><th>Logo</th></tr></thead><tbody>';
-    filas.forEach(function(f){
-      var key=recordarOrdenImp_(f, wi);
-      var on=!!impLoad()[key];
-      t+='<tr><td class="left">'+esc(f.mo||'—')+'</td>';
-      t+='<td class="left">'+esc(f.sku)+'</td><td class="left">'+esc(f.detalle)+'</td><td>'+esc(f.color)+'</td><td>'+esc(f.talla)+'</td><td class="num">'+fmtN(f.cant)+'</td>';
-      t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,'+wi+',this)"></label></td></tr>';
-    });
-    t+='</tbody></table></td>';
-    row.innerHTML=t;
+  var m=(window._impMods||{})[id];
+  var tr=row.previousElementSibling;
+  if(row.style.display!=='none'){
+    delete _impOpen[id];
+    row.style.display='none';
+    if(tr&&tr.querySelector('.chev')) tr.querySelector('.chev').textContent='▸';
+    return;
   }
-  row.setAttribute('data-ok','1');
+  _impOpen[id]=1;
+  row.children[0].innerHTML=htmlSkuTableImp(m||{skus:[]});
   row.style.display='table-row';
+  if(tr&&tr.querySelector('.chev')) tr.querySelector('.chev').textContent='▾';
   syncImpChecks();
 };
-window.chkImpSku=function(ev, wi, el){
+window.chkImpSku=function(ev, el){
   if(ev) ev.stopPropagation();
   var key=el.getAttribute('data-imp-sku');
   var st=impLoad();
@@ -1073,14 +1285,22 @@ window.guardarImpresion=function(){
     pintarEstadoGuardarImp_('No se pudo guardar: '+(err&&err.message?err.message:err));
   });
 };
-window.chkImpModelo=function(ev, wi, mi){
+window.chkImpModelo=function(ev, id){
   if(ev) ev.stopPropagation();
-  setImpKeys(keysImpModelo(wi, mi), !!(ev && ev.target && ev.target.checked));
+  var m=(window._impMods||{})[id];
+  setImpKeys(keysDeModeloImp(m||{}), !!(ev && ev.target && ev.target.checked));
+  if(_impOpen[id] && m){
+    var row=document.getElementById(id);
+    if(row) row.children[0].innerHTML=htmlSkuTableImp(m);
+  }
   syncImpChecks();
 };
-window.chkImpSemana=function(ev, wi){
+window.chkImpGrupo=function(ev, id){
   if(ev) ev.stopPropagation();
-  setImpKeys(keysImpSemana(wi), !!(ev && ev.target && ev.target.checked));
+  var arr=(window._impGrupos||{})[id]||[];
+  var keys=[];
+  arr.forEach(function(m){ keys=keys.concat(keysDeModeloImp(m)); });
+  setImpKeys(keys, !!(ev && ev.target && ev.target.checked));
   syncImpChecks();
 };
 
@@ -1659,15 +1879,17 @@ function exportCSV(){
     });
     downloadCSV('planificacion-calendario.csv', rows);
   } else if(_tab==='imp'){
-    var rows=[['Semana','Fecha','Linea','Modelo','MO','SKU','Detalle','Color','Talla','Cant semana','Logo listo']];
+    var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Faltante','MO status','Logo listo']];
     var st=impLoad();
-    keys.forEach(function(k, wi){
-      agruparCarga(cargaImp(k, wi), wi).forEach(function(c){
-        filasImp(c.modelo, wi).forEach(function(f){
-          rows.push([k, D.fechasSemanas[k]||'', (c.lineas||[]).join('/'), c.modelo, f.mo, f.sku, f.detalle, f.color, f.talla, f.cant, st[impKey(f.sku, f.mo)]?'SI':'NO']);
+    function dumpImp(grupo, arr){
+      arr.forEach(function(m){
+        (m.skus||[]).forEach(function(s){
+          rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.faltante, s.moStatus||'', st[impKey(s.sku,s.mo)]?'SI':'NO']);
         });
       });
-    });
+    }
+    dumpImp('L1-4', (window._impGrupos||{}).l14||[]);
+    dumpImp('L5', (window._impGrupos||{}).l5||[]);
     downloadCSV('impresion-digital.csv', rows);
   } else if(_tab==='pend'){
     var rows=[['Seccion','Modelo','Tipo','MOs','Solicitada','Faltante','Meta','Sin programar','Estado']];

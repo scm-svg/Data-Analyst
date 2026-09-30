@@ -24,7 +24,7 @@ from impresion_digital import (
     resumen,
 )
 
-XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion__43__bf98.xlsx")
+XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion__43__9374.xlsx")
 
 
 def sku(**kw):
@@ -201,6 +201,33 @@ class TestExcelReal(unittest.TestCase):
         self.assertNotIn("<th>Línea</th>", html)
         self.assertNotIn("<th>Variantes</th>", html)
         self.assertNotIn("<th>Fecha</th>", html)
+
+
+class TestDashboardAppsScript(unittest.TestCase):
+    def test_dashboard_html_lista_fija(self):
+        html = (ROOT / "Dashboard.html").read_text(encoding="utf-8")
+        gs = (ROOT / "Codigo.gs").read_text(encoding="utf-8")
+        self.assertIn("function agruparImpresionFija(", html)
+        self.assertIn("function listaImpresionFija()", html)
+        self.assertIn("Lista fija de Impresión Digital", html)
+        self.assertIn("imp-grupo-l14", html)
+        self.assertIn("imp-grupo-l5", html)
+        self.assertIn("b-pd", html)
+        self.assertNotIn("imp-mod-pd", html)
+        self.assertNotIn("<th>Prioridad</th>", html)
+        self.assertNotIn("<th>Variantes</th>", html)
+        self.assertNotIn("window.chkImpSemana", html)
+        self.assertNotIn("function cargaImp(", html)
+        self.assertNotIn("function filasImp(", html)
+        self.assertIn("window.chkImpGrupo", html)
+        self.assertIn("guardarChecksImpresion", html)
+        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn("IMPRESIÓN DIGITAL LISTA FIJA", gs)
+        self.assertIn("moStatus:", gs)
+        i_imp = html.find("function renderImp()")
+        j_imp = html.find("window.onImpFiltro")
+        self.assertGreater(j_imp, i_imp)
+        self.assertNotIn("fSem()", html[i_imp:j_imp])
 
 
 if __name__ == "__main__":
