@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranking Colores Microfibra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Expanded:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBFBF9; --ink:#16150F; --muted:#6E6A60; --line:#E4E1DA; --card:#FFFFFF;
+  --ok:#2E7D4F; --ok-bg:#EAF4EE; --warn:#B07A1E; --warn-bg:#FBF3E2;
+  --neutral-bg:#F1F0EC;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Archivo',system-ui,sans-serif;background:var(--paper);color:var(--ink);line-height:1.45;font-size:15px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 18px 60px}
+header{padding:28px 0 16px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+h1{font-family:'Archivo Expanded',sans-serif;font-weight:800;font-size:clamp(20px,4vw,28px);line-height:1.1}
+.sub{color:var(--muted);margin-top:6px;font-size:13.5px}
+nav{display:flex;gap:4px;margin:16px 0 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:10;padding-top:6px}
+nav button{font-family:'Archivo',sans-serif;font-size:14px;font-weight:600;padding:10px 16px;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent}
+nav button.active{color:var(--ink);border-bottom-color:var(--ink)}
+section{display:none}section.show{display:block}
+h2{font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:17px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+.q{font-size:15px;font-weight:600;margin-bottom:8px}
+.a{font-family:'Archivo Expanded';font-weight:800;font-size:22px;color:var(--ok);line-height:1.3}
+.note{font-size:13px;color:var(--muted);margin-top:10px}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(0,0,0,.12)}
+.cchip{display:inline-flex;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:13px;font-weight:600;margin:3px 4px 3px 0}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--neutral-bg);color:var(--muted);margin-left:6px}
+.p-ok{background:var(--ok-bg);color:var(--ok)}
+.tags{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+.tag{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;position:relative}
+.tag.alt{border-style:dashed}
+.tag .rank{position:absolute;top:10px;right:12px;font-family:'Archivo Expanded';font-weight:800;font-size:13px;color:var(--muted)}
+.tag .chip{width:100%;height:44px;border-radius:8px;border:1px solid rgba(0,0,0,.1);margin:10px 0 8px}
+.tag h3{font-family:'Archivo Expanded';font-size:15px;font-weight:700}
+.tag .facts{font-size:12.5px;color:var(--muted)}
+.tag .just{font-size:13px;margin-top:10px;line-height:1.4}
+.met-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+.met{background:#F6F5F1;border-radius:8px;padding:12px;font-size:13px}
+.met b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 10px;border-bottom:1.5px solid var(--ink);background:#F6F5F1;white-space:nowrap}
+td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.score{font-weight:700;color:#1F4E79}
+td.why{font-size:12.5px;color:var(--muted);max-width:280px}
+tr.row-top5{background:var(--ok-bg)}
+.tblwrap{overflow-x:auto;border-radius:12px}
+footer{margin-top:32px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">Somos Cuadro · Logística e Inventarios</div>
+  <h1>Ranking de colores — Microfibra Jabón</h1>
+  <div class="sub">Mejor rotación y menor riesgo de inmovilización · 10 meses (oct-25 a jul-26) · corte 12 de agosto de 2026</div>
+</header>
+
+<nav id="tabs">
+  <button class="active" data-t="t1">Top 5</button>
+  <button data-t="t2">Ranking completo</button>
+</nav>
+
+<section id="t1" class="show">
+  <div class="card">
+    <div class="q">¿Cuáles son los 5 colores con mejor rotación y menor riesgo de quedar inmovilizados en inventario?</div>
+    <div class="a">Negro, Blanco, Azul Marino, Verde Militar, Azul Lavanda</div>
+    <div style="margin-top:12px"><span class="cchip"><span class="sw" style="background:#1C1C1C"></span> Negro</span><span class="cchip"><span class="sw" style="background:#FDFDFD"></span> Blanco</span><span class="cchip"><span class="sw" style="background:#1E3A5F"></span> Azul Marino</span><span class="cchip"><span class="sw" style="background:#4E5B3C"></span> Verde Militar</span><span class="cchip"><span class="sw" style="background:#A9B7E6"></span> Azul Lavanda</span></div>
+    <div class="note">Estos 5 colores venden mucho, de forma sostenida, en todo el catálogo y sin meses de inventario parado.</div>
+  </div>
+
+  <h2>Detalle y justificación del Top 5</h2>
+  <div class="tags">
+    <div class="tag"><span class="rank">Nº1</span>
+      <h3><span class="sw" style="background:#1C1C1C"></span>Negro</h3>
+      <div class="chip" style="background:#1C1C1C"></div>
+      <div class="facts">426 u/mes · score 94.2 · 7.2 meses stock</div>
+      <div class="just">El que más vende (426 u/mes, 16% del total). Muy parejo todo el año. Presente en 19 modelos y 3 géneros. Stock dura 7.2 meses: rota sin estancarse.</div>
+    </div>
+    <div class="tag"><span class="rank">Nº2</span>
+      <h3><span class="sw" style="background:#FDFDFD"></span>Blanco</h3>
+      <div class="chip" style="background:#FDFDFD"></div>
+      <div class="facts">345 u/mes · score 87.2 · 6.6 meses stock</div>
+      <div class="just">Segundo en ventas (345 u/mes). Muy parejo todo el año — el más predecible del catálogo. 18 modelos, 3 géneros. Inventario fluye (6.6 meses — fluye bien).</div>
+    </div>
+    <div class="tag"><span class="rank">Nº3</span>
+      <h3><span class="sw" style="background:#1E3A5F"></span>Azul Marino</h3>
+      <div class="chip" style="background:#1E3A5F"></div>
+      <div class="facts">321 u/mes · score 81.4 · 5.7 meses stock</div>
+      <div class="just">Tercero en volumen (321 u/mes). Estable con algún pico. Demanda en 18 modelos y 3 géneros. Rota rápido: 5.7 meses — fluye bien.</div>
+    </div>
+    <div class="tag"><span class="rank">Nº4</span>
+      <h3><span class="sw" style="background:#4E5B3C"></span>Verde Militar</h3>
+      <div class="chip" style="background:#4E5B3C"></div>
+      <div class="facts">199 u/mes · score 65.7 · 8.4 meses stock</div>
+      <div class="just">Venta sólida (199 u/mes), fuerte en caballero. Estable con algún pico. 16 modelos, 3 géneros. 8.4 meses — aceptable.</div>
+    </div>
+    <div class="tag"><span class="rank">Nº5</span>
+      <h3><span class="sw" style="background:#A9B7E6"></span>Azul Lavanda</h3>
+      <div class="chip" style="background:#A9B7E6"></div>
+      <div class="facts">220 u/mes · score 68.4 · 6.7 meses stock</div>
+      <div class="just">Quinto en ventas sostenidas (220 u/mes). Variable — hay meses fuertes y débiles. 17 modelos, 3 géneros. 6.7 meses — fluye bien.</div>
+    </div>
+    <div class="tag alt"><span class="rank">Alt.</span>
+      <h3><span class="sw" style="background:#2B4BD7"></span>Azul Rey <span class="pill">suplente</span></h3>
+      <div class="chip" style="background:#2B4BD7"></div>
+      <div class="facts">147 u/mes</div>
+      <div class="just">Candidato suplente — evaluar vs Top 5</div>
+    </div></div>
+
+  <h2 style="margin-top:22px">Cómo se calculó el score (0–100)</h2>
+  <div class="met-grid"><div class="met"><b>Rotación (40%)</b>Cuánto vende el color cada mes vs. el líder del catálogo.</div><div class="met"><b>Regularidad (25%)</b>Si vende parejo todo el año o a golpes (moda/lanzamientos).</div><div class="met"><b>Presencia en catálogo (20%)</b>Cuántos modelos y géneros lo incluyen.</div><div class="met"><b>No inmovilizar (15%)</b>Meses de stock parado — penaliza si hay mucho inventario quieto.</div></div>
+</section>
+
+<section id="t2">
+  <h2>Ranking — 15 colores activos</h2>
+  <p class="note" style="margin-bottom:12px">Ordenados por score total. Los del Top 5 están resaltados en verde. La columna «Por qué no Top 5» explica los que quedaron fuera (ej. Rojo, Lila).</p>
+  <div class="tblwrap"><table>
+    <thead><tr>
+      <th>#</th><th>Color</th><th>Venta/mes</th><th>Regularidad</th>
+      <th>Stock PT (m)</th><th>Autonomía (m)</th><th>Score</th><th>Por qué no Top 5 / diagnóstico</th>
+    </tr></thead>
+    <tbody>
+      <tr class="row-top5">
+        <td class="num">1</td>
+        <td><span class="sw" style="background:#1C1C1C"></span><b>Negro</b> <span class="pill p-ok">Top 5</span></td>
+        <td class="num">426</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">7.2</td>
+        <td class="num">7.2</td>
+        <td class="num score">94.2</td>
+        <td class="why">TOP 5 — Catálogo permanente</td>
+      </tr>
+      <tr class="row-top5">
+        <td class="num">2</td>
+        <td><span class="sw" style="background:#FDFDFD"></span><b>Blanco</b> <span class="pill p-ok">Top 5</span></td>
+        <td class="num">345</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">6.6</td>
+        <td class="num">6.6</td>
+        <td class="num score">87.2</td>
+        <td class="why">TOP 5 — Catálogo permanente</td>
+      </tr>
+      <tr class="row-top5">
+        <td class="num">3</td>
+        <td><span class="sw" style="background:#1E3A5F"></span><b>Azul Marino</b> <span class="pill p-ok">Top 5</span></td>
+        <td class="num">321</td>
+        <td>Estable con algún pico</td>
+        <td class="num">5.7</td>
+        <td class="num">5.7</td>
+        <td class="num score">81.4</td>
+        <td class="why">TOP 5 — Catálogo permanente</td>
+      </tr>
+      <tr class="row-top5">
+        <td class="num">4</td>
+        <td><span class="sw" style="background:#A9B7E6"></span><b>Azul Lavanda</b> <span class="pill p-ok">Top 5</span></td>
+        <td class="num">220</td>
+        <td>Variable — hay meses fuertes y débiles</td>
+        <td class="num">6.7</td>
+        <td class="num">6.7</td>
+        <td class="num score">68.4</td>
+        <td class="why">TOP 5 — Catálogo permanente</td>
+      </tr>
+      <tr class="row-top5">
+        <td class="num">5</td>
+        <td><span class="sw" style="background:#4E5B3C"></span><b>Verde Militar</b> <span class="pill p-ok">Top 5</span></td>
+        <td class="num">199</td>
+        <td>Estable con algún pico</td>
+        <td class="num">8.4</td>
+        <td class="num">8.4</td>
+        <td class="num score">65.7</td>
+        <td class="why">TOP 5 — Catálogo permanente</td>
+      </tr>
+      <tr class="">
+        <td class="num">6</td>
+        <td><span class="sw" style="background:#2B4BD7"></span><b>Azul Rey</b> </td>
+        <td class="num">147</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">9.7</td>
+        <td class="num">9.7</td>
+        <td class="num score">62.1</td>
+        <td class="why">Buena regularidad (vende parejo), pero menor volumen que Azul Lavanda y 10 meses de stock PT — puede servir como suplente del #5 si se prefiere seguridad sobre volumen.</td>
+      </tr>
+      <tr class="">
+        <td class="num">7</td>
+        <td><span class="sw" style="background:#CFCFCF"></span><b>Gris Claro</b> </td>
+        <td class="num">97</td>
+        <td>Estable con algún pico</td>
+        <td class="num">5.7</td>
+        <td class="num">5.7</td>
+        <td class="num score">59.1</td>
+        <td class="why">Volumen bajo (3.7% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">8</td>
+        <td><span class="sw" style="background:#C9A6E4"></span><b>Lila</b> </td>
+        <td class="num">228</td>
+        <td>A golpes — color de moda o lanzamiento</td>
+        <td class="num">4.2</td>
+        <td class="num">4.2</td>
+        <td class="num score">56.4</td>
+        <td class="why">Vende mucho en total (4º del catálogo) pero ~57% de las ventas fueron en un solo mes (lanzamiento MAFE Lila en marzo) y ~79% es solo dama. Es tendencia, no base permanente.</td>
+      </tr>
+      <tr class="">
+        <td class="num">9</td>
+        <td><span class="sw" style="background:#722F37"></span><b>Vinotinto</b> </td>
+        <td class="num">113</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">12.2</td>
+        <td class="num">12.2</td>
+        <td class="num score">55.4</td>
+        <td class="why">Mucho stock parado: 12 meses de prendas (1,387 u) con solo 4.3% de la venta total. Volumen bajo (4.3% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">10</td>
+        <td><span class="sw" style="background:#7D3FB0"></span><b>Púrpura</b> </td>
+        <td class="num">89</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">11.1</td>
+        <td class="num">11.1</td>
+        <td class="num score">55.4</td>
+        <td class="why">Volumen bajo (3.4% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">11</td>
+        <td><span class="sw" style="background:#6FD8C8"></span><b>Aguamarina</b> </td>
+        <td class="num">137</td>
+        <td>Estable con algún pico</td>
+        <td class="num">12.5</td>
+        <td class="num">12.5</td>
+        <td class="num score">53.9</td>
+        <td class="why">Mucho stock parado: 13 meses de prendas (1,719 u) con solo 5.2% de la venta total. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">12</td>
+        <td><span class="sw" style="background:#D63031"></span><b>Rojo</b> </td>
+        <td class="num">122</td>
+        <td>Estable con algún pico</td>
+        <td class="num">14.0</td>
+        <td class="num">14.0</td>
+        <td class="num score">52.4</td>
+        <td class="why">Vende 122 u/mes (top 10), pero hay 1,699 prendas en stock — eso son 14 meses de inventario parado. El criterio 'no inmovilizar' lo penaliza fuerte. Hoy además no hay tela en almacén (pedido de 50 kg es por reacción, no por catálogo permanente).</td>
+      </tr>
+      <tr class="">
+        <td class="num">13</td>
+        <td><span class="sw" style="background:#F4B8C8"></span><b>Rosado Pastel</b> </td>
+        <td class="num">62</td>
+        <td>Estable con algún pico</td>
+        <td class="num">12.9</td>
+        <td class="num">12.9</td>
+        <td class="num score">47.5</td>
+        <td class="why">Mucho stock parado: 13 meses de prendas (796 u) con solo 2.3% de la venta total. Volumen bajo (2.3% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">14</td>
+        <td><span class="sw" style="background:#EEF25A"></span><b>Amarillo Neón</b> </td>
+        <td class="num">55</td>
+        <td>Muy parejo todo el año</td>
+        <td class="num">24.3</td>
+        <td class="num">24.3</td>
+        <td class="num score">43.9</td>
+        <td class="why">Mucho stock parado: 24 meses de prendas (1,327 u) con solo 2.1% de la venta total. Volumen bajo (2.1% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr>
+      <tr class="">
+        <td class="num">15</td>
+        <td><span class="sw" style="background:#CCCCCC"></span><b>Azul Cielo</b> </td>
+        <td class="num">20</td>
+        <td>A golpes — color de moda o lanzamiento</td>
+        <td class="num">0.3</td>
+        <td class="num">0.3</td>
+        <td class="num score">33.1</td>
+        <td class="why">Venta irregular (CV 1.76): no vende parejo todos los meses. Volumen bajo (0.8% del total) — no entra al grupo de colores núcleo. Rotación menor que los colores núcleo del catálogo.</td>
+      </tr></tbody>
+  </table></div>
+</section>
+
+<footer>Fuente: analisis_microfibra_jabon.xlsx · Respaldo técnico: analisis_microfibra_jabon.xlsx</footer>
+</div>
+<script>
+document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('show'));
+  b.classList.add('active');document.getElementById(b.dataset.t).classList.add('show');
+  window.scrollTo({top:0});
+}));
+</script>
+</body>
+</html>
