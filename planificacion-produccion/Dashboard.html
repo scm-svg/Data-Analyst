@@ -475,7 +475,7 @@ function kpis(){
   document.getElementById('k-alm').textContent=fmtN(aProd);
   document.getElementById('k-mod').textContent=String(nmod);
 }
-function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; _impPrio=''; _impPd=''; toggleModelo(''); }
+function resetFilters(){ document.getElementById('q').value=''; document.getElementById('f-lin').value=''; document.getElementById('f-sem').selectedIndex=0; _impPd=''; toggleModelo(''); }
 function onFilter(){ kpis(); renderAll(); }
 function renderAll(){
   if(!D) return;
@@ -993,8 +993,6 @@ function filtrarModeloImp(m){
   if(!matchModelo(m.modelo)) return null;
   var lin=fLin();
   if(lin && (m.lineas||[]).indexOf(lin)===-1) return null;
-  var prio=_impPrio||'';
-  if(prio && m.prioridad!==prio) return null;
   var pd=_impPd||'';
   var skus=(m.skus||[]).filter(function(s){
     if(pd==='pd' && !s.pd) return false;
@@ -1020,7 +1018,6 @@ var _impMeta = {};
 var _impDirty = false;
 var _impGuardando = false;
 var _impOpen = {};
-var _impPrio = '';
 var _impPd = '';
 var _almSem = 0;
 function impKey(sku, mo){
@@ -1188,15 +1185,6 @@ function htmlGrupoImp(id, titulo, sub, modelos, extraClass){
   html+='</tbody></table></div></div>';
   return html;
 }
-function optsImpSelect_(id, val, items, todasLbl){
-  var h='<select id="'+id+'" onchange="onImpFiltro()">';
-  h+='<option value="">'+esc(todasLbl)+'</option>';
-  (items||[]).forEach(function(p){
-    h+='<option value="'+esc(p)+'"'+(val===p?' selected':'')+'>'+esc(p)+'</option>';
-  });
-  h+='</select>';
-  return h;
-}
 function renderImp(){
   var el=document.getElementById('sec-imp');
   if(!el) return;
@@ -1208,9 +1196,7 @@ function renderImp(){
   l14.forEach(function(m,i){ window._impMods['l14-'+i]=m; });
   l5.forEach(function(m,i){ window._impMods['l5-'+i]=m; });
   var nPd=l14.concat(l5).reduce(function(a,m){ return a+(Number(m.nPd)||0); },0);
-  var pris=(D.opcionesFiltro&&D.opcionesFiltro.prioridades)||['Especial','Urgente','Alta','Media','Baja','Sin Asignar'];
   var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp" onclick="guardarImpresion()">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span>';
-  html+='<label>Prioridad</label>'+optsImpSelect_('f-imp-prio', _impPrio, pris, 'Todas');
   html+='<label>PD</label><select id="f-imp-pd" onchange="onImpFiltro()">';
   html+='<option value=""'+(!_impPd?' selected':'')+'>Todas</option>';
   html+='<option value="pd"'+( _impPd==='pd'?' selected':'')+'>Solo PD</option>';
@@ -1230,9 +1216,7 @@ function renderImp(){
   pintarEstadoGuardarImp_();
 }
 window.onImpFiltro=function(){
-  var p=document.getElementById('f-imp-prio');
   var d=document.getElementById('f-imp-pd');
-  _impPrio=p?p.value:'';
   _impPd=d?d.value:'';
   renderImp();
 };

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.46 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.47 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -3517,7 +3517,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3924,6 +3924,11 @@ class TestDashboardUx(unittest.TestCase):
         self.assertNotIn("window.chkImpSemana", html)
         self.assertNotIn("function cargaImp(", html)
         self.assertNotIn("function filasImp(", html)
+        self.assertNotIn("f-imp-prio", html)
+        self.assertNotIn("_impPrio", html)
+        self.assertNotIn("optsImpSelect_", html)
+        self.assertNotIn("<label>Prioridad</label>", html)
+        self.assertIn('id="f-imp-pd"', html)
         self.assertIn("window._impLista=null", html)
         self.assertIn("window.onImpFiltro", html)
         i_imp = html.find("function renderImp()")
@@ -3961,7 +3966,8 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
+        self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
         self.assertIn("IMPRESIÓN DIGITAL LISTA FIJA", gs)
         self.assertIn("mapaSkuPrioDash = leerMinimasSku_(ss)", gs)
         self.assertIn("moStatus:", gs)
@@ -4596,7 +4602,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4837,7 +4843,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)

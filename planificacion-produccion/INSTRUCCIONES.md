@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.46 — códigos listos para pegar
+# Planificación de Producción v5.9.47 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,9 +14,9 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
 
-## Impresión Digital · lista fija (5.9.46)
+## Impresión Digital · lista fija (5.9.47)
 
 La pestaña **🖨 Impresión Digital** del dashboard web **ya no sigue el plan semanal de costura**. El taller puede mover semanas o fechas de almacén y el listado de logos no se reordena.
 
@@ -24,7 +24,7 @@ La pestaña **🖨 Impresión Digital** del dashboard web **ya no sigue el plan 
 - Orden de modelos: **Especial → Urgente → Alta → Media → Baja → Sin Asignar**, luego fecha de salida, luego volumen.
 - Dos bloques: **Líneas 1–4** y **Línea 5** (si el modelo lista la 5, va a L5).
 - Órdenes **PD** con etiqueta. Esperan crearse en Odoo; el check del logo se guarda igual.
-- Tabla de modelos: **Modelo, MOs, Faltante, Logo**. Prioridad y PD siguen como filtros de la pestaña; el CSV sí los exporta.
+- Tabla de modelos: **Modelo, MOs, Faltante, Logo**. En la pestaña solo queda el filtro **PD**. El CSV sí exporta la prioridad.
 - Variantes: Priorizacion - SKUs, **Negro → Blanco → Marino**, resto por volumen, talla. El día de arranque **no parte** un color.
 - Checks: botón **Guardar**, clave `M|MO|SKU` (sin semana). El filtro de **semana** del encabezado no vacía esta pestaña. Calendario, Salida semanal, Seguimiento y Almacén siguen siendo semanales.
 - Tras pegar `Codigo.gs` + `Dashboard.html`, corre **🔄 Actualizar Dashboard** (no hace falta redesplegar el URL).

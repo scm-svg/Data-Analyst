@@ -138,6 +138,8 @@ class TestReglasId(unittest.TestCase):
         self.assertNotIn("<th>Línea</th>", html)
         self.assertNotIn("<th>Variantes</th>", html)
         self.assertNotIn("<th>Fecha</th>", html)
+        self.assertNotIn('id="f-prio"', html)
+        self.assertNotIn("<label>Prioridad</label>", html)
         self.assertIn("<th>MOs</th>", html)
         self.assertIn("<th>Faltante</th>", html)
         self.assertNotIn("__DASH_JSON__", html)
@@ -201,6 +203,8 @@ class TestExcelReal(unittest.TestCase):
         self.assertNotIn("<th>Línea</th>", html)
         self.assertNotIn("<th>Variantes</th>", html)
         self.assertNotIn("<th>Fecha</th>", html)
+        self.assertNotIn('id="f-prio"', html)
+        self.assertNotIn("<label>Prioridad</label>", html)
 
 
 class TestDashboardAppsScript(unittest.TestCase):
@@ -221,13 +225,19 @@ class TestDashboardAppsScript(unittest.TestCase):
         self.assertNotIn("function filasImp(", html)
         self.assertIn("window.chkImpGrupo", html)
         self.assertIn("guardarChecksImpresion", html)
-        self.assertIn('var VERSION_SISTEMA = "5.9.46"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
+        self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
         self.assertIn("IMPRESIÓN DIGITAL LISTA FIJA", gs)
         self.assertIn("moStatus:", gs)
         i_imp = html.find("function renderImp()")
         j_imp = html.find("window.onImpFiltro")
         self.assertGreater(j_imp, i_imp)
         self.assertNotIn("fSem()", html[i_imp:j_imp])
+        self.assertNotIn("f-imp-prio", html)
+        self.assertNotIn("_impPrio", html)
+        self.assertNotIn("optsImpSelect_", html)
+        self.assertNotIn("<label>Prioridad</label>", html)
+        self.assertIn('id="f-imp-pd"', html)
 
 
 if __name__ == "__main__":

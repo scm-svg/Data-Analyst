@@ -101,8 +101,6 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 <div class="fbar">
   <label>Buscar</label>
   <input id="q" placeholder="Modelo / SKU / MO / color">
-  <label>Prioridad</label>
-  <select id="f-prio"><option value="">Todas</option></select>
   <label>Línea</label>
   <select id="f-lin"><option value="">Todas</option></select>
   <label>PD</label>
@@ -161,10 +159,8 @@ function keysDeModelo(m){
   return (m.skus||[]).map(function(s){ return impKey(s.sku, s.mo); });
 }
 function filtrarModelo(m){
-  var prio=document.getElementById('f-prio').value;
   var lin=document.getElementById('f-lin').value;
   var pd=document.getElementById('f-pd').value;
-  if(prio && m.prioridad!==prio) return null;
   if(lin && (m.lineas||[]).indexOf(lin)===-1) return null;
   var skus=(m.skus||[]).filter(function(s){
     if(pd==='pd' && !s.pd) return false;
@@ -395,20 +391,15 @@ function boot(){
     }
   }catch(e){}
   document.getElementById('footVer').textContent=(D.version||'')+(D.publicadoEn?' · '+D.publicadoEn:'');
-  var sp=document.getElementById('f-prio');
-  (D.opcionesFiltro.prioridades||[]).forEach(function(p){
-    var o=document.createElement('option'); o.value=p; o.textContent=p; sp.appendChild(o);
-  });
   var sl=document.getElementById('f-lin');
   (D.opcionesFiltro.lineas||[]).forEach(function(l){
     var o=document.createElement('option'); o.value=l; o.textContent='Línea '+l; sl.appendChild(o);
   });
-  ['q','f-prio','f-lin','f-pd'].forEach(function(id){
+  ['q','f-lin','f-pd'].forEach(function(id){
     document.getElementById(id).addEventListener(id==='q'?'input':'change', render);
   });
   document.getElementById('btn-limpiar').addEventListener('click', function(){
     document.getElementById('q').value='';
-    document.getElementById('f-prio').value='';
     document.getElementById('f-lin').value='';
     document.getElementById('f-pd').value='';
     render();

@@ -1,10 +1,13 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.46 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.47 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD: se quita el desplegable
+ *     Prioridad de esa pestaña. El listado sigue ordenado Especial →
+ *     Urgente → Alta → Media → Baja. El filtro PD se mantiene.
  *   - IMPRESIÓN DIGITAL LISTA FIJA: la pestaña ya no sigue el plan
  *     semanal de costura. Drill-down modelo → SKU ordenado por
  *     prioridad (Especial → Urgente → Alta → Media → Baja), partido
@@ -255,7 +258,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.46";
+var VERSION_SISTEMA = "5.9.47";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
