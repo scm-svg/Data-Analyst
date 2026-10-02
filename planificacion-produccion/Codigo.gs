@@ -1,10 +1,15 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.47 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.48 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - IMPRESIÓN DIGITAL FALTANTE 0: las órdenes con faltante 0 siguen
+ *     en Impresión Digital. El motor no las planifica, pero el logo
+ *     aún se valida. El drill-down SKU muestra Solicitada, Producida
+ *     y Faltante. Solo salen si están Hecho / Cerrada / Cancelada
+ *     (y por eso ya no están en Por Hacer).
  *   - IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD: se quita el desplegable
  *     Prioridad de esa pestaña. El listado sigue ordenado Especial →
  *     Urgente → Alta → Media → Baja. El filtro PD se mantiene.
@@ -258,7 +263,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.47";
+var VERSION_SISTEMA = "5.9.48";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -5330,7 +5335,7 @@ function supuestosDashboard_(capsModelo) {
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
-    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura.",
+    "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura. Una orden con Faltante 0 sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer; solo sale si está Hecho o Cancelada.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
     "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
     ]

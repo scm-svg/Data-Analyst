@@ -892,12 +892,16 @@ function ordenarSkusImp(arr){
   });
   return list;
 }
+function moCerradaImp(status){
+  var s=String(status||'').toLowerCase().replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u');
+  return s==='hecho' || s==='cerrada' || s==='cerrado' || s==='cancelada' || s==='cancelado';
+}
 function agruparImpresionFija(backlog){
   var grupos={}, orden=[];
   (backlog||[]).forEach(function(row){
     var modelo=String(row.modelo||'').trim();
     if(!modelo) return;
-    if(!(Number(row.faltante)>0)) return;
+    if(moCerradaImp(row.moStatus||row.status)) return;
     if(!grupos[modelo]){
       grupos[modelo]={
         modelo:modelo,
@@ -943,10 +947,10 @@ function agruparImpresionFija(backlog){
       color:String(row.color||'').trim(),
       talla:String(row.talla||'').trim(),
       genero:String(row.genero||'').trim(),
-      cant:Number(row.faltante)||0,
       solicitada:Number(row.solicitada)||0,
       producida:Number(row.producida)||0,
       faltante:Number(row.faltante)||0,
+      cant:(Number(row.faltante)>0?Number(row.faltante):(Number(row.solicitada)||Number(row.producida)||0)),
       moStatus:String(row.moStatus||row.status||'').trim(),
       pd:esPdMo(row.mo),
       linea:String(row.linea||'').trim(),
@@ -1008,6 +1012,7 @@ function filtrarModeloImp(m){
     modelo:m.modelo, tipo:m.tipo, especial:m.especial, prioridad:m.prioridad,
     fecha:m.fecha, lineas:m.lineas, skus:skus,
     solicitada:skus.reduce(function(a,s){ return a+(Number(s.solicitada)||0); },0),
+    producida:skus.reduce(function(a,s){ return a+(Number(s.producida)||0); },0),
     faltante:skus.reduce(function(a,s){ return a+(Number(s.faltante)||0); },0),
     nMos:Object.keys(mos).length, nSkus:skus.length, nPd:nPd, grupo:m.grupo
   };
@@ -1139,7 +1144,7 @@ function syncImpChecks(){
   });
 }
 function htmlSkuTableImp(m){
-  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
+  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Solicitada</th><th>Producida</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
   (m.skus||[]).forEach(function(s){
     var key=recordarOrdenImp_(s);
     var on=!!impLoad()[key];
@@ -1148,6 +1153,8 @@ function htmlSkuTableImp(m){
     t+='<td class="left">'+esc(s.sku)+'</td>';
     t+='<td class="left">'+esc(s.detalle)+'</td>';
     t+='<td>'+esc(s.color)+'</td><td>'+esc(s.talla)+'</td>';
+    t+='<td class="num">'+fmtN(s.solicitada)+'</td>';
+    t+='<td class="num">'+fmtN(s.producida)+'</td>';
     t+='<td class="num">'+fmtN(s.faltante)+'</td>';
     t+='<td>'+esc(s.moStatus||'—')+'</td>';
     t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'onchange="chkImpSku(event,this)"></label></td>';
@@ -1207,7 +1214,7 @@ function renderImp(){
   html+='<div class="tkpi"><div class="tv">'+fmtN(l5.length)+'</div><div class="tl">Modelos L5</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(nPd)+'</div><div class="tl">Variantes PD</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(Object.keys(_impChecks).length)+'</div><div class="tl">Logos listos</div></div></div>';
-  html+='<div class="note">Lista fija de Impresión Digital: drill-down <b>modelo → SKU</b> por prioridad (Especial → Urgente → Alta → Media → Baja), partido en Líneas 1–4 y Línea 5. No se reordena si el taller mueve la semana de costura o la entrada a almacén. Las variantes van Negro → Blanco → Marino → resto por volumen → talla. Marca el logo y pulsa Guardar (clave MO + SKU, sin semana).</div>';
+  html+='<div class="note">Lista fija de Impresión Digital: drill-down <b>modelo → SKU</b> por prioridad (Especial → Urgente → Alta → Media → Baja), partido en Líneas 1–4 y Línea 5. No se reordena si el taller mueve la semana de costura o la entrada a almacén. Una orden con <b>faltante 0</b> sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer. Solo sale si está Hecho o Cancelada. Las variantes van Negro → Blanco → Marino → resto por volumen → talla. Marca el logo y pulsa Guardar (clave MO + SKU, sin semana).</div>';
   html+='<div class="note imp-leyenda">Las órdenes con siglas <b>PD</b> están a la espera de ser creadas en Odoo. Van con la etiqueta PD; el check del logo se guarda igual (MO + SKU).</div>';
   html+=htmlGrupoImp('l14','Líneas 1–4','Costura regular (un modelo a la vez en esas líneas)', l14, 'imp-grupo-l14');
   html+=htmlGrupoImp('l5','Línea 5','Flujo aparte de L1–4 (shorts / prendas de L5)', l5, 'imp-grupo-l5');
@@ -1863,12 +1870,12 @@ function exportCSV(){
     });
     downloadCSV('planificacion-calendario.csv', rows);
   } else if(_tab==='imp'){
-    var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Faltante','MO status','Logo listo']];
+    var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Solicitada','Producida','Faltante','MO status','Logo listo']];
     var st=impLoad();
     function dumpImp(grupo, arr){
       arr.forEach(function(m){
         (m.skus||[]).forEach(function(s){
-          rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.faltante, s.moStatus||'', st[impKey(s.sku,s.mo)]?'SI':'NO']);
+          rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.solicitada, s.producida, s.faltante, s.moStatus||'', st[impKey(s.sku,s.mo)]?'SI':'NO']);
         });
       });
     }

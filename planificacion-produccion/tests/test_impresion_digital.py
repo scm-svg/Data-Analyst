@@ -11,12 +11,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from impresion_digital import (
+    Numberish,
     agrupar_impresion,
     clave_check,
     es_pd,
     escribir_html,
     extraer_desde_xlsx,
     grupo_linea,
+    mo_cerrada,
     ordenar_skus,
     parsear_lineas,
     payload_para_html,
@@ -24,7 +26,9 @@ from impresion_digital import (
     resumen,
 )
 
-XLSX = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion__43__9374.xlsx")
+XLSX43 = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion__43__9374.xlsx")
+XLSX44 = Path("/home/ubuntu/.cursor/projects/workspace/uploads/Planificacion_Produccion__44__5ea0.xlsx")
+XLSX = XLSX44 if XLSX44.exists() else XLSX43
 
 
 def sku(**kw):
@@ -109,6 +113,35 @@ class TestReglasId(unittest.TestCase):
         self.assertEqual(clas["prioridad"], "Especial")
         self.assertTrue(clas["especial"])
 
+    def test_faltante_cero_sigue_y_cerrada_sale(self):
+        self.assertTrue(mo_cerrada("Hecho"))
+        self.assertTrue(mo_cerrada("CANCELADA"))
+        self.assertTrue(mo_cerrada("Cerrada"))
+        self.assertFalse(mo_cerrada("Confirmada"))
+        self.assertFalse(mo_cerrada("En Progreso"))
+        backlog = [
+            sku(modelo="RIO KIDS", sku="RK-OK", mo="01000", faltante=12, solicitada=12, producida=0),
+            sku(modelo="RIO KIDS", sku="RK-0", mo="01001", faltante=0, solicitada=20, producida=20,
+                moStatus="Confirmada"),
+            sku(modelo="RIO KIDS", sku="RK-HECHO", mo="01002", faltante=0, solicitada=8, producida=8,
+                moStatus="Hecho"),
+            sku(modelo="RIO KIDS", sku="RK-CANC", mo="01003", faltante=5, solicitada=5, producida=0,
+                moStatus="Cancelada"),
+        ]
+        lista = agrupar_impresion(backlog)
+        skus = {s["sku"]: s for m in lista["modelos"] for s in m["skus"]}
+        self.assertIn("RK-OK", skus)
+        self.assertIn("RK-0", skus)
+        self.assertEqual(skus["RK-0"]["solicitada"], 20)
+        self.assertEqual(skus["RK-0"]["producida"], 20)
+        self.assertEqual(skus["RK-0"]["faltante"], 0)
+        self.assertNotIn("RK-HECHO", skus)
+        self.assertNotIn("RK-CANC", skus)
+        rio = [m for m in lista["lineas14"] if m["modelo"] == "RIO KIDS"][0]
+        self.assertEqual(rio["solicitada"], 32)
+        self.assertEqual(rio["producida"], 20)
+        self.assertEqual(rio["faltante"], 12)
+
     def test_html_plantilla_y_checks(self):
         backlog = [
             sku(modelo="SHORT PLAYA CAB", linea="5", prioridad="Urgente", sku="SP1", mo="02000"),
@@ -141,6 +174,8 @@ class TestReglasId(unittest.TestCase):
         self.assertNotIn('id="f-prio"', html)
         self.assertNotIn("<label>Prioridad</label>", html)
         self.assertIn("<th>MOs</th>", html)
+        self.assertIn("<th>Solicitada</th>", html)
+        self.assertIn("<th>Producida</th>", html)
         self.assertIn("<th>Faltante</th>", html)
         self.assertNotIn("__DASH_JSON__", html)
         data = json.loads(html.split('id="dash-data">')[1].split("</script>")[0])
@@ -189,6 +224,13 @@ class TestExcelReal(unittest.TestCase):
         self.assertGreater(len(self.extraido["checks"]), 50)
         self.assertTrue(all(k.startswith("M|") or k.startswith("S|") for k in self.extraido["checks"]))
 
+    def test_incluye_faltante_cero_del_excel(self):
+        skus = [s for m in self.lista["modelos"] for s in m["skus"]]
+        ceros = [s for s in skus if Numberish(s.get("faltante")) == 0]
+        self.assertGreater(len(ceros), 0, "El Excel 44 debe traer órdenes con faltante 0 aún abiertas")
+        self.assertTrue(all((s.get("solicitada") or 0) > 0 or (s.get("producida") or 0) > 0 for s in ceros))
+        self.assertFalse(any(mo_cerrada(s.get("moStatus")) for s in skus))
+
     def test_html_real_descargable(self):
         payload = payload_para_html(self.extraido)
         dest = ROOT / "impresion-digital-prueba.html"
@@ -205,6 +247,8 @@ class TestExcelReal(unittest.TestCase):
         self.assertNotIn("<th>Fecha</th>", html)
         self.assertNotIn('id="f-prio"', html)
         self.assertNotIn("<label>Prioridad</label>", html)
+        self.assertIn("<th>Solicitada</th>", html)
+        self.assertIn("<th>Producida</th>", html)
 
 
 class TestDashboardAppsScript(unittest.TestCase):
@@ -225,9 +269,14 @@ class TestDashboardAppsScript(unittest.TestCase):
         self.assertNotIn("function filasImp(", html)
         self.assertIn("window.chkImpGrupo", html)
         self.assertIn("guardarChecksImpresion", html)
-        self.assertIn('var VERSION_SISTEMA = "5.9.47"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.48"', gs)
+        self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
         self.assertIn("IMPRESIÓN DIGITAL LISTA FIJA", gs)
+        self.assertIn("function moCerradaImp(", html)
+        self.assertIn("<th>Solicitada</th>", html)
+        self.assertIn("<th>Producida</th>", html)
+        self.assertNotIn("if(!(Number(row.faltante)>0)) return;", html)
         self.assertIn("moStatus:", gs)
         i_imp = html.find("function renderImp()")
         j_imp = html.find("window.onImpFiltro")

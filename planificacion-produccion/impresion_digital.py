@@ -209,6 +209,11 @@ def fmt_fecha(v):
     return d.strftime("%d/%m/%Y")
 
 
+def mo_cerrada(status):
+    s = quitar_tildes(norm(status)).lower()
+    return s in ("hecho", "cerrada", "cerrado", "cancelada", "cancelado")
+
+
 def agrupar_impresion(backlog):
     """Modelos fijos por prioridad, partidos en L1-4 vs L5. No usa semanas del plan."""
     grupos = {}
@@ -217,7 +222,7 @@ def agrupar_impresion(backlog):
         modelo = norm(row.get("modelo"))
         if not modelo:
             continue
-        if Numberish(row.get("faltante")) <= 0:
+        if mo_cerrada(row.get("moStatus") or row.get("status")):
             continue
         if modelo not in grupos:
             grupos[modelo] = {
@@ -265,10 +270,10 @@ def agrupar_impresion(backlog):
             "color": norm(row.get("color")),
             "talla": norm(row.get("talla")),
             "genero": norm(row.get("genero")),
-            "cant": Numberish(row.get("faltante")),
             "solicitada": Numberish(row.get("solicitada")),
             "producida": Numberish(row.get("producida")),
             "faltante": Numberish(row.get("faltante")),
+            "cant": Numberish(row.get("faltante")) if Numberish(row.get("faltante")) > 0 else (Numberish(row.get("solicitada")) or Numberish(row.get("producida"))),
             "moStatus": norm(row.get("moStatus") or row.get("status")),
             "pd": es_pd(row.get("mo")),
             "linea": norm(row.get("linea")),
@@ -372,11 +377,11 @@ def leer_embudo_xlsx(ws, especial, prio_map):
         status = norm(raw[idx["status"]]) if idx["status"] >= 0 else ""
         if especial and quitar_tildes(status).lower() == "hecho":
             continue
+        if mo_cerrada(status):
+            continue
         sol = Numberish(raw[idx["sol"]]) if idx["sol"] >= 0 else 0
         prodq = Numberish(raw[idx["prodq"]]) if idx["prodq"] >= 0 else 0
         falt = _faltante(sol, prodq, raw[idx["falt"]] if idx["falt"] >= 0 else None)
-        if falt <= 0:
-            continue
         gen = norm(raw[idx["gen"]]) if idx["gen"] >= 0 else ""
         color = norm(raw[idx["col"]]) if idx["col"] >= 0 else ""
         talla = norm(raw[idx["tal"]]) if idx["tal"] >= 0 else ""
@@ -487,7 +492,7 @@ def extraer_desde_xlsx(path):
         "backlog": backlog,
         "checks": checks,
         "lista": lista,
-        "version": "5.9.45-id-fija",
+        "version": "5.9.48",
     }
 
 
@@ -542,7 +547,7 @@ def payload_para_html(extraido):
         for lin in m.get("lineas") or []
     }, key=lambda x: int(x) if str(x).isdigit() else 99)
     return _json_safe({
-        "version": extraido.get("version") or "5.9.45-id-fija",
+        "version": extraido.get("version") or "5.9.48",
         "publicadoEn": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "kpis": kpis,
         "checks": extraido.get("checks") or {},

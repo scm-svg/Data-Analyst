@@ -176,6 +176,7 @@ function filtrarModelo(m){
     modelo:m.modelo, tipo:m.tipo, especial:m.especial, prioridad:m.prioridad,
     fecha:m.fecha, lineas:m.lineas, skus:skus,
     solicitada:skus.reduce(function(a,s){ return a+(Number(s.solicitada)||0); },0),
+    producida:skus.reduce(function(a,s){ return a+(Number(s.producida)||0); },0),
     faltante:skus.reduce(function(a,s){ return a+(Number(s.faltante)||0); },0),
     nMos:Object.keys(mos).length, nSkus:skus.length, nPd:nPd, grupo:m.grupo
   };
@@ -221,7 +222,7 @@ function markDirty(){
   pintarSave();
 }
 function htmlSkuTable(m){
-  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
+  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Solicitada</th><th>Producida</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
   (m.skus||[]).forEach(function(s){
     var key=impKey(s.sku, s.mo);
     var on=!!_impChecks[key];
@@ -230,6 +231,8 @@ function htmlSkuTable(m){
     t+='<td class="left">'+esc(s.sku)+'</td>';
     t+='<td class="left">'+esc(s.detalle)+'</td>';
     t+='<td>'+esc(s.color)+'</td><td>'+esc(s.talla)+'</td>';
+    t+='<td class="num">'+fmtN(s.solicitada)+'</td>';
+    t+='<td class="num">'+fmtN(s.producida)+'</td>';
     t+='<td class="num">'+fmtN(s.faltante)+'</td>';
     t+='<td>'+esc(s.moStatus||'—')+'</td>';
     t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'></label></td>';
@@ -289,7 +292,7 @@ function render(){
   html+='<div class="tkpi"><div class="tv">'+fmtN(l5.length)+'</div><div class="tl">Modelos L5</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(nPd)+'</div><div class="tl">Variantes PD</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(Object.keys(_impChecks).length)+'</div><div class="tl">Logos listos</div></div></div>';
-  html+='<div class="note">Estructura fija para ID: drill-down <b>modelo → variante</b> ordenado por prioridad (Especial → Urgente → Alta → Media → Baja). No se reordena si el taller mueve la semana de costura o la entrada a almacén. Las variantes van Negro → Blanco → Marino → resto por volumen → talla.</div>';
+  html+='<div class="note">Estructura fija para ID: drill-down <b>modelo → variante</b> ordenado por prioridad (Especial → Urgente → Alta → Media → Baja). No se reordena si el taller mueve la semana de costura o la entrada a almacén. Una orden con <b>faltante 0</b> sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer. Solo sale si está Hecho o Cancelada. Las variantes van Negro → Blanco → Marino → resto por volumen → talla.</div>';
   html+='<div class="note imp-leyenda">Las órdenes con siglas <b>PD</b> están a la espera de ser creadas en Odoo. Van resaltadas en amarillo y con la etiqueta PD; el check del logo se guarda igual (MO + SKU).</div>';
   html+=htmlGrupo('l14','Líneas 1–4','Costura regular (un modelo a la vez en esas líneas)', l14, 'imp-grupo-l14');
   html+=htmlGrupo('l5','Línea 5','Flujo aparte de L1–4 (shorts / prendas de L5)', l5, 'imp-grupo-l5');
@@ -362,11 +365,11 @@ function guardar(){
   pintarSave('Guardado en este navegador. '+Object.keys(_impChecks).length+' logos listos. En Apps Script esta misma clave M|MO|SKU irá a _ImpresionChecks.');
 }
 function exportCSV(){
-  var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Faltante','MO status','Logo listo']];
+  var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Solicitada','Producida','Faltante','MO status','Logo listo']];
   function dump(grupo, arr){
     arr.forEach(function(m){
       (m.skus||[]).forEach(function(s){
-        rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.faltante, s.moStatus||'', _impChecks[impKey(s.sku,s.mo)]?'SI':'NO']);
+        rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.solicitada, s.producida, s.faltante, s.moStatus||'', _impChecks[impKey(s.sku,s.mo)]?'SI':'NO']);
       });
     });
   }
