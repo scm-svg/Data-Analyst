@@ -183,11 +183,11 @@ class TestReglasId(unittest.TestCase):
         self.assertTrue(data["checks"]["M|02000|SP1"])
 
 
-@unittest.skipUnless(XLSX.exists(), "Falta el Excel de Planificación")
+@unittest.skipUnless(XLSX43.exists(), "Falta el Excel 43 de Planificación")
 class TestExcelReal(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.extraido = extraer_desde_xlsx(str(XLSX))
+        cls.extraido = extraer_desde_xlsx(str(XLSX43))
         cls.lista = cls.extraido["lista"]
         cls.kpis = resumen(cls.lista)
 
@@ -224,13 +224,6 @@ class TestExcelReal(unittest.TestCase):
         self.assertGreater(len(self.extraido["checks"]), 50)
         self.assertTrue(all(k.startswith("M|") or k.startswith("S|") for k in self.extraido["checks"]))
 
-    def test_incluye_faltante_cero_del_excel(self):
-        skus = [s for m in self.lista["modelos"] for s in m["skus"]]
-        ceros = [s for s in skus if Numberish(s.get("faltante")) == 0]
-        self.assertGreater(len(ceros), 0, "El Excel 44 debe traer órdenes con faltante 0 aún abiertas")
-        self.assertTrue(all((s.get("solicitada") or 0) > 0 or (s.get("producida") or 0) > 0 for s in ceros))
-        self.assertFalse(any(mo_cerrada(s.get("moStatus")) for s in skus))
-
     def test_html_real_descargable(self):
         payload = payload_para_html(self.extraido)
         dest = ROOT / "impresion-digital-prueba.html"
@@ -249,6 +242,34 @@ class TestExcelReal(unittest.TestCase):
         self.assertNotIn("<label>Prioridad</label>", html)
         self.assertIn("<th>Solicitada</th>", html)
         self.assertIn("<th>Producida</th>", html)
+
+
+@unittest.skipUnless(XLSX44.exists(), "Falta el Excel 44 de Planificación")
+class TestXlsx44FaltanteCero(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.extraido = extraer_desde_xlsx(str(XLSX44))
+        cls.lista = cls.extraido["lista"]
+        cls.kpis = resumen(cls.lista)
+
+    def test_incluye_faltante_cero_abiertas(self):
+        skus = [s for m in self.lista["modelos"] for s in m["skus"]]
+        ceros = [s for s in skus if Numberish(s.get("faltante")) == 0]
+        self.assertGreater(len(ceros), 0, "El Excel 44 debe traer órdenes con faltante 0 aún abiertas")
+        self.assertTrue(all((s.get("solicitada") or 0) > 0 or (s.get("producida") or 0) > 0 for s in ceros))
+        self.assertFalse(any(mo_cerrada(s.get("moStatus")) for s in skus))
+        self.assertGreater(self.kpis["skus"], 500)
+        self.assertGreater(self.kpis["l14"], 10)
+
+    def test_html_actual_con_columnas(self):
+        payload = payload_para_html(self.extraido)
+        dest = ROOT / "impresion-digital-prueba.html"
+        escribir_html(payload, dest)
+        html = dest.read_text(encoding="utf-8")
+        self.assertIn("<th>Solicitada</th>", html)
+        self.assertIn("<th>Producida</th>", html)
+        self.assertIn("<th>Faltante</th>", html)
+        self.assertIn("faltante 0", html)
 
 
 class TestDashboardAppsScript(unittest.TestCase):
