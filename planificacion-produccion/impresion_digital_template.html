@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Impresión Digital · lista fija por prioridad</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--a2:#f75b8a;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--l5:#a78bfa;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+body.light{--bg:#f5f6fa;--surf:#ffffff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;--tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5;--ac:#5b6af7;--a2:#f75b8a;--gr:#2e9e5e;--rd:#dc3545;--yw:#e6a800;--l5:#7c3aed}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0d0e13 0%,#191a2d 55%,#0d0e13 100%);border-bottom:1px solid var(--brd);padding:18px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3 100%)}
+.hdr-l h1{font-family:var(--fh);font-size:1.45rem;font-weight:800;letter-spacing:-.5px}
+.hdr-l h1 em{color:var(--ac);font-style:normal}
+#status{color:var(--mu);font-size:.8rem;margin-top:2px}
+.hdr-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kpi-bar{display:flex;gap:10px;flex-wrap:wrap}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:9px 14px;text-align:center;min-width:76px}
+.kpib .kv{font-family:var(--fh);font-size:1.3rem;font-weight:800;color:var(--ac);line-height:1}
+.kpib .kl{font-size:.64rem;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.theme-btn,.fbtn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem;font-family:var(--fb)}
+.theme-btn:hover,.fbtn:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
+.fbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:10px 40px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fbar label{font-size:.68rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
+.fbar select,.fbar input{background:var(--s2);color:var(--tx);border:1px solid var(--brd);border-radius:7px;padding:5px 10px;font-family:var(--fb);font-size:.78rem;outline:none}
+.content{padding:22px 40px;max-width:1500px;margin:0 auto}
+.tkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px}
+.tkpi{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:11px;text-align:center}
+.tkpi .tv{font-family:var(--fh);font-size:1.15rem;font-weight:800;color:var(--ac)}
+.tkpi .tl{font-size:.66rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.card h3{font-family:var(--fh);font-size:.92rem;font-weight:700;margin-bottom:2px}
+.sub{font-size:.7rem;color:var(--mu);margin-bottom:12px}
+.ctwrap{overflow:auto;max-height:640px}
+.ct{width:100%;border-collapse:collapse;font-size:.78rem}
+.ct th{color:var(--mu);padding:6px 8px;text-align:left;border-bottom:1px solid var(--brd);font-size:.64rem;text-transform:uppercase;position:sticky;top:0;background:var(--surf);z-index:1;white-space:nowrap}
+.ct td{padding:7px 8px;border-bottom:1px solid var(--brd);vertical-align:middle}
+.ct tr:hover td{background:rgba(91,106,247,.06)}
+.num{font-family:var(--fh);font-weight:700;text-align:right;white-space:nowrap}
+.ct.ct-mid th,.ct.ct-mid td{text-align:center}
+.ct.ct-mid th.left,.ct.ct-mid td.left{text-align:left}
+.ct.ct-mid .num{text-align:center}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:50%;font-size:.68rem;font-weight:800;color:#fff;margin:0 2px}
+.c1{background:#5b6af7}.c2{background:#f75b8a}.c3{background:#4caf76}.c4{background:#e6a800}.c5{background:#7c3aed}
+.note{background:var(--s2);border-left:3px solid var(--ac);padding:10px 12px;border-radius:8px;font-size:.78rem;color:var(--mu);margin-bottom:8px}
+.badge{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:999px;display:inline-block;white-space:nowrap}
+.b-ok{background:rgba(76,175,118,.2);color:var(--gr)}
+.b-yw{background:rgba(255,193,7,.22);color:var(--yw)}
+.b-bad{background:rgba(239,68,68,.2);color:var(--rd)}
+.b-mut{background:var(--s3);color:var(--mu)}
+.b-pd{background:rgba(255,193,7,.22);color:var(--yw);border:1px solid rgba(255,193,7,.45);letter-spacing:.4px}
+.b-esp{background:rgba(247,91,138,.2);color:var(--a2)}
+.b-urg{background:rgba(239,68,68,.22);color:var(--rd)}
+.b-alt{background:rgba(247,91,138,.18);color:#ff8fab}
+.b-med{background:rgba(255,193,7,.18);color:var(--yw)}
+.b-baj{background:rgba(91,106,247,.2);color:var(--ac)}
+.tr-exp{cursor:pointer}
+.tr-exp .chev{color:var(--ac);display:inline-block;width:14px}
+.sku-row td{background:var(--s2);font-size:.72rem}
+.imp-leyenda{border:1px solid var(--yw);border-left:3px solid var(--yw);background:rgba(255,193,7,.08);color:var(--tx);margin-bottom:14px}
+.imp-chk{display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;vertical-align:middle;user-select:none}
+.imp-chk input{appearance:none;-webkit-appearance:none;width:16px;height:16px;margin:0;border:2px solid var(--ac);border-radius:4px;background:rgba(91,106,247,.12);cursor:pointer;position:relative;vertical-align:middle}
+.imp-chk input:checked{background:var(--ac);border-color:var(--ac)}
+.imp-chk input:checked:after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.imp-chk input:indeterminate{background:rgba(91,106,247,.5);border-color:var(--ac)}
+.imp-chk input:indeterminate:after{content:'';position:absolute;left:3px;top:6px;width:8px;height:2px;background:#fff;border:none;transform:none}
+.imp-chk span{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.3px}
+.imp-chk.ok span{color:var(--ac);font-weight:700}
+.imp-savebar{position:sticky;top:0;z-index:5;background:var(--surf);border:1px solid var(--brd);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.imp-savebar button{background:var(--s3);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:8px 16px;font-family:var(--fh);font-weight:800;font-size:.78rem;cursor:pointer}
+.imp-savebar button.dirty{background:var(--ac);color:#fff;border-color:var(--ac)}
+.imp-savebar button:disabled{opacity:.5;cursor:default}
+.imp-save-msg{font-size:.75rem;color:var(--mu)}
+.imp-save-msg.dirty{color:var(--yw);font-weight:700}
+.imp-save-msg.ok{color:var(--gr)}
+.imp-grupo-l14{border-top:3px solid var(--ac)}
+.imp-grupo-l5{border-top:3px solid var(--l5)}
+.imp-grupo-l5 h3{color:var(--l5)}
+.footer{text-align:center;color:var(--mu);font-size:.68rem;padding:14px 40px;border-top:1px solid var(--brd);margin-top:8px}
+@media(max-width:780px){.content,.fbar,.hdr{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-l">
+    <h1>Impresión Digital · <em>lista fija</em></h1>
+    <p id="status">Prueba HTML. No sigue el plan semanal de costura: el orden es la prioridad de producción, partido por líneas 1–4 y línea 5.</p>
+  </div>
+  <div class="hdr-r">
+    <div class="kpi-bar">
+      <div class="kpib"><div class="kv" id="k-mod">—</div><div class="kl">Modelos</div></div>
+      <div class="kpib"><div class="kv" id="k-sku">—</div><div class="kl">Variantes</div></div>
+      <div class="kpib"><div class="kv" id="k-pza">—</div><div class="kl">Pzas</div></div>
+      <div class="kpib"><div class="kv" id="k-pd">—</div><div class="kl">Órdenes PD</div></div>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">☀️ Light</button>
+  </div>
+</div>
+<div class="fbar">
+  <label>Buscar</label>
+  <input id="q" placeholder="Modelo / SKU / MO / color">
+  <label>Línea</label>
+  <select id="f-lin"><option value="">Todas</option></select>
+  <label>PD</label>
+  <select id="f-pd">
+    <option value="">Todas</option>
+    <option value="pd">Solo PD</option>
+    <option value="odoo">Sin PD (ya en Odoo)</option>
+  </select>
+  <button class="fbtn" type="button" id="btn-limpiar">↺ Limpiar</button>
+  <button class="fbtn" type="button" id="btn-csv">📥 CSV</button>
+</div>
+<div class="content" id="app"></div>
+<div class="footer">Impresión Digital · lista fija por prioridad · prueba HTML v<span id="footVer"></span> · Los checks se guardan en este navegador (clave MO+SKU). Luego se copian a Apps Script / _ImpresionChecks.</div>
+<script type="application/json" id="dash-data">__DASH_JSON__</script>
+<script>
+var LS_KEY='impDigitalChecks:prueba';
+var D=null;
+var _impChecks={};
+var _impSaved={};
+var _impDirty=false;
+var _theme='dark';
+var _open={};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
+function fmtN(n){ n=Number(n)||0; return n.toLocaleString('es-CO',{maximumFractionDigits:0}); }
+function q(){ return (document.getElementById('q').value||'').toLowerCase().trim(); }
+function matchQ(s){ var t=q(); return !t || String(s||'').toLowerCase().indexOf(t)!==-1; }
+function impKey(sku, mo){
+  var m=String(mo||'').trim().toUpperCase();
+  var s=String(sku||'').trim().toUpperCase();
+  if(m) return 'M|'+m+'|'+s;
+  return 'S|'+s;
+}
+function clonar(st){
+  var o={}; st=st||{}; Object.keys(st).forEach(function(k){ if(st[k]) o[k]=1; }); return o;
+}
+function iguales(a,b){
+  a=a||{}; b=b||{}; var ka=Object.keys(a), kb=Object.keys(b);
+  if(ka.length!==kb.length) return false;
+  for(var i=0;i<ka.length;i++) if(!b[ka[i]]) return false;
+  return true;
+}
+function estadoKeys(keys){
+  var st=_impChecks, n=keys.length, ok=0;
+  keys.forEach(function(k){ if(st[k]) ok++; });
+  return {n:n, ok:ok, all:n>0 && ok===n, some:ok>0 && ok<n};
+}
+function applyBox(el, est){
+  if(!el) return;
+  el.checked=!!est.all;
+  el.indeterminate=!!est.some;
+  var lab=el.closest('.imp-chk');
+  if(lab) lab.classList.toggle('ok', !!est.all);
+}
+function keysDeModelo(m){
+  return (m.skus||[]).map(function(s){ return impKey(s.sku, s.mo); });
+}
+function filtrarModelo(m){
+  var lin=document.getElementById('f-lin').value;
+  var pd=document.getElementById('f-pd').value;
+  if(lin && (m.lineas||[]).indexOf(lin)===-1) return null;
+  var skus=(m.skus||[]).filter(function(s){
+    if(pd==='pd' && !s.pd) return false;
+    if(pd==='odoo' && s.pd) return false;
+    if(!q()) return true;
+    return matchQ(m.modelo) || matchQ(s.sku) || matchQ(s.mo) || matchQ(s.detalle) || matchQ(s.color);
+  });
+  if(!skus.length) return null;
+  var nPd=skus.filter(function(s){ return s.pd; }).length;
+  var mos={};
+  skus.forEach(function(s){ if(s.mo) mos[s.mo]=1; });
+  return {
+    modelo:m.modelo, tipo:m.tipo, especial:m.especial, prioridad:m.prioridad,
+    fecha:m.fecha, lineas:m.lineas, skus:skus,
+    solicitada:skus.reduce(function(a,s){ return a+(Number(s.solicitada)||0); },0),
+    producida:skus.reduce(function(a,s){ return a+(Number(s.producida)||0); },0),
+    faltante:skus.reduce(function(a,s){ return a+(Number(s.faltante)||0); },0),
+    nMos:Object.keys(mos).length, nSkus:skus.length, nPd:nPd, grupo:m.grupo
+  };
+}
+function syncChecks(){
+  document.querySelectorAll('input[data-imp-sku]').forEach(function(el){
+    el.checked=!!_impChecks[el.getAttribute('data-imp-sku')];
+  });
+  document.querySelectorAll('input[data-imp-mod]').forEach(function(el){
+    var id=el.getAttribute('data-imp-mod');
+    var m=(window._impMods||{})[id];
+    applyBox(el, estadoKeys(m?keysDeModelo(m):[]));
+  });
+  document.querySelectorAll('input[data-imp-grp]').forEach(function(el){
+    var g=el.getAttribute('data-imp-grp');
+    var arr=(window._impGrupos||{})[g]||[];
+    var keys=[];
+    arr.forEach(function(m){ keys=keys.concat(keysDeModelo(m)); });
+    applyBox(el, estadoKeys(keys));
+    var note=el.closest('.imp-grphead');
+    if(note) note.classList.toggle('imp-done', estadoKeys(keys).all);
+  });
+}
+function pintarSave(extra){
+  var btn=document.getElementById('btn-guardar-imp');
+  var msg=document.getElementById('imp-save-msg');
+  if(btn){
+    btn.disabled=!_impDirty;
+    btn.classList.toggle('dirty', !!_impDirty);
+    btn.textContent='Guardar';
+  }
+  if(msg){
+    var t=extra||(_impDirty?'Hay checks sin guardar. Pulsa Guardar para dejarlos en este navegador.':'');
+    msg.textContent=t;
+    msg.className='imp-save-msg'+(_impDirty?' dirty':' ok');
+  }
+}
+function setCheck(key, on){
+  if(on) _impChecks[key]=1; else delete _impChecks[key];
+}
+function markDirty(){
+  _impDirty=!iguales(_impChecks, _impSaved);
+  pintarSave();
+}
+function htmlSkuTable(m){
+  var t='<table class="ct ct-mid"><thead><tr><th class="left">MO</th><th class="left">SKU</th><th class="left">Detalle</th><th>Color</th><th>Talla</th><th>Solicitada</th><th>Producida</th><th>Faltante</th><th>Estado MO</th><th>Logo</th></tr></thead><tbody>';
+  (m.skus||[]).forEach(function(s){
+    var key=impKey(s.sku, s.mo);
+    var on=!!_impChecks[key];
+    t+='<tr>';
+    t+='<td class="left">'+(s.pd?'<span class="badge b-pd">PD</span> ':'')+esc(s.mo||'—')+'</td>';
+    t+='<td class="left">'+esc(s.sku)+'</td>';
+    t+='<td class="left">'+esc(s.detalle)+'</td>';
+    t+='<td>'+esc(s.color)+'</td><td>'+esc(s.talla)+'</td>';
+    t+='<td class="num">'+fmtN(s.solicitada)+'</td>';
+    t+='<td class="num">'+fmtN(s.producida)+'</td>';
+    t+='<td class="num">'+fmtN(s.faltante)+'</td>';
+    t+='<td>'+esc(s.moStatus||'—')+'</td>';
+    t+='<td><label class="imp-chk'+(on?' ok':'')+'"><input type="checkbox" data-imp-sku="'+esc(key)+'" '+(on?'checked ':'')+'></label></td>';
+    t+='</tr>';
+  });
+  t+='</tbody></table>';
+  return t;
+}
+function htmlGrupo(id, titulo, sub, modelos, extraClass){
+  var keys=[];
+  modelos.forEach(function(m){ keys=keys.concat(keysDeModelo(m)); });
+  var est=estadoKeys(keys);
+  var tot=modelos.reduce(function(a,m){ return a+m.faltante; },0);
+  var nPd=modelos.reduce(function(a,m){ return a+m.nPd; },0);
+  var html='<div class="card '+extraClass+'">';
+  html+='<div class="imp-grphead" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+  html+='<div><h3>'+esc(titulo)+'</h3><p class="sub" style="margin:0">'+esc(sub)+' · <b>'+modelos.length+'</b> modelos · <b>'+fmtN(tot)+'</b> pzas'+(nPd?' · <span class="badge b-pd">'+nPd+' PD</span>':'')+'</p></div>';
+  html+='<label class="imp-chk'+(est.all?' ok':'')+'" title="Grupo listo"><input type="checkbox" data-imp-grp="'+id+'" '+(est.all?'checked ':'')+'><span>Listo</span></label></div>';
+  if(!modelos.length){
+    html+='<p class="sub">No hay modelos en este grupo con el filtro actual.</p></div>';
+    return html;
+  }
+  html+='<div class="ctwrap"><table class="ct ct-mid"><thead><tr><th></th><th class="left">Modelo</th><th>MOs</th><th>Faltante</th><th>Logo</th></tr></thead><tbody>';
+  modelos.forEach(function(m, i){
+    var mid=id+'-'+i;
+    var estM=estadoKeys(keysDeModelo(m));
+    var pdTag=m.nPd?' <span class="badge b-pd">'+m.nPd+' PD</span>':'';
+    html+='<tr class="tr-exp" data-open="'+mid+'"><td><span class="chev">▸</span></td>';
+    html+='<td class="left">'+esc(m.modelo)+pdTag+'</td>';
+    html+='<td class="num">'+fmtN(m.nMos)+'</td>';
+    html+='<td class="num">'+fmtN(m.faltante)+'</td>';
+    html+='<td onclick="event.stopPropagation()"><label class="imp-chk'+(estM.all?' ok':'')+'"><input type="checkbox" data-imp-mod="'+mid+'" '+(estM.all?'checked ':'')+'></label></td></tr>';
+    html+='<tr id="'+mid+'" class="sku-row" style="display:'+(_open[mid]?'table-row':'none')+'"><td colspan="5">'+(_open[mid]?htmlSkuTable(m):'')+'</td></tr>';
+  });
+  html+='</tbody></table></div></div>';
+  return html;
+}
+function render(){
+  var l14=(D.lista.lineas14||[]).map(filtrarModelo).filter(Boolean);
+  var l5=(D.lista.linea5||[]).map(filtrarModelo).filter(Boolean);
+  window._impGrupos={l14:l14, l5:l5};
+  window._impMods={};
+  l14.forEach(function(m,i){ window._impMods['l14-'+i]=m; });
+  l5.forEach(function(m,i){ window._impMods['l5-'+i]=m; });
+  var nMod=l14.length+l5.length;
+  var nSku=l14.concat(l5).reduce(function(a,m){ return a+m.nSkus; },0);
+  var nPza=l14.concat(l5).reduce(function(a,m){ return a+m.faltante; },0);
+  var nPd=l14.concat(l5).reduce(function(a,m){ return a+m.nPd; },0);
+  document.getElementById('k-mod').textContent=fmtN(nMod);
+  document.getElementById('k-sku').textContent=fmtN(nSku);
+  document.getElementById('k-pza').textContent=fmtN(nPza);
+  document.getElementById('k-pd').textContent=fmtN(nPd);
+
+  var html='<div class="imp-savebar"><button type="button" id="btn-guardar-imp">Guardar</button><span id="imp-save-msg" class="imp-save-msg"></span></div>';
+  html+='<div class="tkpis">';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(l14.length)+'</div><div class="tl">Modelos L1–4</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(l5.length)+'</div><div class="tl">Modelos L5</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(nPd)+'</div><div class="tl">Variantes PD</div></div>';
+  html+='<div class="tkpi"><div class="tv">'+fmtN(Object.keys(_impChecks).length)+'</div><div class="tl">Logos listos</div></div></div>';
+  html+='<div class="note">Estructura fija para ID: drill-down <b>modelo → variante</b> ordenado por prioridad (Especial → Urgente → Alta → Media → Baja). No se reordena si el taller mueve la semana de costura o la entrada a almacén. Una orden con <b>faltante 0</b> sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer. Solo sale si está Hecho o Cancelada. Las variantes van Negro → Blanco → Marino → resto por volumen → talla.</div>';
+  html+='<div class="note imp-leyenda">Las órdenes con siglas <b>PD</b> están a la espera de ser creadas en Odoo. Van resaltadas en amarillo y con la etiqueta PD; el check del logo se guarda igual (MO + SKU).</div>';
+  html+=htmlGrupo('l14','Líneas 1–4','Costura regular (un modelo a la vez en esas líneas)', l14, 'imp-grupo-l14');
+  html+=htmlGrupo('l5','Línea 5','Flujo aparte de L1–4 (shorts / prendas de L5)', l5, 'imp-grupo-l5');
+  document.getElementById('app').innerHTML=html;
+  bind();
+  syncChecks();
+  pintarSave();
+}
+function bind(){
+  document.getElementById('btn-guardar-imp').addEventListener('click', guardar);
+  document.querySelectorAll('.tr-exp').forEach(function(tr){
+    tr.addEventListener('click', function(){
+      var id=tr.getAttribute('data-open');
+      var row=document.getElementById(id);
+      if(!row) return;
+      var m=(window._impMods||{})[id];
+      if(row.style.display==='none'){
+        _open[id]=1;
+        row.children[0].innerHTML=htmlSkuTable(m);
+        row.style.display='table-row';
+        tr.querySelector('.chev').textContent='▾';
+        syncChecks();
+      } else {
+        delete _open[id];
+        row.style.display='none';
+        tr.querySelector('.chev').textContent='▸';
+      }
+    });
+  });
+  document.querySelectorAll('input[data-imp-sku]').forEach(function(el){
+    el.addEventListener('change', function(ev){
+      ev.stopPropagation();
+      setCheck(el.getAttribute('data-imp-sku'), el.checked);
+      markDirty(); syncChecks();
+    });
+  });
+  document.querySelectorAll('input[data-imp-mod]').forEach(function(el){
+    el.addEventListener('change', function(ev){
+      ev.stopPropagation();
+      var m=(window._impMods||{})[el.getAttribute('data-imp-mod')];
+      keysDeModelo(m||{}).forEach(function(k){ setCheck(k, el.checked); });
+      markDirty(); syncChecks();
+      var id=el.getAttribute('data-imp-mod');
+      var row=document.getElementById(id);
+      if(row && row.style.display!=='none' && m){
+        row.children[0].innerHTML=htmlSkuTable(m);
+        syncChecks();
+      }
+    });
+  });
+  document.querySelectorAll('input[data-imp-grp]').forEach(function(el){
+    el.addEventListener('change', function(ev){
+      ev.stopPropagation();
+      var arr=(window._impGrupos||{})[el.getAttribute('data-imp-grp')]||[];
+      arr.forEach(function(m){ keysDeModelo(m).forEach(function(k){ setCheck(k, el.checked); }); });
+      markDirty(); syncChecks();
+    });
+  });
+}
+function guardar(){
+  if(!_impDirty) return;
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify(_impChecks));
+  }catch(e){
+    pintarSave('No se pudo guardar en el navegador: '+e.message);
+    return;
+  }
+  _impSaved=clonar(_impChecks);
+  _impDirty=false;
+  pintarSave('Guardado en este navegador. '+Object.keys(_impChecks).length+' logos listos. En Apps Script esta misma clave M|MO|SKU irá a _ImpresionChecks.');
+}
+function exportCSV(){
+  var rows=[['Grupo','Prioridad','Lineas','Modelo','MO','PD','SKU','Detalle','Color','Talla','Solicitada','Producida','Faltante','MO status','Logo listo']];
+  function dump(grupo, arr){
+    arr.forEach(function(m){
+      (m.skus||[]).forEach(function(s){
+        rows.push([grupo, m.prioridad, (m.lineas||[]).join('/'), m.modelo, s.mo, s.pd?'SI':'NO', s.sku, s.detalle, s.color, s.talla, s.solicitada, s.producida, s.faltante, s.moStatus||'', _impChecks[impKey(s.sku,s.mo)]?'SI':'NO']);
+      });
+    });
+  }
+  dump('L1-4', (window._impGrupos||{}).l14||[]);
+  dump('L5', (window._impGrupos||{}).l5||[]);
+  var txt=rows.map(function(r){ return r.map(function(v){ var s=String(v==null?'':v); if(/[",\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; }).join(','); }).join('\n');
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+txt],{type:'text/csv;charset=utf-8;'}));
+  a.download='impresion-digital-fija.csv';
+  a.click();
+}
+function boot(){
+  try{ D=JSON.parse(document.getElementById('dash-data').textContent); }
+  catch(e){ document.getElementById('status').textContent='No se pudo leer el dataset: '+e.message; return; }
+  _impSaved=clonar(D.checks||{});
+  _impChecks=clonar(D.checks||{});
+  try{
+    var local=JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    if(local && typeof local==='object'){
+      _impChecks=clonar(local);
+      _impDirty=!iguales(_impChecks, _impSaved);
+    }
+  }catch(e){}
+  document.getElementById('footVer').textContent=(D.version||'')+(D.publicadoEn?' · '+D.publicadoEn:'');
+  var sl=document.getElementById('f-lin');
+  (D.opcionesFiltro.lineas||[]).forEach(function(l){
+    var o=document.createElement('option'); o.value=l; o.textContent='Línea '+l; sl.appendChild(o);
+  });
+  ['q','f-lin','f-pd'].forEach(function(id){
+    document.getElementById(id).addEventListener(id==='q'?'input':'change', render);
+  });
+  document.getElementById('btn-limpiar').addEventListener('click', function(){
+    document.getElementById('q').value='';
+    document.getElementById('f-lin').value='';
+    document.getElementById('f-pd').value='';
+    render();
+  });
+  document.getElementById('btn-csv').addEventListener('click', exportCSV);
+  document.getElementById('themeBtn').addEventListener('click', function(){
+    _theme=_theme==='dark'?'light':'dark';
+    document.body.classList.toggle('light', _theme==='light');
+    this.textContent=_theme==='dark'?'☀️ Light':'🌙 Dark';
+  });
+  window.addEventListener('beforeunload', function(e){
+    if(!_impDirty) return;
+    e.preventDefault(); e.returnValue='Hay checks sin guardar.';
+  });
+  render();
+}
+boot();
+</script>
+</body>
+</html>

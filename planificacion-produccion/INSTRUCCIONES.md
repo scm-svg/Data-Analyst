@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.45 — códigos listos para pegar
+# Planificación de Producción v5.9.48 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,28 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Impresión Digital · faltante 0 y cantidades (5.9.48)
+
+En **🖨 Impresión Digital**, una orden con **Faltante 0** (ya no entra al plan de costura) **sigue en el listado** mientras esté en `Por Hacer` / `Por Hacer - Especial`.
+
+- El drill-down modelo → SKU muestra **Solicitada**, **Producida** y **Faltante**.
+- El CSV de esa pestaña exporta las mismas tres columnas.
+- Solo desaparece si la MO está **Hecho**, **Cerrada** o **Cancelada** (y por eso ya no está en el archivo principal).
+
+## Impresión Digital · lista fija (5.9.47)
+
+La pestaña **🖨 Impresión Digital** del dashboard web **ya no sigue el plan semanal de costura**. El taller puede mover semanas o fechas de almacén y el listado de logos no se reordena.
+
+- Drill-down **modelo → SKU**.
+- Orden de modelos: **Especial → Urgente → Alta → Media → Baja → Sin Asignar**, luego fecha de salida, luego volumen.
+- Dos bloques: **Líneas 1–4** y **Línea 5** (si el modelo lista la 5, va a L5).
+- Órdenes **PD** con etiqueta. Esperan crearse en Odoo; el check del logo se guarda igual.
+- Tabla de modelos: **Modelo, MOs, Faltante, Logo**. En el desglose SKU: **Solicitada, Producida, Faltante**. En la pestaña solo queda el filtro **PD**. El CSV sí exporta la prioridad y las tres cantidades.
+- Variantes: Priorizacion - SKUs, **Negro → Blanco → Marino**, resto por volumen, talla. El día de arranque **no parte** un color.
+- Checks: botón **Guardar**, clave `M|MO|SKU` (sin semana). El filtro de **semana** del encabezado no vacía esta pestaña. Calendario, Salida semanal, Seguimiento y Almacén siguen siendo semanales.
+- Tras pegar `Codigo.gs` + `Dashboard.html`, corre **🔄 Actualizar Dashboard** (no hace falta redesplegar el URL).
 
 ## Listado por color, sin saltos (5.9.45)
 
@@ -77,8 +98,9 @@ Al abrir un modelo, las variantes se listan **como van a salir de costura**, no 
 - **Calendario → Detalle diario** (tooltip sobre el modelo)
 - **Salida semanal** (semana → modelo → SKU)
 - **Seguimiento** (clic en el modelo)
-- **Impresión Digital** (semana → modelo → SKU)
 - **Almacén** (tabla Entrada de almacén y calendario de ingresos)
+
+**Impresión Digital** (desde **5.9.46**) no usa este listado semanal: es una **lista fija** por prioridad, partida en L1–4 vs L5. Las variantes de cada modelo sí siguen el orden de color/talla de arriba.
 
 Criterio, el mismo del motor:
 
@@ -149,7 +171,7 @@ Esos SKUs **no adelantan el modelo** en la cola. Cuando al modelo le toca entrar
 - **Especial en todas las asignadas:** un modelo de `Por Hacer - Especial` con 2+ líneas (Running Tank Biomove en `1, 2`; Clásica Cab/DAMA en `3, 4`) es **prioridad 1** en cada línea listada. Al llegar su **Día de inicio** toma **sí o sí** todas esas líneas (desaloja a RIO u otro de peor banda). Ya no se queda en una sola porque “alcanza la semana”. El faltante se reparte entre las asignadas (la MO no se clava a una). Dos Especiales que comparten líneas: el de más volumen (o mejor fecha) usa ambas hasta terminar; el otro entra después. **No** desborda a una línea que no esté en `Linea de Produccion`.
 - **Encabezado Producto:** si en `Por Hacer` la celda de Producto/Modelo de la fila 2 viene vacía, se usa la columna siguiente a SKU o el título de la fila 1. Generar Planificación ya no se bloquea por eso.
 - **RIO DAMA no suelta L2:** el lote de familia (Negro → Blanco → Marino, CAB → DAMA → KIDS) **ignora** hermanos que todavía no llegan a su Día de inicio. Si RIO KIDS está en la misma línea pero arranca el 29/09, RIO DAMA sigue en Línea 2 en la semana 2. Al llegar ese día, la secuencia de color/género vuelve a aplicar. El apoyo 50% de L1 no deja a DAMA como ocupante fantasma de una L2 vacía.
-- **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** guarda los checks con el botón **Guardar**, por MO+SKU, en `_ImpresionChecks`. Actualizar el dashboard no los borra.
+- **Dashboard web compartido:** menú **Producción → Actualizar Dashboard** publica un snapshot. `doGet` / la app web leen `_DashboardCache` (no recorren las hojas en cada visita). **Impresión Digital** es una lista fija por prioridad (L1–4 vs L5) y guarda los checks con el botón **Guardar**, por MO+SKU, en `_ImpresionChecks`. Actualizar el dashboard no los borra ni reordena esa pestaña.
 - **Urgente en fecha estimada:** un modelo Urgente/mínima con 2+ líneas toma **sí o sí** todas las asignadas el día de Fecha de Salida Estimada y el hábil anterior. Fuera de esa ventana, la segunda línea solo si está libre.
 - **Secuencia=No en Línea 5:** en Priorizacion col. H, `No` hace que ese modelo sea el **único ocupante de L5**. No comparte la rueda en paralelo. Desde **5.9.44**, `No` también saca al modelo del lote familiar en L1–4 (no espera/cede color ni género a un hermano).
 - **Horizonte 12 semanas:** `Proyeccion` y `Proyeccion - SKUS` proyectan 12 semanas (la actual + 11), con los mismos formatos, acumulados y umbrales. Las pestañas `Semana 11` y `Semana 12` reciben tablero, resumen ejecutivo y alerta de pendientes igual que `Planificacion` / `Semana 2`–`Semana 10`. El menú **Ver Pestañas** las incluye.
