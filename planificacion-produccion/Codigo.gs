@@ -1,10 +1,14 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.48 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.49 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - CALENDARIO TOOLTIP FIJO: en Detalle diario el recuadro de
+ *     variantes se puede entrar y bajar. Ya no se cierra al salir un
+ *     milímetro del modelo. Clic en el modelo lo fija; Esc o clic
+ *     fuera lo cierra.
  *   - IMPRESIÓN DIGITAL FALTANTE 0: las órdenes con faltante 0 siguen
  *     en Impresión Digital. El motor no las planifica, pero el logo
  *     aún se valida. El drill-down SKU muestra Solicitada, Producida
@@ -91,8 +95,8 @@
  *     de lo esperado por recibir vs lo ya producido, según la fecha
  *     esperada de entrada a almacén. Chips de semana por esa fecha y
  *     calendario de ingresos por modelo (drill-down a SKU). En
- *     Calendario → Detalle diario, el cursor sobre un modelo muestra
- *     las variantes / SKUs de la semana por salida de producción.
+ *     Calendario → Detalle diario, el recuadro de variantes se puede
+ *     entrar y bajar (clic en el modelo para fijarlo).
  *   - CHECKS DE IMPRESIÓN DIGITAL: el botón Guardar de esa pestaña
  *     escribe en _ImpresionChecks la clave M|MO|SKU (sin semana).
  *     Si la orden cambia de semana o de fila al regenerar el plan,
@@ -263,7 +267,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.48";
+var VERSION_SISTEMA = "5.9.49";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -5337,7 +5341,7 @@ function supuestosDashboard_(capsModelo) {
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura. Una orden con Faltante 0 sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer; solo sale si está Hecho o Cancelada.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
-    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
+    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. En Calendario → Detalle diario el recuadro de variantes se puede entrar y bajar (clic para fijarlo). Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
     ]
   };
 }

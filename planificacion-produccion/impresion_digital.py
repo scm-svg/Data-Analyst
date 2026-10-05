@@ -492,7 +492,7 @@ def extraer_desde_xlsx(path):
         "backlog": backlog,
         "checks": checks,
         "lista": lista,
-        "version": "5.9.48",
+        "version": "5.9.49",
     }
 
 
@@ -547,7 +547,7 @@ def payload_para_html(extraido):
         for lin in m.get("lineas") or []
     }, key=lambda x: int(x) if str(x).isdigit() else 99)
     return _json_safe({
-        "version": extraido.get("version") or "5.9.48",
+        "version": extraido.get("version") or "5.9.49",
         "publicadoEn": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "kpis": kpis,
         "checks": extraido.get("checks") or {},
