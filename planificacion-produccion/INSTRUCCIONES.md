@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.48 — códigos listos para pegar
+# Planificación de Producción v5.9.49 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,18 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Calendario · recuadro de variantes (5.9.49)
+
+En **📅 Calendario → Detalle diario**, al pasar el cursor sobre un modelo se abre el recuadro de variantes (SKU, color, talla, cantidad de la semana).
+
+- Puedes **entrar al recuadro y bajar** la lista: ya no se cierra al salir un milímetro del modelo.
+- **Clic en el modelo** fija el recuadro (útil en listas largas o en táctil).
+- **Esc**, clic otra vez en el mismo modelo, o clic fuera lo cierra.
+- El orden de variantes sigue siendo por **salida de producción** (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla).
+
+Tras pegar `Dashboard.html`, corre **🔄 Actualizar Dashboard** (el URL de la app web no cambia).
 
 ## Impresión Digital · faltante 0 y cantidades (5.9.48)
 
@@ -95,7 +106,7 @@ Efecto:
 
 Al abrir un modelo, las variantes se listan **como van a salir de costura**, no por MO ni alfabético. Vale para:
 
-- **Calendario → Detalle diario** (tooltip sobre el modelo)
+- **Calendario → Detalle diario** (recuadro de variantes: se entra, se baja y se puede fijar)
 - **Salida semanal** (semana → modelo → SKU)
 - **Seguimiento** (clic en el modelo)
 - **Almacén** (tabla Entrada de almacén y calendario de ingresos)
@@ -130,7 +141,7 @@ Después de pegar los dos archivos, corre **🔄 Actualizar Dashboard**. El enla
 - Arriba de la tabla: torta **producido vs por producir**, y barras **quincenales** de lo esperado por recibir frente a lo ya producido. La quincena usa la fecha esperada de entrada a almacén.
 - Los chips de semana filtran los modelos que ingresarían esa semana (lunes de la fecha de entrada).
 - El calendario de ingresos lista piezas por modelo y semana de entrada. Clic en el modelo abre los SKUs.
-- En **Calendario → Detalle diario**, al pasar el cursor sobre un modelo se ven las variantes (SKU, color, talla y cantidad de la semana) **por salida de producción**.
+- En **Calendario → Detalle diario**, el recuadro de variantes se puede **entrar y bajar**. Clic en el modelo lo fija; Esc o clic fuera lo cierra.
 
 ## Priorizacion — columna I (Division)
 

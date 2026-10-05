@@ -84,10 +84,13 @@ body.light .hdr{background:linear-gradient(135deg,#e8e9f3 0%,#f5f6fa 55%,#e8e9f3
 .dayhead .dn{display:block;font-family:var(--fh);font-size:.84rem;font-weight:800;color:var(--tx);letter-spacing:.2px;line-height:1.15}
 .dayhead .dd{display:block;margin-top:4px;font-family:var(--fh);font-size:.78rem;font-weight:700;color:var(--ac)}
 body.light .dayhead{background:linear-gradient(180deg,#eef0ff,#e4e7fb);border-color:#c5caf5}
-.pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem;cursor:default}
-.sku-tip{position:fixed;z-index:40;display:none;max-width:360px;max-height:280px;overflow:auto;background:var(--surf);color:var(--tx);border:1px solid var(--ac);border-radius:10px;padding:8px 10px;font-size:.72rem;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none}
+.pill{display:inline-block;background:var(--s3);border-radius:999px;padding:2px 7px;margin:1px;font-size:.64rem;cursor:pointer}
+.pill.tip-src{outline:1px solid var(--ac);background:rgba(91,106,247,.18)}
+.sku-tip{position:fixed;z-index:40;display:none;max-width:380px;max-height:320px;overflow:auto;overscroll-behavior:contain;background:var(--surf);color:var(--tx);border:1px solid var(--ac);border-radius:10px;padding:8px 10px;font-size:.72rem;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:auto}
+.sku-tip.pin{border-color:var(--yw);box-shadow:0 8px 28px rgba(255,193,7,.22)}
 .sku-tip b{font-family:var(--fh);display:block;margin-bottom:2px}
 .sku-tip .mo{color:var(--ac);font-weight:700;margin-top:6px}
+.sku-tip-hint{margin-top:8px;padding-top:6px;border-top:1px solid var(--brd);color:var(--mu);font-size:.62rem;line-height:1.35}
 .tl{width:100%;border-collapse:separate;border-spacing:0}
 .tl th,.tl td{padding:8px 6px;border-bottom:1px solid var(--brd);text-align:center;min-width:70px}
 .tl th{font-size:.62rem;color:var(--mu);text-transform:uppercase;position:sticky;top:0;background:var(--surf);z-index:2}
@@ -520,6 +523,7 @@ function chipsLineas(lineas){
 }
 
 function renderCal(){
+  if(typeof tipHideNow==='function') tipHideNow();
   var el=document.getElementById('sec-cal');
   var keys=weekKeys();
   var lines=['1','2','3','4','5'];
@@ -574,7 +578,7 @@ function renderCal(){
     DIAS.forEach(function(d){
       var items=(byLin[l]||[]).filter(function(c){ return (c.dias&&c.dias[d])>0; });
       var bits=items.map(function(c){
-        return '<span class="pill" data-m="'+esc(c.modelo)+'" data-wi="'+wiSel+'" data-q="'+(Number(c.dias[d])||0)+'" onmouseenter="tipDia(event,this)" onmouseleave="tipDiaOff()">'+esc(shortMod(c.modelo))+' · '+fmtN(c.dias[d])+'</span>';
+        return '<span class="pill" data-m="'+esc(c.modelo)+'" data-wi="'+wiSel+'" data-q="'+(Number(c.dias[d])||0)+'" onmouseenter="tipDia(event,this)" onmouseleave="tipDiaOff(event)" onclick="tipDiaPin(event,this)">'+esc(shortMod(c.modelo))+' · '+fmtN(c.dias[d])+'</span>';
       }).join(' ');
       var sum=items.reduce(function(a,c){ return a+(c.dias[d]||0); },0);
       gridHtml+='<div class="daycell">'+(sum? '<b>'+fmtN(sum)+' pzas</b>':'')+(bits||'<span class="sub">—</span>')+'</div>';
@@ -600,7 +604,7 @@ function renderCal(){
     '<div class="ctwrap"><table class="ct"><thead><tr>'+thead+'<th>Total</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
     '<div class="card"><h3>Detalle diario · '+sel+(D.fechasSemanas[sel]?' ('+D.fechasSemanas[sel]+')':'')+'</h3>'+
     wbar+
-    '<p class="sub">'+subDia+'Qué modelo corre en cada línea y cuántas piezas salen ese día.</p>'+gridHtml+'</div>';
+    '<p class="sub">'+subDia+'Qué modelo corre en cada línea y cuántas piezas salen ese día. Pasa el cursor al recuadro de variantes para bajar la lista; clic en el modelo para fijarlo.</p>'+gridHtml+'</div>';
 }
 
 function renderSalida(){
@@ -1393,30 +1397,114 @@ function htmlTipDia(modelo, wi, diaQty){
   h+='<span class="sub">'+fmtN(diaQty)+' pzas este día. Variantes de la semana, por salida de producción.</span>';
   if(!filas.length){
     h+='<div class="sub">Sin desglose de SKU para esta semana.</div>';
-    return h;
+  } else {
+    filas.forEach(function(f){
+      h+='<div>'+esc(f.sku)+' · '+esc([f.color,f.talla].filter(Boolean).join(' '))+' · '+fmtN(f.cant)+(f.mo?' · MO '+esc(f.mo):'')+'</div>';
+    });
   }
-  filas.forEach(function(f){
-    h+='<div>'+esc(f.sku)+' · '+esc([f.color,f.talla].filter(Boolean).join(' '))+' · '+fmtN(f.cant)+(f.mo?' · MO '+esc(f.mo):'')+'</div>';
-  });
+  h+='<div class="sku-tip-hint">'+(_tipPinned
+    ? 'Fijado. Clic otra vez, Esc o clic fuera para cerrar.'
+    : 'Entra al recuadro para bajar la lista. Clic en el modelo para fijarlo.')+'</div>';
   return h;
 }
-function tipDia(ev, el){
+var _tipTimer=null;
+var _tipPinned=false;
+var _tipEl=null;
+function tipClearTimer(){
+  if(_tipTimer){ clearTimeout(_tipTimer); _tipTimer=null; }
+}
+function tipMarcaPildora_(el){
+  document.querySelectorAll('.pill.tip-src').forEach(function(p){ p.classList.remove('tip-src'); });
+  if(el) el.classList.add('tip-src');
+}
+function tipHideNow(){
+  tipClearTimer();
   var tip=document.getElementById('sku-tip');
-  if(!tip || !el) return;
-  tip.innerHTML=htmlTipDia(el.getAttribute('data-m')||'', Number(el.getAttribute('data-wi'))||0, Number(el.getAttribute('data-q'))||0);
+  if(tip){
+    tip.style.display='none';
+    tip.classList.remove('pin');
+  }
+  tipMarcaPildora_(null);
+  _tipPinned=false;
+  _tipEl=null;
+}
+function tipDesdeHacia_(ev, extra){
+  var to=ev && ev.relatedTarget;
+  if(!to || !to.closest) return false;
+  if(to.closest('#sku-tip')) return true;
+  if(to.closest('.pill')) return true;
+  if(extra && extra.contains && extra.contains(to)) return true;
+  return false;
+}
+function posicionarTip_(tip, el){
+  var pr=el.getBoundingClientRect();
   tip.style.display='block';
-  var x=ev.clientX+14, y=ev.clientY+16;
   var r=tip.getBoundingClientRect();
-  if(x+r.width>window.innerWidth-8) x=Math.max(8, window.innerWidth-r.width-8);
-  if(y+r.height>window.innerHeight-8) y=Math.max(8, ev.clientY-r.height-10);
+  var tw=r.width||360;
+  var th=r.height||200;
+  var gap=6;
+  var x=pr.right+gap;
+  var y=pr.top;
+  if(x+tw>window.innerWidth-8) x=pr.left-tw-gap;
+  if(x<8) x=Math.min(pr.left, Math.max(8, window.innerWidth-tw-8));
+  if(y+th>window.innerHeight-8) y=Math.max(8, window.innerHeight-th-8);
+  if(y+th<pr.top && pr.bottom+gap+th<=window.innerHeight-8){
+    x=Math.max(8, Math.min(pr.left, window.innerWidth-tw-8));
+    y=pr.bottom-2;
+  }
   tip.style.left=x+'px';
   tip.style.top=y+'px';
 }
-window.tipDia=tipDia;
-window.tipDiaOff=function(){
+function tipDia(ev, el){
+  tipClearTimer();
   var tip=document.getElementById('sku-tip');
-  if(tip) tip.style.display='none';
-};
+  if(!tip || !el) return;
+  _tipEl=el;
+  tip.classList.toggle('pin', !!_tipPinned);
+  tip.innerHTML=htmlTipDia(el.getAttribute('data-m')||'', Number(el.getAttribute('data-wi'))||0, Number(el.getAttribute('data-q'))||0);
+  posicionarTip_(tip, el);
+  tipMarcaPildora_(el);
+}
+function tipDiaOff(ev){
+  if(_tipPinned) return;
+  if(tipDesdeHacia_(ev, document.getElementById('sku-tip'))) return;
+  tipClearTimer();
+  _tipTimer=setTimeout(function(){
+    if(_tipPinned) return;
+    tipHideNow();
+  }, 280);
+}
+function tipDiaPin(ev, el){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  if(_tipPinned && _tipEl===el){ tipHideNow(); return; }
+  _tipPinned=true;
+  tipDia(ev, el);
+}
+window.tipDia=tipDia;
+window.tipDiaOff=tipDiaOff;
+window.tipDiaPin=tipDiaPin;
+window.tipHideNow=tipHideNow;
+(function bindSkuTip(){
+  var tip=document.getElementById('sku-tip');
+  if(!tip || tip.getAttribute('data-bound')) return;
+  tip.setAttribute('data-bound','1');
+  tip.addEventListener('mouseenter', function(){ tipClearTimer(); });
+  tip.addEventListener('mouseleave', function(e){
+    if(_tipPinned) return;
+    if(tipDesdeHacia_(e, _tipEl)) return;
+    tipDiaOff(e);
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape') tipHideNow();
+  });
+  document.addEventListener('click', function(e){
+    var t=e.target;
+    if(!t) return;
+    if(tip.contains(t)) return;
+    if(t.closest && t.closest('.pill')) return;
+    if(_tipPinned || (tip.style.display==='block')) tipHideNow();
+  });
+})();
 
 function parseFechaAlm(s){
   var m=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
