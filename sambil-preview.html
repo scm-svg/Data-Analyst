@@ -323,7 +323,7 @@ td.num{font-variant-numeric:tabular-nums}
   </div>
   <div class="dpan">
     <div class="dpT"><span class="dot" style="background:#0d7490"></span><span class="t-cy">Sobre-stock (más de <span class="polSob"></span> meses)</span></div>
-    <div class="dpS">Variantes que sí vendieron en el período y superan <span class="polSob"></span> meses de cobertura. Un color en cero ventas no entra aquí: si la familia también tiene un hueco, está en Rebalancear. · <b>click en una familia para ver sus variantes</b></div>
+    <div class="dpS">Variantes que sí vendieron en el período y superan <span class="polSob"></span> meses de cobertura. Un color sin venta no entra aquí. · <b>click en una familia para ver sus variantes</b></div>
     <div class="dlist" id="dSob" style="max-height:none"></div>
   </div>
 </div>
@@ -359,8 +359,7 @@ function headMonths(){
   document.querySelectorAll('.vtaWin').forEach(e=>e.textContent=`Vta ${D.kpi.win} m`);
   ['sHead','mHead'].forEach(id=>{ const tr=$(id); if(!tr) return;
     tr.querySelectorAll('.mcolx').forEach(e=>e.remove());
-    const ph=tr.querySelector('.mph');
-    if(ph) ph.insertAdjacentHTML('beforebegin',MONTHS.map(m=>`<th class="num mcolx">${m}</th>`).join(''));
+    const ph=tr.querySelector('.mph'); if(ph) ph.insertAdjacentHTML('beforebegin',MONTHS.map(m=>`<th class="num mcolx">${m}</th>`).join(''));
   });
 }
 
@@ -377,13 +376,15 @@ function SP(n){
 // ===== MOTOR: recalcula todo el análisis según la ventana elegida =====
 const RAW=D.skus.map(s=>({...s})), REL=(D.kpi.rel&&D.kpi.rel.length===12)?D.kpi.rel:Array(12).fill(1);
 const BASEF=m=>{for(const sf of [' CAB',' DAMA',' KIDS']) if(m.endsWith(sf)) return m.slice(0,-sf.length); return m;};
-const FAC=Math.max(1,(REL[0]+REL[1]+REL[2])/3);   // temporada alta: demanda media de oct–dic vs ritmo actual
-function covT(stock,vel){ if(vel<=0) return null; if(stock<=0) return 0; return Math.min(240,stock/(vel*FAC)); }
-function demand(vel,months){ let tot=0,m=months,k=0; while(m>0){const f=Math.min(1,m); tot+=vel*REL[k%12]*f; m-=f; k+=1;} return tot; }
+const RELF=REL.map(x=>Math.max(1,x));   // temporada alta: ningún mes vende menos que el ritmo actual
+const FAC=Math.max(1,(RELF[0]+RELF[1]+RELF[2])/3);
+function covT(stock,vel){ if(vel<=0) return null; if(stock<=0) return 0;
+  let rem=stock,m=0; for(let k=0;k<240;k++){const d=vel*RELF[k%12]; if(rem<=d) return m+rem/d; rem-=d; m+=1;} return 240; }
+function demand(vel,months){ let tot=0,m=months,k=0; while(m>0){const f=Math.min(1,m); tot+=vel*RELF[k%12]*f; m-=f; k+=1;} return tot; }
 function pareto(list,key){ const L=list.filter(x=>x[key]>0).sort((a,b)=>b[key]-a[key]); const t=L.reduce((a,x)=>a+x[key],0)||1;
   let c=0; const o={}; L.forEach(x=>{const p=c/t; c+=x[key]; o[x.m]= p<.8?'A':(p<.95?'B':'C');}); return o; }
 function compute(W){
-  const P=POL, R3=(REL[0]+REL[1]+REL[2])/3, OBJ=W/(W+P.sano);
+  const P=POL, R3=FAC, OBJ=W/(W+P.sano);
   D.kpi.win=W; D.abc.st_obj=Math.round(OBJ*100);
   // --- SKU
   D.skus=RAW.map(s=>{
@@ -424,13 +425,11 @@ function compute(W){
     const n=Math.ceil(s.vel*R3*P.repq-s.s); return n>0?n:0; };
   const rep=[],reb=[],act=[],sob=[],man=[],sm=[];
   Object.values(BM).forEach(g=>{
-    const qb=g.vs.filter(s=>s.s<=0&&s.v>=3), ex=g.vs.filter(s=>s.s>0&&(s.cobT===null||s.cobT>P.exceso));
-    const isReb=qb.length&&ex.length;
-    if(isReb) reb.push({m:g.m,nq:qb.length,vq:qb.reduce((a,s)=>a+s.v,0),nx:ex.length,ux:ex.reduce((a,s)=>a+s.s,0),s:g.s});
     const det=g.vs.map(s=>[s,needVar(s)]).filter(x=>x[1]>0);
-    if(!isReb && det.length && g.vel>=2) rep.push({m:g.m,st:g.st,v:g.v,s:g.s,qty:det.reduce((a,x)=>a+x[1],0),nvar:det.length,
-      n0:det.filter(x=>x[0].s<=0).length,nCrit:det.filter(x=>x[0].s>0).length,
+    if(det.length && g.vel>=2) rep.push({m:g.m,st:g.st,v:g.v,s:g.s,qty:det.reduce((a,x)=>a+x[1],0),nvar:det.length,
       vel:Math.round(det.reduce((a,x)=>a+x[0].vel,0)*10)/10,fac:Math.round(R3*100)/100,ciclo:P.repq,sdet:det.reduce((a,x)=>a+x[0].s,0)});
+    const qb=g.vs.filter(s=>s.s<=0&&s.v>=3), ex=g.vs.filter(s=>s.s>0&&(s.cobT===null||s.cobT>P.exceso));
+    if(qb.length&&ex.length) reb.push({m:g.m,nq:qb.length,vq:qb.reduce((a,s)=>a+s.v,0),nx:ex.length,ux:ex.reduce((a,s)=>a+s.s,0),s:g.s});
     const sinmov=g.v<=0;
     const prom=g.vs.filter(s=>s.s>0&&s.cobT!==null&&s.cobT>P.exceso&&s.cobT<=2*P.exceso);
     const exc =g.vs.filter(s=>s.s>0&&s.cobT!==null&&s.cobT>2*P.exceso);
@@ -442,7 +441,8 @@ function compute(W){
   const rebSet=new Set(reb.map(r=>r.m));
   Object.values(BM).forEach(g=>{ if(g.cobT!==null&&g.cobT>=P.crit&&g.cobT<=P.sano&&!rebSet.has(g.m)) man.push({m:g.m,st:g.st,v:g.v,s:g.s,cob:g.cobT}); });
   const abcOf={}; D.modelos.forEach(r=>abcOf[r.m]=r.abc);
-  D.dec={ rep:rep.sort((a,b)=>b.qty-a.qty), reb:reb.sort((a,b)=>b.vq-a.vq), man:man.sort((a,b)=>b.v-a.v),
+  const rebM=new Set(reb.map(r=>r.m));
+  D.dec={ rep:rep.filter(r=>!rebM.has(r.m)).sort((a,b)=>b.qty-a.qty), reb:reb.sort((a,b)=>b.vq-a.vq), man:man.sort((a,b)=>b.v-a.v),
     act:act.sort((a,b)=>b.s-a.s), sob:sob.sort((a,b)=>b.s-a.s), sm:sm.sort((a,b)=>b.s-a.s), vig:[],
     marg:D.modelos.filter(r=>r.s===0&&r.v>=1&&r.v<=2).map(r=>({m:r.m,v:r.v})),
     quiebres:D.skus.filter(s=>s.s===0&&s.v>=3&&['A','B'].includes(abcOf[s.m])&&!rebSet.has(BASEF(s.m))).map(s=>({k:s.k,m:s.m,col:s.col,t:s.t,v:s.v})).sort((a,b)=>b.v-a.v),
@@ -455,9 +455,13 @@ function compute(W){
   D.kpi.skus_act=D.skus.filter(s=>s.v>0).length;
   D.kpi.sinmov_sku_u=D.clases_u['SIN VENTA']||0; D.kpi.sinmov_modelos=sm.length;
   const vm=D.kpi.vta_m12.slice(12-W); D.kpi.var=vm.length>=2&&vm[vm.length-2]? Math.round(1000*(vm[vm.length-1]-vm[vm.length-2])/vm[vm.length-2])/10:0;
-  MONTHS=D.kpi.meses12.slice(12-W);
+  BYMOD={}; BYBASE={};
+  D.skus.forEach(s=>{ (BYMOD[s.m]=BYMOD[s.m]||[]).push(s); (BYBASE[BASEF(s.m)]=BYBASE[BASEF(s.m)]||[]).push(s); });
+  Object.values(BYMOD).forEach(a=>a.sort((x,y)=>y.v-x.v || (x.t||'').localeCompare(y.t||'')));
+  Object.values(BYBASE).forEach(a=>a.sort((x,y)=>y.s-x.s||y.v-x.v));
+    MONTHS=D.kpi.meses12.slice(12-W);
 }
-let MONTHS=[];
+let MONTHS=[], BYMOD={}, BYBASE={};
 
 function covJS(stock,vel){ if(vel<=0) return null; const R=(D.kpi.rel&&D.kpi.rel.length===12)?D.kpi.rel:Array(12).fill(1); let rem=stock,m=0; for(let k=0;k<36;k++){const d=vel*R[k%12]; if(rem<=d) return m+rem/d; rem-=d; m+=1;} return 36; }
 const GRP=s=>s.cat.startsWith('Manufactura')?'Manufactura':(s.cat.startsWith('Equipamiento / Accesorios')?'Accesorios':'Equipamiento');
@@ -479,7 +483,7 @@ $('krow').innerHTML = `
  <div class="ks">vendido ${D.kpi.meses12[D.kpi.first||0].toLowerCase()}–sep ${fm(D.kpi.v12)} + stock actual ${fm(D.kpi.stock)}${D.kpi.fuera12?` · no incluye ${fm(D.kpi.fuera12)} und de productos sin stock ni venta reciente`:''}</div></div>
 <div class="kpi c-em"><div class="kv">${fm(D.kpi.stock)}</div>
  <div class="kl">Stock actual</div>
- <div class="ks">${fm(D.skus.filter(s=>s.s>0).length)} con unidades · ${fm(D.kpi.skus-D.skus.filter(s=>s.s>0).length)} en cero</div></div>
+ <div class="ks">${fm(D.skus.filter(s=>s.s>0).length)} SKUs con unidades · ${fm(D.skus.filter(s=>s.s<=0).length)} en cero</div></div>
 <div class="kpi c-wh"><div class="kv">${fm(vN)}</div>
  <div class="kl">Unidades vendidas · ${PER} meses</div>
  <div class="ks">${mN[0].toLowerCase()}–${mN[mN.length-1].toLowerCase()} · prom. ${fm(Math.round(vN/PER))}/mes${D.kpi.big_excl?' · excluye '+fm(D.kpi.big_excl)+' und de pedidos ≥100':''}</div></div>
@@ -503,7 +507,7 @@ $('miniK').innerHTML = `
  <div class="cdesc">${fm(D.clases['SIN VENTA']||0)} variantes sin venta · ${D.kpi.sinmov_modelos} familias completas sin ventas en el período</div></div>
 <div class="card"><div class="ct">Cobertura con temporada alta <em style="font-weight:600;color:var(--lmu)">· todo el surtido y por categoría</em></div>
  <div class="covrow"><div class="bigN" style="margin:0;color:${D.kpi.cobT===null?'#0B3F6B':cobCol(D.kpi.cobT)}">${D.kpi.cobT===null?'—':nm(D.kpi.cobT.toFixed(1))}<small style="font-size:.9rem;color:var(--lmu)"> meses</small></div>${catCovHTML()}</div>
- <div class="cdesc" style="margin-top:9px">Stock ÷ (venta mensual × <b>${nm(FAC.toFixed(2))}</b>), el factor de temporada alta de la tienda (oct–dic). Al ritmo plano serían ${nm(String(D.kpi.cob))} meses.</div></div>
+ <div class="cdesc" style="margin-top:9px">El stock se consume mes a mes desde octubre, sin que ningún mes venda menos que el ritmo actual y con <b>diciembre ×${nm(String(D.kpi.season.dic))}</b>. Al ritmo plano serían ${nm(String(D.kpi.cob))} meses.</div></div>
 <div class="card"><div class="ct">Variación mensual</div>
  <div class="bigN" style="color:${D.kpi.var<0?'#C70705':'#0B3F6B'}">${D.kpi.var>0?'+':''}${D.kpi.var}%</div>
  <div class="cdesc">Septiembre (${fm(D.kpi.vta_m[3])}) vs agosto (${fm(D.kpi.vta_m[2])}) · meses completos.</div></div>`;
@@ -516,7 +520,7 @@ function R_ABC(){
 // ===== ABC =====
 $('abcRow').innerHTML = `
 <div class="abcCard a"><div class="abcT">Clase A · ${D.abc.A} modelos</div>
- <div class="abcS">Pareto de la venta, descontando a quien retiene mucho stock, y con cobertura de temporada alta de ${nm(POL.exceso)} meses o menos</div>
+ <div class="abcS">Se venden mucho y no tienen exceso (≤ ${nm(POL.exceso)} meses). El ranking descuenta las unidades si el sell-through no llega al ${D.abc.st_obj} %</div>
  <div class="chips">${D.abc.chips.map(c=>`<span class="mchip">${c}</span>`).join('')}</div></div>
 <div class="abcCard b"><div class="abcT">Clase B · ${D.abc.B} modelos</div>
  <div class="abcS">Venta media, o venden mucho pero con exceso de stock</div>
@@ -535,23 +539,21 @@ window.CH_MES=new Chart($('cMes'),{type:'bar',data:{
   tooltip:{callbacks:{label:c=>` ${fm(c.parsed.y)} unidades`}}},
   scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:GRID,beginAtZero:true}}}});
 
-const CL_ORDER=['CRITICO','SALUDABLE','LENTO','EXCESO','SIN VENTA'];
-const CL_COL={CRITICO:'#C70705',SALUDABLE:'#1E7B34',LENTO:'#F2C12E',EXCESO:'#9A6B00','SIN VENTA':'#B3B3B3'};
-const CL_LAB={CRITICO:`Crítico <${nm(POL.crit)}m`,SALUDABLE:`Saludable ${nm(POL.crit)}–${nm(POL.sano)}m`,LENTO:`Lento ${nm(POL.sano)}–${nm(POL.lento)}m`,EXCESO:`Exceso >${nm(POL.lento)}m`,'SIN VENTA':'Sin venta'};
+const CL_ORDER=['QUIEBRE','CRITICO','SALUDABLE','LENTO','EXCESO','SIN VENTA'];
+const CL_COL={QUIEBRE:'#7F1D1D',CRITICO:'#C70705',SALUDABLE:'#1E7B34',LENTO:'#F2C12E',EXCESO:'#9A6B00','SIN VENTA':'#B3B3B3'};
+const CL_LAB={QUIEBRE:'Quiebre · en 0',CRITICO:`Crítico <${nm(POL.crit)}m`,SALUDABLE:`Saludable ${nm(POL.crit)}–${nm(POL.sano)}m`,LENTO:`Lento ${nm(POL.sano)}–${nm(POL.lento)}m`,EXCESO:`Exceso >${nm(POL.lento)}m`,'SIN VENTA':'Sin venta'};
+window.donLab=()=>CL_ORDER.map(c=>c==='QUIEBRE'?`Quiebre · ${fm(D.clases[c]||0)} SKUs sin unidades`:`${CL_LAB[c]} · ${fm(D.clases_u[c]||0)}u · ${fm(D.clases[c]||0)} SKUs`);
+window.donData=()=>CL_ORDER.map(c=>D.clases_u[c]||0);
 window.CH_EST=new Chart($('cEstado'),{type:'doughnut',data:{
-  labels:CL_ORDER.map(c=>`${CL_LAB[c]} · ${fm(D.clases_u[c]||0)}u · ${fm(D.clases[c]||0)} SKUs`),
-  datasets:[{data:CL_ORDER.map(c=>D.clases_u[c]||0),backgroundColor:CL_ORDER.map(c=>CL_COL[c]),
+  labels:donLab(),
+  datasets:[{data:donData(),backgroundColor:CL_ORDER.map(c=>CL_COL[c]),
    borderColor:'#F1F1F1',borderWidth:2}]},
  options:{maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'right',labels:{boxWidth:9,font:{size:9}}}}}});
 
 // ===== NOTA ABC =====
-function R_DONUT(){ if(!window.CH_EST) return;
-  CH_EST.data.labels=CL_ORDER.map(c=>`${CL_LAB[c]} · ${fm(D.clases_u[c]||0)}u · ${fm(D.clases[c]||0)} SKUs`);
-  CH_EST.data.datasets[0].data=CL_ORDER.map(c=>D.clases_u[c]||0);
-  CH_EST.update(); }
 function R_NOTA(){
  const tv=D.modelos.reduce((a,r)=>a+r.v,0)||1, uA=D.modelos.filter(r=>r.abc==='A').reduce((a,r)=>a+r.v,0);
- $('abcSub').textContent=`modelos · A = venta alta ajustada por sell-through y sin exceso · concentra el ${Math.round(100*uA/tv)} % de las unidades vendidas`;
+ $('abcSub').textContent=`modelos · A = vende mucho y sin exceso de stock · concentra el ${Math.round(100*uA/tv)} % de las unidades vendidas`;
  const top15=new Set([...D.modelos].sort((a,b)=>b.v-a.v).slice(0,15).map(r=>r.m));
  const ex=D.modelos.filter(r=>r.abc!=='A'&&r.cobT!==null&&r.cobT>POL.exceso&&(r.exc||top15.has(r.m))).sort((a,b)=>b.v-a.v);
  $('abcNote').innerHTML=ex.length?`<b>Muy vendidos que quedan en B por exceso de stock</b> (más de ${nm(POL.exceso)} meses de cobertura con temporada alta): ${ex.slice(0,6).map(r=>`${r.m} (${fm(r.v)} und · ${nm(r.cobT.toFixed(1))}m)`).join(', ')}${ex.length>6?' y '+(ex.length-6)+' más':''}.`:'';
@@ -573,7 +575,7 @@ function FC(el){document.querySelectorAll('#sec-salud .chip').forEach(c=>c.class
 function SO(k){sSort = sSort.k===k?{k,d:-sSort.d}:{k,d:-1};RS();}
 const PILL={QUIEBRE:'p-qb',CRITICO:'p-cr',SALUDABLE:'p-ok',LENTO:'p-le',EXCESO:'p-ex','SIN VENTA':'p-sv','SIN STOCK':'p-sv'};
 function cobCell(cob){
-  if(cob===null) return `<span class="dim" title="con stock y sin venta en estos ${D.kpi.win} meses">sin rot.</span>`;
+  if(cob===null) return '<span class="dim" title="con stock y sin venta en jul–sep">sin rot.</span>';
   const w=Math.min(cob/8,1)*74, col=cobCol(cob);
   return `<span class="mono" style="margin-right:6px">${cobTxt(cob)}</span><span class="cbar"><i style="width:${w}px;background:${col}"></i></span>`;
 }
@@ -599,9 +601,6 @@ function RS(){
 }
 
 // ===== MODELOS =====
-const BYMOD={};
-D.skus.forEach(s=>{(BYMOD[s.m]=BYMOD[s.m]||[]).push(s)});
-Object.values(BYMOD).forEach(a=>a.sort((x,y)=>y.v-x.v||y.s-x.s));
 let mAbc='', mSort={k:'v',d:-1}, OPEN=new Set();
 function FA(el){document.querySelectorAll('#sec-modelos .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');mAbc=el.dataset.abc;RM();}
 function MO(k){mSort = mSort.k===k?{k,d:-mSort.d}:{k,d:-1};RM();}
@@ -616,9 +615,7 @@ function RM(){
   $('mCount').textContent=`${rows.length} modelos · ${fm(rows.reduce((a,r)=>a+r.v,0))} unid vendidas`;
   const maxT = Math.max(...D.modelos.map(r=>r.v+r.s),1);
   $('mBody').innerHTML=rows.map(r=>{
-    const prev=r.mm.length>=2?r.mm[r.mm.length-2]:undefined, last=r.mm.length?r.mm[r.mm.length-1]:undefined;
-    const d=(prev===undefined||last===undefined)?0:last-prev;
-    const tr = r.v===0?'<span class="eq">—</span>':d>1?`<span class="up">▲ +${d}</span>`:d<-1?`<span class="dn">▼ ${d}</span>`:'<span class="eq">≈</span>';
+    const d=r.mm.length>1?r.mm[r.mm.length-1]-r.mm[r.mm.length-2]:0, tr = r.v===0?'<span class="eq">—</span>':d>1?`<span class="up">▲ +${d}</span>`:d<-1?`<span class="dn">▼ ${d}</span>`:'<span class="eq">≈</span>';
     const wv=Math.max(1,140*r.v/maxT), ws=140*r.s/maxT;
     const open=OPEN.has(r.m);
     let html=`<tr class="exp${open?' open':''}" onclick="TGL('${r.m.replace(/'/g,"\\'")}')">
@@ -654,24 +651,30 @@ function RM(){
 }
 
 // ===== DECISIONES =====
-const drow=(nm,stat)=>`<div class="drow"><span class="nm">${nm}</span><span class="stat">${stat}</span></div>`;
+window.drow=(nm,stat)=>`<div class="drow"><span class="nm">${nm}</span><span class="stat">${stat}</span></div>`;
+window.R_QB=function(){
+$('dQb').innerHTML = D.dec.quiebres.length? D.dec.quiebres.map(r=>
+  drow(`${r.m} <span class="dim" style="font-weight:400">· ${r.col}${r.t?' · '+r.t:''}</span>`,
+   `<span class="mono dim">${r.k}</span> · <b class="t-re">${r.v}v · 0s</b>`)).join(''):'<div class="empty">Sin agotados de modelos A/B fuera de Rebalancear</div>';
+// agotados de baja rotación: modelos completos + variantes 1–2v de modelos A/B
+window.margAll = [
+  ...D.dec.marg.map(r=>({html:drow(r.m+' <span class="dim" style="font-weight:400">· modelo completo</span>',`<b>${r.v}v · 0s</b>`)})),
+  ...(D.dec.marg_var||[]).map(r=>({html:drow(
+    `${r.m} <span class="dim" style="font-weight:400">· ${r.col}${r.t?' · '+r.t:''}</span>`,
+    `<span class="mono dim">${r.k}</span> · <b>${r.v}v · 0s</b>`)}))
+];
+$('dMarg').innerHTML = margAll.length? margAll.map(x=>x.html).join(''):'<div class="empty">—</div>';
+};
 
 // ── paneles expandibles: base -> variantes desde D.skus ──
 const baseOf = m=>{for(const suf of [' CAB',' DAMA',' KIDS']) if(m.endsWith(suf)) return m.slice(0,-suf.length); return m};
-const BYBASE={};
-D.skus.forEach(s=>{const b=baseOf(s.m);(BYBASE[b]=BYBASE[b]||[]).push(s)});
 Object.values(BYBASE).forEach(a=>a.sort((x,y)=>y.s-x.s||y.v-x.v));
 const POPEN={act:new Set(), sm:new Set(), sob:new Set(), rep:new Set(), man:new Set(), reb:new Set()};
 
-const R3F=(REL[0]+REL[1]+REL[2])/3;
-function needOf(s){
-  if(!s||!(s.vel>0)) return 0;
-  if(!(s.s<=0||(s.cobT!==null&&s.cobT<POL.crit))) return 0;
-  const n=Math.ceil(s.vel*(s.r3??R3F)*POL.repq-s.s);
-  return n>0?n:0;
-}
+const velOf=s=>s.vel;
+function needOf(s){ if(!s||!(s.vel>0)) return 0; if(!(s.s<=0||(s.cobT!==null&&s.cobT<POL.crit))) return 0; const n=Math.ceil(s.vel*FAC*POL.repq-s.s); return n>0?n:0; }
 function varFilter(panel,s){
-  if(panel==='rep') return needOf(s)>0;
+  if(panel==='rep') return velOf(s)>0 && (s.s===0 || (s.cobT!==null && s.cobT<POL.crit));
   if(panel==='man') return s.cobT!==null && s.cobT>=POL.crit && s.cobT<=POL.sano;
   if(panel==='reb') return s.s<=0 ? s.v>=3 : (s.cobT===null || s.cobT>POL.exceso);
   if(panel==='act') return s.s>0 && s.cobT!==null && s.cobT>POL.exceso && s.cobT<=2*POL.exceso;
@@ -688,7 +691,7 @@ function varRows(b,panel){
   const rows=vs.map(s=>`<div class="dvar">
     <span class="sku">${s.k}</span>
     <span>${s.m!==b?'<b style="font-size:.58rem;color:var(--lmu)">'+s.m.replace(b,'').trim()+'</b> · ':''}${s.col||'—'}${s.t?' · <span class="mono">'+s.t+'</span>':''}</span>
-    <span class="vt"><b>${fm(s.s)}s</b> · ${s.v||0}v${fmtCob(s)}${panel==='rep'?` · <b class="t-gr" title="ceil(${nm((s.vel).toFixed(2))} /mes × ${nm(R3F.toFixed(2))} × ${nm(String(POL.repq))} − ${s.s})">+${needOf(s)}</b>`:''}</span>
+    <span class="vt"><b>${fm(s.s)}s</b> · ${s.v||0}v${fmtCob(s)}${panel==='rep'?` · <b class="t-gr">+${needOf(s)}</b>`:''}</span>
   </div>`).join('');
   const rest=all.length-vs.length;
   const NOTE={reb:'equilibradas',rep:'con stock suficiente o sin venta reciente',man:`fuera de ${nm(POL.crit)}–${nm(POL.sano)} meses de cobertura`,act:'fuera de ese rango de cobertura, sin venta o sin stock',sob:`con cobertura de ${nm(POL.exceso*2)} meses o menos, o sin stock`,sm:'sin stock'};
@@ -702,25 +705,15 @@ function drowX(panel,b,stat){
     +(open?varRows(b,panel):'');
 }
 function PT(panel,b){POPEN[panel].has(b)?POPEN[panel].delete(b):POPEN[panel].add(b);RD();}
-function renderMarg(){
-  const margAll = [
-    ...D.dec.marg.map(r=>({html:drow(r.m+' <span class="dim" style="font-weight:400">· modelo completo</span>',`<b>${r.v}v · 0s</b>`)})),
-    ...(D.dec.marg_var||[]).map(r=>({html:drow(
-      `${r.m} <span class="dim" style="font-weight:400">· ${r.col}${r.t?' · '+r.t:''}</span>`,
-      `<span class="mono dim">${r.k}</span> · <b>${r.v}v · 0s</b>`)}))
-  ];
-  $('dMarg').innerHTML = margAll.length? margAll.map(x=>x.html).join(''):'<div class="empty">—</div>';
-  $('dQb').innerHTML = D.dec.quiebres.length? D.dec.quiebres.map(r=>
-    drow(`${r.m} <span class="dim" style="font-weight:400">· ${r.col}${r.t?' · '+r.t:''}</span>`,
-     `<span class="mono dim">${r.k}</span> · <b class="t-re">${r.v}v · 0s</b>`)).join(''):'<div class="empty">Sin agotados de modelos A/B fuera de Rebalancear</div>';
-}
 function RD(){
   $('dReb').innerHTML = (D.dec.reb||[]).length? D.dec.reb.map(r=>
     drowX('reb',r.m,`<b class="t-re">${r.nq} agotadas</b> (${fm(r.vq)}v) · <b class="t-cy">${fm(r.ux)}u</b> de sobra en ${r.nx}`)).join(''):'<div class="empty">Sin familias en este estado</div>';
-  renderMarg();
-  { const n0=D.dec.rep.reduce((a,r)=>a+(r.n0||0),0), nC=D.dec.rep.reduce((a,r)=>a+(r.nCrit||0),0);
-    const u=D.dec.rep.reduce((a,r)=>a+r.qty,0), nv=D.dec.rep.reduce((a,r)=>a+r.nvar,0);
-    $('skuRepTxt').innerHTML=`Reponer <b>${fm(u)} unidades</b> en <b>${fm(nv)} variantes</b> de ${D.dec.rep.length} familias · ${fm(n0)} en cero y ${fm(nC)} con stock bajo ${mes(POL.crit)}. Las familias con sobra y hueco están en Rebalancear.`; }
+  { const q=D.clases['QUIEBRE']||0, c=D.clases['CRITICO']||0;
+    const L=D.dec.rep, u=L.reduce((a,r)=>a+r.qty,0), nv=L.reduce((a,r)=>a+r.nvar,0);
+    const fams=new Set(L.map(r=>r.m)); let ag=0,cr=0;
+    D.skus.forEach(s=>{ if(!fams.has(BASEF(s.m))) return; if(s.vel<=0) return;
+      if(s.s<=0) ag++; else if(s.cobT!==null&&s.cobT<POL.crit) cr++; });
+    $('skuRepTxt').innerHTML=`Reponer <b>${fm(u)} unidades</b> en <b>${fm(nv)} variantes</b> de ${L.length} familias: ${fm(ag)} agotadas + ${fm(cr)} bajo ${mes(POL.crit)} de cobertura. <span class="dim">Las familias con exceso en otras tallas están en Rebalancear.</span>`; }
   $('txtRep').innerHTML=`Demanda relevante (≥2 unid/mes) con menos de ${mes(POL.crit)} de cobertura con temporada alta · % = sell-through · v/s = vendido/stock · <b class="t-gr">+n</b> = reposición sugerida para ${mes(POL.repq)}${POL.ciclo?' (reposición '+POL.ciclo+')':''}`;
   $('txtMan').textContent=`Rotación saludable (${nm(POL.crit)}–${nm(POL.sano)} meses de cobertura con temporada alta) — solo monitoreo`;
   document.querySelectorAll('.polExc').forEach(e=>e.textContent=nm(POL.exceso));
@@ -738,17 +731,8 @@ function RD(){
     drowX('sob',r.m,`<b class="t-cy">${fm(r.s)}u</b> en ${r.nvar} variantes · familia ${r.cob===null?'sin rot.':nm(r.cob.toFixed(r.cob>=100?0:1))+'m'}`)).join('');
 }
 RD();
-function reindex(){
-  Object.keys(BYMOD).forEach(k=>delete BYMOD[k]);
-  Object.keys(BYBASE).forEach(k=>delete BYBASE[k]);
-  D.skus.forEach(s=>{
-    (BYMOD[s.m]=BYMOD[s.m]||[]).push(s);
-    const b=baseOf(s.m); (BYBASE[b]=BYBASE[b]||[]).push(s);
-  });
-  Object.values(BYMOD).forEach(a=>a.sort((x,y)=>y.v-x.v||y.s-x.s));
-  Object.values(BYBASE).forEach(a=>a.sort((x,y)=>y.s-x.s||y.v-x.v));
-}
-function REBUILD(){ reindex(); if(window.setSub)setSub(); KP(); R_ABC(); R_NOTA(); R_DONUT(); R_SKPIS(); RS(); RM(); RD(); }
+function R_DON(){ if(window.CH_EST){ CH_EST.data.labels=donLab(); CH_EST.data.datasets[0].data=donData(); CH_EST.update(); } }
+function REBUILD(){ if(window.setSub)setSub(); KP(); R_ABC(); R_NOTA(); R_SKPIS(); RS(); RM(); R_QB(); RD(); R_DON(); }
 compute(PER); headMonths(); REBUILD();
 
 // ===== nav: alterna zona oscura (resumen) / clara (detalle) =====
