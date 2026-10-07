@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Genera proyección de producción Chaqueta Lite (DAMA, XS–XL).
+"""Genera proyección de producción LITE PANT DAMA (XS–XL).
 
-Referencia: ventas DAMA combinadas de Jacket 1.0 + Jacket 2.0 (adjuntos).
-Restricción: cierres QX Negro 0580 — 60 cm (748 und) y 75 cm (744 und).
+Referencia: ventas DAMA de BASIC LINE PANT en Dashboard Basic Line.
+Consumo tela/insumos: Ficha técnica LITE PANT DAMA (VIORI).
 """
 
 import json
@@ -14,9 +14,9 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from coleccion_lite_tela import (
-    CHAQUETA_FABRIC_SHARE,
     COLORES_TELA_REAL,
     NEGRO_FACTOR_RESERVA,
+    PANT_FABRIC_SHARE,
     TELA_POOL_NEGRO_MTS,
     TELA_POOL_VERDE_MTS,
     calc_fabric_production,
@@ -24,18 +24,25 @@ from coleccion_lite_tela import (
 )
 
 BASE = Path(__file__).resolve().parent
-HTML_PATHS = [
-    BASE / "Dashboard_Jacket_1_0.html",
-    BASE / "Dashboard_Jacket_2_0.html",
-]
-OUTPUT_PATH = BASE / "CHAQUETA_LITE_RANGO_PRODUCCION.xlsx"
+_BASIC_LINE = BASE / "Dashboard_Basic_Line.html"
+if not _BASIC_LINE.exists():
+    _BASIC_LINE = BASE / "DASHBOARD BASIC LINE.html"
+HTML_PATHS = [_BASIC_LINE]
+OUTPUT_PATH = BASE / "LITE_PANT_RANGO_PRODUCCION.xlsx"
 
-PRODUCTO = "CHAQUETA LITE"
+PRODUCTO = "LITE PANT"
+REFERENCE_MODEL = "BASIC LINE PANT"
 GENERO = "DAMA"
 TALLAS = ["XS", "S", "M", "L", "XL"]
-TORD = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4}
-TALLAS_60CM = {"XS", "S", "M"}
-TALLAS_75CM = {"L", "XL"}
+
+# Normalización nombres de tienda (dashboard Basic Line → convención proyección)
+STORE_MAP = {
+    "SAMBIL VALENCIA": "SAMBIL",
+    "SAMBIL CHACAO": "CHACAO",
+    "GRANDPLAZ": "GRAND PLAZ",
+    "VELA": "LA VELA",
+    "GRIE": "GRIETA",
+}
 
 # ── Parámetros de proyección ──
 HIGH_SEASON_FACTOR = 1.40        # Temporada alta diciembre (ajustado ×1,4)
@@ -47,17 +54,17 @@ MAX_PCT_ABOVE_MIN = 1.12
 TOLON_VS_CHACAO = 0.85          # Tolón ≈ 85% de Chacao
 WEB_VS_CERRO_VERDE = 0.60       # Web ≈ 60% de Cerro Verde
 GRAND_PLAZ_BONUS = 1.68         # Grand Plaz +68% hist. (+40% base + 20% adicional)
-PROD_RANGE_MIN = 1280            # Rango global acordado (lanzamiento diciembre)
+PROD_RANGE_MIN = 1280            # Mismo rango acordado que Chaqueta Lite
 PROD_RANGE_MAX = 1350
 VELOCITY_MONTHS = ["junio-2026", "julio-2026", "agosto-2026"]
-TALLA_SHIFT_L_TO_XL = 0.015       # +1,5 pp XL ← L (XS sin cambio)
 
+# Escenario tela comprada (Negro + Verde Militar; pool compartido con Chaqueta Lite)
 USE_TELA_REAL = True
 
-# ── Insumo limitante: cierres (inventario global — 75 cm adaptable a 60 cm) ──
-CIERRES_60CM = 748
-CIERRES_75CM = 744
-CIERRES_TOTAL = CIERRES_60CM + CIERRES_75CM
+# Ajuste curva tallas: M y S fijas; lo restado va a XS; +1,5 pp de L a XL
+TALLA_TARGET_M = 0.25
+TALLA_TARGET_S = 0.22
+TALLA_SHIFT_L_TO_XL = 0.015       # +1,5 pp XL ← L (XS sin cambio)
 
 # ── Colores de producción ──
 COLORES = ["Negro", "Vinotinto", "Verde Militar"]
@@ -80,16 +87,11 @@ CURVA_HDR_FONT = Font(bold=True, color="FFFFFF", size=11)
 CURVA_NUM_FONT = Font(bold=True, color="375623", size=11)
 CURVA_LBL_FONT = Font(bold=True, size=10)
 
-# ── Consumo tela VIORI por talla (ficha técnica DAMA) ──
-CONSUMO_MTS = {"XS": 1.19, "S": 1.22, "M": 1.28, "L": 1.34, "XL": 1.35}
-CONSUMO_KG = {"XS": 0.128, "S": 0.131, "M": 0.138, "L": 0.144, "XL": 0.145}
-INSUMOS_CM = {
-    "XS": {"elastica": 48, "sesgo_cintura": 52, "sesgo_manga": 18},
-    "S": {"elastica": 49, "sesgo_cintura": 53, "sesgo_manga": 19},
-    "M": {"elastica": 50, "sesgo_cintura": 54, "sesgo_manga": 20},
-    "L": {"elastica": 51, "sesgo_cintura": 55, "sesgo_manga": 21},
-    "XL": {"elastica": 52, "sesgo_cintura": 56, "sesgo_manga": 22},
-}
+# ── Consumo tela VIORI por talla (ficha técnica LITE PANT DAMA) ──
+CONSUMO_MTS = {"XS": 1.45, "S": 1.48, "M": 1.58, "L": 1.63, "XL": 1.66}
+CONSUMO_KG = {"XS": 0.165, "S": 0.172, "M": 0.177, "L": 0.187, "XL": 0.206}
+ELASTICA_CM = {"XS": 67, "S": 69, "M": 72, "L": 75, "XL": 77}
+ETIQUETAS_POR_PIEZA = 1
 
 # ── Tiendas ──
 HISTORICAL_STORES = ["SAMBIL", "GRIETA", "CERRO VERDE", "CHACAO", "GRAND PLAZ", "LA VELA"]
@@ -125,7 +127,10 @@ def load_combined_data() -> dict:
             raise ValueError(f"No se encontró DATA en {path.name}")
         data = json.loads(match.group(1))
         meses_order.extend(data.get("meses_order", []))
-        all_rows.extend(data["raw_rows"])
+        for row in data["raw_rows"]:
+            row = dict(row)
+            row["tienda"] = STORE_MAP.get(row.get("tienda", ""), row.get("tienda", ""))
+            all_rows.append(row)
 
     seen = set()
     months_chrono = []
@@ -138,7 +143,12 @@ def load_combined_data() -> dict:
 
 
 def analyze_reference(data: dict) -> dict:
-    rows = [r for r in data["raw_rows"] if r["genero"] == GENERO and r["tienda"] not in EXCLUDE_STORES]
+    rows = [
+        r for r in data["raw_rows"]
+        if r.get("modelo") == REFERENCE_MODEL
+        and r["genero"] == GENERO
+        and r["tienda"] not in EXCLUDE_STORES
+    ]
     months = data["meses_order"]
     months_with_data = [m for m in months if any(r["mes"] == m for r in rows)]
     n_months = len(months_with_data)
@@ -217,64 +227,23 @@ def analyze_reference(data: dict) -> dict:
 
 
 def adjust_talla_curve(talla_pct: dict) -> dict:
-    """Transfiere +1,5 pp de L a XL sobre curva histórica (XS sin cambio)."""
-    adjusted = dict(talla_pct)
-    shift = min(TALLA_SHIFT_L_TO_XL, adjusted.get("L", 0))
-    adjusted["L"] -= shift
-    adjusted["XL"] = adjusted.get("XL", 0) + shift
+    """Fija M y S; transfiere a XS lo restado de ambas; +1,5 pp de L a XL."""
+    shift_m = max(0, talla_pct.get("M", 0) - TALLA_TARGET_M)
+    shift_s = max(0, talla_pct.get("S", 0) - TALLA_TARGET_S)
+    adjusted = {
+        "XS": talla_pct.get("XS", 0) + shift_m + shift_s,
+        "S": TALLA_TARGET_S,
+        "M": TALLA_TARGET_M,
+        "L": talla_pct.get("L", 0),
+        "XL": talla_pct.get("XL", 0),
+    }
+    shift_l = min(TALLA_SHIFT_L_TO_XL, adjusted["L"])
+    adjusted["L"] -= shift_l
+    adjusted["XL"] += shift_l
     return adjusted
 
 
-def calc_zipper_cap(talla_pct: dict) -> dict:
-    pct_60 = sum(talla_pct[t] for t in TALLAS_60CM)
-    pct_75 = sum(talla_pct[t] for t in TALLAS_75CM)
-    return {
-        "pct_60": pct_60,
-        "pct_75": pct_75,
-        "cierres_total": CIERRES_TOTAL,
-        "cap_total": CIERRES_TOTAL,
-    }
-
-
-def calc_cierre_allocation(talla_min: dict, talla_max: dict) -> dict:
-    """Asigna cierres por longitud; excedente 60 cm se cubre adaptando 75 cm."""
-    need_60_min = sum(talla_min[t] for t in TALLAS_60CM)
-    need_60_max = sum(talla_max[t] for t in TALLAS_60CM)
-    need_75_min = sum(talla_min[t] for t in TALLAS_75CM)
-    need_75_max = sum(talla_max[t] for t in TALLAS_75CM)
-
-    from_60_max = min(need_60_max, CIERRES_60CM)
-    adapt_75_max = max(0, need_60_max - CIERRES_60CM)
-    from_75_lxl_max = need_75_max
-    total_75_used_max = from_75_lxl_max + adapt_75_max
-    total_used_max = need_60_max + need_75_max
-
-    from_60_min = min(need_60_min, CIERRES_60CM)
-    adapt_75_min = max(0, need_60_min - CIERRES_60CM)
-    total_75_used_min = need_75_min + adapt_75_min
-    total_used_min = need_60_min + need_75_min
-
-    return {
-        "need_60_min": need_60_min,
-        "need_60_max": need_60_max,
-        "need_75_min": need_75_min,
-        "need_75_max": need_75_max,
-        "from_60_min": from_60_min,
-        "from_60_max": from_60_max,
-        "adapt_75_min": adapt_75_min,
-        "adapt_75_max": adapt_75_max,
-        "from_75_lxl_min": need_75_min,
-        "from_75_lxl_max": from_75_lxl_max,
-        "total_75_used_min": total_75_used_min,
-        "total_75_used_max": total_75_used_max,
-        "total_used_min": total_used_min,
-        "total_used_max": total_used_max,
-        "rem_global_min": CIERRES_TOTAL - total_used_min,
-        "rem_global_max": CIERRES_TOTAL - total_used_max,
-    }
-
-
-def calc_production(ref: dict, zip_cap: dict) -> dict:
+def calc_production(ref: dict) -> dict:
     vel_adj = ref["vel_base"] * HIGH_SEASON_FACTOR
     barq_add = ref["barq_proj"]
     vel_network = vel_adj + barq_add
@@ -282,28 +251,18 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
     raw_min = round(vel_network * COVER_MONTHS_MIN * (1 + SAFETY_STOCK_PCT))
     raw_max = round(vel_network * COVER_MONTHS_MAX * (1 + SAFETY_STOCK_PCT))
 
-    prod_min = PROD_RANGE_MIN
-    prod_max = PROD_RANGE_MAX
-    cap = zip_cap["cap_total"]
-
     out = {
         "vel_adj": vel_adj,
         "vel_network": vel_network,
         "barq_add": barq_add,
         "raw_min": raw_min,
         "raw_max": raw_max,
-        "prod_min": prod_min,
-        "prod_max": prod_max,
-        "zipper_limited": prod_max > cap,
-        "total_used_min": prod_min,
-        "total_used_max": prod_max,
-        "rem_global_min": cap - prod_min,
-        "rem_global_max": cap - prod_max,
-        "cap_cierres": cap,
+        "prod_min": PROD_RANGE_MIN,
+        "prod_max": PROD_RANGE_MAX,
         "use_tela_real": False,
     }
     if USE_TELA_REAL:
-        fab = calc_fabric_production(CHAQUETA_FABRIC_SHARE, CONSUMO_MTS, ref["talla_pct"], TALLAS)
+        fab = calc_fabric_production(PANT_FABRIC_SHARE, CONSUMO_MTS, ref["talla_pct"], TALLAS)
         out.update(
             use_tela_real=True,
             fabric=fab,
@@ -311,11 +270,6 @@ def calc_production(ref: dict, zip_cap: dict) -> dict:
             prod_max=fab["prod_max"],
             color_totals_min=fab["color_totals_min"],
             color_totals_max=fab["color_totals_max"],
-            total_used_min=fab["prod_min"],
-            total_used_max=fab["prod_max"],
-            rem_global_min=cap - fab["prod_min"],
-            rem_global_max=cap - fab["prod_max"],
-            zipper_limited=fab["prod_max"] > cap,
         )
     return out
 
@@ -407,16 +361,14 @@ def calc_tela_totals(color_matrix: dict, tela_en_bodega: bool = False) -> dict:
 
 
 def calc_insumos_totals(talla_qty: dict) -> dict:
-    """Totales de insumos en metros (medidas en cm por pieza)."""
-    result = {"elastica_m": 0, "sesgo_cintura_m": 0, "sesgo_manga_m": 0, "und": 0}
+    """Totales de insumos (elástica en metros, etiquetas en und)."""
+    result = {"elastica_m": 0, "etiquetas": 0, "und": 0}
     for t in TALLAS:
         q = talla_qty[t]
-        result["elastica_m"] += q * INSUMOS_CM[t]["elastica"] / 100
-        result["sesgo_cintura_m"] += q * INSUMOS_CM[t]["sesgo_cintura"] / 100
-        result["sesgo_manga_m"] += q * INSUMOS_CM[t]["sesgo_manga"] / 100
+        result["elastica_m"] += q * ELASTICA_CM[t] / 100
+        result["etiquetas"] += q * ETIQUETAS_POR_PIEZA
         result["und"] += q
-    for k in ("elastica_m", "sesgo_cintura_m", "sesgo_manga_m"):
-        result[k] = round(result[k], 2)
+    result["elastica_m"] = round(result["elastica_m"], 2)
     return result
 
 
@@ -429,13 +381,14 @@ def style_cell(cell, fill=None, bold=False, align=center):
     cell.border = border
 
 
-def write_resumen(wb, ref, zip_cap, prod):
+def write_resumen(wb, ref, prod):
     ws = wb.create_sheet("Resumen", 0)
     rows = [
         [f"{PRODUCTO} — PROYECCIÓN DE PRODUCCIÓN (DAMA)"],
         [],
-        ["Referencia analítica", "Jacket 1.0 + Jacket 2.0 — ventas DAMA combinadas"],
+        ["Referencia analítica", f"{REFERENCE_MODEL} — ventas DAMA (Basic Line)"],
         ["Fuentes datos", " + ".join(ref["sources"])],
+        ["Ficha técnica", "Ficha_tecnica_LITE_PANT.xlsx"],
         ["Período velocidad base", f"Jun–Jul–Ago 2026 ({', '.join(ref['vel_months'])})"],
         [],
         ["── VELOCIDAD ──"],
@@ -456,21 +409,11 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Demanda teórica mín (referencia)", prod["raw_min"], "und"],
         ["Demanda teórica máx (referencia)", prod["raw_max"], "und"],
         [],
-        ["── INSUMO LIMITANTE: CIERRES QX NEGRO 0580 ──"],
-        ["Inventario global (60 + 75 cm)", CIERRES_TOTAL, "und disponibles"],
-        ["  · Cierres 60 cm en stock", CIERRES_60CM, "und"],
-        ["  · Cierres 75 cm en stock", CIERRES_75CM, "und (adaptables a 60 cm)"],
-        ["Lógica", "1 cierre = 1 chaqueta · pool global intercambiable", ""],
-        ["Tope producción (inventario global)", zip_cap["cap_total"], "und"],
-        ["¿Producción cabe en cierres?", "SÍ" if prod["prod_max"] <= zip_cap["cap_total"] else "NO"],
-        [],
         ["── RANGO DE PRODUCCIÓN ──"],
         ["MÍNIMO (compromiso)", prod["prod_min"], "und"],
         ["MÁXIMO", prod["prod_max"], "und"],
         ["Rango de acción", prod["prod_max"] - prod["prod_min"], "und"],
-        ["Cierres usados al mínimo", prod["total_used_min"], f"de {CIERRES_TOTAL} disp."],
-        ["Cierres usados al máximo", prod["total_used_max"], f"de {CIERRES_TOTAL} disp."],
-        ["Remanente global al máximo", prod["rem_global_max"], "und"],
+        ["Demanda teórica calculada (referencia)", f"{prod['raw_min']} – {prod['raw_max']} und", ""],
     ]
     if prod.get("use_tela_real"):
         fab = prod["fabric"]
@@ -479,7 +422,7 @@ def write_resumen(wb, ref, zip_cap, prod):
             ["── TELA DISPONIBLE (POOL CHAQUETA + PANT) ──"],
             ["Negro comprado (total)", TELA_POOL_NEGRO_MTS, "mts"],
             ["Verde Militar comprado (total)", TELA_POOL_VERDE_MTS, "mts"],
-            ["Reparto tela este modelo", f"{CHAQUETA_FABRIC_SHARE*100:.1f}%", "peso 1.280 vs 1.350"],
+            ["Reparto tela este modelo", f"{PANT_FABRIC_SHARE*100:.1f}%", "peso 1.280 vs 1.350"],
             ["Verde — unidades (máx tela)", fab["verde_und"], "und"],
             [f"Negro — unidades (÷{NEGRO_FACTOR_RESERVA} margen +30%)", fab["negro_und_min"], "und"],
             ["Negro — unidades (uso total tela asignada)", fab["negro_und_max"], "und"],
@@ -507,8 +450,11 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Compra tela VIORI", f"Hoja Compra de Tela (+{int(TELA_SS_PCT*100)}% SS)", ""],
         [],
         ["── AJUSTE CURVA TALLAS ──"],
-        ["Curva histórica (Jacket 1.0 + 2.0)", "Dashboards combinados", ""],
-        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"hist XL {ref['talla_pct_hist']['XL']*100:.1f}% · L {ref['talla_pct']['L']*100:.1f}% · XS sin cambio"],
+        ["Curva histórica (BASIC LINE PANT)", "Dashboard Basic Line", ""],
+        ["M objetivo", f"{TALLA_TARGET_M*100:.0f}%", f"hist {ref['talla_pct_hist']['M']*100:.1f}%"],
+        ["S objetivo", f"{TALLA_TARGET_S*100:.0f}%", f"hist {ref['talla_pct_hist']['S']*100:.1f}%"],
+        ["XS (recibe resto M+S)", f"{ref['talla_pct']['XS']*100:.1f}%", f"hist {ref['talla_pct_hist']['XS']*100:.1f}%"],
+        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"L {ref['talla_pct']['L']*100:.1f}% · XS sin cambio"],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -523,10 +469,10 @@ def write_resumen(wb, ref, zip_cap, prod):
         ["Corporativo", "EXCLUIDO"],
         [],
         ["Notas"],
-        ["• Dashboards adjuntos Jacket 1.0 y Jacket 2.0 leídos y combinados."],
+        [f"• Referencia: {REFERENCE_MODEL} DAMA del dashboard Basic Line."],
         ["• Producto NUEVO manufacturado — sin stock inicial."],
         ["• Solo género DAMA, tallas XS a XL."],
-        ["• Preferencia: 60 cm → XS/S/M · 75 cm → L/XL · excedente 75 cm adaptable a 60 cm."],
+        ["• Compra tela VIORI incluye +20% stock de seguridad."],
     ])
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
@@ -546,60 +492,30 @@ def write_tallas_sheet(wb, ref, prod):
     talla_min = distribute_by_talla(prod["prod_min"], ref["talla_pct"])
     talla_max = distribute_by_talla(prod["prod_max"], ref["talla_pct"])
 
-    ws.merge_cells("A1:G1")
+    ws.merge_cells("A1:E1")
     style_cell(ws.cell(row=1, column=1, value=f"{PRODUCTO} — CANTIDADES POR TALLA (MÍN / MÁX)"), title_fill, bold=True)
-    ws.cell(row=2, column=1, value=(
-        f"{GENERO} · Curva Jacket 1.0 + 2.0 DAMA · XL +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L"
-    )).font = Font(italic=True)
+    ws.cell(row=2, column=1, value=f"{GENERO} · Curva {REFERENCE_MODEL} DAMA").font = Font(italic=True)
 
-    headers = ["Talla", "Curva %", "Cierre (cm)", "Mínimo", "Máximo", "Cierres Mín", "Cierres Máx"]
+    headers = ["Talla", "Curva %", "Mínimo", "Máximo"]
     for c, h in enumerate(headers, 1):
         style_cell(ws.cell(row=4, column=c, value=h), sub_fill, bold=True)
 
-    cierres_map = {"XS": 60, "S": 60, "M": 60, "L": 75, "XL": 75}
-    c60_min = c75_min = c60_max = c75_max = 0
     t_min_total = t_max_total = 0
-
     for i, t in enumerate(TALLAS, start=5):
         mn, mx = talla_min[t], talla_max[t]
         style_cell(ws.cell(row=i, column=1, value=t), color_fill, bold=True)
         ws.cell(row=i, column=2, value=f"{ref['talla_pct'][t]*100:.1f}%")
-        ws.cell(row=i, column=3, value=cierres_map[t])
-        style_cell(ws.cell(row=i, column=4, value=mn), min_fill, bold=True)
-        style_cell(ws.cell(row=i, column=5, value=mx), max_fill, bold=True)
-        ws.cell(row=i, column=6, value=mn)
-        ws.cell(row=i, column=7, value=mx)
+        style_cell(ws.cell(row=i, column=3, value=mn), min_fill, bold=True)
+        style_cell(ws.cell(row=i, column=4, value=mx), max_fill, bold=True)
         t_min_total += mn
         t_max_total += mx
-        if cierres_map[t] == 60:
-            c60_min += mn
-            c60_max += mx
-        else:
-            c75_min += mn
-            c75_max += mx
 
     r = len(TALLAS) + 5
     style_cell(ws.cell(row=r, column=1, value="TOTAL"), tot_fill, bold=True, align=left)
-    style_cell(ws.cell(row=r, column=4, value=t_min_total), tot_fill, bold=True)
-    style_cell(ws.cell(row=r, column=5, value=t_max_total), tot_fill, bold=True)
-    style_cell(ws.cell(row=r, column=6, value=c60_min), tot_fill, bold=True)
-    style_cell(ws.cell(row=r, column=7, value=c60_max), tot_fill, bold=True)
+    style_cell(ws.cell(row=r, column=3, value=t_min_total), tot_fill, bold=True)
+    style_cell(ws.cell(row=r, column=4, value=t_max_total), tot_fill, bold=True)
 
-    r += 2
-    alloc = calc_cierre_allocation(
-        {t: talla_min[t] for t in TALLAS},
-        {t: talla_max[t] for t in TALLAS},
-    )
-    style_cell(ws.cell(row=r, column=1, value="Inventario global cierres"), color_fill, align=left)
-    ws.cell(row=r, column=4, value=CIERRES_TOTAL)
-    ws.cell(row=r, column=5, value=f"Usa máx {t_max_total} ({t_max_total/CIERRES_TOTAL*100:.0f}%)")
-    r += 1
-    style_cell(ws.cell(row=r, column=1, value="Remanente global al máximo"), color_fill, align=left)
-    ws.cell(row=r, column=4, value=alloc["rem_global_max"])
-    if alloc["adapt_75_max"]:
-        ws.cell(row=r, column=5, value=f"Incl. {alloc['adapt_75_max']} cierres 75→60 cm")
-
-    for col in "ABCDEFG":
+    for col in "ABCDE":
         ws.column_dimensions[col].width = 14
     ws.column_dimensions["A"].width = 18
 
@@ -718,7 +634,7 @@ def _write_curva_block(ws, start_row: int, block_title: str, color_matrix: dict)
     return row + 2
 
 
-def write_curva_completa_sheet(wb, ref, prod, zip_cap):
+def write_curva_completa_sheet(wb, ref, prod):
     ws = wb.create_sheet("Cantidades por Colores")
     color_min, color_max, _, _ = color_matrices(prod, ref)
     en_bodega = prod.get("use_tela_real", False)
@@ -728,13 +644,12 @@ def write_curva_completa_sheet(wb, ref, prod, zip_cap):
     talla_max = distribute_by_talla(prod["prod_max"], ref["talla_pct"])
     ins_min = calc_insumos_totals(talla_min)
     ins_max = calc_insumos_totals(talla_max)
-    alloc_max = calc_cierre_allocation(talla_min, talla_max)
 
     ws.merge_cells("A1:G1")
     style_cell(ws.cell(row=1, column=1, value="CANTIDADES POR COLORES"), title_fill, bold=True)
     ws.cell(row=1, column=1).font = Font(bold=True, size=14, color="FFFFFF")
-    if en_bodega:
-        sub = "Tela disponible Negro + Verde Militar (pool compartido con Lite Pant)"
+    if prod.get("use_tela_real"):
+        sub = "Tela disponible Negro + Verde Militar (pool compartido con Chaqueta Lite)"
     else:
         sub = f"{PRODUCTO} · Proporción Negro 40% · Vinotinto 30% · Verde Militar 30%"
     ws.cell(row=2, column=1, value=sub).font = Font(italic=True)
@@ -769,12 +684,8 @@ def write_curva_completa_sheet(wb, ref, prod, zip_cap):
         f"{tela_max['total_kg']} kg al máx · {ss_lbl}",
     ))
     ins_rows.extend([
-        ("Elástica 4.5 cm", ins_min["elastica_m"], ins_max["elastica_m"], "metros", "Ficha técnica"),
-        ("Sesgo cintura 2 cm", ins_min["sesgo_cintura_m"], ins_max["sesgo_cintura_m"], "metros", "Ficha técnica"),
-        ("Sesgo manga 2 cm", ins_min["sesgo_manga_m"], ins_max["sesgo_manga_m"], "metros", "Ficha técnica"),
-        ("Cierres QX Negro 0580", prod["total_used_min"], prod["total_used_max"], "und", f"Pool global {CIERRES_TOTAL} und · rem. {prod['rem_global_max']} al máx"),
-        ("  · Preferencia 60 cm (XS/S/M)", alloc_max["need_60_min"], alloc_max["need_60_max"], "und", f"Stock {CIERRES_60CM} und"),
-        ("  · Preferencia 75 cm (L/XL)", alloc_max["need_75_min"], alloc_max["need_75_max"], "und", f"Stock {CIERRES_75CM} und · adaptable"),
+        ("Elástica 4.5 cm", ins_min["elastica_m"], ins_max["elastica_m"], "metros", "Ficha técnica LITE PANT"),
+        ("Etiqueta agua / SENCAMER", ins_min["etiquetas"], ins_max["etiquetas"], "und", "1 und/pieza"),
     ])
     for label, vmin, vmax, unit, note in ins_rows:
         is_sub = label.startswith("  ·")
@@ -871,7 +782,7 @@ def write_compra_tela_sheet(wb, ref, prod):
     ins_max = calc_insumos_totals(talla_max)
 
     ws.merge_cells("A1:J1")
-    title = f"{PRODUCTO} — COMPRA DE TELA VIORI POR COLOR"
+    title = f"{PRODUCTO} — TELA VIORI POR COLOR"
     if en_bodega:
         title = f"{PRODUCTO} — USO TELA DISPONIBLE POR COLOR"
     style_cell(ws.cell(row=1, column=1, value=title), title_fill, bold=True)
@@ -958,8 +869,7 @@ def write_compra_tela_sheet(wb, ref, prod):
     row += 1
     for label, k in [
         ("Elástica 4.5 cm (metros)", "elastica_m"),
-        ("Sesgo cintura 2 cm (metros)", "sesgo_cintura_m"),
-        ("Sesgo manga 2 cm (metros)", "sesgo_manga_m"),
+        ("Etiqueta agua / SENCAMER (und)", "etiquetas"),
     ]:
         ws.cell(row=row, column=1, value=label)
         ws.cell(row=row, column=2, value=ins_min[k])
@@ -971,69 +881,64 @@ def write_compra_tela_sheet(wb, ref, prod):
     ws.column_dimensions["A"].width = 28
 
 
-def write_cierres_sheet(wb, ref, prod, zip_cap):
-    ws = wb.create_sheet("Cierres (Insumo)")
+def write_insumos_sheet(wb, ref, prod):
+    ws = wb.create_sheet("Insumos")
     talla_min = distribute_by_talla(prod["prod_min"], ref["talla_pct"])
     talla_max = distribute_by_talla(prod["prod_max"], ref["talla_pct"])
-    alloc = calc_cierre_allocation(talla_min, talla_max)
+    ins_min = calc_insumos_totals(talla_min)
+    ins_max = calc_insumos_totals(talla_max)
 
     rows = [
-        ["PLAN DE CIERRES — QX NEGRO 0580 (INVENTARIO GLOBAL)"],
-        ["Modelo", "QX Negro 0580"],
-        ["Color producto", "Negro (inferido del insumo)"],
-        ["Lógica", "75 cm adaptable a 60 cm · 1 cierre = 1 chaqueta · pool global"],
+        [f"INSUMOS — {PRODUCTO} {GENERO}"],
+        ["Fuente", "Ficha_tecnica_LITE_PANT.xlsx"],
         [],
-        ["── STOCK POR LONGITUD ──"],
-        ["Longitud", "Und disponibles", "Nota"],
-        ["60 cm", CIERRES_60CM, "Preferido XS · S · M"],
-        ["75 cm", CIERRES_75CM, "Preferido L · XL · adaptable a 60 cm"],
-        ["TOTAL GLOBAL", CIERRES_TOTAL, "Tope producción"],
+        ["── ELÁSTICA 4.5 CM ──"],
+        ["Talla", "Cm/pieza", "Demanda Mín", "Demanda Máx"],
+    ]
+    for t in TALLAS:
+        rows.append([t, ELASTICA_CM[t], talla_min[t], talla_max[t]])
+    rows += [
         [],
-        ["── DEMANDA POR TALLA (Mín / Máx) ──"],
-        ["Grupo", "Tallas", "Demanda Mín", "Demanda Máx"],
-        ["60 cm ideal", "XS · S · M", alloc["need_60_min"], alloc["need_60_max"]],
-        ["75 cm ideal", "L · XL", alloc["need_75_min"], alloc["need_75_max"]],
-        ["TOTAL chaquetas", "", alloc["total_used_min"], alloc["total_used_max"]],
+        ["Total elástica (metros)", "", ins_min["elastica_m"], ins_max["elastica_m"]],
         [],
-        [f"── ASIGNACIÓN AL MÁXIMO ({prod['prod_max']} und) ──"],
-        ["Concepto", "Und"],
-        ["Cierres 60 cm usados (nativos XS/S/M)", alloc["from_60_max"]],
-        ["Cierres 75 cm adaptados a 60 cm", alloc["adapt_75_max"]],
-        ["Cierres 75 cm usados en L/XL", alloc["from_75_lxl_max"]],
-        ["Total cierres 75 cm consumidos", alloc["total_75_used_max"]],
-        ["Total cierres consumidos (global)", alloc["total_used_max"]],
-        ["Remanente global", alloc["rem_global_max"]],
+        ["── ETIQUETA AGUA / SENCAMER ──"],
+        ["Consumo", "1 und/pieza", "Ubicación", "Costado derecho"],
+        ["Demanda Mín", ins_min["etiquetas"], "Demanda Máx", ins_max["etiquetas"]],
         [],
-        ["Rango producción acordado", f"{prod['prod_min']} – {prod['prod_max']} und"],
-        ["¿Cabe en inventario global?", "SÍ" if prod["prod_max"] <= CIERRES_TOTAL else "NO"],
+        ["── HILOS (por color de tela) ──"],
+        ["Negro", "Hilo Negro-N", "Vinotinto", "Hilo Vinotinto"],
+        ["Verde Militar", "Hilo Verde Militar", "", ""],
+        [],
+        [f"Rango producción", f"{prod['prod_min']} – {prod['prod_max']} und"],
     ]
     for r, row in enumerate(rows, start=1):
         for c, val in enumerate(row, start=1):
             cell = ws.cell(row=r, column=c, value=val)
-            if r in (1, 5):
+            if r == 1 or (row and row[0] and str(row[0]).startswith("──")):
                 cell.font = Font(bold=True)
-                cell.fill = title_fill if r == 1 else sub_fill
-    ws.column_dimensions["A"].width = 42
+                if r == 1:
+                    cell.fill = title_fill
+                    cell.font = Font(bold=True, color="FFFFFF")
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 16
 
 
-def write_metodologia(wb, ref, zip_cap, prod):
+def write_metodologia(wb, ref, prod):
     ws = wb.create_sheet("Metodología")
     text = [
         f"METODOLOGÍA — PROYECCIÓN {PRODUCTO}",
         "",
         "1. PRODUCTO DE REFERENCIA",
-        "   Fuentes: Dashboard_Jacket_1_0.html + Dashboard_Jacket_2_0.html (adjuntos).",
-        "   Se combinaron ventas DAMA de Jacket 1.0 y CUADRO Jacket 2.0.",
+        f"   Fuente: Dashboard_Basic_Line.html — filtro {REFERENCE_MODEL} DAMA.",
         f"   Velocidad base = promedio Jun–Jul–Ago 2026: {ref['vel_base']:.0f} und/mes.",
+        "   Ficha técnica: Ficha_tecnica_LITE_PANT.xlsx (consumo VIORI + elástica).",
         "",
-        "2. AJUSTE TEMPORADA ALTA",
+        "2. AJUSTE TEMPORADA ALTA Y STOCK",
         f"   Factor ×{HIGH_SEASON_FACTOR} (diciembre — incrementado para escenario temporada alta).",
         f"   Diciembre 2025 combinado: {ref['dec_vel']} und.",
-        "",
-        "   STOCK DE SEGURIDAD Y TALLER",
-        f"   • Producción: +{int(SAFETY_STOCK_PCT*100)}% SS sobre demanda teórica.",
-        f"   • Tela (compra): +{int(TELA_SS_PCT*100)}% SS sobre consumo VIORI.",
-        "   • Producto terminado en taller: buffer operativo (pre-distribución a tiendas y reposición).",
+        f"   • Stock de seguridad producción: +{int(SAFETY_STOCK_PCT*100)}%.",
+        f"   • Stock de seguridad tela (compra): +{int(TELA_SS_PCT*100)}%.",
+        "   • Stock producto terminado en taller: buffer operativo pre-distribución y reposición.",
         "",
         "3. AJUSTES DE TIENDA (según indicación)",
         f"   • Tolón: proyectado al {int(TOLON_VS_CHACAO*100)}% de Chacao ({ref['chacao_m']:.0f} → {ref['tolon_proj']:.0f} und/mes).",
@@ -1047,34 +952,31 @@ def write_metodologia(wb, ref, zip_cap, prod):
         f"   • Barquisimeto (nueva): promedio Grieta + Chacao + Tolón proyectado = {ref['barq_proj']:.0f} und/mes.",
         "   • Corporativo: EXCLUIDO.",
         "",
-        "4. RANGO GLOBAL ACORDADO",
-        f"   Mínimo: {PROD_RANGE_MIN} und | Máximo: {PROD_RANGE_MAX} und.",
+        "4. RANGO DE PRODUCCIÓN (ACORDADO)",
+        f"   Mínimo: {PROD_RANGE_MIN} und | Máximo: {PROD_RANGE_MAX} und (mismo rango Chaqueta Lite).",
         f"   Demanda teórica calculada: {prod['raw_min']} – {prod['raw_max']} und (referencia).",
+        f"   Velocidad red ajustada: {prod['vel_network']:.0f} und/mes.",
         "",
-        "5. INSUMO LIMITANTE — CIERRES (INVENTARIO GLOBAL)",
-        f"   Stock total: {CIERRES_60CM} (60 cm) + {CIERRES_75CM} (75 cm) = {CIERRES_TOTAL} und.",
-        "   Los cierres 75 cm se adaptan a 60 cm → se considera pool global intercambiable.",
-        f"   Tope producción = {zip_cap['cap_total']} und (1 cierre por chaqueta).",
-        f"   Al máximo ({prod['prod_max']} und) quedan {prod['rem_global_max']} cierres remanentes.",
-        "",
-        "6. RANGO MÍNIMO / MÁXIMO",
-        f"   Compromiso mín: {prod['prod_min']} und.",
-        f"   Techo máx: {prod['prod_max']} und.",
-        "",
-        "7. AJUSTE CURVA TALLAS",
-        f"   Histórica Jacket 1.0 + 2.0 DAMA: L {ref['talla_pct_hist']['L']*100:.1f}% · XL {ref['talla_pct_hist']['XL']*100:.1f}%.",
+        "5. AJUSTE CURVA TALLAS",
+        f"   Histórica: XS {ref['talla_pct_hist']['XS']*100:.1f}% · S {ref['talla_pct_hist']['S']*100:.1f}% · M {ref['talla_pct_hist']['M']*100:.1f}%.",
+        f"   Ajustada: M {TALLA_TARGET_M*100:.0f}% · S {TALLA_TARGET_S*100:.0f}% · XS {ref['talla_pct']['XS']*100:.1f}% (recibe lo restado de M y S).",
         f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}% (XS sin cambio).",
         "",
-        "8. DISTRIBUCIÓN",
+        "6. DISTRIBUCIÓN",
         "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
-        "   Por talla: curva histórica ajustada (ver sección 7).",
+        f"   Por talla: curva ajustada (ver sección 5).",
         "",
-        "9. COLORES Y COMPRA DE TELA",
-        "   Colores: Negro 40% · Vinotinto 30% · Verde Militar 30%.",
+        "7. COLORES Y COMPRA DE TELA",
+        "   Colores producción: Negro 40% · Vinotinto 30% · Verde Militar 30%.",
         "   Dentro de cada color se aplica la misma curva de tallas.",
-        "   Consumo VIORI por pieza (ficha técnica): XS 1.19m · S 1.22m · M 1.28m · L 1.34m · XL 1.35m.",
+        "   Consumo VIORI por pieza (ficha LITE PANT DAMA): XS 1.45m · S 1.48m · M 1.58m · L 1.63m · XL 1.66m.",
         f"   Stock de seguridad tela: +{int(TELA_SS_PCT*100)}% sobre consumo (compra = consumo × {1+TELA_SS_PCT}).",
         "   Ver hojas 'Producción Color × Talla' y 'Compra de Tela VIORI'.",
+        "",
+        "8. OTROS INSUMOS",
+        "   Elástica 4.5 cm: consumo por talla según ficha (67–77 cm/pieza).",
+        "   Etiqueta agua/SENCAMER: 1 und/pieza · costado derecho.",
+        "   Hilos: Negro-N · Vinotinto · Verde Militar (según color de tela).",
     ]
     for r, line in enumerate(text, start=1):
         cell = ws.cell(row=r, column=1, value=line)
@@ -1088,19 +990,18 @@ def write_metodologia(wb, ref, zip_cap, prod):
 def main():
     data = load_combined_data()
     ref = analyze_reference(data)
-    zip_cap = calc_zipper_cap(ref["talla_pct"])
-    prod = calc_production(ref, zip_cap)
+    prod = calc_production(ref)
 
     wb = Workbook()
     wb.remove(wb.active)
-    write_resumen(wb, ref, zip_cap, prod)
+    write_resumen(wb, ref, prod)
     write_tallas_sheet(wb, ref, prod)
-    write_curva_completa_sheet(wb, ref, prod, zip_cap)
+    write_curva_completa_sheet(wb, ref, prod)
     write_colores_sheet(wb, ref, prod)
     write_compra_tela_sheet(wb, ref, prod)
     write_tiendas_sheet(wb, ref, prod)
-    write_cierres_sheet(wb, ref, prod, zip_cap)
-    write_metodologia(wb, ref, zip_cap, prod)
+    write_insumos_sheet(wb, ref, prod)
+    write_metodologia(wb, ref, prod)
     wb.save(OUTPUT_PATH)
 
     print(f"✅ Generado: {OUTPUT_PATH}")
@@ -1115,8 +1016,6 @@ def main():
     if prod.get("use_tela_real"):
         print(f"   Colores máx: Negro {cx['Negro']} · V.Militar {cx['Verde Militar']}")
         print(f"   Tela asignada modelo: V {prod['fabric']['verde_m_asignado']} m · N {prod['fabric']['negro_m_asignado']} m")
-        if prod["zipper_limited"]:
-            print("   ⚠ Producción máx supera inventario de cierres")
     else:
         print(f"   Tela VIORI máx compra (+{int(TELA_SS_PCT*100)}% SS): {tx['total_mts_compra']} mts / {tx['total_kg_compra']} kg")
         print(f"   Colores máx: Negro {cx['Negro']} · Vinotinto {cx.get('Vinotinto', 0)} · V.Militar {cx['Verde Militar']}")
