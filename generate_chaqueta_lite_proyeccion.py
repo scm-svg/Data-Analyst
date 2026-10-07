@@ -16,9 +16,10 @@ from openpyxl.utils import get_column_letter
 from coleccion_lite_tela import (
     CHAQUETA_FABRIC_SHARE,
     COLORES_TELA_REAL,
-    NEGRO_FACTOR_RESERVA,
+    NEGRO_TELA_MIN_FACTOR,
     TELA_POOL_NEGRO_MTS,
     TELA_POOL_VERDE_MTS,
+    VERDE_TELA_MIN_FACTOR,
     calc_fabric_production,
     distribute_by_color_talla_fixed,
 )
@@ -480,9 +481,10 @@ def write_resumen(wb, ref, zip_cap, prod):
             ["Negro comprado (total)", TELA_POOL_NEGRO_MTS, "mts"],
             ["Verde Militar comprado (total)", TELA_POOL_VERDE_MTS, "mts"],
             ["Reparto tela este modelo", f"{CHAQUETA_FABRIC_SHARE*100:.1f}%", "peso 1.280 vs 1.350"],
-            ["Verde — unidades (máx tela)", fab["verde_und"], "und"],
-            [f"Negro — unidades (÷{NEGRO_FACTOR_RESERVA} margen +30%)", fab["negro_und_min"], "und"],
-            ["Negro — unidades (uso total tela asignada)", fab["negro_und_max"], "und"],
+            [f"Verde — unidades mín (÷{VERDE_TELA_MIN_FACTOR})", fab["verde_und_min"], "und"],
+            ["Verde — unidades máx (100% tela)", fab["verde_und_max"], "und"],
+            [f"Negro — unidades mín (÷{NEGRO_TELA_MIN_FACTOR})", fab["negro_und_min"], "und"],
+            ["Negro — unidades máx (100% tela)", fab["negro_und_max"], "und"],
             ["Consumo prom. VIORI/pieza (curva tallas)", fab["avg_m"], "mts"],
             ["Vinotinto", "NO COMPRADO", "—"],
         ])
@@ -492,8 +494,8 @@ def write_resumen(wb, ref, zip_cap, prod):
     ])
     if prod.get("use_tela_real"):
         rows.extend([
-            ["Negro", prod["color_totals_min"]["Negro"], f"mín und · máx {prod['color_totals_max']['Negro']}"],
-            ["Verde Militar", prod["color_totals_min"]["Verde Militar"], "und (máx tela verde)"],
+            ["Negro", prod["color_totals_min"]["Negro"], f"mín · máx {prod['color_totals_max']['Negro']} und"],
+            ["Verde Militar", prod["color_totals_min"]["Verde Militar"], f"mín · máx {prod['color_totals_max']['Verde Militar']} und"],
         ])
     else:
         rows.extend([
