@@ -1,13 +1,15 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.4 (CORREO DIARIO)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.5 (TURNOS DIURNO/NOCTURNO)
  * =====================================================================
  *  Cambios de esta versión:
- *   - Resumen General (Tracking) copia el tablero de la hoja tal cual.
- *     El detalle sí filtra solo lo nuevo desde el último correo.
- *   - Asunto y nota de almacén sin emojis.
- *   - Resumen sin líneas de cuadrícula.
- *   - Lo ya enviado queda en la hoja oculta "_Correo Enviado".
+ *   - Tablero diurno y tablero nocturno en "Tracking - Produccion".
+ *     El mismo script reparte Real (Unds) según la columna Turno.
+ *   - "Unidades Producidas - Costura": columna Turno (I) = Diurno / Nocturno.
+ *     Vacío se trata como Diurno. Pedidos sin Turno van al diurno (Línea 1).
+ *   - "Detalle Tracking - Produccion": columna Turno (E) en el desglose.
+ *   - El correo diario muestra ambos tableros. El detalle incluye Turno.
+ *   - La clave de "_Correo Enviado" incorpora el turno (claves viejas = diurno).
  * =====================================================================
  */
 
@@ -51,6 +53,69 @@ function encontrarFilaEncabezado_(filasData, palabrasClave, maxFilas) {
   return { fila: -1, celdas: [] };
 }
 
+function vaciosDiasTracking_() {
+  return { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0 };
+}
+
+function clasificarTurno_(val) {
+  var t = quitarTildes_(String(val == null ? "" : val).toLowerCase()).replace(/\s+/g, " ").trim();
+  if (t.indexOf("nocturn") !== -1) return "nocturno";
+  return "diurno";
+}
+
+function etiquetaTurno_(clave) {
+  return clave === "nocturno" ? "Nocturno" : "Diurno";
+}
+
+function tituloTableroTurno_(clave) {
+  return clave === "nocturno" ? "Turno Nocturno" : "Turno Diurno";
+}
+
+function turnoDeBloque_(texto) {
+  var t = quitarTildes_(String(texto == null ? "" : texto).toLowerCase()).replace(/\s+/g, " ").trim();
+  if (t.indexOf("nocturn") !== -1) return "nocturno";
+  if (t.indexOf("diurn") !== -1) return "diurno";
+  return "";
+}
+
+function asegurarTotalesTurno_(totalesPorTurno, turno, linea) {
+  if (!totalesPorTurno[turno]) totalesPorTurno[turno] = {};
+  if (!totalesPorTurno[turno][linea]) totalesPorTurno[turno][linea] = vaciosDiasTracking_();
+  return totalesPorTurno[turno][linea];
+}
+
+var HEADERS_DETALLE_TRACKING_ = ["Dia", "Fecha", "Linea", "Turno", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
+
+function prepararHojaDetalleTracking_(ss, hojaDetalle) {
+  if (!hojaDetalle) {
+    hojaDetalle = ss.insertSheet("Detalle Tracking - Produccion");
+  }
+  var datos = hojaDetalle.getLastRow() > 0 ? hojaDetalle.getDataRange().getValues() : [];
+  var headerRow = -1;
+  for (var r = 0; r < Math.min(5, datos.length); r++) {
+    var celdas = (datos[r] || []).map(function(x) {
+      return quitarTildes_(String(x == null ? "" : x).toLowerCase().trim());
+    });
+    if ((celdas.indexOf("dia") !== -1 || celdas.indexOf("linea") !== -1) &&
+        (celdas.indexOf("sku") !== -1 || celdas.indexOf("cantidad") !== -1)) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow === -1) headerRow = 0;
+  hojaDetalle.getRange(headerRow + 1, 2, 1, HEADERS_DETALLE_TRACKING_.length)
+    .setValues([HEADERS_DETALLE_TRACKING_])
+    .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
+    .setHorizontalAlignment("center");
+  var ultFila = hojaDetalle.getLastRow();
+  var dataStart = headerRow + 2;
+  if (ultFila >= dataStart) {
+    hojaDetalle.getRange(dataStart, 2, ultFila - dataStart + 1, HEADERS_DETALLE_TRACKING_.length)
+      .clearContent().setBorder(false, false, false, false, false, false);
+  }
+  return { hoja: hojaDetalle, headerRow: headerRow, dataStart: dataStart };
+}
+
 // =========================================================================
 // 1. ACTUALIZAR TABLERO VISUAL DE COSTURA (+ PEDIDOS + DETALLE CON LINKS)
 // =========================================================================
@@ -65,24 +130,12 @@ function actualizarTrackingProduccion() {
     return;
   }
 
-  // Preparar u obtener la hoja de Detalles desde el principio para tener su ID
-  var hojaDetalle = ss.getSheetByName("Detalle Tracking - Produccion");
-  if (!hojaDetalle) {
-    hojaDetalle = ss.insertSheet("Detalle Tracking - Produccion");
-    var headersDetalle = ["Dia", "Fecha", "Linea", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
-    hojaDetalle.getRange(2, 2, 1, 10).setValues([headersDetalle])
-      .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold")
-      .setHorizontalAlignment("center");
-  } else {
-    var ultFilaDet = hojaDetalle.getLastRow();
-    if (ultFilaDet > 2) {
-      hojaDetalle.getRange(3, 2, ultFilaDet - 2, 10).clearContent().setBorder(false, false, false, false, false, false);
-    }
-  }
+  var prepDetalle = prepararHojaDetalleTracking_(ss, ss.getSheetByName("Detalle Tracking - Produccion"));
+  var hojaDetalle = prepDetalle.hoja;
   var sheetIdDetalle = hojaDetalle.getSheetId();
 
-  var totalesPorLinea = {};
-  var registrosDetalle = []; // [Dia, Fecha, Linea, MO, SKU, Producto, Genero, Color, Talla, Cantidad]
+  var totalesPorTurno = {};
+  var registrosDetalle = []; // [Dia, Fecha, Linea, Turno, MO, SKU, Producto, Genero, Color, Talla, Cantidad]
   var mapaDiasNom = {1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes"};
 
   // ==============================================================
@@ -102,6 +155,7 @@ function actualizarTrackingProduccion() {
       var idxGen = headersUnidades.findIndex(function(h) { return h.includes("genero") || h.includes("género"); });
       var idxCol = headersUnidades.indexOf("color");
       var idxTal = headersUnidades.indexOf("talla");
+      var idxTurno = headersUnidades.findIndex(function(h) { return h === "turno" || h.indexOf("turno") === 0; });
 
       var colDiasIdx = [
         {dia: "Lunes", idx: headersUnidades.findIndex(function(h) { return h.includes("lunes"); }), claveObj: "lunes"},
@@ -137,9 +191,9 @@ function actualizarTrackingProduccion() {
         var numLinea = match ? "linea " + match[0] : filaStr;
         if (!numLinea || numLinea === "") continue;
 
-        if (!totalesPorLinea[numLinea]) {
-          totalesPorLinea[numLinea] = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0 };
-        }
+        var turnoFila = clasificarTurno_(idxTurno !== -1 ? fila[idxTurno] : "");
+        var etiquetaFila = etiquetaTurno_(turnoFila);
+        var prodLinea = asegurarTotalesTurno_(totalesPorTurno, turnoFila, numLinea);
 
         var mo = idxMo !== -1 ? String(fila[idxMo]).trim() : "";
         var sku = idxSku !== -1 ? String(fila[idxSku]).trim() : "";
@@ -152,11 +206,12 @@ function actualizarTrackingProduccion() {
           if (dObj.idx !== -1) {
             var cantDia = Number(fila[dObj.idx]) || 0;
             if (cantDia > 0) {
-              totalesPorLinea[numLinea][dObj.claveObj] += cantDia;
+              prodLinea[dObj.claveObj] += cantDia;
               registrosDetalle.push([
                 dObj.dia,
                 fechasDiasUnidades[dObj.claveObj] || "",
                 "Línea " + (match ? match[0] : filaStr),
+                etiquetaFila,
                 mo, sku, prodNom, gen, color, talla, cantDia
               ]);
             }
@@ -185,6 +240,7 @@ function actualizarTrackingProduccion() {
         var idxGenP = headP.findIndex(function(h) { return h.includes("genero") || h.includes("género"); });
         var idxColP = headP.indexOf("color");
         var idxTalP = headP.indexOf("talla");
+        var idxTurnoP = headP.findIndex(function(h) { return h === "turno" || h.indexOf("turno") === 0; });
 
         if (idCant !== -1 && idFecha !== -1) {
           var numLineaP = "linea 1"; // Estricto para Pedidos
@@ -195,26 +251,26 @@ function actualizarTrackingProduccion() {
             var fechaVal = filaP[idFecha];
 
             if (cantidad > 0 && fechaVal) {
-              if (!totalesPorLinea[numLineaP]) {
-                 totalesPorLinea[numLineaP] = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0 };
-              }
+              var turnoP = clasificarTurno_(idxTurnoP !== -1 ? filaP[idxTurnoP] : "");
+              var prodLineaP = asegurarTotalesTurno_(totalesPorTurno, turnoP, numLineaP);
 
               var f = new Date(fechaVal);
               if (!isNaN(f.getTime())) {
                 var diaSemana = f.getDay(); // 1=Lunes, 2=Martes, 3=Miercoles, 4=Jueves, 5=Viernes
                 var nombreDiaReal = mapaDiasNom[diaSemana] || "Otro";
 
-                if (diaSemana === 1) totalesPorLinea[numLineaP].lunes += cantidad;
-                else if (diaSemana === 2) totalesPorLinea[numLineaP].martes += cantidad;
-                else if (diaSemana === 3) totalesPorLinea[numLineaP].miercoles += cantidad;
-                else if (diaSemana === 4) totalesPorLinea[numLineaP].jueves += cantidad;
-                else if (diaSemana === 5) totalesPorLinea[numLineaP].viernes += cantidad;
+                if (diaSemana === 1) prodLineaP.lunes += cantidad;
+                else if (diaSemana === 2) prodLineaP.martes += cantidad;
+                else if (diaSemana === 3) prodLineaP.miercoles += cantidad;
+                else if (diaSemana === 4) prodLineaP.jueves += cantidad;
+                else if (diaSemana === 5) prodLineaP.viernes += cantidad;
 
                 if (diaSemana >= 1 && diaSemana <= 5) {
                   registrosDetalle.push([
                     nombreDiaReal,
                     f,
                     "Línea 1",
+                    etiquetaTurno_(turnoP),
                     idxMoP !== -1 ? String(filaP[idxMoP]).trim() : "",
                     idxSkuP !== -1 ? String(filaP[idxSkuP]).trim() : "",
                     idxProdP !== -1 ? String(filaP[idxProdP]).trim() : "",
@@ -248,17 +304,25 @@ function actualizarTrackingProduccion() {
   }
 
   var datosTracking = hojaTracking.getDataRange().getValues();
+  var turnoBloque = "diurno";
   for (var t = 0; t < datosTracking.length; t++) {
     var filaTracking = datosTracking[t];
-    var nombreLineaTracking = String(filaTracking[1]).trim().toLowerCase();
-
-    if (nombreLineaTracking === "" || (!nombreLineaTracking.includes("linea") && !nombreLineaTracking.includes("línea"))) {
+    var nombreLineaTracking = String(filaTracking[1] == null ? "" : filaTracking[1]).trim();
+    var marcaTurno = turnoDeBloque_(nombreLineaTracking);
+    if (marcaTurno) {
+      turnoBloque = marcaTurno;
       continue;
     }
 
-    var matchT = nombreLineaTracking.match(/\d+/);
-    var numLineaT = matchT ? "linea " + matchT[0] : nombreLineaTracking;
-    var prod = totalesPorLinea[numLineaT] || { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0 };
+    var nombreNorm = nombreLineaTracking.toLowerCase();
+    if (nombreNorm === "" || (!nombreNorm.includes("linea") && !nombreNorm.includes("línea"))) {
+      continue;
+    }
+
+    var matchT = nombreNorm.match(/\d+/);
+    var numLineaT = matchT ? "linea " + matchT[0] : nombreNorm;
+    var mapaTurno = totalesPorTurno[turnoBloque] || {};
+    var prod = mapaTurno[numLineaT] || vaciosDiasTracking_();
 
     aplicarEnlace(hojaTracking.getRange(t + 1, 4), prod.lunes);
     aplicarEnlace(hojaTracking.getRange(t + 1, 6), prod.martes);
@@ -278,18 +342,22 @@ function actualizarTrackingProduccion() {
       var timeA = a[1] instanceof Date ? a[1].getTime() : 0;
       var timeB = b[1] instanceof Date ? b[1].getTime() : 0;
       if (timeA !== timeB) return timeA - timeB;
-      return a[2].localeCompare(b[2]);
+      var lin = String(a[2]).localeCompare(String(b[2]));
+      if (lin !== 0) return lin;
+      return String(a[3]).localeCompare(String(b[3]));
     });
 
-    var rangoDest = hojaDetalle.getRange(3, 2, registrosDetalle.length, 10);
+    var filaDatos = prepDetalle.dataStart;
+    var nColsDet = HEADERS_DETALLE_TRACKING_.length;
+    var rangoDest = hojaDetalle.getRange(filaDatos, 2, registrosDetalle.length, nColsDet);
     rangoDest.setValues(registrosDetalle)
       .setHorizontalAlignment("center").setVerticalAlignment("middle")
       .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
-    hojaDetalle.getRange(3, 3, registrosDetalle.length, 1).setNumberFormat("dd/MM/yyyy");
-    hojaDetalle.autoResizeColumns(2, 10);
+    hojaDetalle.getRange(filaDatos, 3, registrosDetalle.length, 1).setNumberFormat("dd/MM/yyyy");
+    hojaDetalle.autoResizeColumns(2, nColsDet);
   }
 
-  SpreadsheetApp.getUi().alert("✅ Tableros Actualizados:\n\n1. El tablero numérico ('Tracking - Produccion') fue actualizado con links dinámicos.\n2. La pestaña de desglose ('Detalle Tracking - Produccion') fue regenerada con el registro individual de piezas.");
+  SpreadsheetApp.getUi().alert("✅ Tableros Actualizados:\n\n1. El tablero diurno y el tablero nocturno ('Tracking - Produccion') se actualizaron según la columna Turno.\n2. La pestaña de desglose ('Detalle Tracking - Produccion') incluye Turno en cada fila.");
 }
 
 // =========================================================================
@@ -1000,11 +1068,25 @@ function diaClaveCorreo_(s) {
   return quitarTildes_(String(s || "").toLowerCase()).replace(/\s+/g, " ").trim();
 }
 
+function turnoClaveCorreo_(s) {
+  return clasificarTurno_(s);
+}
+
+function migrarClaveHistorialCorreo_(clave) {
+  var parts = String(clave || "").split("|");
+  if (parts.length === 9) {
+    parts.splice(3, 0, "diurno");
+    return parts.join("|");
+  }
+  return clave;
+}
+
 function claveDetalleCorreo_(fila) {
   return [
     diaClaveCorreo_(fila.dia),
     normalizarFechaClave_(fila.fecha),
     lineaClaveCorreo_(fila.linea),
+    turnoClaveCorreo_(fila.turno),
     String(fila.mo == null ? "" : fila.mo).trim().toLowerCase(),
     String(fila.sku == null ? "" : fila.sku).trim().toLowerCase(),
     String(fila.producto == null ? "" : fila.producto).trim().toLowerCase(),
@@ -1127,14 +1209,18 @@ function enviarCorreoHtml_(to, subject, htmlBody) {
   }
 }
 
+var HEADERS_HISTORIAL_CORREO_ = [
+  "Clave", "Dia", "Fecha", "Linea", "Turno", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad Enviada", "Ultimo Envio"
+];
+
 function obtenerHojaHistorialCorreo_(ss) {
   var hoja = ss.getSheetByName(NOMBRE_HISTORIAL_CORREO_);
   if (!hoja) {
     hoja = ss.insertSheet(NOMBRE_HISTORIAL_CORREO_);
     hoja.getRange(1, 1).setValue("Historial de cantidades ya enviadas por correo. No borrar. Se oculta sola.");
-    hoja.getRange(2, 1, 1, 12).setValues([[
-      "Clave", "Dia", "Fecha", "Linea", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad Enviada", "Ultimo Envio"
-    ]]).setFontWeight("bold");
+    hoja.getRange(2, 1, 1, HEADERS_HISTORIAL_CORREO_.length)
+      .setValues([HEADERS_HISTORIAL_CORREO_])
+      .setFontWeight("bold");
     hoja.hideSheet();
   }
   return hoja;
@@ -1144,30 +1230,42 @@ function cargarEnviadoPorClave_(hoja) {
   var map = {};
   var last = hoja.getLastRow();
   if (last < 3) return map;
-  var vals = hoja.getRange(3, 1, last - 2, 11).getValues();
+  var lastCol = Math.max(hoja.getLastColumn(), 12);
+  var headers = hoja.getRange(2, 1, 1, lastCol).getValues()[0];
+  var idxClave = 0;
+  var idxCant = 10;
+  for (var h = 0; h < headers.length; h++) {
+    var n = quitarTildes_(String(headers[h] || "").toLowerCase().trim());
+    if (n === "clave") idxClave = h;
+    if (n.indexOf("cantidad") !== -1) idxCant = h;
+  }
+  var vals = hoja.getRange(3, 1, last - 2, Math.max(idxCant + 1, idxClave + 1)).getValues();
   for (var i = 0; i < vals.length; i++) {
-    var clave = String(vals[i][0] || "").trim();
+    var clave = migrarClaveHistorialCorreo_(String(vals[i][idxClave] || "").trim());
     if (!clave) continue;
-    map[clave] = Number(vals[i][10]) || 0;
+    map[clave] = Number(vals[i][idxCant]) || 0;
   }
   return map;
 }
 
 function guardarHistorialCorreo_(hoja, filasPersistir, ahora) {
   var last = hoja.getLastRow();
-  if (last > 2) hoja.getRange(3, 1, last - 2, 12).clearContent();
+  var nCols = HEADERS_HISTORIAL_CORREO_.length;
+  hoja.getRange(2, 1, 1, nCols).setValues([HEADERS_HISTORIAL_CORREO_]).setFontWeight("bold");
+  if (last > 2) hoja.getRange(3, 1, last - 2, nCols).clearContent();
   if (!filasPersistir.length) return;
   var out = [];
   for (var i = 0; i < filasPersistir.length; i++) {
     var f = filasPersistir[i];
     out.push([
-      f.clave, f.dia, f.fecha, f.linea, f.mo, f.sku, f.producto, f.genero, f.color, f.talla,
+      f.clave, f.dia, f.fecha, f.linea, etiquetaTurno_(clasificarTurno_(f.turno)),
+      f.mo, f.sku, f.producto, f.genero, f.color, f.talla,
       f.enviado, ahora
     ]);
   }
-  hoja.getRange(3, 1, out.length, 12).setValues(out);
+  hoja.getRange(3, 1, out.length, nCols).setValues(out);
   hoja.getRange(3, 3, out.length, 1).setNumberFormat("dd/MM/yyyy");
-  hoja.getRange(3, 12, out.length, 1).setNumberFormat("dd/MM/yyyy HH:mm");
+  hoja.getRange(3, nCols, out.length, 1).setNumberFormat("dd/MM/yyyy HH:mm");
 }
 
 function reiniciarHistorialCorreo() {
@@ -1180,7 +1278,7 @@ function reiniciarHistorialCorreo() {
   if (r !== ui.Button.YES) return;
   var hoja = obtenerHojaHistorialCorreo_(SpreadsheetApp.getActiveSpreadsheet());
   var last = hoja.getLastRow();
-  if (last > 2) hoja.getRange(3, 1, last - 2, 12).clearContent();
+  if (last > 2) hoja.getRange(3, 1, last - 2, HEADERS_HISTORIAL_CORREO_.length).clearContent();
   ui.alert("Listo. El siguiente reporte enviará todo el detalle actual.");
 }
 
@@ -1211,6 +1309,7 @@ function extraerFilasDetalleCorreo_(valores, displays) {
   var idxDia = idxDe(["dia"]);
   var idxFecha = idxDe(["fecha"]);
   var idxLinea = idxDe(["linea"]);
+  var idxTurno = idxDe(["turno"]);
   var idxMo = idxDe(["mo", "m.o."]);
   var idxSku = idxDe(["sku"]);
   var idxProd = idxDe(["producto", "modelo"]);
@@ -1225,10 +1324,13 @@ function extraerFilasDetalleCorreo_(valores, displays) {
     var disp = (displays && displays[i]) ? displays[i] : fila;
     var cant = idxCant !== -1 ? Number(fila[idxCant]) || 0 : 0;
     if (cant <= 0) continue;
+    var turnoVal = idxTurno !== -1 ? fila[idxTurno] : "";
+    var turnoDisp = idxTurno !== -1 ? disp[idxTurno] : "";
     var obj = {
       dia: idxDia !== -1 ? fila[idxDia] : "",
       fecha: idxFecha !== -1 ? fila[idxFecha] : "",
       linea: idxLinea !== -1 ? fila[idxLinea] : "",
+      turno: turnoVal,
       mo: idxMo !== -1 ? fila[idxMo] : "",
       sku: idxSku !== -1 ? fila[idxSku] : "",
       producto: idxProd !== -1 ? fila[idxProd] : "",
@@ -1240,6 +1342,7 @@ function extraerFilasDetalleCorreo_(valores, displays) {
         dia: idxDia !== -1 ? disp[idxDia] : "",
         fecha: idxFecha !== -1 ? disp[idxFecha] : "",
         linea: idxLinea !== -1 ? disp[idxLinea] : "",
+        turno: turnoDisp || etiquetaTurno_(clasificarTurno_(turnoVal)),
         mo: idxMo !== -1 ? disp[idxMo] : "",
         sku: idxSku !== -1 ? disp[idxSku] : "",
         producto: idxProd !== -1 ? disp[idxProd] : "",
@@ -1267,6 +1370,7 @@ function consolidarDetallePorClave_(filas) {
         dia: f.dia,
         fecha: f.fecha,
         linea: f.linea,
+        turno: f.turno,
         mo: f.mo,
         sku: f.sku,
         producto: f.producto,
@@ -1300,6 +1404,7 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
       dia: f.dia,
       fecha: f.fecha,
       linea: f.linea,
+      turno: f.turno,
       mo: f.mo,
       sku: f.sku,
       producto: f.producto,
@@ -1328,6 +1433,7 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
       dia: "",
       fecha: "",
       linea: "",
+      turno: "",
       mo: "",
       sku: "",
       producto: "",
@@ -1350,27 +1456,74 @@ function esFilaTotalTablero_(fila) {
   return nom.indexOf("total") === 0;
 }
 
+function esFilaMarcadorTurno_(fila) {
+  return turnoDeBloque_(fila && fila[1] != null ? fila[1] : "") !== "";
+}
+
+function filaTableroTieneValor_(fila) {
+  for (var j = 1; j < Math.min(16, (fila || []).length); j++) {
+    if (String(fila[j] == null ? "" : fila[j]).trim() !== "") return true;
+  }
+  return false;
+}
+
 function limitesTableroCorreo_(datos) {
+  var bloques = dividirTablerosTracking_(datos);
+  if (!bloques.length) return { first: 0, last: -1, lastCol: 1 };
+  return { first: bloques[0].first, last: bloques[0].last, lastCol: bloques[0].lastCol };
+}
+
+function dividirTablerosTracking_(datos) {
+  var bloques = [];
   var first = -1;
   var last = -1;
   var lastCol = 1;
-  var tope = Math.min(40, datos.length);
+  var hayLinea = false;
+  var titulo = tituloTableroTurno_("diurno");
+  var pendingTitulo = tituloTableroTurno_("diurno");
+  var tope = Math.min(80, datos.length);
+
+  function cerrarBloque() {
+    if (first !== -1 && last >= first && hayLinea) {
+      bloques.push({ titulo: titulo, first: first, last: last, lastCol: lastCol });
+    }
+    first = -1;
+    last = -1;
+    lastCol = 1;
+    hayLinea = false;
+  }
+
   for (var i = 0; i < tope; i++) {
     var fila = datos[i] || [];
-    var hay = false;
-    for (var j = 1; j < Math.min(16, fila.length); j++) {
-      if (String(fila[j] == null ? "" : fila[j]).trim() !== "") {
-        hay = true;
-        lastCol = Math.max(lastCol, j);
+    if (!filaTableroTieneValor_(fila)) continue;
+
+    if (esFilaMarcadorTurno_(fila)) {
+      if (first !== -1 && hayLinea) cerrarBloque();
+      pendingTitulo = tituloTableroTurno_(turnoDeBloque_(fila[1]));
+      titulo = pendingTitulo;
+      first = i;
+      last = i;
+      lastCol = 1;
+      hayLinea = false;
+      for (var jm = 1; jm < Math.min(16, fila.length); jm++) {
+        if (String(fila[jm] == null ? "" : fila[jm]).trim() !== "") lastCol = Math.max(lastCol, jm);
       }
+      continue;
     }
-    if (!hay) continue;
-    if (first === -1) first = i;
+
+    for (var j = 1; j < Math.min(16, fila.length); j++) {
+      if (String(fila[j] == null ? "" : fila[j]).trim() !== "") lastCol = Math.max(lastCol, j);
+    }
+    if (first === -1) {
+      first = i;
+      titulo = pendingTitulo;
+    }
     last = i;
-    if (esFilaTotalTablero_(fila)) break;
+    if (esFilaLineaTablero_(fila)) hayLinea = true;
+    if (esFilaTotalTablero_(fila)) cerrarBloque();
   }
-  if (first === -1) return { first: 0, last: -1, lastCol: 1 };
-  return { first: first, last: last, lastCol: lastCol };
+  cerrarBloque();
+  return bloques;
 }
 
 function columnasUsadasTablero_(datos, first, last, lastCol, ocultar) {
@@ -1398,17 +1551,17 @@ function htmlCeldaTablero_(tag, val, bg, fg, bold, conBorde) {
     escapeHtml_(val == null ? "" : val) + "</" + tag + ">";
 }
 
-function construirHtmlTableroTracking_(datos, fondos, colores) {
-  var lim = limitesTableroCorreo_(datos);
-  if (lim.last < lim.first) return "";
-  var cols = columnasUsadasTablero_(datos, lim.first, lim.last, lim.lastCol, {});
+function construirHtmlTableroEnRango_(datos, fondos, colores, first, last, lastCol) {
+  if (last < first) return "";
+  var cols = columnasUsadasTablero_(datos, first, last, lastCol, {});
   if (!cols.length) return "";
 
   var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; border: none; width: 100%; font-size: 13px; margin-bottom: 20px;'>";
-  for (var i = lim.first; i <= lim.last; i++) {
+  for (var i = first; i <= last; i++) {
     if (String((datos[i] || []).join("")).trim() === "") continue;
     var esLinea = esFilaLineaTablero_(datos[i]);
     var esTotal = esFilaTotalTablero_(datos[i]);
+    var esMarcador = esFilaMarcadorTurno_(datos[i]);
     var isHeader = !esLinea && !esTotal;
     var tag = isHeader ? "th" : "td";
     html += "<tr>";
@@ -1417,7 +1570,7 @@ function construirHtmlTableroTracking_(datos, fondos, colores) {
       var val = datos[i][j];
       var bg = (fondos[i] && fondos[i][j]) ? fondos[i][j] : "";
       var fg = (colores[i] && colores[i][j]) ? colores[i][j] : "";
-      html += htmlCeldaTablero_(tag, val, bg, fg, isHeader || esTotal, false);
+      html += htmlCeldaTablero_(tag, val, bg, fg, isHeader || esTotal || esMarcador, false);
     }
     html += "</tr>";
   }
@@ -1425,10 +1578,27 @@ function construirHtmlTableroTracking_(datos, fondos, colores) {
   return html;
 }
 
+function construirHtmlTableroTracking_(datos, fondos, colores) {
+  var lim = limitesTableroCorreo_(datos);
+  return construirHtmlTableroEnRango_(datos, fondos, colores, lim.first, lim.last, lim.lastCol);
+}
+
+function construirHtmlTablerosTracking_(datos, fondos, colores) {
+  var bloques = dividirTablerosTracking_(datos);
+  if (!bloques.length) return construirHtmlTableroTracking_(datos, fondos, colores);
+  var html = "";
+  for (var b = 0; b < bloques.length; b++) {
+    var bl = bloques[b];
+    html += "<h4 style='color: #2b5797; margin: 16px 0 8px 0;'>" + escapeHtml_(bl.titulo) + "</h4>";
+    html += construirHtmlTableroEnRango_(datos, fondos, colores, bl.first, bl.last, bl.lastCol);
+  }
+  return html;
+}
+
 function construirHtmlDetalle_(filasNuevas, fondosHeader, colorHeader) {
   var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; width: 100%; font-size: 13px;'>";
-  var headers = ["Dia", "Fecha", "Linea", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
-  var keys = ["dia", "fecha", "linea", "mo", "sku", "producto", "genero", "color", "talla", "cantidad"];
+  var headers = ["Dia", "Fecha", "Linea", "Turno", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
+  var keys = ["dia", "fecha", "linea", "turno", "mo", "sku", "producto", "genero", "color", "talla", "cantidad"];
   html += "<tr>";
   for (var h = 0; h < headers.length; h++) {
     html += htmlCeldaTablero_("th", headers[h], fondosHeader || "#434343", colorHeader || "#FFFFFF", true, true);
@@ -1459,7 +1629,7 @@ function enviarReporteProduccion() {
 
   var confirm = ui.alert(
     "Enviar Reporte de Producción",
-    "El resumen copiará el tablero 'Tracking - Produccion' tal cual está en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
+    "El resumen copiará los tableros diurno y nocturno de 'Tracking - Produccion' tal cual están en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
@@ -1495,7 +1665,7 @@ function enviarReporteProduccion() {
     return;
   }
 
-  var rangoTrack = hojaTracking.getRange(1, 1, Math.min(40, Math.max(hojaTracking.getLastRow(), 1)), Math.min(16, Math.max(hojaTracking.getLastColumn(), 1)));
+  var rangoTrack = hojaTracking.getRange(1, 1, Math.min(80, Math.max(hojaTracking.getLastRow(), 1)), Math.min(16, Math.max(hojaTracking.getLastColumn(), 1)));
   var datosTracking = rangoTrack.getDisplayValues();
   var fondosTracking = rangoTrack.getBackgrounds();
   var coloresTracking = rangoTrack.getFontColors();
@@ -1521,16 +1691,16 @@ function enviarReporteProduccion() {
 
   ss.toast("Generando tablas HTML...", "Enviando Reporte", 10);
 
-  var htmlTablero = construirHtmlTableroTracking_(datosTracking, fondosTracking, coloresTracking);
+  var htmlTableros = construirHtmlTablerosTracking_(datosTracking, fondosTracking, coloresTracking);
   var htmlDetalle = construirHtmlDetalle_(filasNuevas, "#434343", "#FFFFFF");
 
   var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
   htmlBody += "<h2 style='color: #2b5797;'>Reporte de Producción Diaria</h2>";
   htmlBody += "<p>Estimado equipo,</p>";
-  htmlBody += "<p>El resumen general copia el tablero de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
+  htmlBody += "<p>El resumen copia los tableros diurno y nocturno de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
 
   htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen General (Tracking)</h3>";
-  htmlBody += "<div style='overflow-x: auto;'>" + htmlTablero + "</div>";
+  htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";
 
   htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>2. Detalle de Producción</h3>";
   htmlBody += "<div style='overflow-x: auto;'>" + htmlDetalle + "</div>";
