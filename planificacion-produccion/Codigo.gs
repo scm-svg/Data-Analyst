@@ -1,10 +1,18 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.49 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.50 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - COLUMNA LOTE (Por Hacer col. J): el número de lote ya no va
+ *     dentro de Producto. El nombre de modelo es Producto + Género +
+ *     "Lote N". Si el lote es 0 (o vacío), solo Producto + Género.
+ *     Ese string se usa en MO, Priorizacion, Planificacion, Semana
+ *     2–12, Proyeccion, Entrada de Almacen Modelo y el dashboard.
+ *     Proyeccion - SKUS, Entrada de Almacen - Skus e Historial MO
+ *     (registros nuevos) ganan la columna Lote. Los drill-down de
+ *     variantes no duplican esa columna: el lote vive en el modelo.
  *   - CALENDARIO TOOLTIP FIJO: en Detalle diario el recuadro de
  *     variantes se puede entrar y bajar. Ya no se cierra al salir un
  *     milímetro del modelo. Clic en el modelo lo fija; Esc o clic
@@ -53,9 +61,9 @@
  *     indicar el %). Línea 5 no cambia.
  *   - LOTES POR MO + MODELO: se quita el bloqueo que impedía repetir
  *     un SKU en Por Hacer. La identidad es MO + modelo (el lote va en
- *     Producto, ej. MAR LOTE 1 KIDS). Dos filas del mismo SKU no se
- *     juntan ni se pisan la MO. Solo se revierte un verdadero
- *     duplicado: mismo SKU + misma MO + mismo modelo.
+ *     la columna Lote; el modelo queda "MAR KIDS Lote 1"). Dos filas
+ *     del mismo SKU no se juntan ni se pisan la MO. Solo se revierte
+ *     un verdadero duplicado: mismo SKU + misma MO + mismo modelo.
  *   - DIVISION (Priorizacion col. I): Si / Sí parte las variantes a
  *     la mitad y las produce en vueltas (1ª = todas las variantes al
  *     50%, 2ª = el resto en el mismo orden). Vacío u otro valor =
@@ -267,7 +275,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.49";
+var VERSION_SISTEMA = "5.9.50";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -703,12 +711,88 @@ function claveModeloNorm_(s) {
   return quitarTildes_(normLow_(s)).replace(/\s+/g, " ");
 }
 
-/** Quita "LOTE 1" / "Lote #2" del nombre para cruzar Priorizacion (MAR KIDS) con Por Hacer (MAR LOTE 1 KIDS). */
-function modeloSinLote_(modelo) {
-  var n = norm_(modelo).replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+/** Número/código de lote para mostrar. 0, 0.0 y vacío → "" (no se escribe "Lote"). */
+function textoLote_(lote) {
+  if (lote === true || lote === false || lote === null || lote === undefined || lote === "") return "";
+  if (typeof lote === "number") {
+    if (!isFinite(lote) || lote === 0) return "";
+    return (Math.floor(lote) === lote) ? String(Math.floor(lote)) : String(lote);
+  }
+  var s = String(lote).trim();
+  if (s === "" || s === "--") return "";
+  s = s.replace(/^["']+|["']+$/g, "").trim();
+  if (s === "") return "";
+  if (/^\d+(\.0+)?$/.test(s)) {
+    var n = Number(s);
+    if (!isFinite(n) || n === 0) return "";
+    return String(Math.floor(n));
+  }
+  return s;
+}
+
+function loteDesdeNombre_(producto) {
+  var n = norm_(producto).replace(/\s*\(\s*especial\s*\)\s*$/i, "");
+  var m = n.match(/\blote\s*#?\s*"?([^"\s]+)"?/i);
+  if (!m) return "";
+  return textoLote_(m[1]);
+}
+
+/** Si la celda Lote trae valor (incluido 0), manda esa celda. Vacía → intenta el nombre viejo "MAR LOTE 1". */
+function loteDeFila_(loteCelda, producto) {
+  if (loteCelda !== "" && loteCelda !== null && loteCelda !== undefined) {
+    return textoLote_(loteCelda);
+  }
+  return loteDesdeNombre_(producto);
+}
+
+function idxLote_(headers) {
+  var i;
+  for (i = 0; i < (headers || []).length; i++) {
+    var h = quitarTildes_(normLow_(headers[i]));
+    if (h === "lote" || h === "lotes" || h === "nro lote" || h === "num lote" ||
+        h === "n lote" || h === "numero de lote" || h === "no lote") return i;
+  }
+  return -1;
+}
+
+/** Quita "LOTE 1" / 'Lote "M"' / "Lote NUEVO" de Producto o del modelo armado. */
+function productoLimpio_(producto) {
+  var n = norm_(producto).replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
   if (n === "") return "";
-  n = n.replace(/\s+lote\s*#?\s*\d+\b/ig, " ").replace(/\s+/g, " ").trim();
+  n = n.replace(/\s+lote\s*#?\s*"?[^"\s]+"?/ig, " ").replace(/\s+/g, " ").trim();
   return n;
+}
+
+function modeloSinLote_(modelo) {
+  return productoLimpio_(modelo);
+}
+
+function partesModeloLote_(modelo) {
+  var n = norm_(modelo).replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+  return { base: modeloSinLote_(n), lote: loteDesdeNombre_(n) };
+}
+
+function mismaIdentidadModelo_(a, b) {
+  var pa = partesModeloLote_(a), pb = partesModeloLote_(b);
+  return claveModeloNorm_(pa.base) === claveModeloNorm_(pb.base) &&
+    claveModeloNorm_(pa.lote) === claveModeloNorm_(pb.lote);
+}
+
+/**
+ * Producto + Género + "Lote N". Lote 0/vacío omite la palabra y el número.
+ * Limpia un "LOTE 1" que aún viva dentro de Producto.
+ */
+function formatoModelo_(producto, genero, lote, esEspecial) {
+  var prod = productoLimpio_(producto);
+  var gen = norm_(genero);
+  var partes = [];
+  if (prod) partes.push(prod);
+  if (gen && gen !== "--") partes.push(gen);
+  var lot = textoLote_(lote);
+  if (lot) partes.push("Lote " + lot);
+  var modelo = partes.join(" ");
+  if (esEspecial) modelo += (modelo ? " " : "") + "(Especial)";
+  return modelo;
 }
 
 function valorMapaModelo_(mapa, modelo) {
@@ -719,15 +803,8 @@ function valorMapaModelo_(mapa, modelo) {
   for (k in mapa) {
     if (Object.prototype.hasOwnProperty.call(mapa, k) && claveModeloNorm_(k) === alvo) return mapa[k];
   }
-  var sin = modeloSinLote_(modelo);
-  if (sin && claveModeloNorm_(sin) !== alvo) {
-    if (Object.prototype.hasOwnProperty.call(mapa, sin)) return mapa[sin];
-    var alvo2 = claveModeloNorm_(sin);
-    for (k in mapa) {
-      if (!Object.prototype.hasOwnProperty.call(mapa, k)) continue;
-      if (claveModeloNorm_(k) === alvo2) return mapa[k];
-      if (claveModeloNorm_(modeloSinLote_(k)) === alvo2) return mapa[k];
-    }
+  for (k in mapa) {
+    if (Object.prototype.hasOwnProperty.call(mapa, k) && mismaIdentidadModelo_(k, modelo)) return mapa[k];
   }
   return undefined;
 }
@@ -802,13 +879,11 @@ function prioHayVivo_(modelosUnicos, modelo, tipo) {
   if (!modelosUnicos) return false;
   var exact = modelo + "||" + tipo;
   if (modelosUnicos.has(exact)) return true;
-  var alvo = claveModeloNorm_(modeloSinLote_(modelo) || modelo);
   var found = false;
   modelosUnicos.forEach(function (clave) {
     var partes = String(clave).split("||");
     if (partes[1] !== tipo) return;
-    if (claveModeloNorm_(partes[0]) === alvo) found = true;
-    if (claveModeloNorm_(modeloSinLote_(partes[0])) === alvo) found = true;
+    if (mismaIdentidadModelo_(partes[0], modelo)) found = true;
   });
   return found;
 }
@@ -816,9 +891,27 @@ function prioHayVivo_(modelosUnicos, modelo, tipo) {
 function prioCubreModelo_(existentes, modelo, tipo) {
   if (!existentes) return false;
   if (existentes.has(modelo + "||" + tipo)) return true;
-  var base = modeloSinLote_(modelo);
-  if (base && existentes.has(base + "||" + tipo)) return true;
-  return false;
+  var found = false;
+  existentes.forEach(function (clave) {
+    var partes = String(clave).split("||");
+    if (partes[1] !== tipo) return;
+    if (mismaIdentidadModelo_(partes[0], modelo)) found = true;
+  });
+  return found;
+}
+
+function canonModeloVivo_(modelosUnicos, modelo, tipo) {
+  var exact = modelo + "||" + tipo;
+  if (modelosUnicos && modelosUnicos.has(exact)) return modelo;
+  var found = "";
+  if (modelosUnicos) {
+    modelosUnicos.forEach(function (clave) {
+      var partes = String(clave).split("||");
+      if (partes[1] !== tipo) return;
+      if (mismaIdentidadModelo_(partes[0], modelo)) found = partes[0];
+    });
+  }
+  return found || modelo;
 }
 
 function claveLoteMO_(sku, tipo, mo, modelo) {
@@ -855,7 +948,8 @@ function resolverClaveActivaMO_(sku, tipo, mo, modelo, skusActivos, metaActivos)
     var m = metaActivos[k] || {};
     if (normUp_(m.sku) !== skuN) continue;
     if ((norm_(m.tipo) || "Producción") !== tipoN) continue;
-    if (alvo && claveModeloNorm_(m.modelo || "") !== alvo) continue;
+    if (alvo && claveModeloNorm_(m.modelo || "") !== alvo &&
+        !mismaIdentidadModelo_(m.modelo || "", modelo || "")) continue;
     var moA = claveLookupMO_(m.mo);
     if (moB && moA && moB !== moA) continue;
     hits.push(k);
@@ -958,7 +1052,7 @@ function ordenGenero_(g) {
 }
 
 function familiaDeNombre_(modelo) {
-  var n = norm_(modelo).replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+  var n = modeloSinLote_(modelo);
   if (n === "") return "";
   var parts = n.split(/\s+/);
   if (parts.length >= 2 && esTokenGenero_(parts[parts.length - 1])) {
@@ -974,7 +1068,7 @@ function familiaDeTarea_(t) {
 
 function generoDeTarea_(t) {
   if (t && t.genero && norm_(t.genero) !== "" && norm_(t.genero) !== "--") return t.genero;
-  var n = norm_(t ? t.modelo : "").replace(/\s*\(\s*especial\s*\)\s*$/i, "").trim();
+  var n = modeloSinLote_(t ? t.modelo : "");
   var parts = n.split(/\s+/);
   if (parts.length >= 2 && esTokenGenero_(parts[parts.length - 1])) return parts[parts.length - 1];
   return t && t.genero ? t.genero : "";
@@ -1179,7 +1273,8 @@ function cloneTask(t, newQty, isFase2) {
     esSkuPrio: !!t.esSkuPrio,
     skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999,
     vuelta: t.vuelta || 0,
-    volColor: t.volColor || 0
+    volColor: t.volColor || 0,
+    lote: t.lote || ""
   };
 }
 
@@ -1451,6 +1546,7 @@ function leerMinimasSku_(ss) {
   if (iSku === -1) iSku = 0;
   var iProd = idxPorFragmento_(headers, ["producto", "modelo"]);
   var iGen = idxPorFragmento_(headers, ["genero", "género"]);
+  var iLoteSku = idxLote_(headers);
   var iMin = idxCantidadMinima_(headers);
   var iFec = idxPorFragmento_(headers, ["fecha"]);
   var iLin = idxPorFragmento_(headers, ["linea", "línea"]);
@@ -1465,7 +1561,8 @@ function leerMinimasSku_(ss) {
     if (!(minVal > 0)) continue;
     var prod = iProd !== -1 ? norm_(datos[i][iProd]) : "";
     var gen = iGen !== -1 ? norm_(datos[i][iGen]) : "";
-    var modelo = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
+    var loteSku = iLoteSku !== -1 ? datos[i][iLoteSku] : "";
+    var modelo = formatoModelo_(prod, gen, loteDeFila_(loteSku, prod), false);
     mapa[claveSku_(sku)] = {
       sku: sku,
       min: minVal,
@@ -1529,6 +1626,7 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
   var iMO   = idxExacto_(headers, "MO");
   var iMoSt = idxPorFragmento_(headers, ["mo status"]);
   var iFec  = idxPorFragmento_(headers, ["fecha de salida", "fecha salida"]);
+  var iLote = idxLote_(headers);
 
   if (iSKU === -1 || iProd === -1 || iCant === -1 || iCap === -1 || (!esEspecial && iLin === -1)) {
     SpreadsheetApp.getUi().alert(
@@ -1616,19 +1714,21 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
     var noLabTexto = iNoLab !== -1 ? normLow_(fila[iNoLab]) : "";
     var diaNoLaborable = mapaDias[noLabTexto] !== undefined ? mapaDias[noLabTexto] : -1;
 
-    var modelo = productoBase + (genero !== "" && genero !== "--" ? " " + genero : "");
-    var detalle = productoBase;
+    var loteTxt = loteDeFila_(iLote !== -1 ? fila[iLote] : "", productoBase);
+    var productoNom = productoLimpio_(productoBase);
+    var modelo = formatoModelo_(productoBase, genero, loteTxt, false);
+    var detalle = productoNom;
     if (genero !== "" && genero !== "--") detalle += " " + genero;
     if (talla !== "" && talla !== "--") detalle += " " + talla;
     if (color !== "" && color !== "--") detalle += " " + color;
 
-    var detalleAlmacen = productoBase;
+    var detalleAlmacen = productoNom;
     if (genero !== "" && genero !== "--") detalleAlmacen += " - " + genero;
     if (color !== "" && color !== "--") detalleAlmacen += " - " + color;
     if (talla !== "" && talla !== "--") detalleAlmacen += " - " + talla;
 
     if (esEspecial) {
-      modelo += " (Especial)";
+      modelo = formatoModelo_(productoBase, genero, loteTxt, true);
       detalle += " (Especial)";
       detalleAlmacen += " (Especial)";
     }
@@ -1650,7 +1750,8 @@ function leerEmbudo_(hoja, esEspecial, mapaPrioridades, mapaFechaModelo, tareas,
       cantidad: cantEfectiva, cantidadOriginal: cantSolicitada, solicitadaOrig: cantSolicitada, cap: cap,
       prioridadNum: esEspecial ? 0 : (prioLookup !== undefined ? prioLookup : 5),
       esEspecial: esEspecial, fechaKey: fechaKey, diaIngreso: diaIngreso, diaNoLaborable: diaNoLaborable,
-      mo: mo, genero: genero, familia: productoBase, color: color, colorRank: rangoColor_(color), talla: talla,
+      mo: mo, genero: genero, familia: productoNom || familiaDeNombre_(modelo), color: color, colorRank: rangoColor_(color), talla: talla,
+      lote: loteTxt,
       restante: cantEfectiva, planificada: 0, planificadaSem1: 0, ultimoDia: -1, plan: {},
       indice: (esEspecial ? -100000 : 0) + i, fase2: false, lineaFija: null, esMinima: false,
       esSkuPrio: false, skuPrioOrden: 9999, vuelta: 0, volColor: 0
@@ -3239,6 +3340,7 @@ function generarPlanificacionSemanal_() {
         sku: t.sku,
         modelo: t.modelo,
         detalle: t.detalle,
+        lote: t.lote || "",
         genero: t.genero, color: t.color, talla: t.talla, cap: t.cap,
         lineas: t.lineas, esEspecial: t.esEspecial,
         solicitada: 0, sem1: 0, prioMin: t.prioridadNum,
@@ -3414,7 +3516,7 @@ function generarPlanificacionSemanal_() {
     "• Tableros: primero el remanente del día, luego el modelo que sigue la semana.\n" +
     "• Almacén: entrada a 4 días hábiles de costura.\n" +
     "• MOs atómicas (1 línea): " + mosAtomicas + (mosMultiLinea ? "\n⚠️ MOs partidas (no debería ocurrir): " + mosMultiLinea : "") + "\n" +
-    "• Lotes: el mismo SKU puede repetirse; se distingue por MO + modelo (lote en Producto).\n" +
+    "• Lotes: el mismo SKU puede repetirse; se distingue por MO + modelo (columna Lote; lote 0 no se escribe).\n" +
     "• Division=Si (Priorizacion col. I): dos vueltas al 50% en el mismo orden de variantes.\n" +
     "• Color: Negro → Blanco → Marino; el resto por volumen del color (sin saltos en Proyeccion - SKUS). Géneros que comparten línea alternan dentro del color.\n" +
     "• Proyección: amarillo al llegar a la mínima, verde al llegar a la meta."
@@ -3955,10 +4057,10 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   var hojaProy = ss.getSheetByName("Proyeccion") || ss.insertSheet("Proyeccion");
   var hojaProySkus = ss.getSheetByName("Proyeccion - SKUS") || ss.insertSheet("Proyeccion - SKUS");
   limpiarHojaProy_(hojaProy, 3 + cfg.semanas + 5);
-  limpiarHojaProy_(hojaProySkus, 5 + cfg.semanas + 10);
+  limpiarHojaProy_(hojaProySkus, 6 + cfg.semanas + 10);
 
   var cabProy = ["Modelo", "Fecha Objetivo", "Meta (Faltante)"];
-  var cabProySku = ["SKU", "Modelo", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"];
+  var cabProySku = ["SKU", "Modelo", "Lote", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"];
   for (var w2 = 0; w2 < cfg.semanas; w2++) {
     var etq = "Acum Sem " + (w2 + 1) + " (" + Utilities.formatDate(fechaDeDia_(cfg, w2 * DIAS_LABORALES), cfg.tz, "dd/MM") + ")";
     cabProy.push(etq);
@@ -3967,9 +4069,9 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
   cabProy.push("Sin Programar", "Fecha Estim. Término", "Estado");
   cabProySku.push("Sin Programar", "Fecha Estim. Término", "Estado", "Genero", "Color", "Talla", "Linea", "Cap Produccion por Dia", "Tipo");
   var idxSemProy = 3;
-  var idxSemSku = 5;
+  var idxSemSku = 6;
   var idxEstadoProy = 3 + cfg.semanas + 2;
-  var idxEstadoSku = 5 + cfg.semanas + 2;
+  var idxEstadoSku = 6 + cfg.semanas + 2;
 
   var modelosOrdenados = Object.keys(infoModelo).sort(function (a, b) {
     var ia = infoModelo[a], ib = infoModelo[b];
@@ -4012,7 +4114,7 @@ function dibujarProyecciones_(ss, cfg, infoModelo, infoSku) {
     }
     if (!(isku.solicitada > 0)) continue;
     var estadoSku = estadoProyeccion_(isku.restante, isku.fechaObj, fechaFinMsSku);
-    var filaS = [isku.sku, isku.modelo, isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
+    var filaS = [isku.sku, isku.modelo, isku.lote || "", isku.detalle, formatoFecha_(cfg, isku.fechaObj), isku.solicitada];
     var acumSku = valoresAcumuladosSemanas_(isku.porSemana, cfg.semanas, isku.solicitada);
     for (var w3S = 0; w3S < cfg.semanas; w3S++) filaS.push(acumSku[w3S]);
     filaS.push(isku.restante === 0 ? "--" : isku.restante);
@@ -4113,14 +4215,22 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
   var viejosSku = {};
   if (hojaAlmacenSku.getLastRow() >= 3) {
     var maxF_S = hojaAlmacenSku.getLastRow() - 2;
-    var dSku = hojaAlmacenSku.getRange(3, 2, maxF_S, 8).getValues();
-    var fSku = hojaAlmacenSku.getRange(3, 2, maxF_S, 8).getFormulas();
+    var nColsSku = Math.max(8, hojaAlmacenSku.getLastColumn() - 1);
+    var dSku = hojaAlmacenSku.getRange(3, 2, maxF_S, nColsSku).getValues();
+    var fSku = hojaAlmacenSku.getRange(3, 2, maxF_S, nColsSku).getFormulas();
+    var hdrSkuA = hojaAlmacenSku.getRange(2, 2, 1, nColsSku).getValues()[0].map(function (h) {
+      return quitarTildes_(normLow_(h));
+    });
+    var iRecA = hdrSkuA.findIndex(function (h) { return h.indexOf("recepcionado") !== -1; });
+    var iFalA = hdrSkuA.findIndex(function (h) { return h.indexOf("faltante") !== -1; });
+    if (iRecA < 0) iRecA = nColsSku >= 9 ? 7 : 6;
+    if (iFalA < 0) iFalA = nColsSku >= 9 ? 8 : 7;
     dSku.forEach(function (r, i) {
       var k = norm_(r[0]) + "_" + norm_(r[1]);
       if (k !== "_") {
         viejosSku[k] = {
-          rec: fSku[i][6] ? fSku[i][6] : r[6],
-          fal: fSku[i][7] ? fSku[i][7] : r[7]
+          rec: fSku[i][iRecA] ? fSku[i][iRecA] : r[iRecA],
+          fal: fSku[i][iFalA] ? fSku[i][iFalA] : r[iFalA]
         };
       }
     });
@@ -4133,7 +4243,7 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     if (!agrupadoSku[key]) {
       agrupadoSku[key] = {
         mo: moClave, sku: t.sku, producto: t.detalleAlmacen,
-        modelo: t.modelo, color: t.color, talla: t.talla,
+        modelo: t.modelo, lote: t.lote || "", color: t.color, talla: t.talla,
         cantidad: t.solicitadaOrig !== undefined ? t.solicitadaOrig : t.cantidadOriginal,
         diaFin: -1, diaInicio: 9999, prioMin: t.prioridadNum,
         esSkuPrio: !!t.esSkuPrio, skuPrioOrden: t.skuPrioOrden !== undefined ? t.skuPrioOrden : 9999
@@ -4215,7 +4325,7 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     var v = viejosSku[norm_(tG.mo) + "_" + norm_(tG.sku)] || { rec: "", fal: "" };
 
     arrSku.push([
-      tG.mo, tG.sku, tG.producto, tG.cantidad,
+      tG.mo, tG.sku, tG.producto, tG.lote || "", tG.cantidad,
       isFinite(msSalida) ? formatoFecha_(cfg, msSalida) : "--",
       (msEntrada !== Infinity && isFinite(msEntrada.getTime())) ? formatoFecha_(cfg, msEntrada.getTime()) : "--",
       v.rec, v.fal
@@ -4233,16 +4343,21 @@ function dibujarAlmacen_(ss, cfg, tareas, infoModelo, totalDias) {
     hojaAlmacenModelo.getRange(3, 2, richTextModelo.length, 1).setRichTextValues(richTextModelo);
   }
 
+  hojaAlmacenSku.getRange(2, 2, 1, 9)
+    .setValues([["MO", "SKU", "Producto", "Lote", "CANTIDAD", "Fecha Salida de Costura", "Fecha Entrada de Almacen", "Recepcionado", "Faltantes"]])
+    .setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+
   var sRows = hojaAlmacenSku.getMaxRows();
   if (sRows > 2) {
-    hojaAlmacenSku.getRange(3, 2, sRows - 2, 8).clearContent().setBorder(false, false, false, false, false, false);
+    hojaAlmacenSku.getRange(3, 2, sRows - 2, 9).clearContent().setBorder(false, false, false, false, false, false);
   }
   if (arrSku.length > 0) {
-    hojaAlmacenSku.getRange(3, 2, arrSku.length, 8).setValues(arrSku)
+    hojaAlmacenSku.getRange(3, 2, arrSku.length, 9).setValues(arrSku)
       .setHorizontalAlignment("center").setVerticalAlignment("middle")
       .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
     hojaAlmacenSku.getRange(3, 2, arrSku.length, 1).setNumberFormat("@");
     hojaAlmacenSku.getRange(3, 3, arrSku.length, 1).setNumberFormat("@");
+    hojaAlmacenSku.getRange(3, 5, arrSku.length, 1).setNumberFormat("@");
   }
 }
 
@@ -4300,6 +4415,7 @@ function actualizarModelosPriorizacion_() {
     var headers = datos[1];
     var iProd = idxProductoEmbudo_(headers, datos[0]);
     var iGen = idxPorFragmento_(headers, ["genero", "género"]);
+    var iLoteP = idxLote_(headers);
     var iCant = idxPorFragmento_(headers, ["cantidad solicitada"]);
     var iFalt = idxPorFragmento_(headers, ["faltante"]);
     var iProdQty = idxPorFragmento_(headers, ["producida"]);
@@ -4312,7 +4428,8 @@ function actualizarModelosPriorizacion_() {
       var prod = norm_(datos[i][iProd]);
       if (prod === "") continue;
       var gen = iGen !== -1 ? norm_(datos[i][iGen]) : "";
-      var nombreCompleto = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
+      var loteP = loteDeFila_(iLoteP !== -1 ? datos[i][iLoteP] : "", prod);
+      var nombreCompleto = formatoModelo_(prod, gen, loteP, false);
       var falt = faltanteDeFila_(datos[i], iCant, iFalt, iProdQty);
       tot[nombreCompleto] = (tot[nombreCompleto] || 0) + falt;
     }
@@ -4360,8 +4477,9 @@ function actualizarModelosPriorizacion_() {
 
       var clave = modP + "||" + tipoP;
       if (prioHayVivo_(modelosUnicos, modP, tipoP)) {
+        var canonP = canonModeloVivo_(modelosUnicos, modP, tipoP);
         conservados.push([
-          modP, tipoP,
+          canonP, tipoP,
           datosP[j][2] !== undefined ? datosP[j][2] : "",
           datosP[j][3] !== undefined ? datosP[j][3] : "",
           datosP[j][4] !== undefined ? datosP[j][4] : "",
@@ -4369,9 +4487,8 @@ function actualizarModelosPriorizacion_() {
           datosP[j][6] !== undefined ? datosP[j][6] : "",
           datosP[j][7] !== undefined ? datosP[j][7] : ""
         ]);
+        existentes.add(canonP + "||" + tipoP);
         existentes.add(clave);
-        var baseP = modeloSinLote_(modP);
-        if (baseP) existentes.add(baseP + "||" + tipoP);
       } else {
         huerfanos++;
       }
@@ -4411,7 +4528,7 @@ function actualizarModelosPriorizacion_() {
     : "✅ ACTUALIZACIÓN:\nTu lista de priorización está al día.";
   msg += "\n\nColumna H Secuencia: escribe No para que el modelo no entre al lote familiar (no espera ni cede color/género a un hermano). En L5 además corre solo.";
   msg += "\nColumna I Division: escribe Si para producir el modelo en dos vueltas al 50%.";
-  msg += "\nSi el producto en Por Hacer trae lote (MAR LOTE 1 KIDS), se conserva la fila base (MAR KIDS).";
+  msg += "\nEl modelo se arma como Producto + Género + Lote N (lote 0 no se escribe). Filas viejas tipo MAR LOTE 1 KIDS se reescriben a MAR KIDS Lote 1.";
   msg += "\nLa hoja 'Priorizacion - SKUs' está lista: ingresa SKU y Cantidad Minima a mano (Líneas se calcula sola).";
   SpreadsheetApp.getUi().alert("RESUMEN DE PRIORIZACIÓN\n\n" + msg);
 }
@@ -4420,7 +4537,7 @@ function actualizarModelosPriorizacion_() {
 //  GESTOR DE ÓRDENES: actualizarMOs()
 // =====================================================================
 var CAMPOS_HISTORIAL = [
-  "SKU", "Tipo", "Producto", "Genero", "Color", "Talla", "Linea de Produccion",
+  "SKU", "Tipo", "Producto", "Genero", "Color", "Talla", "Lote", "Linea de Produccion",
   "Cantidad Solicitada", "Cantida Producida", "Faltante", "Cap Produccion por Dia",
   "Prioridad", "Dia de inicio", "Dia no laborable", "Fecha de Salida Estimada", "MO", "MO STATUS",
   "Fecha de Archivo", "Origen"
@@ -4435,6 +4552,7 @@ function campoCanonico_(header) {
   if (h.indexOf("genero") !== -1 || h.indexOf("género") !== -1) return "Genero";
   if (h.indexOf("color") !== -1) return "Color";
   if (h.indexOf("talla") !== -1) return "Talla";
+  if (h === "lote" || h === "lotes") return "Lote";
   if (h.indexOf("linea") !== -1 || h.indexOf("línea") !== -1) return "Linea de Produccion";
   if (h.indexOf("cantidad solicitada") !== -1) return "Cantidad Solicitada";
   if (h.indexOf("producida") !== -1) return "Cantida Producida";
@@ -4447,6 +4565,27 @@ function campoCanonico_(header) {
   if (normUp_(header) === "MO") return "MO";
   if (h.indexOf("mo status") !== -1) return "MO STATUS";
   return null;
+}
+
+function asegurarColumnaHistorialLote_(hojaHist) {
+  if (!hojaHist) return;
+  var lastCol = Math.max(hojaHist.getLastColumn(), CAMPOS_HISTORIAL.length);
+  var headers = hojaHist.getRange(1, 1, 1, lastCol).getValues()[0];
+  var iLoteH = -1, iTallaH = -1, i;
+  for (i = 0; i < headers.length; i++) {
+    var h = quitarTildes_(normLow_(headers[i]));
+    if (h === "lote" || h === "lotes") iLoteH = i;
+    if (h === "talla") iTallaH = i;
+  }
+  if (iLoteH !== -1) return;
+  if (iTallaH === -1) {
+    hojaHist.getRange(1, lastCol + 1).setValue("Lote")
+      .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
+    return;
+  }
+  hojaHist.insertColumnAfter(iTallaH + 1);
+  hojaHist.getRange(1, iTallaH + 2).setValue("Lote")
+    .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
 }
 
 function actualizarMOs() {
@@ -4511,7 +4650,8 @@ function actualizarMOs_() {
       var moFila = mapaCampos.MO !== undefined ? norm_(datos[p][mapaCampos.MO]) : "";
       var prodFila = mapaCampos.Producto !== undefined ? norm_(datos[p][mapaCampos.Producto]) : "";
       var genFila = mapaCampos.Genero !== undefined ? norm_(datos[p][mapaCampos.Genero]) : "";
-      var modeloFila = prodFila + (genFila !== "" && genFila !== "--" ? " " + genFila : "");
+      var loteFila = mapaCampos.Lote !== undefined ? datos[p][mapaCampos.Lote] : "";
+      var modeloFila = formatoModelo_(prodFila, genFila, loteDeFila_(loteFila, prodFila), tipoAsignado === "Especial");
       var clave = claveLoteMO_(skuFila, tipoAsignado, moFila, modeloFila);
       var claveCorta = skuFila + "||" + tipoAsignado;
       if (!skusTerminados.hasOwnProperty(clave) && !skusTerminados.hasOwnProperty(claveCorta)) continue;
@@ -4540,6 +4680,8 @@ function actualizarMOs_() {
         var filaCab = hojaHist.getLastRow() === 0 ? 1 : hojaHist.getLastRow() + 2;
         hojaHist.getRange(filaCab, 1, 1, CAMPOS_HISTORIAL.length).setValues([CAMPOS_HISTORIAL])
           .setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
+      } else {
+        asegurarColumnaHistorialLote_(hojaHist);
       }
       var ultH = hojaHist.getLastRow();
       hojaHist.getRange(ultH + 1, 1, filasHistorial.length, CAMPOS_HISTORIAL.length)
@@ -4575,6 +4717,7 @@ function actualizarMOs_() {
     var iMoA = idxExacto_(hs, "MO");
     var iProdA = idxProductoEmbudo_(hs, d[0]);
     var iGenA = idxPorFragmento_(hs, ["genero", "género"]);
+    var iLoteA = idxLote_(hs);
     if (iS === -1 || iC === -1) return;
     for (var i = 2; i < d.length; i++) {
       var s = norm_(d[i][iS]);
@@ -4583,7 +4726,8 @@ function actualizarMOs_() {
         var moA = iMoA !== -1 ? norm_(d[i][iMoA]) : "";
         var prodA = iProdA !== -1 ? norm_(d[i][iProdA]) : "";
         var genA = iGenA !== -1 ? norm_(d[i][iGenA]) : "";
-        var modeloA = prodA + (genA !== "" && genA !== "--" ? " " + genA : "");
+        var loteA = loteDeFila_(iLoteA !== -1 ? d[i][iLoteA] : "", prodA);
+        var modeloA = formatoModelo_(prodA, genA, loteA, tipoAsignado === "Especial");
         var claveA = claveLoteMO_(s, tipoAsignado, moA, modeloA);
         skusActivos[claveA] = (skusActivos[claveA] || 0) + c;
         metaActivos[claveA] = { sku: s, tipo: tipoAsignado, mo: moA, modelo: modeloA };
@@ -4627,7 +4771,7 @@ function actualizarMOs_() {
 
     var metaB = metaActivos[claveAct] || {};
     var moFinal = norm_(moB) || norm_(metaB.mo) || "";
-    var modeloFinal = modeloB || norm_(metaB.modelo) || "";
+    var modeloFinal = norm_(metaB.modelo) || modeloB || "";
     filasMOFinal.push([
       skuB, tipoB, bloqueMO[b][2], moFinal, bloqueMO[b][4], modeloFinal
     ]);
@@ -4701,7 +4845,7 @@ function actualizarMOs_() {
     if (modelo) {
       var alvo = claveModeloNorm_(modelo);
       for (var iH = 0; iH < hits.length; iH++) {
-        if (claveModeloNorm_(hits[iH].modelo) === alvo) return hits[iH];
+        if (claveModeloNorm_(hits[iH].modelo) === alvo || mismaIdentidadModelo_(hits[iH].modelo, modelo)) return hits[iH];
       }
     }
     return null;
@@ -4712,16 +4856,17 @@ function actualizarMOs_() {
     var uF = hoja.getLastRow();
     if (uF < 3) return;
     var hs = hoja.getRange(2, 1, 1, hoja.getLastColumn()).getValues()[0];
-    var colSku = -1, colMo = -1, colMoStatus = -1, colProdW = -1, colGenW = -1;
+    var colSku = -1, colMo = -1, colMoStatus = -1, colProdW = -1, colGenW = -1, colLoteW = -1;
 
     for (var h = 0; h < hs.length; h++) {
       var n = normUp_(hs[h]);
-      var hl = normLow_(hs[h]);
+      var hl = quitarTildes_(normLow_(hs[h]));
       if (n === "SKU") colSku = h + 1;
       if (n === "MO") colMo = h + 1;
       if (n === "MO STATUS") colMoStatus = h + 1;
-      if (colProdW === -1 && (hl.indexOf("producto") !== -1 || hl.indexOf("modelo") !== -1)) colProdW = h + 1;
+      if (colProdW === -1 && (hl.indexOf("producto") !== -1 || hl.indexOf("modelo") !== -1) && hl !== "lote") colProdW = h + 1;
       if (colGenW === -1 && (hl.indexOf("genero") !== -1 || hl.indexOf("género") !== -1)) colGenW = h + 1;
+      if (colLoteW === -1 && (hl === "lote" || hl === "lotes")) colLoteW = h + 1;
     }
 
     if (colSku === -1 || colMo === -1 || colMoStatus === -1) return;
@@ -4737,7 +4882,8 @@ function actualizarMOs_() {
       var moW = norm_(bloqueW[i][colMo - 1]);
       var prodW = colProdW !== -1 ? norm_(bloqueW[i][colProdW - 1]) : "";
       var genW = colGenW !== -1 ? norm_(bloqueW[i][colGenW - 1]) : "";
-      var modeloW = prodW + (genW !== "" && genW !== "--" ? " " + genW : "");
+      var loteW = colLoteW !== -1 ? bloqueW[i][colLoteW - 1] : "";
+      var modeloW = formatoModelo_(prodW, genW, loteDeFila_(loteW, prodW), tipoAsignado === "Especial");
       var recW = buscarDiccMO_(skuW, tipoAsignado, moW, modeloW);
       if (recW) {
         matMo.push([recW.mo || moW]);
@@ -4773,21 +4919,22 @@ function onEdit(e) {
   if (filaEditada <= 2) return;
 
   var headers = sheet.getRange(2, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var colSKU = -1, colMO = -1, colProd = -1, colGen = -1;
+  var colSKU = -1, colMO = -1, colProd = -1, colGen = -1, colLote = -1;
   for (var h = 0; h < headers.length; h++) {
     var hn = normUp_(headers[h]);
-    var hl = normLow_(headers[h]);
+    var hl = quitarTildes_(normLow_(headers[h]));
     if (hn === "SKU") colSKU = h + 1;
     if (hn === "MO") colMO = h + 1;
-    if (colProd === -1 && (hl.indexOf("producto") !== -1 || hl.indexOf("modelo") !== -1)) colProd = h + 1;
+    if (colProd === -1 && (hl.indexOf("producto") !== -1 || hl.indexOf("modelo") !== -1) && hl !== "lote") colProd = h + 1;
     if (colGen === -1 && (hl.indexOf("genero") !== -1 || hl.indexOf("género") !== -1)) colGen = h + 1;
+    if (colLote === -1 && (hl === "lote" || hl === "lotes")) colLote = h + 1;
   }
   if (colSKU === -1) return;
 
   var colEditada = rangoEditado.getColumn();
-  var esCampoId = (colEditada === colSKU || colEditada === colMO || colEditada === colProd || colEditada === colGen);
+  var esCampoId = (colEditada === colSKU || colEditada === colMO || colEditada === colProd || colEditada === colGen || colEditada === colLote);
   if (!esCampoId) {
-    var hEdit = normLow_(headers[colEditada - 1] || "");
+    var hEdit = quitarTildes_(normLow_(headers[colEditada - 1] || ""));
     esCampoId = (hEdit.indexOf("color") !== -1 || hEdit.indexOf("talla") !== -1);
   }
   if (!esCampoId) return;
@@ -4800,8 +4947,10 @@ function onEdit(e) {
   var moFila = colMO !== -1 ? norm_(sheet.getRange(filaEditada, colMO).getValue()) : "";
   var prodFila = colProd !== -1 ? norm_(sheet.getRange(filaEditada, colProd).getValue()) : "";
   var genFila = colGen !== -1 ? norm_(sheet.getRange(filaEditada, colGen).getValue()) : "";
-  var modeloFila = prodFila + (genFila !== "" && genFila !== "--" ? " " + genFila : "");
-  var idFila = claveLoteMO_(skuGenerado, nombre === "Por Hacer - Especial" ? "Especial" : "Producción", moFila, modeloFila);
+  var loteFilaEd = colLote !== -1 ? sheet.getRange(filaEditada, colLote).getValue() : "";
+  var tipoFila = nombre === "Por Hacer - Especial" ? "Especial" : "Producción";
+  var modeloFila = formatoModelo_(prodFila, genFila, loteDeFila_(loteFilaEd, prodFila), tipoFila === "Especial");
+  var idFila = claveLoteMO_(skuGenerado, tipoFila, moFila, modeloFila);
 
   var ultimaFila = sheet.getLastRow();
   if (ultimaFila < 3) return;
@@ -4814,8 +4963,9 @@ function onEdit(e) {
     var moI = colMO !== -1 ? norm_(bloque[i][colMO - 1]) : "";
     var prodI = colProd !== -1 ? norm_(bloque[i][colProd - 1]) : "";
     var genI = colGen !== -1 ? norm_(bloque[i][colGen - 1]) : "";
-    var modeloI = prodI + (genI !== "" && genI !== "--" ? " " + genI : "");
-    var idI = claveLoteMO_(skuI, nombre === "Por Hacer - Especial" ? "Especial" : "Producción", moI, modeloI);
+    var loteI = colLote !== -1 ? bloque[i][colLote - 1] : "";
+    var modeloI = formatoModelo_(prodI, genI, loteDeFila_(loteI, prodI), tipoFila === "Especial");
+    var idI = claveLoteMO_(skuI, tipoFila, moI, modeloI);
     if (idI === idFila) contador++;
   }
 
@@ -4825,7 +4975,7 @@ function onEdit(e) {
     SpreadsheetApp.getUi().alert(
       "🚨 BLOQUEO DE LOTE: ya existe la misma combinación SKU + MO + modelo '" +
       skuGenerado + "' / '" + (moFila || "(sin MO)") + "' / '" + (modeloFila || "(sin modelo)") +
-      "'.\n\nEl mismo SKU sí puede repetirse si cambia la MO o el lote en Producto.\nSe revirtió la celda."
+      "'.\n\nEl mismo SKU sí puede repetirse si cambia la MO o el lote (columna Lote).\nSe revirtió la celda."
     );
   }
 }
@@ -5125,6 +5275,7 @@ function sincronizarProduccionExterna() {
     var idMo = headersM.findIndex(function (h) { return h === "mo" || h === "m.o." || h.indexOf("mo ") === 0; });
     var idProd = headersM.findIndex(function (h) { return h === "producto" || h === "modelo"; });
     var idGen = headersM.findIndex(function (h) { return h.indexOf("genero") !== -1 || h.indexOf("género") !== -1; });
+    var idLoteM = headersM.findIndex(function (h) { return h === "lote" || h === "lotes"; });
     if (idMo === -1 || idProd === -1) return;
 
     for (var i = detHeadM.fila + 1; i < datosM.length; i++) {
@@ -5132,8 +5283,8 @@ function sincronizarProduccionExterna() {
       if (moStr === "") continue;
       var prod = String(datosM[i][idProd]).trim();
       var gen = idGen !== -1 ? String(datosM[i][idGen]).trim() : "";
-      var mod = prod + (gen !== "" && gen !== "--" ? " " + gen : "");
-      if (esEspecial) mod += " (Especial)";
+      var loteM = loteDeFila_(idLoteM !== -1 ? datosM[i][idLoteM] : "", prod);
+      var mod = formatoModelo_(prod, gen, loteM, esEspecial);
       moStr.split(",").forEach(function (mm) {
         var claveMap = claveLookupMO_(mm);
         if (claveMap) mapaMoAModelo[claveMap] = mod;
@@ -5183,13 +5334,23 @@ function sincronizarProduccionExterna() {
   var hojaAlmacenSku = ssMain.getSheetByName("Entrada de Almacen - Skus");
   if (hojaAlmacenSku && hojaAlmacenSku.getLastRow() >= 3) {
     var ultFilaS = hojaAlmacenSku.getLastRow();
-    var datosS = hojaAlmacenSku.getRange(3, 2, ultFilaS - 2, 8).getValues();
+    var nColsAlmS = Math.max(8, hojaAlmacenSku.getLastColumn() - 1);
+    var hdrAlmS = hojaAlmacenSku.getRange(2, 2, 1, nColsAlmS).getValues()[0].map(function (h) {
+      return quitarTildes_(normLow_(h));
+    });
+    var iCantAlmS = hdrAlmS.findIndex(function (h) { return h.indexOf("cantidad") !== -1; });
+    var iRecAlmS = hdrAlmS.findIndex(function (h) { return h.indexOf("recepcionado") !== -1; });
+    var iFalAlmS = hdrAlmS.findIndex(function (h) { return h.indexOf("faltante") !== -1; });
+    if (iCantAlmS < 0) iCantAlmS = hdrAlmS.indexOf("lote") !== -1 ? 4 : 3;
+    if (iRecAlmS < 0) iRecAlmS = hdrAlmS.indexOf("lote") !== -1 ? 7 : 6;
+    if (iFalAlmS < 0) iFalAlmS = hdrAlmS.indexOf("lote") !== -1 ? 8 : 7;
+    var datosS = hojaAlmacenSku.getRange(3, 2, ultFilaS - 2, nColsAlmS).getValues();
     var colRecepcionado = [];
     var colFaltanteS = [];
     for (var rS = 0; rS < datosS.length; rS++) {
       var rowMoStr = String(datosS[rS][0]).trim().toUpperCase();
       var rowSku = String(datosS[rS][1]).trim().toUpperCase();
-      var valSolS = String(datosS[rS][3]).trim();
+      var valSolS = String(datosS[rS][iCantAlmS]).trim();
       var cantSolS = Number(valSolS) || 0;
       if (rowMoStr === "" && rowSku === "" && valSolS === "") {
         colRecepcionado.push([""]); colFaltanteS.push([""]); continue;
@@ -5205,8 +5366,8 @@ function sincronizarProduccionExterna() {
       colRecepcionado.push([recHoy > 0 ? recHoy : ""]);
       colFaltanteS.push([recHoy > 0 ? faltS : (valSolS !== "" ? cantSolS : "")]);
     }
-    hojaAlmacenSku.getRange(3, 8, colRecepcionado.length, 1).setValues(colRecepcionado);
-    hojaAlmacenSku.getRange(3, 9, colFaltanteS.length, 1).setValues(colFaltanteS);
+    hojaAlmacenSku.getRange(3, 2 + iRecAlmS, colRecepcionado.length, 1).setValues(colRecepcionado);
+    hojaAlmacenSku.getRange(3, 2 + iFalAlmS, colFaltanteS.length, 1).setValues(colFaltanteS);
   }
 
   var hojaAlmacenMod = ssMain.getSheetByName("Entrada de Almacen Modelo");
@@ -5341,7 +5502,7 @@ function supuestosDashboard_(capsModelo) {
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura. Una orden con Faltante 0 sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer; solo sale si está Hecho o Cancelada.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
-    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. En Calendario → Detalle diario el recuadro de variantes se puede entrar y bajar (clic para fijarlo). Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El mismo SKU puede repetirse si cambia la MO o el lote en el modelo."
+    "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. En Calendario → Detalle diario el recuadro de variantes se puede entrar y bajar (clic para fijarlo). Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El modelo se muestra como Producto + Género + Lote N (lote 0 se omite). El mismo SKU puede repetirse si cambia la MO o el lote."
     ]
   };
 }
@@ -5405,16 +5566,12 @@ function estadoModeloAlm_(skus, backlog, cantidadModelo, producidaModelo) {
   return "";
 }
 
-function modeloAlmDeFila_(producto, genero, esEspecial) {
-  var m = norm_(producto);
-  var g = norm_(genero);
-  if (g && g !== "--") m += (m ? " " : "") + g;
-  if (esEspecial) m += " (Especial)";
-  return m;
+function modeloAlmDeFila_(producto, genero, esEspecial, lote) {
+  return formatoModelo_(producto, genero, lote, esEspecial);
 }
 
 function detalleAlmDeFila_(producto, genero, color, talla, esEspecial) {
-  var parts = [norm_(producto)];
+  var parts = [productoLimpio_(producto) || norm_(producto)];
   if (norm_(genero) && norm_(genero) !== "--") parts.push(norm_(genero));
   if (norm_(color) && norm_(color) !== "--") parts.push(norm_(color));
   if (norm_(talla) && norm_(talla) !== "--") parts.push(norm_(talla));
@@ -5476,6 +5633,7 @@ function leerOrdenesVivasDashboard_(ss) {
     var iGen = h.indexOf("genero") !== -1 ? h.indexOf("genero") : h.indexOf("género");
     var iCol = h.indexOf("color");
     var iTal = h.indexOf("talla");
+    var iLot = h.indexOf("lote");
     var iFec = h.findIndex(function (x) {
       return x.indexOf("fecha de salida") !== -1 || x.indexOf("fecha salida") !== -1;
     });
@@ -5499,6 +5657,7 @@ function leerOrdenesVivasDashboard_(ss) {
       var falt = faltanteEfectivo_(sol, prod, hayFalt ? data[i][iFalt] : "", iProd !== -1, hayFalt);
       var producto = iMod !== -1 ? norm_(data[i][iMod]) : "";
       var genero = iGen !== -1 ? norm_(data[i][iGen]) : "";
+      var lote = loteDeFila_(iLot !== -1 ? data[i][iLot] : "", producto);
       filas.push({
         key: key,
         mo: mo,
@@ -5507,7 +5666,8 @@ function leerOrdenesVivasDashboard_(ss) {
         producida: prod,
         solicitada: sol,
         faltante: falt,
-        modelo: modeloAlmDeFila_(producto, genero, esEspecial),
+        lote: lote,
+        modelo: modeloAlmDeFila_(producto, genero, esEspecial, lote),
         producto: detalleAlmDeFila_(
           producto,
           genero,
@@ -5648,6 +5808,7 @@ function aplicarProducidaAlmacen_(ss, resp) {
       sku: rec.sku,
       producto: rec.producto || rec.modelo || "",
       modelo: rec.modelo || "",
+      lote: rec.lote || "",
       cantidad: rec.solicitada > 0 ? rec.solicitada : rec.producida,
       producida: rec.producida,
       salidaCostura: fec.salida,
@@ -5674,6 +5835,7 @@ function aplicarProducidaAlmacen_(ss, resp) {
       solicitada: Number(b.solicitada) || 0,
       faltante: Number(b.faltante),
       modelo: b.modelo || "",
+      lote: b.lote || "",
       producto: b.detalle || "",
       fechaSalidaMs: (typeof b.fechaSalida === "number" && isFinite(b.fechaSalida) && b.fechaSalida > 1e11)
         ? b.fechaSalida
@@ -5750,6 +5912,7 @@ function leerAlmacenDashboard_(ss) {
       var h2 = detS.celdas;
       var iMo = h2.indexOf("mo"), iSku = h2.indexOf("sku");
       var iProd = h2.findIndex(function (x) { return x.indexOf("producto") !== -1; });
+      var iLoteS = h2.indexOf("lote");
       var iCantS = h2.findIndex(function (x) { return x.indexOf("cantidad") !== -1; });
       var iSalS = h2.findIndex(function (x) { return x.indexOf("salida") !== -1; });
       var iEntS = h2.findIndex(function (x) { return x.indexOf("entrada") !== -1; });
@@ -5759,11 +5922,17 @@ function leerAlmacenDashboard_(ss) {
         var sk = iSku !== -1 ? String(ds[j][iSku] || "").trim() : "";
         if (!sk) continue;
         var prod = iProd !== -1 ? String(ds[j][iProd] || "").trim() : "";
-        var modeloSku = prod.indexOf(" - ") !== -1 ? prod.split(" - ")[0] : prod.split(" ")[0];
+        var loteSku = iLoteS !== -1 ? ds[j][iLoteS] : "";
+        var especialSku = /\(\s*especial\s*\)/i.test(prod);
+        var partsProd = prod.replace(/\s*\(\s*especial\s*\)\s*$/i, "").split(/\s*-\s*/);
+        var prodNomSku = partsProd[0] || "";
+        var genNomSku = (partsProd.length >= 2 && esTokenGenero_(partsProd[1])) ? partsProd[1] : "";
+        var modeloSku = formatoModelo_(prodNomSku, genNomSku, loteDeFila_(loteSku, prodNomSku), especialSku);
         sku.push({
           mo: iMo !== -1 ? String(ds[j][iMo] || "").trim() : "",
           sku: sk,
           producto: prod,
+          lote: textoLote_(loteSku),
           modelo: modeloSku,
           cantidad: iCantS !== -1 ? numCeldaDash_(ds[j][iCantS]) : 0,
           salidaCostura: iSalS !== -1 ? fmtFechaDash_(ds[j][iSalS], tz) : "",
@@ -5860,6 +6029,7 @@ function obtenerDatosDashboardCompleto() {
     var iSku = hph.indexOf("sku"), iMod = hph.indexOf("producto") !== -1 ? hph.indexOf("producto") : hph.indexOf("modelo");
     var iGen = hph.indexOf("genero") !== -1 ? hph.indexOf("genero") : hph.indexOf("género");
     var iCol = hph.indexOf("color"), iTal = hph.indexOf("talla"), iCant = hph.indexOf("cantidad solicitada");
+    var iLotPH = hph.indexOf("lote");
     var iProdQty = hph.findIndex(function (x) { return x.indexOf("producida") !== -1; });
     var iFalt = hph.indexOf("faltante"), iMo = hph.indexOf("mo"), iPri = hph.indexOf("prioridad");
     var iFecPH = hph.indexOf("fecha de salida estimada");
@@ -5874,22 +6044,23 @@ function obtenerDatosDashboardCompleto() {
 
       var mBase = iMod !== -1 ? String(dph[i][iMod]).trim() : "", mGen = iGen !== -1 ? String(dph[i][iGen]).trim() : "";
       var color = iCol !== -1 ? String(dph[i][iCol]).trim() : "", talla = iTal !== -1 ? String(dph[i][iTal]).trim() : "";
+      var lotePH = loteDeFila_(iLotPH !== -1 ? dph[i][iLotPH] : "", mBase);
       var linea = iLinPH !== -1 ? String(dph[i][iLinPH]).trim() : "";
       var cap = iCapPH !== -1 ? (Number(dph[i][iCapPH]) || 0) : 0;
-      var m = mBase + (mGen !== "" && mGen !== "--" ? " " + mGen : "");
-      var arrDetalle = [mBase];
+      var prodNom = productoLimpio_(mBase);
+      var m = formatoModelo_(mBase, mGen, lotePH, esEspecial);
+      var arrDetalle = [prodNom || mBase];
       if (mGen && mGen !== "--") arrDetalle.push(mGen);
       if (color && color !== "--") arrDetalle.push(color);
       if (talla && talla !== "--") arrDetalle.push(talla);
 
       if (esEspecial) {
-        m += " (Especial)";
         arrDetalle.push("(Especial)");
       }
 
       skuToModelo[s] = m;
 
-      var pInfo = prioMap[m] || { prioridad: "Sin Asignar", fecha: "", minima: 0 };
+      var pInfo = valorMapaModelo_(prioMap, m) || { prioridad: "Sin Asignar", fecha: "", minima: 0 };
       var prioFila = iPri !== -1 ? String(dph[i][iPri]).trim() : "";
       if (!prioFila) prioFila = pInfo.prioridad;
       var prioridadNormalizada = normalizarPrioridad(prioFila);
@@ -5910,7 +6081,7 @@ function obtenerDatosDashboardCompleto() {
 
       resp.backlog.push({
         sku: s, modelo: m, detalle: arrDetalle.join("-"), mo: iMo !== -1 ? String(dph[i][iMo]) : "",
-        genero: mGen, color: color, talla: talla, linea: linea, cap: cap,
+        genero: mGen, color: color, talla: talla, lote: lotePH, linea: linea, cap: cap,
         tipo: esEspecial ? "Especial" : "Producción",
         solicitada: cantSol, producida: prodQty, faltante: faltanteFinal,
         prioridad: esEspecial ? "Especial" : prioridadNormalizada,
@@ -6209,6 +6380,7 @@ function leerModelosSinPlanificar_(ss, resp) {
     var h = det.celdas;
     var iMod = h.indexOf("producto") !== -1 ? h.indexOf("producto") : h.indexOf("modelo");
     var iGen = h.indexOf("genero") !== -1 ? h.indexOf("genero") : h.indexOf("género");
+    var iLotQ = h.indexOf("lote");
     var iMo = h.indexOf("mo");
     var iCant = h.indexOf("cantidad solicitada");
     var iFalt = h.indexOf("faltante");
@@ -6220,8 +6392,7 @@ function leerModelosSinPlanificar_(ss, resp) {
       var base = iMod !== -1 ? String(data[i][iMod] || "").trim() : "";
       if (!base) continue;
       var gen = iGen !== -1 ? String(data[i][iGen] || "").trim() : "";
-      var m = base + (gen !== "" && gen !== "--" ? " " + gen : "");
-      if (esEspecial) m += " (Especial)";
+      var m = formatoModelo_(base, gen, loteDeFila_(iLotQ !== -1 ? data[i][iLotQ] : "", base), esEspecial);
       if (!qty[m]) qty[m] = { solicitada: 0, faltante: 0, mos: {} };
       var sol = iCant !== -1 ? (Number(data[i][iCant]) || 0) : 0;
       var prod = iProd !== -1 ? (Number(data[i][iProd]) || 0) : 0;
@@ -6259,11 +6430,21 @@ function leerModelosSinPlanificar_(ss, resp) {
         if (!mod) continue;
         var tipo = pTip !== -1 ? String(dp[i][pTip] || "").trim() : "";
         var nombre = tipo.toLowerCase() === "especial" ? (mod + " (Especial)") : mod;
-        if (planificados[nombre] || planificados[mod]) continue;
+        var yaPlan = !!(planificados[nombre] || planificados[mod]);
+        if (!yaPlan) {
+          for (k in planificados) {
+            if (!planificados.hasOwnProperty(k)) continue;
+            if (mismaIdentidadModelo_(k, nombre) || mismaIdentidadModelo_(k, mod)) {
+              yaPlan = true;
+              break;
+            }
+          }
+        }
+        if (yaPlan) continue;
         if (!celdaVaciaDash_(pPri !== -1 ? dp[i][pPri] : "") ||
             !celdaVaciaDash_(pFec !== -1 ? dp[i][pFec] : "") ||
             !celdaVaciaDash_(pLin !== -1 ? dp[i][pLin] : "")) continue;
-        var q = qty[nombre] || qty[mod] || { solicitada: 0, faltante: 0, mos: {} };
+        var q = qty[nombre] || qty[mod] || valorMapaModelo_(qty, nombre) || valorMapaModelo_(qty, mod) || { solicitada: 0, faltante: 0, mos: {} };
         out.push({
           modelo: nombre,
           tipo: tipo,

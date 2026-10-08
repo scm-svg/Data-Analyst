@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.49 — códigos listos para pegar
+# Planificación de Producción v5.9.50 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,23 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **columna Lote en Por Hacer** (**5.9.50**), **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Motor · Columna Lote y nombre de modelo (5.9.50)
+
+En `Por Hacer` el número de lote ya no vive dentro de **Producto**. Va en la columna **Lote** (columna J). El motor arma el **Modelo** así:
+
+- `Producto + Género + "Lote N"` → `MAR KIDS Lote 1`, `MAR DAMA Lote M`
+- Si Lote es **0**, `0.0`, vacío o no aplica: **no** se escribe la palabra `Lote` ni el número → `BASIC LINE CROP TEE DAMA`, `MAR CAB`
+
+Ese string se usa en **MO** (columna Modelo), **Priorizacion**, **Planificacion**, **Semana 2–12**, **Proyeccion**, **Entrada de Almacen Modelo** y en todas las tablas/drill-down del dashboard que muestran modelos.
+
+- `Proyeccion - SKUS` y `Entrada de Almacen - Skus` ganan una columna **Lote** (entre Modelo/Producto y el detalle o la cantidad).
+- **Historial MO** inserta **Lote** (después de Talla) solo en **registros nuevos**.
+- Si Producto todavía trae el texto viejo (`MAR LOTE 1`), se limpia para no duplicar: queda `MAR KIDS Lote 1`, no `MAR LOTE 1 KIDS Lote 1`.
+- En el dashboard, las tablas de **variantes / SKU** no duplican columna Lote: el lote ya va en el nombre del modelo.
+
+Tras pegar, corre **1️⃣ Actualizar MOs**, **2️⃣ Actualizar Priorización** y **3️⃣ Generar Planificación**. Las filas viejas de Priorizacion tipo `MAR LOTE 1 KIDS` se reescriben a `MAR KIDS Lote 1`.
 
 ## Calendario · recuadro de variantes (5.9.49)
 
@@ -94,9 +110,9 @@ Efecto:
 
 ## Motor · Lotes, Division y secuencia (5.9.39)
 
-- **Mismo SKU, distinto lote:** ya no se bloquea repetir un SKU en `Por Hacer` / `Por Hacer - Especial`. La identidad es **MO + modelo**. El número de lote va en **Producto** (ej. `MAR LOTE 1` + género KIDS = `MAR LOTE 1 KIDS`). Cada lote tiene su propia prioridad, fecha, líneas y secuencia. Solo se revierte la celda si coinciden SKU + MO + modelo.
+- **Mismo SKU, distinto lote:** ya no se bloquea repetir un SKU en `Por Hacer` / `Por Hacer - Especial`. La identidad es **MO + modelo**. Desde **5.9.50** el número va en la columna **Lote** y el modelo queda `MAR KIDS Lote 1` (lote 0 se omite). Cada lote tiene su propia prioridad, fecha, líneas y secuencia. Solo se revierte la celda si coinciden SKU + MO + modelo.
 - **Actualizar MOs** ya no pisa un lote con la MO de otro: la hoja `MO` guarda también **Modelo** y cruza por MO o por lote. Asignar el número en un solo lado (hoja `MO` o Por Hacer) ya no borra la fila ni vacía la MO.
-- **Actualizar Priorización** conserva la fila base (`MAR KIDS`) aunque en Por Hacer el producto sea `MAR LOTE 1 KIDS`. Si más adelante agregas una fila exacta del lote, esa gana.
+- **Actualizar Priorización** reescribe el modelo canónico (`MAR KIDS Lote 1`). Lote 0 se muestra solo como producto + género (`MAR CAB`).
 - **Division (columna I):** escribe **Si** (vale `SI` / `Sí`) para partir las variantes a la **mitad** y producirlas en **vueltas**: primero todas las variantes al 50% (el impar va a la 1ª), en el orden de color/talla; después la otra mitad en el mismo orden. Vacío u otro valor = flujo normal. No aplica a Especial ni a la banda de cantidad mínima.
 - **Secuencia de color:** Negro → Blanco → Azul Marino, y el resto **por volumen del color en el modelo**. Ese orden es el del plan, `Proyeccion - SKUS` y Entrada de almacén.
 - **Géneros en una línea:** si RIO CAB y RIO DAMA (o MAR) comparten una línea, se sigue el color y se **alternan géneros** dentro de ese color (CAB → DAMA → KIDS). Si hay dos líneas libres, cada género toma una. Una MO regular **no se parte** entre líneas.

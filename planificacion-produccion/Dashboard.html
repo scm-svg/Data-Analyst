@@ -613,7 +613,7 @@ function renderSalida(){
   var keys=weekKeys();
   var weekVals=keys.map(function(k){ return cargaFiltrada(k).reduce(function(a,c){ return a+(Number(c.total)||0); },0); });
   var html='<div class="card"><h3>Volumen por semana</h3><p class="sub">Total a fabricar según el plan (filtros aplicados).</p><div class="cw"><canvas id="cSalida"></canvas></div></div>';
-  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. Las variantes se agrupan por color (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). El día de arranque no parte un color. Las cantidades salen de Proyeccion - SKUS.</p>';
+  html+='<div class="card"><h3>Qué sale cada semana</h3><p class="sub">Drill-down semana → modelo (línea) → SKU. El modelo es Producto + Género + Lote N (lote 0 se omite). Las variantes no llevan columna Lote: el lote ya va en el modelo. Se agrupan por color (prioridad SKU → Negro → Blanco → Marino → resto por volumen → talla). El día de arranque no parte un color. Las cantidades salen de Proyeccion - SKUS.</p>';
   keys.forEach(function(k, wi){
     var carga=agruparCarga(cargaFiltrada(k), wi);
     var tot=carga.reduce(function(a,c){ return a+(Number(c.total)||0); },0);
@@ -1218,7 +1218,7 @@ function renderImp(){
   html+='<div class="tkpi"><div class="tv">'+fmtN(l5.length)+'</div><div class="tl">Modelos L5</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(nPd)+'</div><div class="tl">Variantes PD</div></div>';
   html+='<div class="tkpi"><div class="tv">'+fmtN(Object.keys(_impChecks).length)+'</div><div class="tl">Logos listos</div></div></div>';
-  html+='<div class="note">Lista fija de Impresión Digital: drill-down <b>modelo → SKU</b> por prioridad (Especial → Urgente → Alta → Media → Baja), partido en Líneas 1–4 y Línea 5. No se reordena si el taller mueve la semana de costura o la entrada a almacén. Una orden con <b>faltante 0</b> sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer. Solo sale si está Hecho o Cancelada. Las variantes van Negro → Blanco → Marino → resto por volumen → talla. Marca el logo y pulsa Guardar (clave MO + SKU, sin semana).</div>';
+  html+='<div class="note">Lista fija de Impresión Digital: drill-down <b>modelo → SKU</b> por prioridad (Especial → Urgente → Alta → Media → Baja), partido en Líneas 1–4 y Línea 5. El modelo es Producto + Género + Lote N (lote 0 se omite); las variantes no duplican columna Lote. No se reordena si el taller mueve la semana de costura o la entrada a almacén. Una orden con <b>faltante 0</b> sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer. Solo sale si está Hecho o Cancelada. Las variantes van Negro → Blanco → Marino → resto por volumen → talla. Marca el logo y pulsa Guardar (clave MO + SKU, sin semana).</div>';
   html+='<div class="note imp-leyenda">Las órdenes con siglas <b>PD</b> están a la espera de ser creadas en Odoo. Van con la etiqueta PD; el check del logo se guarda igual (MO + SKU).</div>';
   html+=htmlGrupoImp('l14','Líneas 1–4','Costura regular (un modelo a la vez en esas líneas)', l14, 'imp-grupo-l14');
   html+=htmlGrupoImp('l5','Línea 5','Flujo aparte de L1–4 (shorts / prendas de L5)', l5, 'imp-grupo-l5');
