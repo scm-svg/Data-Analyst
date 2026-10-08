@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.49 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.50 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1138,11 +1138,67 @@ def acumular_semanas(por_semana, meta=0):
     return out
 
 
+def texto_lote(lote):
+    if lote is True or lote is False or lote is None or lote == "":
+        return ""
+    if isinstance(lote, (int, float)):
+        if lote == 0 or lote != lote:
+            return ""
+        if int(lote) == lote:
+            return str(int(lote))
+        return str(lote)
+    s = str(lote).strip().strip("\"'")
+    if s in ("", "--"):
+        return ""
+    if re.match(r"^\d+(\.0+)?$", s):
+        n = float(s)
+        if n == 0:
+            return ""
+        return str(int(n))
+    return s
+
+
+def producto_limpio(producto):
+    n = re.sub(r"\s*\(\s*especial\s*\)\s*$", "", str(producto or "").strip(), flags=re.I).strip()
+    if not n:
+        return ""
+    n = re.sub(r'\s+lote\s*#?\s*"?[^"\s]+"?', " ", n, flags=re.I)
+    return re.sub(r"\s+", " ", n).strip()
+
+
+def formato_modelo(producto, genero="", lote="", es_especial=False):
+    partes = []
+    prod = producto_limpio(producto)
+    gen = str(genero or "").strip()
+    if prod:
+        partes.append(prod)
+    if gen and gen != "--":
+        partes.append(gen)
+    lot = texto_lote(lote)
+    if lot:
+        partes.append("Lote " + lot)
+    modelo = " ".join(partes)
+    if es_especial:
+        modelo += (" " if modelo else "") + "(Especial)"
+    return modelo
+
+
 def cabeceras_proyeccion(n_sem=12):
     cab = ["Modelo", "Fecha Objetivo", "Meta (Faltante)"]
     for w in range(n_sem):
         cab.append("Acum Sem %d" % (w + 1))
     cab.extend(["Sin Programar", "Fecha Estim. Término", "Estado"])
+    return cab
+
+
+def cabeceras_proyeccion_sku(n_sem=12):
+    cab = ["SKU", "Modelo", "Lote", "Detalle del Producto", "Fecha Objetivo", "Meta (Faltante)"]
+    for w in range(n_sem):
+        cab.append("Acum Sem %d" % (w + 1))
+    cab.extend([
+        "Sin Programar", "Fecha Estim. Término", "Estado",
+        "Genero", "Color", "Talla", "Linea", "Cap Produccion por Dia", "Tipo",
+    ])
     return cab
 
 
@@ -3517,7 +3573,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.49"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3978,7 +4034,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.49"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
@@ -4616,7 +4672,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.49"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4857,10 +4913,61 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.49"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
+
+
+class TestColumnaLoteModelo(unittest.TestCase):
+    def test_lote_cero_omite_palabra_y_numero(self):
+        self.assertEqual(formato_modelo("BASIC LINE CROP TEE", "DAMA", 0), "BASIC LINE CROP TEE DAMA")
+        self.assertEqual(formato_modelo("BASIC LINE CROP TEE", "DAMA", 0.0), "BASIC LINE CROP TEE DAMA")
+        self.assertEqual(formato_modelo("BASIC LINE CROP TEE", "DAMA", "0.0"), "BASIC LINE CROP TEE DAMA")
+        self.assertEqual(formato_modelo("MAR", "CAB", ""), "MAR CAB")
+        self.assertEqual(formato_modelo("MAR", "CAB", None), "MAR CAB")
+
+    def test_lote_positivo_va_al_final(self):
+        self.assertEqual(formato_modelo("MAR LOTE 1", "KIDS", 1.0), "MAR KIDS Lote 1")
+        self.assertEqual(formato_modelo("MAR LOTE 2", "KIDS", 2), "MAR KIDS Lote 2")
+        self.assertEqual(formato_modelo('MAR LOTE "M"', "DAMA", "M"), "MAR DAMA Lote M")
+        self.assertEqual(formato_modelo("RIO LOTE 1", "CAB", 1, True), "RIO CAB Lote 1 (Especial)")
+
+    def test_limpia_lote_embebido_en_producto(self):
+        self.assertEqual(producto_limpio("MAR LOTE 1"), "MAR")
+        self.assertEqual(producto_limpio('MAR LOTE "M"'), "MAR")
+        self.assertEqual(producto_limpio("BASIC LINE CROP TEE"), "BASIC LINE CROP TEE")
+
+    def test_texto_lote(self):
+        self.assertEqual(texto_lote(0), "")
+        self.assertEqual(texto_lote(0.0), "")
+        self.assertEqual(texto_lote("0"), "")
+        self.assertEqual(texto_lote(1.0), "1")
+        self.assertEqual(texto_lote("M"), "M")
+
+    def test_gs_formato_y_columnas_lote(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        html_path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn("function formatoModelo_", gs)
+        self.assertIn("function textoLote_", gs)
+        self.assertIn("function loteDeFila_", gs)
+        self.assertIn('"Lote"', gs)
+        self.assertIn('cabProySku = ["SKU", "Modelo", "Lote", "Detalle del Producto"', gs)
+        self.assertIn('var idxSemSku = 6', gs)
+        self.assertIn('"Producto", "Lote", "CANTIDAD"', gs)
+        self.assertIn('"Talla", "Lote", "Linea de Produccion"', gs)
+        self.assertIn("COLUMNA LOTE", gs)
+        self.assertIn("<th>Color</th><th>Talla</th>", html)
+        self.assertNotIn("<th>Lote</th>", html)
+        cab = cabeceras_proyeccion_sku(12)
+        self.assertEqual(cab[2], "Lote")
+        self.assertEqual(cab[6], "Acum Sem 1")
+        self.assertEqual(len(cab), 6 + 12 + 9)
 
 
 if __name__ == "__main__":

@@ -290,7 +290,7 @@ class TestDashboardAppsScript(unittest.TestCase):
         self.assertNotIn("function filasImp(", html)
         self.assertIn("window.chkImpGrupo", html)
         self.assertIn("guardarChecksImpresion", html)
-        self.assertIn('var VERSION_SISTEMA = "5.9.49"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
