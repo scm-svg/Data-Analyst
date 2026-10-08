@@ -1917,7 +1917,7 @@ function renderSup(){
   html+='<table class="ct"><tbody>';
   html+='<tr><td>Horizonte</td><td class="num">'+(s.semanas||10)+' semanas · '+(s.diasLaborales||5)+' días hábiles</td></tr>';
   html+='<tr><td>Lead time costura → almacén</td><td class="num">'+(s.leadTimeAlmacenDias||4)+' días hábiles</td></tr>';
-  html+='<tr><td>Apoyo Línea 1</td><td class="num">'+Math.round((s.apoyoL1Fraccion||0.5)*100)+'% de L1 al modelo de L2</td></tr>';
+  html+='<tr><td>Apoyo Línea 1</td><td class="num">'+Math.round((s.apoyoL1Fraccion||0.5)*100)+'% de L1 al modelo de L2 (solo si L1 no tiene prendas propias)</td></tr>';
   html+='<tr><td>Remanente corto L2</td><td class="num">cede si quedan &lt; '+(s.remanenteCortoL2Dias||2)+' días</td></tr>';
   html+='<tr><td>Línea 5 en paralelo</td><td class="num">máx. '+(s.maxModelosLinea5||2)+' familias</td></tr>';
   html+='<tr><td>Techo si no hay cap en el modelo</td><td class="num">L1–4 = '+(fb['1']||130)+' · L5 = '+(fb['5']||40)+'</td></tr>';

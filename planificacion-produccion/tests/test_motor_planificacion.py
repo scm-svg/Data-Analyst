@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.50 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.51 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1938,16 +1938,29 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return False
         return rest < DIAS_REMANENTE_CORTO_L2 * cap
 
+    def fraccion_apoyo_l1_hoy(m, d):
+        lin = "1"
+        piezas = 0
+        cap_ref = 0
+        for t in m["tareas"]:
+            piezas += (t.get("plan") or {}).get(lin, [0] * total_dias)[d] or 0
+            if (t.get("cap") or 0) > cap_ref:
+                cap_ref = t["cap"]
+        cap_ref = cap_ref if cap_ref > 0 else caps_lineas.get(lin, 130)
+        return piezas / cap_ref
+
     def producir_lote_apoyo_l1(m, d):
         lin = "1"
+        hueco = 1 - carga[lin][d]
+        room = FRACCION_APOYO_L1 - fraccion_apoyo_l1_hoy(m, d)
+        avail = min(hueco, room)
+        if avail <= 0.001:
+            return 0
         for t in m["tareas"]:
             if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
                 continue
             if d < DIAS_LABORALES and (d % DIAS_LABORALES) == t.get("diaNoLaborable", -1):
                 continue
-            avail = FRACCION_APOYO_L1 - carga[lin][d]
-            if avail <= 0.001:
-                return 0
             cap_lin = cap_de_tarea(t, lin, caps_lineas)
             piezas = min(t["restante"], math.floor(avail * cap_lin + 1e-9))
             if piezas <= 0:
@@ -1972,12 +1985,26 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             return None
         return m
 
+    def linea1_tiene_nativo_hoy(d):
+        overflow_nat = not nativos_linea1_pendientes(d)
+        for nom in (ocupante.get("1") or []):
+            m = modelos.get(nom)
+            if not m or restante_modelo(m) <= 0:
+                continue
+            if modelo_puede(m, d, "1", overflow_nat):
+                return True
+        return False
+
     def producir_apoyo_l1_dia(d):
+        if linea1_tiene_nativo_hoy(d):
+            return
         m = modelo_apoyo_linea2(d)
         if not m:
             return
         guard = 0
-        while carga["1"][d] < FRACCION_APOYO_L1 - 0.001 and restante_modelo(m) > 0 and guard < 40:
+        while (carga["1"][d] < 0.999
+               and fraccion_apoyo_l1_hoy(m, d) < FRACCION_APOYO_L1 - 0.001
+               and restante_modelo(m) > 0 and guard < 40):
             guard += 1
             if producir_lote_apoyo_l1(m, d) <= 0:
                 break
@@ -2157,8 +2184,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 t["lineaFija"] = cands[0]
                 linea_por_mo[t.get("mo") or t["sku"]] = cands[0]
                 load[cands[0]] += 0.01
+        producir_linea_dia("1", d)
         producir_apoyo_l1_dia(d)
         for lin in list(ocupante):
+            if lin == "1":
+                continue
             producir_linea_dia(lin, d)
     return tareas
 
@@ -3573,7 +3603,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3626,8 +3656,8 @@ class TestApoyoLinea1(unittest.TestCase):
         self.assertEqual(self._por(out, "2", 0), {"MODELO L2": 130})
         self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
 
-    def test_apoyo_l1_50_comparte_con_nativo(self):
-        """Con apoyo, L2 produce 65 en L1 y el nativo de L1 se queda con 65."""
+    def test_apoyo_l1_no_comparte_si_nativo_tiene_piezas(self):
+        """L1 con prendas propias no cede el 50% a L2: trabaja al 100% lo suyo."""
         tareas = [
             self._t("L1", "NATIVO L1", ["1"], 2000, prioridadNum=2),
             self._t("L2", "MODELO L2", ["2"], 2000, prioridadNum=2),
@@ -3636,12 +3666,25 @@ class TestApoyoLinea1(unittest.TestCase):
         d0_1 = self._por(out, "1", 0)
         d0_2 = self._por(out, "2", 0)
         self.assertEqual(d0_2, {"MODELO L2": 130})
+        self.assertEqual(d0_1, {"NATIVO L1": 130}, d0_1)
+        self.assertEqual(sum(t["plan"]["1"][d] for t in out if t["modelo"] == "MODELO L2" for d in range(5)), 0)
+
+    def test_apoyo_l1_entra_cuando_nativo_termina(self):
+        """Cuando el nativo de L1 se acaba, el hueco (hasta 50%) pasa al modelo de L2."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 50, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 2000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        self.assertEqual(d0_1.get("NATIVO L1"), 50, d0_1)
         self.assertEqual(d0_1.get("MODELO L2"), 65, d0_1)
-        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
-        self.assertEqual(sum(d0_1.values()), 130)
+        self.assertEqual(self._por(out, "2", 0), {"MODELO L2": 130})
+        d1_1 = self._por(out, "1", 1)
+        self.assertEqual(d1_1, {"MODELO L2": 65}, d1_1)
 
     def test_apoyo_l1_desde_semana_2_no_toca_semana_1(self):
-        """El 50% de L1 solo arranca en la semana pedida."""
+        """El 50% de L1 solo arranca en la semana pedida; con nativo vivo L1 sigue al 100%."""
         tareas = [
             self._t("L1", "NATIVO L1", ["1"], 3000, prioridadNum=2),
             self._t("L2", "MODELO L2", ["2"], 3000, prioridadNum=2),
@@ -3650,8 +3693,20 @@ class TestApoyoLinea1(unittest.TestCase):
         self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
         self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
         d5_1 = self._por(out, "1", 5)
-        self.assertEqual(d5_1.get("MODELO L2"), 65, d5_1)
-        self.assertEqual(d5_1.get("NATIVO L1"), 65, d5_1)
+        self.assertEqual(d5_1, {"NATIVO L1": 130}, d5_1)
+        self.assertEqual(d5_1.get("MODELO L2", 0), 0)
+
+    def test_apoyo_l1_desde_semana_2_si_l1_ya_libre(self):
+        """Semana 2 con L1 libre: el modelo de L2 sí toma el 50%."""
+        tareas = [
+            self._t("L1", "NATIVO L1", ["1"], 130, prioridadNum=2),
+            self._t("L2", "MODELO L2", ["2"], 3000, prioridadNum=2),
+        ]
+        out = planificar(tareas, {}, total_dias=10, apoyo_l1={"activo": True, "desde_semana": 2})
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(sum(t["plan"]["1"][0] for t in out if t["modelo"] == "MODELO L2"), 0)
+        d5_1 = self._por(out, "1", 5)
+        self.assertEqual(d5_1, {"MODELO L2": 65}, d5_1)
 
     def test_apoyo_l1_aunque_el_modelo_no_liste_linea1(self):
         """El apoyo no exige que L2 liste la línea 1 en Por Hacer."""
@@ -3663,7 +3718,21 @@ class TestApoyoLinea1(unittest.TestCase):
         self.assertEqual(self._por(out, "1", 0), {"SOLO L2": 65})
 
     def test_remanente_corto_l2_pasa_al_siguiente_con_apoyo(self):
-        """Menos de 2 días en L2: el apoyo cierra el lote y el siguiente entra el mismo día."""
+        """L1 libre: el apoyo cierra el lote de L2 y el siguiente entra el mismo día."""
+        tareas = [
+            self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
+            self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
+        ]
+        out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
+        d0_1 = self._por(out, "1", 0)
+        d0_2 = self._por(out, "2", 0)
+        self.assertEqual(d0_1.get("CIERRE L2"), 65, d0_1)
+        self.assertEqual(d0_2.get("CIERRE L2"), 85, d0_2)
+        self.assertEqual(d0_2.get("SIGUIENTE L2"), 45, d0_2)
+        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "CIERRE L2"), 150)
+
+    def test_remanente_corto_l2_con_nativo_l1_no_usa_apoyo(self):
+        """Si L1 está ocupada, el remanente corto de L2 no toma el 50% de L1."""
         tareas = [
             self._t("A", "CIERRE L2", ["2"], 150, prioridadNum=1, fechaKey=20260901),
             self._t("B", "SIGUIENTE L2", ["2"], 500, prioridadNum=2, fechaKey=20260920),
@@ -3672,11 +3741,9 @@ class TestApoyoLinea1(unittest.TestCase):
         out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
         d0_1 = self._por(out, "1", 0)
         d0_2 = self._por(out, "2", 0)
-        self.assertEqual(d0_1.get("CIERRE L2"), 65, d0_1)
-        self.assertEqual(d0_1.get("NATIVO L1"), 65, d0_1)
-        self.assertEqual(d0_2.get("CIERRE L2"), 85, d0_2)
-        self.assertEqual(d0_2.get("SIGUIENTE L2"), 45, d0_2)
-        self.assertEqual(sum(t["planificada"] for t in out if t["modelo"] == "CIERRE L2"), 150)
+        self.assertEqual(d0_1, {"NATIVO L1": 130}, d0_1)
+        self.assertEqual(d0_2.get("CIERRE L2"), 130, d0_2)
+        self.assertEqual(d0_2.get("SIGUIENTE L2", 0), 0, d0_2)
 
     def test_remanente_corto_l2_sin_apoyo_cede_al_cerrar(self):
         """Sin apoyo, un remanente de menos de 2 días cierra y L2 pasa al siguiente."""
@@ -3701,6 +3768,17 @@ class TestApoyoLinea1(unittest.TestCase):
         out = planificar(tareas, {}, total_dias=5, apoyo_l1={"activo": True, "desde_semana": 1})
         self.assertEqual(self._por(out, "1", 0), {"URGENTE DOS": 130})
         self.assertEqual(self._por(out, "2", 0), {"URGENTE DOS": 130})
+
+    def test_gs_apoyo_l1_no_pisa_nativo(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        with open(path, encoding="utf-8") as f:
+            gs = f.read()
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
+        self.assertIn("APOYO L1 NO PISA PRENDAS PROPIAS", gs)
+        self.assertIn("function linea1TieneNativoHoy_(d)", gs)
+        self.assertIn("if (linea1TieneNativoHoy_(d)) return;", gs)
+        self.assertIn("producirLineaDia_(\"1\", d);", gs)
+        self.assertIn("producirApoyoL1Dia_(d);", gs)
 
 
 class TestConteoSemanal(unittest.TestCase):
@@ -4034,7 +4112,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
@@ -4672,7 +4750,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -4913,7 +4991,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
@@ -4952,7 +5030,7 @@ class TestColumnaLoteModelo(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.50"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.51"', gs)
         self.assertIn("function formatoModelo_", gs)
         self.assertIn("function textoLote_", gs)
         self.assertIn("function loteDeFila_", gs)
