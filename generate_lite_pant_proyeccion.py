@@ -20,11 +20,9 @@ from coleccion_lite_tela import (
     TELA_POOL_NEGRO_MTS,
     TELA_POOL_VERDE_MTS,
     VERDE_TELA_MIN_FACTOR,
-    PANT_L_SHIFT_TO_S,
-    PANT_XL_SHIFT_TO_S,
+    PANT_L_BOOST_PP,
     PANT_XS_TARGET,
-    apply_pant_l_xl_to_s,
-    apply_xs_shift_to_sm,
+    finalize_pant_talla_curve,
     calc_fabric_production,
     distribute_by_color_talla_fixed,
 )
@@ -246,8 +244,7 @@ def adjust_talla_curve(talla_pct: dict) -> dict:
     shift_l = min(TALLA_SHIFT_L_TO_XL, adjusted["L"])
     adjusted["L"] -= shift_l
     adjusted["XL"] += shift_l
-    adjusted = apply_xs_shift_to_sm(adjusted, PANT_XS_TARGET)
-    return apply_pant_l_xl_to_s(adjusted)
+    return finalize_pant_talla_curve(adjusted)
 
 
 def calc_production(ref: dict) -> dict:
@@ -463,8 +460,7 @@ def write_resumen(wb, ref, prod):
         ["S objetivo", f"{TALLA_TARGET_S*100:.0f}%", f"hist {ref['talla_pct_hist']['S']*100:.1f}%"],
         ["XS (recibe resto M+S)", f"{ref['talla_pct']['XS']*100:.1f}%", f"hist {ref['talla_pct_hist']['XS']*100:.1f}%"],
         [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"L {ref['talla_pct']['L']*100:.1f}%"],
-        [f"XS objetivo {PANT_XS_TARGET*100:.0f}%", f"XS {ref['talla_pct']['XS']*100:.1f}%", "Exceso repartido 50/50 a S y M"],
-        [f"S ← L/XL", f"S {ref['talla_pct']['S']*100:.1f}%", f"−{PANT_L_SHIFT_TO_S*100:.1f} pp L · −{PANT_XL_SHIFT_TO_S*100:.1f} pp XL → S"],
+        [f"XS objetivo {PANT_XS_TARGET*100:.1f}%", f"XS {ref['talla_pct']['XS']*100:.1f}%", f"+{PANT_L_BOOST_PP*100:.1f} pp a L · resto 50/50 S y M"],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -971,8 +967,7 @@ def write_metodologia(wb, ref, prod):
         f"   Histórica: XS {ref['talla_pct_hist']['XS']*100:.1f}% · S {ref['talla_pct_hist']['S']*100:.1f}% · M {ref['talla_pct_hist']['M']*100:.1f}%.",
         f"   Ajustada: M {TALLA_TARGET_M*100:.0f}% · S {TALLA_TARGET_S*100:.0f}% · XS {ref['talla_pct']['XS']*100:.1f}% (recibe lo restado de M y S).",
         f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}%.",
-        f"   XS objetivo {PANT_XS_TARGET*100:.0f}%: exceso de XS repartido por igual a S y M (criterio I+D).",
-        f"   S reforzada: −{PANT_L_SHIFT_TO_S*100:.1f} pp desde L y −{PANT_XL_SHIFT_TO_S*100:.1f} pp desde XL → S.",
+        f"   XS objetivo {PANT_XS_TARGET*100:.1f}%: +{PANT_L_BOOST_PP*100:.1f} pp a L; excedente repartido entre S y M.",
         "",
         "6. DISTRIBUCIÓN",
         "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
