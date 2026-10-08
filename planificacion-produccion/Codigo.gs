@@ -1,10 +1,16 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.50 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.51 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - APOYO L1 NO PISA PRENDAS PROPIAS: si la Línea 1 tiene piezas
+ *     planificadas (ocupante nativo con faltante), NO comparte el 50%
+ *     con el modelo de L2. L1 trabaja al 100% esas prendas. El apoyo
+ *     al 50% solo entra cuando L1 queda con espacio (terminó lo suyo
+ *     o ese día no tiene nada propio). L2 vacío + L1 libre sigue
+ *     igual: el modelo de L2 produce a media cap en L1.
  *   - COLUMNA LOTE (Por Hacer col. J): el número de lote ya no va
  *     dentro de Producto. El nombre de modelo es Producto + Género +
  *     "Lote N". Si el lote es 0 (o vacío), solo Producto + Género.
@@ -178,9 +184,10 @@
  *   - APOYO L1 50% AL MODELO DE L2: al generar el plan pregunta si se
  *     dispone del 50% de la Línea 1 y desde qué semana. Desde esa
  *     semana, el modelo que corre en L2 también produce en L1 a la
- *     mitad de su Cap Produccion por Dia (sin quitarle la MO a L2).
- *     El ocupante nativo de L1 se queda con el otro 50%. Si L2 ya
- *     lista L1 y la ocupa, no se duplica el apoyo.
+ *     mitad de su Cap Produccion por Dia (sin quitarle la MO a L2),
+ *     PERO solo si L1 no tiene prendas propias planificadas ese día.
+ *     Si L1 está ocupada con lo suyo, usa el 100% hasta que haya
+ *     espacio. Si L2 ya lista L1 y la ocupa, no se duplica el apoyo.
  *   - REMANENTE CORTO EN L2: si al modelo de L2 le quedan menos de
  *     2 días, termina (el apoyo L1 acelera el cierre) y la línea
  *     pasa al siguiente programado. No se queda ocupando L2.
@@ -275,7 +282,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.50";
+var VERSION_SISTEMA = "5.9.51";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1798,7 +1805,9 @@ function preguntarApoyoLinea1_(cfg) {
       "Apoyo Línea 1 al 50%",
       "¿Quieres disponer del 50% de la Línea 1 para el modelo que corre en la Línea 2?\n\n" +
       "Si aceptas, desde la semana que indiques ese modelo también produce en L1 " +
-      "a la mitad de su Cap Produccion por Dia. Así cumple la meta más rápido.\n\n" +
+      "a la mitad de su Cap Produccion por Dia, SOLO cuando L1 no tenga prendas " +
+      "propias planificadas. Si L1 está ocupada, trabaja al 100% lo suyo hasta " +
+      "que haya espacio.\n\n" +
       "Si en L2 queda menos de 2 días de un modelo, la línea pasa al siguiente programado.",
       ui.ButtonSet.YES_NO
     );
@@ -2534,15 +2543,31 @@ function generarPlanificacionSemanal_() {
     return rest < DIAS_REMANENTE_CORTO_L2 * cap;
   }
 
+  function fraccionApoyoL1Hoy_(mP, d) {
+    var lin = "1";
+    var piezas = 0;
+    var capRef = 0;
+    var tiF;
+    for (tiF = 0; tiF < mP.tareas.length; tiF++) {
+      var tF = mP.tareas[tiF];
+      if (tF.plan && tF.plan[lin]) piezas += tF.plan[lin][d] || 0;
+      if (Number(tF.cap) > capRef) capRef = Number(tF.cap);
+    }
+    capRef = capRef > 0 ? capRef : capFallbackLinea_(lin);
+    return piezas / capRef;
+  }
+
   function producirLoteApoyoL1_(mP, d) {
     var lin = "1";
+    var hueco = 1 - carga[lin][d];
+    var room = FRACCION_APOYO_L1 - fraccionApoyoL1Hoy_(mP, d);
+    var availA = Math.min(hueco, room);
+    if (availA <= 0.001) return 0;
     for (var tiA = 0; tiA < mP.tareas.length; tiA++) {
       var tA = mP.tareas[tiA];
       var diaSemA = d % DIAS_LABORALES;
       if (tA.restante <= 0 || d < diaInicioEfectivo_(tA)) continue;
       if (d < DIAS_LABORALES && diaSemA === tA.diaNoLaborable) continue;
-      var availA = FRACCION_APOYO_L1 - carga[lin][d];
-      if (availA <= 0.001) return 0;
       var capA = capDeTarea_(tA, lin);
       var piezasA = Math.floor(availA * capA + 0.0001);
       if (piezasA <= 0) return 0;
@@ -2562,11 +2587,29 @@ function generarPlanificacionSemanal_() {
     return mA;
   }
 
+  /** L1 tiene prendas propias planificadas que aún pueden producir hoy. */
+  function linea1TieneNativoHoy_(d) {
+    var noms = ocupante["1"] || [];
+    var overflowNat = !nativosLinea1Pendientes_(d);
+    var iNat;
+    for (iNat = 0; iNat < noms.length; iNat++) {
+      var nomN = noms[iNat];
+      var mNat = mapaModelos[nomN];
+      if (!mNat || restanteModelo_(mNat) <= 0) continue;
+      if (!modeloPuedeProducirHoyNom_(nomN, "1", d, overflowNat)) continue;
+      return true;
+    }
+    return false;
+  }
+
   function producirApoyoL1Dia_(d) {
+    if (linea1TieneNativoHoy_(d)) return;
     var mA = modeloApoyoLinea2_(d);
     if (!mA) return;
     var guardA = 0;
-    while (carga["1"][d] < FRACCION_APOYO_L1 - 0.001 && restanteModelo_(mA) > 0 && guardA < 40) {
+    while (carga["1"][d] < 0.999 &&
+        fraccionApoyoL1Hoy_(mA, d) < FRACCION_APOYO_L1 - 0.001 &&
+        restanteModelo_(mA) > 0 && guardA < 40) {
       guardA++;
       if (producirLoteApoyoL1_(mA, d) <= 0) break;
     }
@@ -3266,8 +3309,9 @@ function generarPlanificacionSemanal_() {
       }
     }
 
+    producirLineaDia_("1", d);
     producirApoyoL1Dia_(d);
-    ["1", "2", "3", "4", "5"].forEach(function (lin) {
+    ["2", "3", "4", "5"].forEach(function (lin) {
       producirLineaDia_(lin, d);
     });
   }
@@ -3503,7 +3547,7 @@ function generarPlanificacionSemanal_() {
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: prioridad 1 en TODAS las Linea de Produccion asignadas (2+ líneas = las toma sí o sí al llegar Día de inicio). Si la celda viene vacía, 1. No desborda a L1.\n" +
     "• Apoyo L1 50%: " + ((cfg.apoyoL1 && cfg.apoyoL1.activo)
-      ? ("sí, desde semana " + cfg.apoyoL1.desdeSemana + " el modelo de L2 produce también en L1 a media cap.")
+      ? ("sí, desde semana " + cfg.apoyoL1.desdeSemana + ". Si L1 tiene prendas propias, trabaja al 100% lo suyo; el 50% a L2 solo cuando hay espacio.")
       : "no. Al generar puedes activarlo y elegir la semana.") + "\n" +
     "• L2 remanente corto: si quedan menos de 2 días, termina y la línea pasa al siguiente programado.\n" +
     "• Día de inicio (L1-4): al llegar esa fecha, el de mayor prioridad toma la línea (el actual cede).\n" +
@@ -5496,7 +5540,7 @@ function supuestosDashboard_(capsModelo) {
     capsModelo: capsModelo || {},
     notas: [
       "La planificación se puede regenerar (menú Producción → Generar Planificación) si hay consideraciones mayores: paros, cambio de mix, MOs nuevas o ajustes de prioridad.",
-    "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2; el ocupante nativo de L1 se queda con el otro 50%.",
+    "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2, solo si L1 no tiene prendas propias planificadas. Si L1 está ocupada, trabaja al 100% lo suyo hasta que haya espacio.",
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
     "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",

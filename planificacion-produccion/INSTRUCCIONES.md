@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.50 — códigos listos para pegar
+# Planificación de Producción v5.9.51 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,18 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **columna Lote en Por Hacer** (**5.9.50**), **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **apoyo L1 que no pisa prendas propias** (**5.9.51**), **columna Lote en Por Hacer** (**5.9.50**), **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Motor · Apoyo L1 no pisa prendas propias (5.9.51)
+
+El 50% de la Línea 1 para el modelo de L2 **ya no se reserva a ciegas**.
+
+- Si L1 tiene piezas planificadas (un modelo asignado a esa línea con faltante), **trabaja al 100%** esas prendas. No comparte el día con L2.
+- El apoyo al 50% **solo entra cuando hay espacio**: L1 terminó lo suyo ese día, o ese día no tiene nada propio.
+- Si L1 está libre, el modelo de L2 sigue produciendo a media cap en L1 (igual que antes).
+- Si el modelo de L2 ya lista y ocupa L1, no se duplica el apoyo.
+
+Al generar el plan, el aviso de “Apoyo Línea 1 al 50%” lo dice así.
 
 ## Motor · Columna Lote y nombre de modelo (5.9.50)
 
