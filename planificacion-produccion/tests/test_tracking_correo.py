@@ -130,11 +130,32 @@ def es_marcador_turno(fila):
     return turno_de_bloque(fila[1] if fila and len(fila) > 1 else "") != ""
 
 
+MAX_COLS_TABLERO = 26
+
+
 def fila_tiene_valor(fila):
-    for j in range(1, min(16, len(fila or []))):
+    n = min(MAX_COLS_TABLERO, len(fila or []))
+    for j in range(1, n):
         if str(fila[j] or "").strip() != "":
             return True
     return False
+
+
+def columnas_usadas(datos, first, last, last_col):
+    min_j = max_j = -1
+    for j in range(1, last_col + 1):
+        hay = False
+        for i in range(first, last + 1):
+            if str((datos[i] or [None] * (j + 1))[j] or "").strip() != "":
+                hay = True
+                break
+        if hay:
+            if min_j == -1:
+                min_j = j
+            max_j = j
+    if min_j == -1:
+        return []
+    return list(range(min_j, max_j + 1))
 
 
 def dividir_tableros(datos):
@@ -142,34 +163,43 @@ def dividir_tableros(datos):
     first = last = -1
     last_col = 1
     hay_linea = False
+    hay_total = False
     titulo = pending = "Turno Diurno"
 
     def cerrar():
-        nonlocal first, last, last_col, hay_linea
-        if first != -1 and last >= first and hay_linea:
+        nonlocal first, last, last_col, hay_linea, hay_total
+        if first != -1 and last >= first and (hay_linea or hay_total):
             bloques.append(
-                {"titulo": titulo, "first": first, "last": last, "lastCol": last_col}
+                {
+                    "titulo": titulo if hay_linea else "Total del día",
+                    "first": first,
+                    "last": last,
+                    "lastCol": last_col,
+                }
             )
         first = last = -1
         last_col = 1
         hay_linea = False
+        hay_total = False
 
     for i, fila in enumerate(datos[:80]):
         if not fila_tiene_valor(fila):
             continue
+        n = min(MAX_COLS_TABLERO, len(fila))
         if es_marcador_turno(fila):
-            if first != -1 and hay_linea:
+            if first != -1 and (hay_linea or hay_total):
                 cerrar()
             pending = titulo_tablero_turno(turno_de_bloque(fila[1]))
             titulo = pending
             first = last = i
             last_col = 1
             hay_linea = False
-            for jm in range(1, min(16, len(fila))):
+            hay_total = False
+            for jm in range(1, n):
                 if str(fila[jm] or "").strip() != "":
                     last_col = max(last_col, jm)
             continue
-        for j in range(1, min(16, len(fila))):
+        for j in range(1, n):
             if str(fila[j] or "").strip() != "":
                 last_col = max(last_col, j)
         if first == -1:
@@ -179,6 +209,7 @@ def dividir_tableros(datos):
         if es_fila_linea(fila):
             hay_linea = True
         if es_fila_total(fila):
+            hay_total = True
             cerrar()
     cerrar()
     return bloques
@@ -312,6 +343,7 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertIn("tal cual están en la hoja", src)
         self.assertIn("Turno Diurno", src)
         self.assertIn("Turno Nocturno", src)
+        self.assertIn("Total del día", src)
 
     def test_historial_diario_en_script(self):
         with open(GS, encoding="utf-8") as f:
@@ -449,11 +481,13 @@ class TestTrackingCorreo(unittest.TestCase):
     def test_script_reparte_turnos_en_tableros_y_detalle(self):
         with open(GS, encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("VERSIÓN 5.9.5", src)
+        self.assertIn("VERSIÓN 5.9.6", src)
         for token in (
             "function clasificarTurno_(",
             "function turnoDeBloque_(",
             "function dividirTablerosTracking_(",
+            "function tituloTableroTotalDia_(",
+            "MAX_COLS_TABLERO_CORREO_ = 26",
             "function prepararHojaDetalleTracking_(",
             "totalesPorTurno",
             'HEADERS_DETALLE_TRACKING_ = ["Dia", "Fecha", "Linea", "Turno"',
@@ -484,11 +518,16 @@ class TestTrackingCorreo(unittest.TestCase):
         datos[26][1] = "TOTAL"
         datos[26][3] = "62"
         bloques = dividir_tableros(datos)
-        self.assertEqual([b["titulo"] for b in bloques], ["Turno Diurno", "Turno Nocturno"])
+        self.assertEqual(
+            [b["titulo"] for b in bloques],
+            ["Turno Diurno", "Turno Nocturno", "Total del día"],
+        )
         self.assertEqual(bloques[0]["first"], 1)
         self.assertEqual(bloques[0]["last"], 11)
         self.assertEqual(bloques[1]["first"], 14)
         self.assertEqual(bloques[1]["last"], 23)
+        self.assertEqual(bloques[2]["first"], 26)
+        self.assertEqual(bloques[2]["last"], 26)
 
     def test_agrega_reales_por_turno_y_linea(self):
         filas = [
@@ -539,6 +578,58 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertEqual(tot["nocturno"]["linea 1"]["lunes"], 52)
         self.assertEqual(tot["nocturno"]["linea 2"]["martes"], 101)
         self.assertEqual(sum(tot["nocturno"]["linea 5"].values()), 30)
+
+    def test_columnas_contiguas_incluyen_columna_extra(self):
+        datos = []
+        for _ in range(12):
+            datos.append([""] * 18)
+        datos[1][1] = "SEMANA"
+        datos[4][2] = "Lunes"
+        datos[4][15] = "% Cumplimiento"
+        datos[5][1] = "Linea 1"
+        datos[5][3] = "10"
+        datos[5][15] = "80%"
+        datos[6][1] = "Total"
+        datos[6][3] = "10"
+        datos[6][15] = "80%"
+        bloques = dividir_tableros(datos)
+        self.assertEqual(len(bloques), 1)
+        self.assertEqual(bloques[0]["lastCol"], 15)
+        cols = columnas_usadas(
+            datos, bloques[0]["first"], bloques[0]["last"], bloques[0]["lastCol"]
+        )
+        self.assertEqual(cols[0], 1)
+        self.assertEqual(cols[-1], 15)
+        self.assertIn(15, cols)
+
+    def test_excel_total_del_dia_en_correo(self):
+        xlsx = "/home/ubuntu/.cursor/projects/workspace/uploads/Tracking_-_Produccion__3__edd2.xlsx"
+        if not os.path.isfile(xlsx):
+            self.skipTest("Excel Tracking (3) no está en este entorno")
+        from openpyxl import load_workbook
+
+        wb = load_workbook(xlsx, data_only=True)
+        ws = wb["Tracking - Produccion"]
+        datos = []
+        for r in range(1, 31):
+            fila = []
+            for c in range(1, 17):
+                v = ws.cell(r, c).value
+                if v is None:
+                    fila.append("")
+                elif hasattr(v, "strftime"):
+                    fila.append(v.strftime("%d/%m/%Y"))
+                else:
+                    fila.append(v)
+            datos.append(fila)
+        bloques = dividir_tableros(datos)
+        titulos = [b["titulo"] for b in bloques]
+        self.assertEqual(titulos, ["Turno Diurno", "Turno Nocturno", "Total del día"])
+        self.assertGreaterEqual(bloques[0]["lastCol"], 15)
+        self.assertEqual(str(datos[5][15]).strip(), "% Cumplimiento")
+        total = bloques[2]
+        self.assertEqual(str(datos[total["last"]][1]).strip().upper(), "TOTAL")
+        self.assertEqual(float(datos[total["last"]][3]), 427)
 
 
 if __name__ == "__main__":
