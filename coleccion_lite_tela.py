@@ -18,27 +18,22 @@ COLORES_TELA_REAL = ["Negro", "Verde Militar"]
 # Compatibilidad con textos existentes
 NEGRO_FACTOR_RESERVA = NEGRO_TELA_MIN_FACTOR
 
-# Refuerzo núcleo S+M (I+D): moderado, misma lógica en chaqueta y pant; sale de XS/L/XL
-TALLA_SM_BOOST_EACH = 0.0075  # +0,75 pp a S y +0,75 pp a M (sobre curva ya ajustada por modelo)
+# Objetivo XS (I+D): lo restado de XS se reparte 50/50 entre S y M; L y XL sin cambio
+CHAQUETA_XS_TARGET = 0.205
+PANT_XS_TARGET = 0.18
 
 
-def apply_sm_nucleo_boost(talla_pct: dict, tallas: list) -> dict:
-    """Sube S y M por igual; descuenta XS, L y XL en proporción (base analítica intacta en espíritu)."""
-    boost = TALLA_SM_BOOST_EACH
-    total_give = 2 * boost
-    others = [t for t in tallas if t not in ("S", "M")]
-    pool = sum(talla_pct.get(t, 0) for t in others)
-    if pool <= total_give:
-        return dict(talla_pct)
+def apply_xs_shift_to_sm(talla_pct: dict, xs_target: float) -> dict:
+    """Fija XS al objetivo; transfiere el exceso por igual a S y M."""
     out = dict(talla_pct)
-    out["S"] = out.get("S", 0) + boost
-    out["M"] = out.get("M", 0) + boost
-    for t in others:
-        out[t] = out.get(t, 0) - total_give * (talla_pct.get(t, 0) / pool)
-    total = sum(out.values())
-    if total <= 0:
+    xs = out.get("XS", 0)
+    if xs <= xs_target:
         return out
-    return {t: out[t] / total for t in tallas}
+    delta = xs - xs_target
+    out["XS"] = xs_target
+    out["S"] = out.get("S", 0) + delta / 2
+    out["M"] = out.get("M", 0) + delta / 2
+    return out
 
 
 def avg_consumo_mts(consumo_mts: dict, talla_pct: dict, tallas: list) -> float:
