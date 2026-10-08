@@ -1,15 +1,11 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.5 (TURNOS DIURNO/NOCTURNO)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.6 (TOTAL DEL DÍA EN CORREO)
  * =====================================================================
  *  Cambios de esta versión:
- *   - Tablero diurno y tablero nocturno en "Tracking - Produccion".
- *     El mismo script reparte Real (Unds) según la columna Turno.
- *   - "Unidades Producidas - Costura": columna Turno (I) = Diurno / Nocturno.
- *     Vacío se trata como Diurno. Pedidos sin Turno van al diurno (Línea 1).
- *   - "Detalle Tracking - Produccion": columna Turno (E) en el desglose.
- *   - El correo diario muestra ambos tableros. El detalle incluye Turno.
- *   - La clave de "_Correo Enviado" incorpora el turno (claves viejas = diurno).
+ *   - El correo copia también la columna extra del tablero (p. ej. % Cumplimiento)
+ *     y el bloque TOTAL del día (diurno + nocturno por día).
+ *   - Sigue incluyendo los tableros diurno y nocturno (v5.9.5).
  * =====================================================================
  */
 
@@ -69,6 +65,16 @@ function etiquetaTurno_(clave) {
 
 function tituloTableroTurno_(clave) {
   return clave === "nocturno" ? "Turno Nocturno" : "Turno Diurno";
+}
+
+function tituloTableroTotalDia_() {
+  return "Total del día";
+}
+
+var MAX_COLS_TABLERO_CORREO_ = 26;
+
+function maxColFilaTablero_(fila) {
+  return Math.max(2, Math.min(MAX_COLS_TABLERO_CORREO_, (fila || []).length));
 }
 
 function turnoDeBloque_(texto) {
@@ -1461,7 +1467,8 @@ function esFilaMarcadorTurno_(fila) {
 }
 
 function filaTableroTieneValor_(fila) {
-  for (var j = 1; j < Math.min(16, (fila || []).length); j++) {
+  var n = maxColFilaTablero_(fila);
+  for (var j = 1; j < n; j++) {
     if (String(fila[j] == null ? "" : fila[j]).trim() !== "") return true;
   }
   return false;
@@ -1479,39 +1486,48 @@ function dividirTablerosTracking_(datos) {
   var last = -1;
   var lastCol = 1;
   var hayLinea = false;
+  var hayTotal = false;
   var titulo = tituloTableroTurno_("diurno");
   var pendingTitulo = tituloTableroTurno_("diurno");
   var tope = Math.min(80, datos.length);
 
   function cerrarBloque() {
-    if (first !== -1 && last >= first && hayLinea) {
-      bloques.push({ titulo: titulo, first: first, last: last, lastCol: lastCol });
+    if (first !== -1 && last >= first && (hayLinea || hayTotal)) {
+      bloques.push({
+        titulo: hayLinea ? titulo : tituloTableroTotalDia_(),
+        first: first,
+        last: last,
+        lastCol: lastCol
+      });
     }
     first = -1;
     last = -1;
     lastCol = 1;
     hayLinea = false;
+    hayTotal = false;
   }
 
   for (var i = 0; i < tope; i++) {
     var fila = datos[i] || [];
     if (!filaTableroTieneValor_(fila)) continue;
+    var nCols = maxColFilaTablero_(fila);
 
     if (esFilaMarcadorTurno_(fila)) {
-      if (first !== -1 && hayLinea) cerrarBloque();
+      if (first !== -1 && (hayLinea || hayTotal)) cerrarBloque();
       pendingTitulo = tituloTableroTurno_(turnoDeBloque_(fila[1]));
       titulo = pendingTitulo;
       first = i;
       last = i;
       lastCol = 1;
       hayLinea = false;
-      for (var jm = 1; jm < Math.min(16, fila.length); jm++) {
+      hayTotal = false;
+      for (var jm = 1; jm < nCols; jm++) {
         if (String(fila[jm] == null ? "" : fila[jm]).trim() !== "") lastCol = Math.max(lastCol, jm);
       }
       continue;
     }
 
-    for (var j = 1; j < Math.min(16, fila.length); j++) {
+    for (var j = 1; j < nCols; j++) {
       if (String(fila[j] == null ? "" : fila[j]).trim() !== "") lastCol = Math.max(lastCol, j);
     }
     if (first === -1) {
@@ -1520,14 +1536,18 @@ function dividirTablerosTracking_(datos) {
     }
     last = i;
     if (esFilaLineaTablero_(fila)) hayLinea = true;
-    if (esFilaTotalTablero_(fila)) cerrarBloque();
+    if (esFilaTotalTablero_(fila)) {
+      hayTotal = true;
+      cerrarBloque();
+    }
   }
   cerrarBloque();
   return bloques;
 }
 
 function columnasUsadasTablero_(datos, first, last, lastCol, ocultar) {
-  var usadas = [];
+  var minJ = -1;
+  var maxJ = -1;
   for (var j = 1; j <= lastCol; j++) {
     var hay = false;
     for (var i = first; i <= last; i++) {
@@ -1537,8 +1557,14 @@ function columnasUsadasTablero_(datos, first, last, lastCol, ocultar) {
         break;
       }
     }
-    if (hay) usadas.push(j);
+    if (hay) {
+      if (minJ === -1) minJ = j;
+      maxJ = j;
+    }
   }
+  var usadas = [];
+  if (minJ === -1) return usadas;
+  for (var k = minJ; k <= maxJ; k++) usadas.push(k);
   return usadas;
 }
 
@@ -1629,7 +1655,7 @@ function enviarReporteProduccion() {
 
   var confirm = ui.alert(
     "Enviar Reporte de Producción",
-    "El resumen copiará los tableros diurno y nocturno de 'Tracking - Produccion' tal cual están en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
+    "El resumen copiará los tableros diurno, nocturno y el total del día de 'Tracking - Produccion' tal cual están en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
@@ -1665,7 +1691,9 @@ function enviarReporteProduccion() {
     return;
   }
 
-  var rangoTrack = hojaTracking.getRange(1, 1, Math.min(80, Math.max(hojaTracking.getLastRow(), 1)), Math.min(16, Math.max(hojaTracking.getLastColumn(), 1)));
+  var nFilasTrack = Math.min(80, Math.max(hojaTracking.getLastRow(), 1));
+  var nColsTrack = Math.min(MAX_COLS_TABLERO_CORREO_, Math.max(hojaTracking.getLastColumn(), 1));
+  var rangoTrack = hojaTracking.getRange(1, 1, nFilasTrack, nColsTrack);
   var datosTracking = rangoTrack.getDisplayValues();
   var fondosTracking = rangoTrack.getBackgrounds();
   var coloresTracking = rangoTrack.getFontColors();
@@ -1697,7 +1725,7 @@ function enviarReporteProduccion() {
   var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
   htmlBody += "<h2 style='color: #2b5797;'>Reporte de Producción Diaria</h2>";
   htmlBody += "<p>Estimado equipo,</p>";
-  htmlBody += "<p>El resumen copia los tableros diurno y nocturno de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
+  htmlBody += "<p>El resumen copia los tableros diurno, nocturno y el total del día de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
 
   htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen General (Tracking)</h3>";
   htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";

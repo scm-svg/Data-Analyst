@@ -1,4 +1,4 @@
-# Tracking de Producción v5.9.5 — turnos diurno y nocturno
+# Tracking de Producción v5.9.6 — total del día en el correo
 
 ## Cómo instalar (borrar y pegar)
 
@@ -22,7 +22,7 @@ En el archivo **Tracking de Producción** (no el de Planificación):
 
 - Asunto: `Reporte de Producción Diaria y Proyección a Almacén` (sin emojis; Gmail los rompía).
 - La nota de almacén también va sin emoji.
-- El **Resumen General** copia **ambos** tableros (diurno y nocturno) tal cual están en la hoja (sin cuadrícula).
+- El **Resumen General** copia los tableros **diurno**, **nocturno** y el **Total del día** (diurno + nocturno por día), con todas las columnas del tablero (Plan/Real, Total Semana y la columna extra, p. ej. % Cumplimiento).
 - El **detalle** sí sale solo con **modelos y cantidades nuevas**, ahora con columna Turno. Lo ya enviado se guarda en `_Correo Enviado`. Un mismo SKU en diurno y nocturno no se mezcla.
 - Claves viejas del historial (sin turno) se leen como Diurno.
 - Si no hay nada nuevo, el script avisa y no manda correo.
