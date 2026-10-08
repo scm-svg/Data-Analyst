@@ -21,6 +21,8 @@ NEGRO_FACTOR_RESERVA = NEGRO_TELA_MIN_FACTOR
 # Objetivo XS (I+D): lo restado de XS se reparte 50/50 entre S y M; L y XL sin cambio
 CHAQUETA_XS_TARGET = 0.205
 PANT_XS_TARGET = 0.18
+PANT_L_SHIFT_TO_S = 0.005   # −0,5 pp L → S
+PANT_XL_SHIFT_TO_S = 0.002  # −0,2 pp XL → S
 
 
 def apply_xs_shift_to_sm(talla_pct: dict, xs_target: float) -> dict:
@@ -33,6 +35,17 @@ def apply_xs_shift_to_sm(talla_pct: dict, xs_target: float) -> dict:
     out["XS"] = xs_target
     out["S"] = out.get("S", 0) + delta / 2
     out["M"] = out.get("M", 0) + delta / 2
+    return out
+
+
+def apply_pant_l_xl_to_s(talla_pct: dict) -> dict:
+    """Lite Pant: −0,5 pp L y −0,2 pp XL → S."""
+    out = dict(talla_pct)
+    l_take = min(PANT_L_SHIFT_TO_S, out.get("L", 0))
+    xl_take = min(PANT_XL_SHIFT_TO_S, out.get("XL", 0))
+    out["L"] = out.get("L", 0) - l_take
+    out["XL"] = out.get("XL", 0) - xl_take
+    out["S"] = out.get("S", 0) + l_take + xl_take
     return out
 
 
