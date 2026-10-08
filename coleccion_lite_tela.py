@@ -18,6 +18,28 @@ COLORES_TELA_REAL = ["Negro", "Verde Militar"]
 # Compatibilidad con textos existentes
 NEGRO_FACTOR_RESERVA = NEGRO_TELA_MIN_FACTOR
 
+# Refuerzo núcleo S+M (I+D): moderado, misma lógica en chaqueta y pant; sale de XS/L/XL
+TALLA_SM_BOOST_EACH = 0.0075  # +0,75 pp a S y +0,75 pp a M (sobre curva ya ajustada por modelo)
+
+
+def apply_sm_nucleo_boost(talla_pct: dict, tallas: list) -> dict:
+    """Sube S y M por igual; descuenta XS, L y XL en proporción (base analítica intacta en espíritu)."""
+    boost = TALLA_SM_BOOST_EACH
+    total_give = 2 * boost
+    others = [t for t in tallas if t not in ("S", "M")]
+    pool = sum(talla_pct.get(t, 0) for t in others)
+    if pool <= total_give:
+        return dict(talla_pct)
+    out = dict(talla_pct)
+    out["S"] = out.get("S", 0) + boost
+    out["M"] = out.get("M", 0) + boost
+    for t in others:
+        out[t] = out.get(t, 0) - total_give * (talla_pct.get(t, 0) / pool)
+    total = sum(out.values())
+    if total <= 0:
+        return out
+    return {t: out[t] / total for t in tallas}
+
 
 def avg_consumo_mts(consumo_mts: dict, talla_pct: dict, tallas: list) -> float:
     return sum(consumo_mts[t] * talla_pct[t] for t in tallas)

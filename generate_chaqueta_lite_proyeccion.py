@@ -20,6 +20,8 @@ from coleccion_lite_tela import (
     TELA_POOL_NEGRO_MTS,
     TELA_POOL_VERDE_MTS,
     VERDE_TELA_MIN_FACTOR,
+    TALLA_SM_BOOST_EACH,
+    apply_sm_nucleo_boost,
     calc_fabric_production,
     distribute_by_color_talla_fixed,
 )
@@ -218,12 +220,12 @@ def analyze_reference(data: dict) -> dict:
 
 
 def adjust_talla_curve(talla_pct: dict) -> dict:
-    """Transfiere +1,5 pp de L a XL sobre curva histórica (XS sin cambio)."""
+    """Histórica Jacket → +1,5 pp L→XL → refuerzo moderado núcleo S+M (ambos modelos)."""
     adjusted = dict(talla_pct)
     shift = min(TALLA_SHIFT_L_TO_XL, adjusted.get("L", 0))
     adjusted["L"] -= shift
     adjusted["XL"] = adjusted.get("XL", 0) + shift
-    return adjusted
+    return apply_sm_nucleo_boost(adjusted, TALLAS)
 
 
 def calc_zipper_cap(talla_pct: dict) -> dict:
@@ -510,7 +512,8 @@ def write_resumen(wb, ref, zip_cap, prod):
         [],
         ["── AJUSTE CURVA TALLAS ──"],
         ["Curva histórica (Jacket 1.0 + 2.0)", "Dashboards combinados", ""],
-        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"hist XL {ref['talla_pct_hist']['XL']*100:.1f}% · L {ref['talla_pct']['L']*100:.1f}% · XS sin cambio"],
+        [f"XL (+{TALLA_SHIFT_L_TO_XL*100:.1f} pp ← L)", f"XL {ref['talla_pct']['XL']*100:.1f}%", f"hist XL {ref['talla_pct_hist']['XL']*100:.1f}% · L {ref['talla_pct']['L']*100:.1f}%"],
+        [f"Núcleo S+M (+{TALLA_SM_BOOST_EACH*100:.2f} pp c/u)", f"S {ref['talla_pct']['S']*100:.1f}% · M {ref['talla_pct']['M']*100:.1f}%", "Descuento proporcional XS/L/XL · criterio I+D"],
         [],
         ["── AJUSTES DE TIENDA (DISTRIBUCIÓN) ──"],
         ["Tolón histórico", round(ref["store_monthly_hist"].get("TOLON", 0), 1), "und/mes"],
@@ -1065,7 +1068,8 @@ def write_metodologia(wb, ref, zip_cap, prod):
         "",
         "7. AJUSTE CURVA TALLAS",
         f"   Histórica Jacket 1.0 + 2.0 DAMA: L {ref['talla_pct_hist']['L']*100:.1f}% · XL {ref['talla_pct_hist']['XL']*100:.1f}%.",
-        f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}% (XS sin cambio).",
+        f"   XL reforzado +{TALLA_SHIFT_L_TO_XL*100:.1f} pp desde L → L {ref['talla_pct']['L']*100:.1f}% · XL {ref['talla_pct']['XL']*100:.1f}%.",
+        f"   Núcleo S+M: +{TALLA_SM_BOOST_EACH*100:.2f} pp a S y a M (igual en chaqueta y pant); resto desde XS/L/XL proporcional.",
         "",
         "8. DISTRIBUCIÓN",
         "   Por tienda: pesos mensuales proyectados (Tolón/Web/Barquisimeto ajustados).",
