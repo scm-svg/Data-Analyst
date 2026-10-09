@@ -1,12 +1,14 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.7 (CANTIDAD CORREO SIN INFLAR)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.8 (CORREO GERENCIA SEMANAL)
  * =====================================================================
  *  Cambios de esta versión:
- *   - La cantidad del detalle ya no se infla ni se lee como fecha/talla:
- *     historial con formato fecha, clave con un día de menos (America/Lima)
- *     o el mismo SKU con otro nombre de producto (p. ej. MAR vs MAR LOTE 1).
- *   - Sigue copiando Total del día y tableros diurno/nocturno (v5.9.6).
+ *   - Pestaña Correo: columna "Correos Diario" (solo cantidades nuevas) y
+ *     columna "Correos Gerencia" (resumen de toda la semana productiva).
+ *   - El correo de gerencia se envía al cierre de semana: detalle MO-SKU,
+ *     Producto, Genero, Color, Talla y Cantidad, agrupando MOs coincidentes.
+ *   - Asunto y mensaje: piezas que salieron de producción, en proceso,
+ *     próximas a almacén y tienda.
  * =====================================================================
  */
 
@@ -18,7 +20,8 @@ function onOpen() {
     .addItem("2️⃣ Actualizar Tablero (Estampado)", "actualizarTrackingEstampado")
     .addSeparator()
     .addItem("🔐 Autorizar envío de correo (una vez)", "autorizarEnvioCorreo")
-    .addItem("📧 Enviar Reporte de Producción (Correo)", "enviarReporteProduccion")
+    .addItem("📧 Enviar Reporte Diario (Correos Diario)", "enviarReporteProduccion")
+    .addItem("📊 Enviar Resumen Semanal (Gerencia)", "enviarResumenGerencia")
     .addItem("↺ Reiniciar historial de correo diario", "reiniciarHistorialCorreo")
     .addSeparator()
     .addItem("💾 Enviar a Historial (Costura)", "guardarHistorialProduccionDiario")
@@ -1023,6 +1026,9 @@ function guardarHistorialAlmacenDiario() {
 // =========================================================================
 var NOMBRE_HISTORIAL_CORREO_ = "_Correo Enviado";
 var ASUNTO_REPORTE_CORREO_ = "Reporte de Producción Diaria y Proyección a Almacén";
+var ASUNTO_REPORTE_GERENCIA_ = "Resumen semanal de producción — piezas en proceso hacia almacén y tienda";
+var COL_CORREO_DIARIO_ = "diario";
+var COL_CORREO_GERENCIA_ = "gerencia";
 
 function textoPlanoDeHtml_(html) {
   return String(html)
@@ -1341,7 +1347,7 @@ function autorizarEnvioCorreo() {
     "Cuenta: " + (cuenta || "(no leída)") + "\n" +
     "Cuota GmailApp restante: " + cuotaGmail + "\n" +
     "Cuota MailApp restante: " + (cuotaMail < 0 ? "no disponible (se usará GmailApp)" : cuotaMail) + "\n\n" +
-    "Ya puedes usar Tracking → Enviar Reporte de Producción (Correo).",
+    "Ya puedes usar Tracking → Enviar Reporte Diario y Enviar Resumen Semanal (Gerencia).",
     ui.ButtonSet.OK
   );
 }
@@ -1832,6 +1838,195 @@ function construirHtmlDetalle_(filasNuevas, fondosHeader, colorHeader) {
   return html;
 }
 
+function esEmailValido_(val) {
+  var mail = String(val == null ? "" : val).trim();
+  if (mail === "" || mail.indexOf("@") === -1 || mail.indexOf(".") === -1) return false;
+  if (mail.indexOf(" ") !== -1) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail);
+}
+
+function textoCeldaCorreo_(val) {
+  return quitarTildes_(String(val == null ? "" : val).toLowerCase()).replace(/\s+/g, " ").trim();
+}
+
+function columnaDestinatariosCorreo_(datos, tipo) {
+  var col = tipo === COL_CORREO_GERENCIA_ ? 1 : 0;
+  var start = 0;
+  if (!datos || !datos.length) return { col: col, start: start };
+  var c0 = textoCeldaCorreo_((datos[0] || [])[0]);
+  var c1 = textoCeldaCorreo_((datos[0] || [])[1]);
+  var hayEncabezado = c0.indexOf("correo") !== -1 || c1.indexOf("correo") !== -1;
+  if (hayEncabezado) {
+    start = 1;
+    if (tipo === COL_CORREO_GERENCIA_) {
+      if (c1.indexOf("gerencia") !== -1) col = 1;
+      else if (c0.indexOf("gerencia") !== -1) col = 0;
+      else col = 1;
+    } else {
+      if (c0.indexOf("diario") !== -1) col = 0;
+      else if (c1.indexOf("diario") !== -1) col = 1;
+      else col = 0;
+    }
+  }
+  return { col: col, start: start };
+}
+
+function leerDestinatariosCorreo_(datos, tipo) {
+  var meta = columnaDestinatariosCorreo_(datos, tipo);
+  var out = [];
+  var vistos = {};
+  for (var i = meta.start; i < (datos || []).length; i++) {
+    var mail = String((datos[i] || [])[meta.col] == null ? "" : datos[i][meta.col]).trim();
+    if (!esEmailValido_(mail)) continue;
+    var k = mail.toLowerCase();
+    if (vistos[k]) continue;
+    vistos[k] = true;
+    out.push(mail);
+  }
+  return out;
+}
+
+function claveResumenGerencia_(fila) {
+  return [
+    normalizarMoClave_(fila.mo),
+    String(fila.sku == null ? "" : fila.sku).trim().toLowerCase(),
+    String(fila.producto == null ? "" : fila.producto).trim().toLowerCase(),
+    String(fila.genero == null ? "" : fila.genero).trim().toLowerCase(),
+    String(fila.color == null ? "" : fila.color).trim().toLowerCase(),
+    normalizarTallaClave_(fila.talla)
+  ].join("|");
+}
+
+function etiquetaMoSku_(fila) {
+  var d = fila.display || {};
+  var mo = String(d.mo != null && String(d.mo).trim() !== "" ? d.mo : (fila.mo == null ? "" : fila.mo)).trim();
+  var sku = String(d.sku != null && String(d.sku).trim() !== "" ? d.sku : (fila.sku == null ? "" : fila.sku)).trim();
+  if (mo && sku) return mo + " — " + sku;
+  return mo || sku || "";
+}
+
+function compararMoSkuTalla_(a, b) {
+  var moA = String(normalizarMoClave_(a.mo));
+  var moB = String(normalizarMoClave_(b.mo));
+  var nMoA = Number(moA);
+  var nMoB = Number(moB);
+  if (isFinite(nMoA) && isFinite(nMoB) && moA !== "" && moB !== "" && nMoA !== nMoB) return nMoA - nMoB;
+  if (moA !== moB) return moA < moB ? -1 : 1;
+  var skuA = String(a.sku == null ? "" : a.sku).trim().toLowerCase();
+  var skuB = String(b.sku == null ? "" : b.sku).trim().toLowerCase();
+  if (skuA !== skuB) return skuA < skuB ? -1 : 1;
+  var tA = String(normalizarTallaClave_(a.talla));
+  var tB = String(normalizarTallaClave_(b.talla));
+  if (tA === tB) return 0;
+  var nA = Number(tA);
+  var nB = Number(tB);
+  if (isFinite(nA) && isFinite(nB) && nA !== nB) return nA - nB;
+  return tA < tB ? -1 : 1;
+}
+
+function resumirDetalleGerencia_(filas) {
+  var porClave = {};
+  var orden = [];
+  for (var i = 0; i < (filas || []).length; i++) {
+    var f = filas[i];
+    var clave = claveResumenGerencia_(f);
+    if (!porClave[clave]) {
+      porClave[clave] = {
+        clave: clave,
+        mo: f.mo,
+        sku: f.sku,
+        producto: f.producto,
+        genero: f.genero,
+        color: f.color,
+        talla: f.talla,
+        cantidad: 0,
+        display: f.display || {}
+      };
+      orden.push(clave);
+    }
+    porClave[clave].cantidad += numeroCantidad_(f.cantidad);
+  }
+  var out = [];
+  for (var k = 0; k < orden.length; k++) out.push(porClave[orden[k]]);
+  out.sort(compararMoSkuTalla_);
+  return out;
+}
+
+function totalCantidadFilas_(filas) {
+  var t = 0;
+  for (var i = 0; i < (filas || []).length; i++) t += numeroCantidad_(filas[i].cantidad);
+  return t;
+}
+
+function construirHtmlDetalleGerencia_(filas, fondosHeader, colorHeader) {
+  var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; width: 100%; font-size: 13px;'>";
+  var headers = ["MO-SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
+  html += "<tr>";
+  for (var h = 0; h < headers.length; h++) {
+    html += htmlCeldaTablero_("th", headers[h], fondosHeader || "#434343", colorHeader || "#FFFFFF", true, true);
+  }
+  html += "</tr>";
+  for (var i = 0; i < (filas || []).length; i++) {
+    var f = filas[i];
+    var d = f.display || {};
+    var vals = [
+      etiquetaMoSku_(f),
+      d.producto != null && String(d.producto).trim() !== "" ? d.producto : f.producto,
+      d.genero != null && String(d.genero).trim() !== "" ? d.genero : f.genero,
+      d.color != null && String(d.color).trim() !== "" ? d.color : f.color,
+      d.talla != null && String(d.talla).trim() !== "" ? d.talla : f.talla,
+      f.cantidad
+    ];
+    html += "<tr>";
+    for (var k = 0; k < vals.length; k++) {
+      html += htmlCeldaTablero_("td", vals[k], "#ffffff", "#333333", false, true);
+    }
+    html += "</tr>";
+  }
+  html += "<tr>";
+  html += htmlCeldaTablero_("td", "TOTAL SEMANA", "#f3f4f6", "#111111", true, true);
+  html += htmlCeldaTablero_("td", "", "#f3f4f6", "#111111", true, true);
+  html += htmlCeldaTablero_("td", "", "#f3f4f6", "#111111", true, true);
+  html += htmlCeldaTablero_("td", "", "#f3f4f6", "#111111", true, true);
+  html += htmlCeldaTablero_("td", "", "#f3f4f6", "#111111", true, true);
+  html += htmlCeldaTablero_("td", totalCantidadFilas_(filas), "#f3f4f6", "#111111", true, true);
+  html += "</tr>";
+  html += "</table>";
+  return html;
+}
+
+function esCierreSemanaProductiva_(ahora) {
+  var d = ahora || new Date();
+  var dia = d.getDay();
+  return dia === 5 || dia === 6;
+}
+
+function construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas) {
+  var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
+  htmlBody += "<h2 style='color: #2b5797;'>Resumen semanal de producción</h2>";
+  htmlBody += "<p>Estimada gerencia,</p>";
+  htmlBody += "<p>Les compartimos el cierre de la semana productiva. Las <strong>" +
+    escapeHtml_(totalPiezas) + " prendas</strong> de este resumen <strong>ya salieron de producción</strong> " +
+    "y se encuentran <strong>en proceso</strong> (acabados y tránsito interno). " +
+    "Están <strong>próximas a llegar a almacén</strong> de producto terminado " +
+    "(aproximadamente <strong>3 días hábiles</strong>) y, desde allí, <strong>a tienda</strong>.</p>";
+  htmlBody += "<p>El detalle consolida la semana completa: un mismo MO-SKU (mismo producto, color y talla) suma todas las líneas, turnos y días.</p>";
+
+  htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen de líneas (semana)</h3>";
+  htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";
+
+  htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>2. Detalle de producción (MO-SKU)</h3>";
+  htmlBody += "<div style='overflow-x: auto;'>" + htmlDetalle + "</div>";
+
+  htmlBody += "<br><br><div style='background-color: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffeeba;'>";
+  htmlBody += "<strong>NOTA PARA ALMACÉN Y TIENDA:</strong> estas piezas ya no están en costura; proyectar ingreso a almacén en <strong>3 días hábiles</strong> y despacho posterior a tienda.";
+  htmlBody += "</div>";
+
+  htmlBody += "<p><br>Saludos cordiales,<br><em>Sistema Automático de Planificación</em></p>";
+  htmlBody += "</div>";
+  return htmlBody;
+}
+
 // =========================================================================
 // 6. ENVIAR REPORTE POR CORREO ELECTRÓNICO (TABLA INLINE, SOLO LO NUEVO)
 // =========================================================================
@@ -1840,8 +2035,8 @@ function enviarReporteProduccion() {
   var ui = SpreadsheetApp.getUi();
 
   var confirm = ui.alert(
-    "Enviar Reporte de Producción",
-    "El resumen copiará los tableros diurno, nocturno y el total del día de 'Tracking - Produccion' tal cual están en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
+    "Enviar Reporte Diario",
+    "Se enviará solo a la columna 'Correos Diario'. El resumen copiará los tableros diurno, nocturno y el total del día de 'Tracking - Produccion' tal cual están en la hoja. El detalle solo incluirá modelos y cantidades nuevas (las que no hayan salido ya en un correo anterior).\n\n¿Continuar?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
@@ -1854,17 +2049,9 @@ function enviarReporteProduccion() {
     return;
   }
 
-  var datosCorreo = hojaCorreo.getDataRange().getValues();
-  var destinatarios = [];
-  for (var i = 0; i < datosCorreo.length; i++) {
-    var mail = String(datosCorreo[i][0]).trim();
-    if (mail !== "" && mail.indexOf("@") !== -1 && mail.indexOf(".") !== -1) {
-      destinatarios.push(mail);
-    }
-  }
-
+  var destinatarios = leerDestinatariosCorreo_(hojaCorreo.getDataRange().getValues(), COL_CORREO_DIARIO_);
   if (destinatarios.length === 0) {
-    ui.alert("Error: No hay direcciones de correo válidas en la pestaña 'Correo'.");
+    ui.alert("Error: No hay direcciones válidas en la columna 'Correos Diario' de la pestaña 'Correo'.");
     return;
   }
   var correosUnidos = destinatarios.join(",");
@@ -1936,5 +2123,88 @@ function enviarReporteProduccion() {
     );
   } catch (error) {
     ui.alert("Error al enviar el correo:\n\n" + error.toString());
+  }
+}
+
+// =========================================================================
+// 7. RESUMEN SEMANAL PARA GERENCIA (TODA LA SEMANA, COLUMNA CORREOS GERENCIA)
+// =========================================================================
+function enviarResumenGerencia() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui = SpreadsheetApp.getUi();
+
+  var avisoDia = esCierreSemanaProductiva_(new Date())
+    ? "Este envío corresponde al cierre de la semana productiva.\n\n"
+    : "Hoy no es viernes/sábado. El correo de gerencia está pensado para el final de la semana.\n\n";
+
+  var confirm = ui.alert(
+    "Enviar Resumen Semanal (Gerencia)",
+    avisoDia +
+    "Se enviará solo a la columna 'Correos Gerencia'. El detalle resume toda la semana (no solo lo nuevo): MO-SKU, Producto, Genero, Color, Talla y Cantidad, agrupando MOs coincidentes.\n\n¿Continuar?",
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) return;
+
+  if (!asegurarPermisoCorreo_()) return;
+
+  var hojaCorreo = ss.getSheetByName("Correo");
+  if (!hojaCorreo) {
+    ui.alert("Error: No se encontró la pestaña 'Correo'.");
+    return;
+  }
+
+  var destinatarios = leerDestinatariosCorreo_(hojaCorreo.getDataRange().getValues(), COL_CORREO_GERENCIA_);
+  if (destinatarios.length === 0) {
+    ui.alert("Error: No hay direcciones válidas en la columna 'Correos Gerencia' de la pestaña 'Correo'.");
+    return;
+  }
+  var correosUnidos = destinatarios.join(",");
+
+  var hojaTracking = ss.getSheetByName("Tracking - Produccion");
+  var hojaDetalle = ss.getSheetByName("Detalle Tracking - Produccion");
+
+  if (!hojaTracking || !hojaDetalle) {
+    ui.alert("Error: Faltan las pestañas 'Tracking - Produccion' o 'Detalle Tracking - Produccion'.");
+    return;
+  }
+
+  var nFilasTrack = Math.min(80, Math.max(hojaTracking.getLastRow(), 1));
+  var nColsTrack = Math.min(MAX_COLS_TABLERO_CORREO_, Math.max(hojaTracking.getLastColumn(), 1));
+  var rangoTrack = hojaTracking.getRange(1, 1, nFilasTrack, nColsTrack);
+  var datosTracking = rangoTrack.getDisplayValues();
+  var fondosTracking = rangoTrack.getBackgrounds();
+  var coloresTracking = rangoTrack.getFontColors();
+
+  var valoresDetalle = hojaDetalle.getDataRange().getValues();
+  var displaysDetalle = hojaDetalle.getDataRange().getDisplayValues();
+  var filasDetalle = extraerFilasDetalleCorreo_(valoresDetalle, displaysDetalle);
+  if (filasDetalle.length === 0) {
+    ui.alert("Error: La pestaña 'Detalle Tracking - Produccion' está vacía. No hay datos que reportar.");
+    return;
+  }
+
+  var filasGerencia = resumirDetalleGerencia_(filasDetalle);
+  var totalPiezas = totalCantidadFilas_(filasGerencia);
+  if (totalPiezas <= 0) {
+    ui.alert("No hay producción en la semana para armar el resumen de gerencia.");
+    return;
+  }
+
+  ss.toast("Generando resumen semanal...", "Enviando Gerencia", 10);
+
+  var htmlTableros = construirHtmlTablerosTracking_(datosTracking, fondosTracking, coloresTracking);
+  var htmlDetalle = construirHtmlDetalleGerencia_(filasGerencia, "#434343", "#FFFFFF");
+  var htmlBody = construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas);
+
+  try {
+    var via = enviarCorreoHtml_(correosUnidos, ASUNTO_REPORTE_GERENCIA_, htmlBody);
+    ui.alert(
+      "Éxito",
+      "Se envió el resumen semanal de gerencia (" + via + ") con " +
+        filasGerencia.length + " MO-SKU y " + totalPiezas + " prendas a:\n\n" + correosUnidos,
+      ui.ButtonSet.OK
+    );
+  } catch (error) {
+    ui.alert("Error al enviar el correo de gerencia:\n\n" + error.toString());
   }
 }
