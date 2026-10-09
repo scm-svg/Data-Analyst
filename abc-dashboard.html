@@ -183,7 +183,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 <div class="fbar">
   <label>Modelo</label><select id="fModel"></select>
   <label>Tienda</label><select id="fStore"></select>
-  <label>Canal</label><select id="fChannel"><option value="retail">Retail (sin corporativo ni pedidos)</option><option value="sin_grandes">Todos sin pedidos grandes (≥100 und)</option><option value="all" selected>Todos los canales</option><option value="corp">Solo corporativo</option></select>
+  <label>Canal</label><select id="fChannel"><option value="retail" selected>Retail (sin corporativo ni pedidos)</option><option value="sin_grandes">Todos sin pedidos grandes (≥100 und)</option><option value="all">Todos los canales</option><option value="corp">Solo corporativo</option></select>
   <label>Categoría</label><select id="fCat"></select>
   <label>Stock en</label><select id="fLoc"></select>
   <label>Clase</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
@@ -360,7 +360,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     abcClass: "",
     search: "",
     expandedModels: new Set(),
-    channel: "all",
+    channel: "retail",
     verAgotados: false,
     mxCell: "",
     level: "mc",
@@ -370,7 +370,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     xyzCell: "AX",
     opLevel: "mc",
     classMode: "final",
-    activeOnly: true,
+    activeOnly: false,
     opWin: 6,
     opCls: "",
     opEst: "",
@@ -434,6 +434,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 
   function excludedSku(sku) {
     const m = skuMeta(sku);
+    if (!(m.cost > 0)) return true;
     const blob = ((m.producto || "") + " " + (m.modelo || "") + " " + (m.categoria || "")).toLowerCase();
     return blob.indexOf("donaci") >= 0 || blob.indexOf("refresh") >= 0;
   }
@@ -1151,29 +1152,35 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     if (state.verAgotados) {
       const byModel = new Map();
       AGOTADOS.forEach((it) => {
+        if (it.qty < 0) return;
         if (!matchesSearch((it.modelo || "") + " " + (it.producto || "") + " " + it.sku)) return;
         if (state.modelo && it.modelo !== state.modelo && it.producto !== state.modelo) return;
         const k = it.producto || it.modelo;
-        if (!byModel.has(k)) byModel.set(k, { modelo: k, items: [], revenue: 0, qty: 0, stock: 0, abcClass: "-" });
+        const pf = FINAL && FINAL.prod.get(k);
+        const fc = pf && ["A", "B", "C"].indexOf(pf.cls) >= 0 ? pf.cls : "C";
+        if (state.abcClass && fc !== state.abcClass) return;
+        if (!byModel.has(k)) byModel.set(k, { modelo: k, items: [], revenue: 0, qty: 0, stock: 0, abcClass: fc });
         const g = byModel.get(k);
-        g.items.push({ ...it, abcClass: "-", stock: 0 });
+        g.items.push({ ...it, abcClass: fc, stock: 0 });
         g.revenue += it.revenue;
         g.qty += it.qty;
       });
       const models = [...byModel.values()].sort((a, b) => b.revenue - a.revenue);
-      if (sub) sub.textContent = AGOTADOS.length + " SKUs con venta en el período, sin stock y sin venta en los últimos 3 meses. Quedan fuera del corte 80/15/5.";
+      if (sub) sub.textContent = AGOTADOS.length + " SKUs sin stock y sin venta en 3 meses. Entran en el corte con el margen del período.";
       paint(models, "No hay SKUs agotados sin venta con estos filtros");
       return;
     }
     const byModel = new Map();
     scopeSkuMap.forEach((it, sku) => {
-      if (it.margin <= 0) return;
+      if (it.margin <= 0 || it.qty < 0) return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
       if (state.modelo && it.modelo !== state.modelo && it.producto !== state.modelo) return;
       const k = it.producto || it.modelo;
       if (!byModel.has(k)) byModel.set(k, { items: [] });
       const inv = invMap.get(sku) || {};
-      byModel.get(k).items.push({ ...it, stock: inv.total || 0 });
+      const stock = inv.total || 0;
+      if (stock < 0) return;
+      byModel.get(k).items.push({ ...it, stock: stock });
     });
     const models = [...byModel.entries()]
       .map(([modelo, g]) => {
@@ -2122,27 +2129,30 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     // diagnóstico
     const dx = [];
     const recent = cm.roll[n - 1];
-    dx.push("<strong>" + (pr.cls === "N" ? "Producto nuevo" : "Clase " + pr.cls) + "</strong> en " + esc(pr.ctx) + (recent && recent.cum ? " · en los últimos 3 meses está en el puesto " + recent.rank + " de " + recent.n + " por margen, con " + (recent.cum * 100).toFixed(1) + "% acumulado" + (Math.abs(recent.cum - TH.A) < 0.04 || Math.abs(recent.cum - TH.B) < 0.03 ? " (cerca de un corte: los cambios de clase pueden ser ruido)" : "") : "") + ".");
-    dx.push("Vendió en <strong>" + pr.mwin + " de " + state.opWin + " meses</strong> de la ventana" + (pr.capped ? " ⏱️ venta concentrada en pocos meses (pico o evento): revisar antes de reponer" : "") + ".");
-    if (pr.st !== null) dx.push("Sell-through de <strong>" + (pr.st * 100).toFixed(0) + "%</strong> frente a un objetivo de " + (pr.stObj != null ? (pr.stObj * 100).toFixed(0) + "%" : "—") + " y una mediana de " + (pr.stMed * 100).toFixed(0) + "% en su contexto → eficiencia <strong>" + pr.band + "</strong>.");
-    dx.push("La letra sale del margen del período, con corte 80/15/5. Este producto aporta <strong>" + fmtMoney(pr.margin) + "</strong>.");
+    const nearCut = recent && recent.cum != null && (Math.abs(recent.cum - TH.A) < 0.04 || Math.abs(recent.cum - TH.B) < 0.03);
+    dx.push("Clase <strong>" + (pr.cls === "SV" ? "sin venta" : pr.cls) + "</strong>" + (recent && recent.rank ? ". Últimos 3 meses: puesto <strong>" + recent.rank + "</strong> de " + recent.n + " por margen (" + (recent.cum * 100).toFixed(1) + "%)" + (nearCut ? ", pegado al corte" : "") : "") + ".");
     const stuck = mc.filter((g) => g.band === "Estancado" || g.band === "Lento").sort((a, b) => b.stock - a.stock);
-    if (stuck.length) dx.push("Colores lentos o estancados: <strong>" + stuck.map((g) => esc(g.color) + " (" + (g.st * 100).toFixed(0) + "%)").join(", ") + "</strong>.");
-    if (pr.seasonal) dx.push("Es <strong>estacional</strong>: más de la mitad de su venta del año se concentra en 3 meses.");
-    const l3 = pr.ser.slice(-3).reduce((a, b) => a + b, 0) / 3;
-    dx.push("Venta reciente: " + fmt(l3, 1) + " und/mes en los últimos 3 meses frente a " + fmt(avg, 1) + " de promedio (" + (avg ? (l3 / avg).toFixed(1) : "—") + "× su promedio).");
+    if (stuck.length) dx.push("Colores con poca salida: <strong>" + stuck.map((g) => esc(g.color) + " (sell-through " + (g.st * 100).toFixed(0) + "%)").join(", ") + "</strong>.");
+    if (pr.seasonal) dx.push("Más de la mitad de la venta del año cae en 3 meses.");
     const over = mc.filter((g) => g.estado === "Sobrestock" || g.estado === "Sin venta").sort((a, b) => b.stock - a.stock);
-    const brk = mc.filter((g) => g.estado === "Quiebre");
-    if (over.length) dx.push("Colores con stock de más: <strong>" + over.map((g) => esc(g.color) + " (" + fmt(g.stock) + " und, " + covTxt(g.cov) + ")").join(", ") + "</strong>.");
-    if (brk.length) dx.push("Colores en riesgo de quiebre: <strong>" + brk.map((g) => esc(g.color) + " (" + covTxt(g.cov) + ")").join(", ") + "</strong>.");
+    const brk = mc.filter((g) => g.estado === "Quiebre").sort((a, b) => a.cov - b.cov);
+    const agotCol = mc.filter((g) => g.estado === "Agotado").sort((a, b) => b.units - a.units);
+    if (over.length) dx.push("Colores por encima de su cobertura: <strong>" + over.map((g) => esc(g.color) + " (" + fmt(g.stock) + " und, " + covTxt(g.cov) + ")").join(", ") + "</strong>.");
+    if (brk.length) dx.push("Colores por debajo de la cobertura mínima: <strong>" + brk.map((g) => esc(g.color) + " (" + covTxt(g.cov) + ")").join(", ") + "</strong>.");
+    if (agotCol.length) dx.push("Colores agotados: <strong>" + agotCol.map((g) => esc(g.color)).join(", ") + "</strong>.");
     const totSold = Object.values(bySize).reduce((s, v) => s + v.sold, 0) || 1, totStk = Object.values(bySize).reduce((s, v) => s + Math.max(0, v.stock), 0) || 1;
     const sz = Object.entries(bySize).sort((a, b) => (TALLA_ORD[a[0]] ?? 99) - (TALLA_ORD[b[0]] ?? 99));
     const szOver = sz.filter(([t, v]) => v.stock / totStk - v.sold / totSold > 0.1).map(([t]) => t);
     const szShort = sz.filter(([t, v]) => v.sold / totSold - v.stock / totStk > 0.08).map(([t]) => t);
-    if (szOver.length) dx.push("Tallas sobradas frente a lo que se vende: <strong>" + szOver.join(", ") + "</strong>" + (szShort.length ? " · tallas cortas: <strong>" + szShort.join(", ") + "</strong>" : "") + ".");
-    if (pr.stockCentral > 0) dx.push(fmt(pr.stockCentral) + " und están en taller o almacén. Se consultan como stock y no entran en el sell-through ni en la cobertura.");
-    if (nuc && core.length) dx.push("El estado global mira las tiendas que juntan el 70% de la venta (" + core.map((r) => r.store).join(", ") + "): <strong>" + headEstado + "</strong>, cobertura " + covTxt(headCov) + ". El stock de las tiendas lentas no cambia esa lectura.");
-    dx.push("<strong>Acción sugerida:</strong> " + esc(headAccion || "—") + ".");
+    if (szOver.length) dx.push("Tallas con más stock que venta: <strong>" + szOver.join(", ") + "</strong>" + (szShort.length ? ". Tallas con menos stock que venta: <strong>" + szShort.join(", ") + "</strong>" : "") + ".");
+    else if (szShort.length) dx.push("Tallas con menos stock que venta: <strong>" + szShort.join(", ") + "</strong>.");
+    if (nuc && core.length) {
+      const coreNames = {};
+      core.forEach((r) => { coreNames[r.store] = 1; });
+      const slowStores = storeRows.filter((r) => r.sold > 0 && !coreNames[r.store] && coverEstado(r.stock, r.sold, Wf, pr.cat, pr.cls).estado === "Sobrestock");
+      dx.push("Estado <strong>" + headEstado + "</strong> en " + core.map((r) => r.store).join(", ") + " (" + covTxt(headCov) + ", 70% de la venta)." + (slowStores.length ? " El exceso está en " + slowStores.map((r) => r.store + " " + covTxt(coverEstado(r.stock, r.sold, Wf, pr.cat, pr.cls).cov)).join(", ") + "." : ""));
+    } else if (headEstado && headEstado !== "—") dx.push("Estado <strong>" + headEstado + "</strong>, cobertura " + covTxt(headCov) + ".");
+    dx.push("<strong>Acción:</strong> " + esc(headAccion || "—") + ".");
     h += '<div class="card"><h3>Diagnóstico</h3><ul style="margin:6px 0 0 18px;line-height:1.6;font-size:0.8rem">' + dx.map((d) => "<li>" + d + "</li>").join("") + "</ul></div>";
     // mes a mes
     h += '<div class="card"><h3>Comportamiento mes a mes</h3><div class="sub">La misma clase: corte 80/15/5 del margen. "Mes" = solo ese mes · "3 m" = ventana móvil. × prom = venta del mes frente a su promedio desde que se vende</div><div class="cscroll"><table class="ct"><thead><tr><th>Mes</th><th>Und.</th><th>Margen</th><th>× prom.</th><th>Clase mes</th><th>Puesto (margen)</th><th>Clase 3 m</th></tr></thead><tbody>';
@@ -2276,7 +2286,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       const scopeMap = aggregateSalesScope(keys);
       const act = computeActive();
       AGOTADOS = [];
-      if (state.activeOnly) scopeMap.forEach((it, sku) => { if (!act.has(sku)) { AGOTADOS.push(it); scopeMap.delete(sku); } });
+      scopeMap.forEach((it, sku) => { if (!act.has(sku) && it.qty >= 0) AGOTADOS.push(it); });
       const agBtn = $("btnAgotados");
       if (agBtn) {
         agBtn.textContent = "Agotados sin venta (" + AGOTADOS.length + ")";
@@ -2423,10 +2433,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     $("btnReset").onclick = () => {
       state.modelo = state.store = state.category = state.location = "";
       state.abcClass = state.search = "";
-      state.channel = "all";
+      state.channel = "retail";
       state.verAgotados = false;
       state.mxCell = "";
-      $("fChannel").value = "all";
+      $("fChannel").value = "retail";
       state.timePreset = "all";
       state.customPeriodKeys.clear();
       state.expandedModels.clear();
@@ -2440,6 +2450,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 
   function boot(payload) {
     DATA = payload;
+    if (DATA && DATA.salesRows) DATA.salesRows = DATA.salesRows.filter((r) => r[4] >= 0 && r[5] >= 0);
+    if (DATA && DATA.invRows) DATA.invRows = DATA.invRows.filter((r) => r[2] >= 0);
     if (!DATA?.periods?.length) {
       showLoadError("Datos incompletos.");
       return;
