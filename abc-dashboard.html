@@ -144,7 +144,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 .row-model td{background:#FAFAFA;font-weight:600}
 .cap-card{background:#fff;border-radius:14px}
 .bar-stack span{color:#fff}
-.mx-cell{background-color:#fff}
+.mx-cell{background-color:#fff;cursor:pointer}
+.mx-cell.on{outline:2px solid #0B3F6B;outline-offset:1px}
 .qcard{background:#fff;border:0}
 .footer{border-top:1px solid #E6E6E6}
 
@@ -182,9 +183,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 <div class="fbar">
   <label>Modelo</label><select id="fModel"></select>
   <label>Tienda</label><select id="fStore"></select>
-  <span id="classModeNote" style="font-size:0.68rem;color:var(--mu);max-width:520px"></span>
-  <label title="Excluye del ranking los SKUs sin stock y sin venta en los últimos 3 meses"><input type="checkbox" id="fActive" checked> Solo surtido activo</label><span id="activeNote" style="font-size:0.6rem;color:var(--mu)"></span>
-  <label>Canal</label><select id="fChannel"><option value="retail" selected>Retail (sin corporativo ni pedidos)</option><option value="sin_grandes">Todos sin pedidos grandes (≥100 und)</option><option value="all">Todos los canales</option><option value="corp">Solo corporativo</option></select>
+  <label>Canal</label><select id="fChannel"><option value="retail">Retail (sin corporativo ni pedidos)</option><option value="sin_grandes">Todos sin pedidos grandes (≥100 und)</option><option value="all" selected>Todos los canales</option><option value="corp">Solo corporativo</option></select>
   <label>Categoría</label><select id="fCat"></select>
   <label>Stock en</label><select id="fLoc"></select>
   <label>Clase</label><select id="fAbc"><option value="">Todas</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
@@ -217,7 +216,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     </div>
     <div class="g2">
       <div class="card">
-        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación del margen. El producto que cruza el 80% entra completo.</div>
+        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación del margen del período.</div>
         <div class="cw s"><canvas id="cMarginBar"></canvas></div>
       </div>
       <div class="card">
@@ -237,8 +236,11 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   </section>
   <section class="sec" id="sec-catalogo">
     <div class="card">
-      <h3>Catálogo por modelo</h3>
-      <div class="sub">Expandir fila para ver variantes (SKU). Sin margen ≤ 0.</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Catálogo por modelo</h3>
+        <button class="fbtn" type="button" id="btnAgotados">Agotados sin venta</button>
+      </div>
+      <div class="sub" id="catalogSub">Expandir fila para ver variantes (SKU). La clase del producto es la del corte 80/15/5.</div>
       <div class="cscroll"><table class="ct"><thead><tr>
         <th></th><th>Clase</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
@@ -249,6 +251,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
         <h3>Migración ABC por producto</h3>
         <select id="migMode"><option value="single" selected>Mes individual</option><option value="roll">Móvil 3 meses</option></select>
+        <div class="sub" id="migHint" style="flex-basis:100%">Cada mes arma de nuevo el corte 80/15/5 del margen de esa ventana. Un mes suelto cambia de letra cerca del 80% y del 95%. La lectura estable es Móvil 3 meses.</div>
         <label class="sub" style="margin:0"><input type="checkbox" id="migAll"> Mostrar todos (no solo los que cambian)</label>
         <div class="sub" id="migLegend" style="margin:0">
           <span class="mig-dot A">A</span> Intocable &nbsp;
@@ -265,7 +268,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     <div class="g3" id="capitalCards"></div>
     <div class="g1 card">
       <h3>Capital retenido vs stock productivo</h3>
-      <div class="sub">Unidades y valor (stock × costo unitario de Odoo) por clase ABC · incluye SKUs sin venta en el período</div>
+      <div class="sub">Unidades y valor de todo el stock, incluido taller y almacén, por el costo de Odoo y la clase de margen del SKU. El porcentaje de margen al lado es contexto: no forma parte del dinero. La última tarjeta es stock que no aportó margen positivo en el período.</div>
       <div class="g2" style="margin-top:10px">
         <div><div class="sub">Stock físico (unidades)</div><div id="stockBar"></div></div>
         <div><div class="sub">Valor en inventario ($)</div><div id="valueBar"></div></div>
@@ -277,7 +280,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     <div class="g2">
       <div class="card">
         <h3>Matriz cruzada: Margen × Rotación</h3>
-        <div class="sub">ABC margen (ingresos netos − costo) vs ABC rotación (unidades vendidas) — independientes</div>
+        <div class="sub">ABC de margen frente a ABC de rotación. Tocá un cuadro para ver los productos de ese cruce.</div>
         <div id="crossMatrix"></div>
       </div>
       <div class="card">
@@ -285,6 +288,13 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         <div class="sub">Acciones sugeridas por combinación</div>
         <div id="crossAnalysis" class="cscroll" style="max-height:520px"></div>
       </div>
+    </div>
+    <div class="card">
+      <h3>Productos del cuadro</h3>
+      <div class="sub" id="mxCount">Tocá un cuadro para ver los productos</div>
+      <div class="cscroll"><table class="ct"><thead><tr>
+        <th>Clase</th><th>Rotación</th><th>Producto</th><th>Margen</th><th>Ingresos</th><th>Und.</th>
+      </tr></thead><tbody id="mxBody"></tbody></table></div>
     </div>
   </section>
   <section class="sec" id="sec-alertas">
@@ -324,7 +334,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     </div>
   </section>
 </div>
-<div class="footer">ABC · margen de contribución sin IVA · corte 80/15/5 del margen del período (el producto que cruza el corte entra completo) · los ingresos son la venta; el 80% es del margen · fuera del análisis: donación y Refresh · excluye SKUs sin margen positivo en el ranking · migración, alertas y ficha usan la misma clase · margen de oct 2025 a may 2026 estimado (IVA por categoría); jun–sep 2026 es el de Odoo · ventas al 30/09/2026 · inventario al 08/10/2026 · inventario valorado al costo de Odoo, incluye Alm. de Equipamiento</div>
+<div class="footer">ABC · margen de contribución sin IVA · corte 80/15/5 del margen del período · los ingresos son la venta; el 80% es del margen · fuera del análisis: donación y Refresh · migración, alertas y ficha usan la misma clase · margen de oct 2025 a may 2026 estimado (IVA por categoría); jun–sep 2026 es el de Odoo · ventas al 30/09/2026 · inventario al 08/10/2026 · inventario valorado al costo de Odoo, incluye taller y almacén</div>
 <script>
 
 /* Matriz ABC — dashboard compacto */
@@ -350,7 +360,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     abcClass: "",
     search: "",
     expandedModels: new Set(),
-    channel: "retail",
+    channel: "all",
+    verAgotados: false,
+    mxCell: "",
     level: "mc",
     migMode: "single",
     migAll: false,
@@ -444,6 +456,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   }
 
   let ACTIVE = null;
+  let AGOTADOS = [];
+  function isCentralLoc(name) {
+    return name === "TALLER PT" || name === "ALM. EQUIPAMIENTO";
+  }
   function stockLocOk(locName) {
     if (state.location && locName !== state.location) return false;
     if (!state.store) return true;
@@ -648,15 +664,21 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 
   function inventoryBySku(scopeOnly) {
     const map = new Map();
-    DATA.skus.forEach((sku) => map.set(sku, { total: 0 }));
+    DATA.skus.forEach((sku) => map.set(sku, { total: 0, tienda: 0, central: 0 }));
     for (let i = 0; i < DATA.invRows.length; i++) {
       const r = DATA.invRows[i];
       const sku = DATA.skus[r[0]];
       if (excludedSku(sku)) continue;
-      if (!stockLocOk(DATA.locations[r[1]])) continue;
+      const loc = DATA.locations[r[1]];
+      if (!stockLocOk(loc)) continue;
       if (state.category && (skuMeta(sku).categoria || "") !== state.category) continue;
       if (!scopeOnly && state.modelo && !passesSkuFilter(sku)) continue;
-      map.get(sku).total += r[2];
+      const b = map.get(sku);
+      if (!b) continue;
+      const q = r[2] || 0;
+      b.total += q;
+      if (isCentralLoc(loc)) b.central += q;
+      else b.tienda += q;
     }
     return map;
   }
@@ -1054,7 +1076,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           "</td><td class=\"rn\">" +
           esc(m.modelo) +
           "</td><td>" +
-          badge(m.abcClass) + (m.comercialClass && m.comercialClass !== m.abcClass ? ' <span style="font-size:0.6rem;color:#7A5195" title="Clase comercial, solo margen">com. ' + m.comercialClass + "</span>" : "") +
+          badge(m.abcClass) +
           "</td><td>" +
           badge(m.matrix) +
           "</td><td>" +
@@ -1076,77 +1098,102 @@ body{background:#fff;color:#1A1A1A;background-image:none}
 
   function renderCatalog(scopeSkuMap, globalAbc, invMap) {
     const body = $("catalogBody");
+    const sub = $("catalogSub");
     if (!body) return;
+    const paint = (models, empty) => {
+      let html = "";
+      models.slice(0, 200).forEach((m) => {
+        const open = state.expandedModels.has(m.modelo);
+        html +=
+          '<tr class="row-model"><td><span class="expander" data-toggle="' +
+          esc(m.modelo) +
+          '">' +
+          (open ? "▼" : "▶") +
+          '</span></td><td>' +
+          badge(m.abcClass) +
+          '</td><td class="rn">' +
+          esc(m.modelo) +
+          "</td><td>" +
+          fmtMoney(m.revenue) +
+          "</td><td>" +
+          fmt(m.qty, 0) +
+          "</td><td>" +
+          fmt(m.stock, 0) +
+          "</td></tr>";
+        if (open) {
+          m.items.forEach((v) => {
+            const vi = variantInfo(v.sku);
+            html +=
+              '<tr class="row-variant"><td></td><td>' +
+              badge(v.abcClass) +
+              "</td><td>" +
+              esc(vi.label) +
+              "</td><td>" +
+              fmtMoney(v.revenue) +
+              "</td><td>" +
+              fmt(v.qty, 0) +
+              "</td><td>" +
+              fmt(v.stock, 0) +
+              "</td></tr>";
+          });
+        }
+      });
+      body.innerHTML = html || '<tr><td colspan="6">' + empty + "</td></tr>";
+      body.querySelectorAll("[data-toggle]").forEach((el) => {
+        el.onclick = () => {
+          const mod = el.getAttribute("data-toggle");
+          if (state.expandedModels.has(mod)) state.expandedModels.delete(mod);
+          else state.expandedModels.add(mod);
+          renderCatalog(scopeSkuMap, globalAbc, invMap);
+        };
+      });
+    };
+    if (state.verAgotados) {
+      const byModel = new Map();
+      AGOTADOS.forEach((it) => {
+        if (!matchesSearch((it.modelo || "") + " " + (it.producto || "") + " " + it.sku)) return;
+        if (state.modelo && it.modelo !== state.modelo && it.producto !== state.modelo) return;
+        const k = it.producto || it.modelo;
+        if (!byModel.has(k)) byModel.set(k, { modelo: k, items: [], revenue: 0, qty: 0, stock: 0, abcClass: "-" });
+        const g = byModel.get(k);
+        g.items.push({ ...it, abcClass: "-", stock: 0 });
+        g.revenue += it.revenue;
+        g.qty += it.qty;
+      });
+      const models = [...byModel.values()].sort((a, b) => b.revenue - a.revenue);
+      if (sub) sub.textContent = AGOTADOS.length + " SKUs con venta en el período, sin stock y sin venta en los últimos 3 meses. Quedan fuera del corte 80/15/5.";
+      paint(models, "No hay SKUs agotados sin venta con estos filtros");
+      return;
+    }
     const byModel = new Map();
     scopeSkuMap.forEach((it, sku) => {
       if (it.margin <= 0) return;
-      const a = globalAbc.get(sku);
-      if (state.abcClass && a.class !== state.abcClass) return;
       if (!matchesSearch(it.modelo + " " + sku)) return;
-      if (state.modelo && it.modelo !== state.modelo) return;
+      if (state.modelo && it.modelo !== state.modelo && it.producto !== state.modelo) return;
       const k = it.producto || it.modelo;
-      if (!byModel.has(k)) byModel.set(k, { items: [], revenue: 0, qty: 0, stock: 0 });
-      const g = byModel.get(k);
-      g.items.push({ ...it, abc: a, stock: invMap.get(sku)?.total || 0 });
-      g.revenue += it.revenue;
-      g.qty += it.qty;
-      g.stock += g.items[g.items.length - 1].stock;
+      if (!byModel.has(k)) byModel.set(k, { items: [] });
+      const inv = invMap.get(sku) || {};
+      byModel.get(k).items.push({ ...it, stock: inv.total || 0 });
     });
     const models = [...byModel.entries()]
       .map(([modelo, g]) => {
-        g.items.sort((a, b) => b.revenue - a.revenue);
         const pf = FINAL && FINAL.prod.get(modelo);
-        const fc = pf && ["A", "B", "C"].indexOf(pf.cls) >= 0 ? pf.cls : null;
-        return { modelo, ...g, abcClass: fc || g.items[0].abc.class, comercialClass: pf ? pf.comercial : null };
+        const fc = pf && ["A", "B", "C"].indexOf(pf.cls) >= 0 ? pf.cls : "C";
+        if (state.abcClass && fc !== state.abcClass) return null;
+        const items = g.items.map((v) => ({ ...v, abcClass: fc })).sort((a, b) => b.revenue - a.revenue);
+        return {
+          modelo,
+          items,
+          abcClass: fc,
+          revenue: items.reduce((s, v) => s + v.revenue, 0),
+          qty: items.reduce((s, v) => s + v.qty, 0),
+          stock: items.reduce((s, v) => s + v.stock, 0),
+        };
       })
+      .filter(Boolean)
       .sort((a, b) => b.revenue - a.revenue);
-
-    let html = "";
-    models.slice(0, 120).forEach((m) => {
-      const open = state.expandedModels.has(m.modelo);
-      html +=
-        '<tr class="row-model"><td><span class="expander" data-toggle="' +
-        esc(m.modelo) +
-        '">' +
-        (open ? "▼" : "▶") +
-        '</span></td><td>' +
-        badge(m.abcClass) + (m.comercialClass && m.comercialClass !== m.abcClass ? ' <span style="font-size:0.6rem;color:#7A5195" title="Clase comercial, solo margen">com. ' + m.comercialClass + "</span>" : "") +
-        '</td><td class="rn">' +
-        esc(m.modelo) +
-        "</td><td>" +
-        fmtMoney(m.revenue) +
-        "</td><td>" +
-        fmt(m.qty, 0) +
-        "</td><td>" +
-        fmt(m.stock, 0) +
-        "</td></tr>";
-      if (open) {
-        m.items.forEach((v) => {
-          const vi = variantInfo(v.sku);
-          html +=
-            '<tr class="row-variant"><td></td><td>' +
-            badge(v.abc.class) +
-            "</td><td>" +
-            esc(vi.label) +
-            "</td><td>" +
-            fmtMoney(v.revenue) +
-            "</td><td>" +
-            fmt(v.qty, 0) +
-            "</td><td>" +
-            fmt(v.stock, 0) +
-            "</td></tr>";
-        });
-      }
-    });
-    body.innerHTML = html;
-    body.querySelectorAll("[data-toggle]").forEach((el) => {
-      el.onclick = () => {
-        const mod = el.getAttribute("data-toggle");
-        if (state.expandedModels.has(mod)) state.expandedModels.delete(mod);
-        else state.expandedModels.add(mod);
-        renderCatalog(scopeSkuMap, globalAbc, invMap);
-      };
-    });
+    if (sub) sub.textContent = (state.abcClass ? "Solo clase " + state.abcClass + " · " : "") + models.length + " productos · expandir para ver las variantes de esa clase";
+    paint(models, "Sin productos en esta clase");
   }
 
   function migrationTrend(classes, periods) {
@@ -1207,8 +1254,15 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           const cl = r.classes[p.key] || "-";
           const inf = (MIGINFO[r.modelo] || {})[p.key];
           const mon = (MIGINFO[r.modelo] || {})._mon || {};
-          const vals = Object.values(mon), av = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-          const tip = inf ? p.label + " · clase " + cl + " · puesto " + inf.rank + " · acumulado " + (inf.cum * 100).toFixed(1) + "% · venta del mes " + Math.round(mon[p.key] || 0) + " und (" + (av ? ((mon[p.key] || 0) / av).toFixed(1) : "—") + "× su promedio)" : p.label + " · sin venta";
+          const monKeys = Object.keys(mon);
+          let av = 0;
+          if (monKeys.length) {
+            const firstIx = periods.findIndex((pp) => mon[pp.key] > 0);
+            const span = firstIx >= 0 ? periods.slice(firstIx) : [];
+            const sum = span.reduce((s, pp) => s + (mon[pp.key] || 0), 0);
+            av = span.length ? sum / span.length : 0;
+          }
+          const tip = inf ? p.label + " · clase " + cl + " · puesto " + inf.rank + " · acumulado " + (inf.cum * 100).toFixed(1) + "% · venta del mes " + Math.round(mon[p.key] || 0) + " und (" + (av ? ((mon[p.key] || 0) / av).toFixed(1) : "—") + "× su promedio, con los meses en cero)" : p.label + " · sin venta";
           tr +=
             '<td class="mig-cell" title="' + tip + '"><span class="mig-dot ' +
             cl +
@@ -1262,7 +1316,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const cells = {};
     ["A", "B", "C"].forEach((mr) => {
       ["A", "B", "C"].forEach((rr) => {
-        cells[mr + rr] = { n: 0, margin: 0, list: [] };
+        cells[mr + rr] = { n: 0, margin: 0, list: [], items: [] };
       });
     });
     models.forEach((m) => {
@@ -1271,6 +1325,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       cells[k].n++;
       cells[k].margin += m.margin;
       cells[k].list.push(m.modelo);
+      cells[k].items.push(m);
     });
     const rotLbl = { A: "Alta rot.", B: "Media", C: "Baja" };
     const marLbl = { A: "Mar. A", B: "Mar. B", C: "Mar. C" };
@@ -1283,8 +1338,13 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       ["A", "B", "C"].forEach((rr) => {
         const c = cells[mr + rr];
         const p = c.margin / totalMargin;
+        const on = state.mxCell === mr + rr ? " on" : "";
         html +=
           '<div class="mx-cell mx-' +
+          mr +
+          rr +
+          on +
+          '" data-mx="' +
           mr +
           rr +
           '"><div class="n">' +
@@ -1298,6 +1358,22 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     });
     html += "</div>";
     gridEl.innerHTML = html;
+    gridEl.querySelectorAll("[data-mx]").forEach((n) => {
+      n.onclick = () => {
+        const k = n.getAttribute("data-mx");
+        state.mxCell = state.mxCell === k ? "" : k;
+        renderCrossMatrix(allModels);
+      };
+    });
+    const mxBody = $("mxBody");
+    const mxCount = $("mxCount");
+    const focus = state.mxCell && cells[state.mxCell] ? cells[state.mxCell].items.slice().sort((a, b) => b.margin - a.margin) : [];
+    if (mxCount) mxCount.textContent = state.mxCell ? state.mxCell + " · " + focus.length + " productos" : "Tocá un cuadro para ver los productos";
+    if (mxBody) {
+      mxBody.innerHTML = focus.length
+        ? focus.map((m) => "<tr><td>" + badge(m.abcClass) + "</td><td>" + badge(m.rotClass) + '</td><td class="rn">' + esc(m.modelo) + "</td><td>" + fmtMoney(m.margin) + "</td><td>" + fmtMoney(m.revenue) + "</td><td>" + fmt(m.qty, 0) + "</td></tr>").join("")
+        : '<tr><td colspan="6">Tocá un cuadro de la matriz</td></tr>';
+    }
 
     const Q = {
       AA: {
@@ -1403,7 +1479,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           );
         })
         .join("") +
-        '<div class="cap-card"><div class="lbl">Sin venta + en stock</div><div class="big">' +
+        '<div class="cap-card"><div class="lbl">Stock sin margen en el período</div><div class="big">' +
         fmt(cap.X.u, 0) +
         '</div><div class="sub">' +
         cap.X.models.size +
@@ -1611,7 +1687,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     return (TARGETS[line] || TARGETS.Manufactura)[cls] || [1, 6];
   }
   const ACTION = {
-    A: { Quiebre: "Reponer urgente", Sano: "Mantener: que nunca falte", Sobrestock: "Pausar reposición (no descontinuar)" },
+    A: { Quiebre: "Reponer urgente", Sano: "Mantener: que nunca falte", Sobrestock: "Redistribuir el exceso y seguir reponiendo lo que se vende" },
     B: { Quiebre: "Reponer", Sano: "Reposición periódica", Sobrestock: "Pausar y redistribuir" },
     C: { Quiebre: "Evaluar si vale reponer", Sano: "Lotes pequeños", Sobrestock: "Liquidar o descontinuar" },
     N: { Quiebre: "Nuevo con buena salida: reponer", Sano: "Nuevo: seguir de cerca", Sobrestock: "Nuevo lento: no recomprar aún" },
@@ -1711,7 +1787,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       const k = keyOf(sku);
       if (!G.has(k)) {
         const m = skuMeta(sku);
-        G.set(k, { key: k, producto: m.producto || sku, color: m.color || "—", ctx: ctxOf(m.categoria), cat: m.categoria, skus: new Set(), margin: 0, units: 0, revenue: 0, u3: 0, ser: new Array(n).fill(0), first: Infinity, stock: 0, value: 0 });
+        G.set(k, { key: k, producto: m.producto || sku, color: m.color || "—", ctx: ctxOf(m.categoria), cat: m.categoria, skus: new Set(), margin: 0, units: 0, revenue: 0, u3: 0, ser: new Array(n).fill(0), first: Infinity, stock: 0, stockCentral: 0, value: 0 });
       }
       return G.get(k);
     };
@@ -1727,16 +1803,19 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       }
     });
     invMap.forEach((inv, sku) => {
-      if (!inv.total || inv.total <= 0) return;
+      const tie = inv.tienda || 0;
+      const cen = inv.central || 0;
+      if (tie <= 0 && cen <= 0) return;
       const m = skuMeta(sku);
       if (state.category && m.categoria !== state.category) return;
       const g = get(sku);
       g.skus.add(sku);
-      g.stock += inv.total;
-      g.value += inv.total * unitCostOf(sku, null);
+      g.stock += tie;
+      g.stockCentral += cen;
+      g.value += (tie + cen) * unitCostOf(sku, null);
     });
     const list = [...G.values()];
-    list.forEach((g) => { g.inactive = g.stock <= 0 && g.u3 <= 0; });
+    list.forEach((g) => { g.inactive = g.stock + (g.stockCentral || 0) <= 0 && g.u3 <= 0; });
     const needA = Math.max(1, Math.round((W * 2) / 3)), needB = Math.max(1, Math.round(W / 3));
     const useActive = state.activeOnly && !hist;
     list.forEach((g) => {
@@ -1796,6 +1875,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (g.cls === "SV") g.estado = "Sin venta";
       else if (g.cls === "AG") g.estado = "Agotado sin rotación";
       else if (g.cls === "—") g.estado = "—";
+      else if (g.stock <= 0 && g.stockCentral > 0) g.estado = "En almacén";
       else if (g.stock <= 0) g.estado = "Agotado";
       else {
         const t = targetFor(g.cat, g.cls);
@@ -1804,22 +1884,25 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (g.cls === "SV") g.accion = "Liquidar o revisar (sin venta)";
       else if (g.cls === "AG") g.accion = g.was === "A" || g.was === "B" ? "Era " + g.was + ": decidir si reponer (producto de línea) o dar de baja (colección o versión reemplazada)" : "Dar de baja del surtido";
       else if (g.cls === "—") g.accion = "";
+      else if (g.estado === "En almacén") g.accion = g.cls === "A" ? "Mover el stock a tienda y seguir reponiendo" : g.cls === "B" ? "Mover a tienda antes de comprar" : "Revisar si conviene sacar del almacén";
       else if (g.estado === "Agotado") g.accion = g.cls === "C" ? "Evaluar si vale reponer" : "Reponer urgente (agotado con venta reciente)";
-      else g.accion = (g.isNew ? ACTION.N : ACTION[g.cls])[g.estado];
-      if (g.accion && g.band === "Estancado" && g.cls !== "SV" && g.cls !== "AG") g.accion += " · liquidar lo estancado";
+      else g.accion = (g.isNew && g.cls !== "A" ? ACTION.N : ACTION[g.cls] || ACTION.C)[g.estado] || "";
+      if (g.accion && g.band === "Estancado" && g.cls !== "SV" && g.cls !== "AG" && g.cls !== "A") g.accion += " · liquidar lo estancado";
       const tt = targetFor(g.cat, ["A", "B", "C"].indexOf(g.cls) >= 0 ? g.cls : "C");
       const exU = g.stock <= 0 ? 0 : g.cls === "SV" || g.msin >= 6 ? g.stock : Math.max(0, g.stock - g.avg6 * tt[1]);
       g.exU = exU;
-      g.exVal = g.stock > 0 ? exU * (g.value / g.stock) : 0;
+      const stockAll = g.stock + (g.stockCentral || 0);
+      g.exVal = stockAll > 0 ? exU * (g.value / stockAll) : 0;
       if (g.capped && g.accion) g.accion += " · venta concentrada en pocos meses (pico o evento)";
       if (g.seasonal && g.accion && g.cls !== "AG" && g.cls !== "SV") g.accion += " · estacional: planificar por temporada";
+      if (g.cls === "A" && g.accion && /pausar/i.test(g.accion)) g.accion = "Redistribuir el exceso y seguir reponiendo lo que se vende";
     });
     OP_CACHE.set(cacheKey, list);
     return list;
   }
 
   const CLS_COLOR = { A: "var(--a)", B: "var(--b)", C: "var(--c)", N: "#2B8A9E", SV: "var(--mu)", AG: "#7A5195", "—": "var(--mu)" };
-  const EST_COLOR = { Agotado: "#C70705", Quiebre: "#E5532D", Sano: "#1E7B34", Sobrestock: "#9A6B00", "Sin venta": "#8A8A8A", "Agotado sin rotación": "#7A5195", "—": "var(--mu)" };
+  const EST_COLOR = { Agotado: "#C70705", Quiebre: "#E5532D", Sano: "#1E7B34", Sobrestock: "#9A6B00", "Sin venta": "#8A8A8A", "Agotado sin rotación": "#7A5195", "En almacén": "#3F7AB3", "—": "var(--mu)" };
   function clsBadge(g) {
     const t = g.cls === "SV" ? "SV" : g.cls === "N" ? "N" : g.cls;
     const extra = (g.capped ? " · venta en solo " + g.mwin + " meses de la ventana" : "") + (g.isNew ? " · nuevo: menos de 3 meses vendiendo" : "");
@@ -1927,6 +2010,30 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     return res;
   }
 
+  function coverEstado(stock, sold, W, cat, cls) {
+    const w = W > 0 ? W : 1;
+    const avg = sold / w;
+    const cov = avg > 0 ? stock / avg : stock > 0 ? Infinity : null;
+    const letter = ["A", "B", "C"].indexOf(cls) >= 0 ? cls : "C";
+    let estado = "—";
+    if (stock <= 0 && sold > 0) estado = "Agotado";
+    else if (sold <= 0 && stock > 0) estado = "Sin venta";
+    else if (stock > 0 && sold > 0) {
+      const t = targetFor(cat, letter);
+      estado = cov !== null && cov < t[0] && letter !== "C" ? "Quiebre" : cov === Infinity || cov > t[1] ? "Sobrestock" : "Sano";
+    }
+    return { cov, estado };
+  }
+
+  function accionDe(cls, estado, isNew) {
+    if (cls === "A" && (estado === "Sobrestock" || /pausar/i.test(estado))) return "Redistribuir el exceso y seguir reponiendo lo que se vende";
+    if (estado === "En almacén") return cls === "A" ? "Mover el stock a tienda y seguir reponiendo" : cls === "B" ? "Mover a tienda antes de comprar" : "Revisar si conviene sacar del almacén";
+    if (estado === "Agotado") return cls === "C" ? "Evaluar si vale reponer" : "Reponer urgente (agotado con venta reciente)";
+    const table = isNew && cls !== "A" ? ACTION.N : ACTION[cls] || ACTION.C;
+    const txt = (table && table[estado]) || "";
+    return cls === "A" && /pausar/i.test(txt) ? "Redistribuir el exceso y seguir reponiendo lo que se vende" : txt;
+  }
+
   function renderFicha() {
     const box = $("fichaBody");
     if (!box || !OP || !state.ficha) return;
@@ -1966,21 +2073,51 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (!stockLocOk(loc)) continue;
       const sku = DATA.skus[r[0]], m = skuMeta(sku);
       if ((m.producto || sku) !== P) continue;
-      const t = m.talla || "Única";
-      bySize[t] = bySize[t] || { sold: 0, u3: 0, stock: 0 };
-      bySize[t].stock += r[2];
+      if (!isCentralLoc(loc)) {
+        const t = m.talla || "Única";
+        bySize[t] = bySize[t] || { sold: 0, u3: 0, stock: 0 };
+        bySize[t].stock += r[2];
+      }
       byLoc[loc] = (byLoc[loc] || 0) + r[2];
     }
+    const Wf = Math.max(1, selectedIdx().length);
+    const storeRows = Object.keys(STORE2LOC).map((store) => ({ store: store, loc: STORE2LOC[store], sold: byStore[store] || 0, stock: byLoc[STORE2LOC[store]] || 0 }));
+    const soldStores = storeRows.reduce((s, r) => s + r.sold, 0);
+    const rankedStores = storeRows.filter((r) => r.sold > 0).sort((a, b) => b.sold - a.sold);
+    const core = [];
+    let accSold = 0;
+    rankedStores.forEach((r) => {
+      if (soldStores > 0 && accSold >= soldStores * 0.7) return;
+      core.push(r);
+      accSold += r.sold;
+    });
+    const coreSold = core.reduce((s, r) => s + r.sold, 0);
+    const coreStock = core.reduce((s, r) => s + r.stock, 0);
+    const nuc = !state.location && coreSold > 0 ? coverEstado(coreStock, coreSold, Wf, pr.cat, pr.cls) : null;
+    let headEstado = nuc ? nuc.estado : pr.estado;
+    let headCov = nuc ? nuc.cov : pr.cov;
+    if (!nuc && pr.stock <= 0 && pr.stockCentral > 0 && ["A", "B", "C"].indexOf(pr.cls) >= 0) {
+      headEstado = "En almacén";
+      headCov = null;
+    }
+    const slowExcess = pr.estado === "Sobrestock" || pr.stockCentral > 0;
+    let headAccion = accionDe(pr.cls, headEstado, pr.isNew);
+    if (pr.cls === "A" && nuc && (headEstado === "Sano" || headEstado === "Quiebre") && slowExcess) {
+      headAccion = headEstado === "Quiebre"
+        ? "Reponer en las tiendas que venden y mover stock desde las lentas y el almacén"
+        : "Mantener reposición en las tiendas que concentran la venta y mover el exceso de las lentas y del almacén";
+    }
+    if (pr.cls === "A" && /pausar/i.test(headAccion || "")) headAccion = "Redistribuir el exceso y seguir reponiendo lo que se vende";
     // encabezado
     let h = '<div class="kpi-bar" style="margin-bottom:12px">';
     const kb = (v, l, s, c) => '<div class="kpib"><div class="kv" style="color:' + (c || "var(--a)") + '">' + v + '</div><div class="kl">' + l + '</div><div class="ksub">' + (s || "") + "</div></div>";
     h += kb(pr.cls === "SV" ? "Sin venta" : pr.cls, "Clase", "corte 80/15/5 del margen · " + esc(pr.ctx) + (pr.isNew ? " · nuevo" : ""), CLS_COLOR[pr.cls]);
     h += kb(pr.xyz + (pr.seasonal ? " 🗓️" : ""), "Regularidad", pr.seasonal ? "Estacional: >50% en 3 meses" : "XYZ del período elegido");
-    h += kb(estBadge(pr.estado), "Estado del inventario", "cobertura " + covTxt(pr.cov));
-    h += kb(stTxt(pr), "Eficiencia (sell-through)", "mediana de su contexto " + (pr.stMed != null ? (pr.stMed * 100).toFixed(0) + "%" : "—"));
+    h += kb(estBadge(headEstado), "Estado del inventario", (nuc ? "núcleo que vende el 70% · " : "") + "cobertura " + covTxt(headCov));
+    h += kb(stTxt(pr), "Eficiencia (sell-through)", "solo stock de tienda · mediana " + (pr.stMed != null ? (pr.stMed * 100).toFixed(0) + "%" : "—"));
     h += kb(["A", "B", "C"].filter((c) => comp[c] > 0).map((c) => c + " " + Math.round((comp[c] / compT) * 100) + "%").join(" · ") || "—", "Margen por clase de color", mc.length + " colores");
     h += kb(fmtMoney(pr.margin), "Margen en la ventana", fmt(pr.units) + " und");
-    h += kb(fmt(pr.stock), "Stock hoy", fmtMoney(pr.value) + " al costo");
+    h += kb(fmt(pr.stock), "Stock en tienda", (pr.stockCentral > 0 ? fmt(pr.stockCentral) + " en taller/almacén · " : "") + fmtMoney(pr.value) + " al costo");
     h += "</div>";
     // diagnóstico
     const dx = [];
@@ -2003,9 +2140,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const szOver = sz.filter(([t, v]) => v.stock / totStk - v.sold / totSold > 0.1).map(([t]) => t);
     const szShort = sz.filter(([t, v]) => v.sold / totSold - v.stock / totStk > 0.08).map(([t]) => t);
     if (szOver.length) dx.push("Tallas sobradas frente a lo que se vende: <strong>" + szOver.join(", ") + "</strong>" + (szShort.length ? " · tallas cortas: <strong>" + szShort.join(", ") + "</strong>" : "") + ".");
-    const central = (byLoc["TALLER PT"] || 0) + (byLoc["ALM. EQUIPAMIENTO"] || 0);
-    if (central > 0 && pr.stock > 0) dx.push(fmt(central) + " und (" + pct(central / pr.stock) + ") están en el almacén central: se pueden redistribuir hacia las tiendas que más venden.");
-    dx.push("<strong>Acción sugerida:</strong> " + esc(pr.accion || "—") + ".");
+    if (pr.stockCentral > 0) dx.push(fmt(pr.stockCentral) + " und están en taller o almacén. Se consultan como stock y no entran en el sell-through ni en la cobertura.");
+    if (nuc && core.length) dx.push("El estado global mira las tiendas que juntan el 70% de la venta (" + core.map((r) => r.store).join(", ") + "): <strong>" + headEstado + "</strong>, cobertura " + covTxt(headCov) + ". El stock de las tiendas lentas no cambia esa lectura.");
+    dx.push("<strong>Acción sugerida:</strong> " + esc(headAccion || "—") + ".");
     h += '<div class="card"><h3>Diagnóstico</h3><ul style="margin:6px 0 0 18px;line-height:1.6;font-size:0.8rem">' + dx.map((d) => "<li>" + d + "</li>").join("") + "</ul></div>";
     // mes a mes
     h += '<div class="card"><h3>Comportamiento mes a mes</h3><div class="sub">La misma clase: corte 80/15/5 del margen. "Mes" = solo ese mes · "3 m" = ventana móvil. × prom = venta del mes frente a su promedio desde que se vende</div><div class="cscroll"><table class="ct"><thead><tr><th>Mes</th><th>Und.</th><th>Margen</th><th>× prom.</th><th>Clase mes</th><th>Puesto (margen)</th><th>Clase 3 m</th></tr></thead><tbody>';
@@ -2017,9 +2154,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     });
     h += "</tbody></table></div></div>";
     // colores
-    h += '<div class="card"><h3>Colores</h3><div class="sub">Misma clase de cada color · cobertura con el ritmo de venta del período elegido</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
+    h += '<div class="card"><h3>Colores</h3><div class="sub">Misma clase de cada color · cobertura y sell-through con stock de tienda, sin taller ni almacén</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
     // tallas
-    h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">% de la venta del período frente a % del stock · rojo = sobrada, ámbar = corta · Venta/mes y su cobertura usan los últimos 3 meses</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock</th><th>% stock</th><th>Venta/mes (3m)</th><th>Cobertura</th></tr></thead><tbody>';
+    h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">% de la venta del período frente a % del stock de tienda, sin taller ni almacén · rojo = sobrada, ámbar = corta · Venta/mes y su cobertura usan los últimos 3 meses</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock</th><th>% stock</th><th>Venta/mes (3m)</th><th>Cobertura</th></tr></thead><tbody>';
     sz.forEach(([t, v]) => {
       const ps = v.sold / totSold, pk = Math.max(0, v.stock) / totStk, a3 = v.u3 / 3;
       const col = pk - ps > 0.1 ? "#E5532D" : ps - pk > 0.08 ? "#9A6B00" : "var(--tx)";
@@ -2030,11 +2167,19 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const locs = DATA.locations.filter((l) => byLoc[l]);
     const totLoc = locs.reduce((s, l) => s + byLoc[l], 0) || 1;
     const storesSold = Object.entries(byStore).filter(([s]) => STORE2LOC[s]).reduce((s, [, v]) => s + v, 0) || 1;
-    h += '<div class="card"><h3>Dónde está el stock</h3><div class="sub">Stock por ubicación frente a la venta de cada tienda en la ventana</div><div class="cscroll"><table class="ct"><thead><tr><th>Ubicación</th><th>Stock</th><th>% stock</th><th>Vendido (ventana)</th><th>% venta</th></tr></thead><tbody>';
+    h += '<div class="card"><h3>Dónde está el stock</h3><div class="sub">Taller y almacén se consultan como stock. La cobertura y el estado usan la venta y el stock de esa tienda.</div><div class="cscroll"><table class="ct"><thead><tr><th>Ubicación</th><th>Stock</th><th>% stock</th><th>Vendido (ventana)</th><th>% venta</th><th>Cobertura</th><th>Estado</th></tr></thead><tbody>';
     locs.sort((a, b) => byLoc[b] - byLoc[a]).forEach((l) => {
       const st = Object.keys(STORE2LOC).find((s) => STORE2LOC[s] === l);
       const sold = st ? byStore[st] || 0 : null;
-      h += "<tr><td>" + esc(l) + "</td><td>" + fmt(byLoc[l]) + "</td><td>" + pct(byLoc[l] / totLoc) + "</td><td>" + (sold === null ? "almacén central" : fmt(sold)) + "</td><td>" + (sold === null ? "—" : pct(sold / storesSold)) + "</td></tr>";
+      const centralRow = isCentralLoc(l);
+      let cob = "—";
+      let est = "Solo stock";
+      if (!centralRow && sold !== null) {
+        const ce = coverEstado(byLoc[l], sold, Wf, pr.cat, pr.cls);
+        cob = covTxt(ce.cov);
+        est = estBadge(ce.estado);
+      }
+      h += "<tr><td>" + esc(l) + "</td><td>" + fmt(byLoc[l]) + "</td><td>" + pct(byLoc[l] / totLoc) + "</td><td>" + (sold === null ? "solo stock" : fmt(sold)) + "</td><td>" + (sold === null ? "—" : pct(sold / storesSold)) + "</td><td>" + cob + "</td><td>" + est + "</td></tr>";
     });
     h += "</tbody></table></div></div>";
     box.innerHTML = h;
@@ -2078,7 +2223,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const sub = $("xyzSub");
     const rowM = (a) => ["X", "Y", "Z"].reduce((s, z) => s + cells[a + z].margin, 0);
     const mt = rowM("A") + rowM("B") + rowM("C") || 1;
-    if (sub) sub.textContent = "Filas = ABC del margen: A " + pct(rowM("A") / mt) + " · B " + pct(rowM("B") / mt) + " · C " + pct(rowM("C") / mt) + ". El producto que cruza el 80% entra completo. Columnas = variabilidad de la demanda: X hasta 0,5 · Y hasta 1 · Z por encima. " + windowLabel() + " · X " + (band.X || 0) + " · Y " + (band.Y || 0) + " · Z " + (band.Z || 0) + (band["—"] ? " · sin XYZ " + band["—"] : "") + " · fuera de los 9 cruces: " + outside + ".";
+    if (sub) sub.textContent = "Filas = ABC del margen: A " + pct(rowM("A") / mt) + " · B " + pct(rowM("B") / mt) + " · C " + pct(rowM("C") / mt) + ". Columnas = variabilidad de la demanda: X hasta 0,5 · Y hasta 1 · Z por encima. " + windowLabel() + " · X " + (band.X || 0) + " · Y " + (band.Y || 0) + " · Z " + (band.Z || 0) + (band["—"] ? " · sin XYZ " + band["—"] : "") + " · fuera de los 9 cruces: " + outside + ".";
     const colName = { X: "X · estable", Y: "Y · variable", Z: "Z · impredecible" };
     const rowName = { A: "A · alto valor", B: "B · valor medio", C: "C · bajo valor" };
     let html = '<div class="xyz-grid"><div></div>';
@@ -2130,10 +2275,13 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       state.opWin = Math.max(1, selectedIdx().length);
       const scopeMap = aggregateSalesScope(keys);
       const act = computeActive();
-      let excl = 0;
-      if (state.activeOnly) scopeMap.forEach((it, sku) => { if (!act.has(sku)) { scopeMap.delete(sku); excl++; } });
-      const ae = $("activeNote");
-      if (ae) ae.textContent = state.activeOnly ? excl + " SKUs agotados y sin venta en 3 meses fuera del ranking" : "Incluye agotados sin venta reciente";
+      AGOTADOS = [];
+      if (state.activeOnly) scopeMap.forEach((it, sku) => { if (!act.has(sku)) { AGOTADOS.push(it); scopeMap.delete(sku); } });
+      const agBtn = $("btnAgotados");
+      if (agBtn) {
+        agBtn.textContent = "Agotados sin venta (" + AGOTADOS.length + ")";
+        agBtn.style.background = state.verAgotados ? "#7A5195" : "";
+      }
       const { abc: globalAbc } = computeAbc(scopeMap);
       const invAll = inventoryBySku(true);
       FINAL = { sku: new Map(), prod: new Map() };
@@ -2155,17 +2303,12 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         m.classicClass = m.abcClass;
         if (f && ["A", "B", "C"].indexOf(f.cls) >= 0) {
           m.abcClass = f.cls;
-          m.comercialClass = f.comercial;
           m.rank = f.mcRank || 100000 + (m.rank || 0);
           m.adjShare = Math.max(0, f.margin) / marginTot;
         }
         m.matrix = m.abcClass + m.rotClass;
       });
       allModels.sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
-      const cmEl = $("classModeNote");
-      if (cmEl) {
-        cmEl.textContent = "ABC del margen de contribución, " + windowLabel() + ", corte 80/15/5 de todo el catálogo. El producto que cruza el 80% entra completo. Donación y Refresh no entran.";
-      }
       const modelTrack = modelClassByPeriod(invAll);
       const alerts = detectTransitions(skuClassByPeriod(invAll));
 
@@ -2261,8 +2404,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       state.location = e.target.value;
       refresh();
     };
-    $("fActive").onchange = (e) => { state.activeOnly = e.target.checked; refresh(); };
     $("migMode").onchange = (e) => { state.migMode = e.target.value; refresh(); };
+    $("btnAgotados").onclick = () => { state.verAgotados = !state.verAgotados; refresh(); };
     $("migAll").onchange = (e) => { state.migAll = e.target.checked; refresh(); };
     $("fichaSel").onchange = (e) => { state.ficha = e.target.value; renderFicha(); };
     $("fChannel").onchange = (e) => {
@@ -2280,8 +2423,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     $("btnReset").onclick = () => {
       state.modelo = state.store = state.category = state.location = "";
       state.abcClass = state.search = "";
-      state.channel = "retail";
-      $("fChannel").value = "retail";
+      state.channel = "all";
+      state.verAgotados = false;
+      state.mxCell = "";
+      $("fChannel").value = "all";
       state.timePreset = "all";
       state.customPeriodKeys.clear();
       state.expandedModels.clear();
