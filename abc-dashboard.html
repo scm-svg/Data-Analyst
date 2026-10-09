@@ -2051,8 +2051,17 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     if (!pr) { box.innerHTML = "<p>Sin datos</p>"; return; }
     const n = DATA.periods.length;
     const comp = { A: 0, B: 0, C: 0 };
-    mc.forEach((g) => { if (comp[g.cls] !== undefined) comp[g.cls] += Math.max(0, g.margin); });
-    const compT = comp.A + comp.B + comp.C || 1;
+    const compN = { A: 0, B: 0, C: 0 };
+    const colorPos = mc.filter((g) => g.margin > 0).sort((a, b) => b.margin - a.margin);
+    const compT = colorPos.reduce((s, g) => s + g.margin, 0) || 1;
+    let colorCum = 0;
+    colorPos.forEach((g) => {
+      const prev = colorCum / compT;
+      colorCum += g.margin;
+      const cl = prev < TH.A ? "A" : prev < TH.B ? "B" : "C";
+      comp[cl] += g.margin;
+      compN[cl]++;
+    });
     const cm = classesByMonth(P, invMap);
     const tot = pr.ser.reduce((a, b) => a + b, 0), active = pr.ser.filter((v, i) => i >= pr.first).length || 1, avg = tot / active;
     const mm = new Array(n).fill(0);
@@ -2122,7 +2131,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     h += kb(pr.xyz + (pr.seasonal ? " 🗓️" : ""), "Regularidad", pr.seasonal ? "Estacional: >50% en 3 meses" : "XYZ del período elegido");
     h += kb(estBadge(headEstado), "Estado del inventario", (nuc ? "núcleo que vende el 70% · " : "") + "cobertura " + covTxt(headCov));
     h += kb(stTxt(pr), "Eficiencia (sell-through)", "solo stock de tienda · mediana " + (pr.stMed != null ? (pr.stMed * 100).toFixed(0) + "%" : "—"));
-    h += kb(["A", "B", "C"].filter((c) => comp[c] > 0).map((c) => c + " " + Math.round((comp[c] / compT) * 100) + "%").join(" · ") || "—", "Margen por clase de color", mc.length + " colores");
+    h += kb(["A", "B", "C"].map((c) => c + " " + ((comp[c] / compT) * 100).toFixed(1) + "%").join(" · "), "Margen entre sus colores", ["A", "B", "C"].map((c) => compN[c] + " " + c).join(" · ") + " · corte 80/15/5 de este producto");
     h += kb(fmtMoney(pr.margin), "Margen en la ventana", fmt(pr.units) + " und");
     h += kb(fmt(pr.stock), "Stock en tienda", (pr.stockCentral > 0 ? fmt(pr.stockCentral) + " en taller/almacén · " : "") + fmtMoney(pr.value) + " al costo");
     h += "</div>";
@@ -2146,12 +2155,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const szShort = sz.filter(([t, v]) => v.sold / totSold - v.stock / totStk > 0.08).map(([t]) => t);
     if (szOver.length) dx.push("Tallas con más stock que venta: <strong>" + szOver.join(", ") + "</strong>" + (szShort.length ? ". Tallas con menos stock que venta: <strong>" + szShort.join(", ") + "</strong>" : "") + ".");
     else if (szShort.length) dx.push("Tallas con menos stock que venta: <strong>" + szShort.join(", ") + "</strong>.");
-    if (nuc && core.length) {
-      const coreNames = {};
-      core.forEach((r) => { coreNames[r.store] = 1; });
-      const slowStores = storeRows.filter((r) => r.sold > 0 && !coreNames[r.store] && coverEstado(r.stock, r.sold, Wf, pr.cat, pr.cls).estado === "Sobrestock");
-      dx.push("Estado <strong>" + headEstado + "</strong> en " + core.map((r) => r.store).join(", ") + " (" + covTxt(headCov) + ", 70% de la venta)." + (slowStores.length ? " El exceso está en " + slowStores.map((r) => r.store + " " + covTxt(coverEstado(r.stock, r.sold, Wf, pr.cat, pr.cls).cov)).join(", ") + "." : ""));
-    } else if (headEstado && headEstado !== "—") dx.push("Estado <strong>" + headEstado + "</strong>, cobertura " + covTxt(headCov) + ".");
     dx.push("<strong>Acción:</strong> " + esc(headAccion || "—") + ".");
     h += '<div class="card"><h3>Diagnóstico</h3><ul style="margin:6px 0 0 18px;line-height:1.6;font-size:0.8rem">' + dx.map((d) => "<li>" + d + "</li>").join("") + "</ul></div>";
     // mes a mes
@@ -2164,7 +2167,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     });
     h += "</tbody></table></div></div>";
     // colores
-    h += '<div class="card"><h3>Colores</h3><div class="sub">Misma clase de cada color · cobertura y sell-through con stock de tienda, sin taller ni almacén</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
+    h += '<div class="card"><h3>Colores</h3><div class="sub">La letra de cada fila es la del catálogo completo. El recuadro de arriba reparte el margen de este producto entre sus colores. Cobertura y sell-through usan el stock de tienda.</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
     // tallas
     h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">% de la venta del período frente a % del stock de tienda, sin taller ni almacén · rojo = sobrada, ámbar = corta · Venta/mes y su cobertura usan los últimos 3 meses</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock</th><th>% stock</th><th>Venta/mes (3m)</th><th>Cobertura</th></tr></thead><tbody>';
     sz.forEach(([t, v]) => {
@@ -2227,7 +2230,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       band[g.xyz] = (band[g.xyz] || 0) + 1;
       if (["A", "B", "C"].indexOf(g.cls) >= 0 && cells[g.cls + g.xyz]) {
         const c = cells[g.cls + g.xyz];
-        c.n++; c.margin += Math.max(0, g.margin); c.units += g.units; c.stock += g.stock; c.items.push(g);
+        c.n++; c.margin += Math.max(0, g.margin); c.units += g.units; c.stock += (g.stock || 0) + (g.stockCentral || 0); c.items.push(g);
       } else outside++;
     });
     const sub = $("xyzSub");
@@ -2265,9 +2268,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const focus = state.xyzCell && cells[state.xyzCell] ? cells[state.xyzCell].items : ["A", "B", "C"].reduce((acc, a) => acc.concat(["X", "Y", "Z"].reduce((s, z) => s.concat(cells[a + z].items), [])), []);
     focus.sort((a, b) => b.margin - a.margin);
     const shown = focus.slice(0, 400);
-    body.innerHTML = shown.map((g) => "<tr><td>" + badge(g.cls) + "</td><td>" + g.xyz + "</td><td>" + (g.cv == null ? "—" : (g.cv * 100).toFixed(0) + "%") + '</td><td class="rn">' + esc(g.key) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + fmt(g.stock) + "</td><td>" + covTxt(g.cov) + "</td><td>" + esc(XYZ_GUIDE[g.cls + g.xyz] || "") + "</td></tr>").join("") || '<tr><td colspan="9">Sin productos en este cruce</td></tr>';
+    body.innerHTML = shown.map((g) => "<tr><td>" + badge(g.cls) + "</td><td>" + g.xyz + "</td><td>" + (g.cv == null ? "—" : (g.cv * 100).toFixed(0) + "%") + '</td><td class="rn">' + esc(g.key) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + fmt((g.stock || 0) + (g.stockCentral || 0)) + "</td><td>" + covTxt(g.cov) + "</td><td>" + esc(XYZ_GUIDE[g.cls + g.xyz] || "") + "</td></tr>").join("") || '<tr><td colspan="9">Sin productos en este cruce</td></tr>';
     const cnt = $("xyzCount");
-    if (cnt) cnt.textContent = (state.xyzCell || "Los 9 cruces") + " · " + focus.length + " productos" + (focus.length > 400 ? " (se muestran 400)" : "");
+    if (cnt) cnt.textContent = (state.xyzCell || "Los 9 cruces") + " · " + focus.length + " productos" + (focus.length > 400 ? " (se muestran 400)" : "") + " · el stock incluye taller y almacén, igual que el catálogo; la cobertura usa solo la tienda";
   }
 
   function refresh() {
