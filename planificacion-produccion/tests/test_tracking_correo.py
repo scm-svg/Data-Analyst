@@ -413,6 +413,141 @@ def html_celda_tablero(val, con_borde):
     return "<td style='padding: 6px 8px; %s text-align: center;'>%s</td>" % (borde, val)
 
 
+def es_email_valido(val):
+    mail = str(val or "").strip()
+    if mail == "" or "@" not in mail or "." not in mail or " " in mail:
+        return False
+    return bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", mail))
+
+
+def texto_celda_correo(val):
+    return re.sub(r"\s+", " ", quitar_tildes(str(val or "").lower())).strip()
+
+
+def columna_destinatarios(datos, tipo):
+    col = 1 if tipo == "gerencia" else 0
+    start = 0
+    if not datos:
+        return col, start
+    fila0 = datos[0] or []
+    c0 = texto_celda_correo(fila0[0] if len(fila0) > 0 else "")
+    c1 = texto_celda_correo(fila0[1] if len(fila0) > 1 else "")
+    if "correo" in c0 or "correo" in c1:
+        start = 1
+        if tipo == "gerencia":
+            if "gerencia" in c1:
+                col = 1
+            elif "gerencia" in c0:
+                col = 0
+            else:
+                col = 1
+        else:
+            if "diario" in c0:
+                col = 0
+            elif "diario" in c1:
+                col = 1
+            else:
+                col = 0
+    return col, start
+
+
+def leer_destinatarios(datos, tipo):
+    col, start = columna_destinatarios(datos, tipo)
+    out = []
+    vistos = set()
+    for i in range(start, len(datos or [])):
+        fila = datos[i] or []
+        mail = str(fila[col] if col < len(fila) else "").strip()
+        if not es_email_valido(mail):
+            continue
+        key = mail.lower()
+        if key in vistos:
+            continue
+        vistos.add(key)
+        out.append(mail)
+    return out
+
+
+def clave_resumen_gerencia(fila):
+    return "|".join(
+        [
+            normalizar_mo(fila.get("mo")),
+            str(fila.get("sku") or "").strip().lower(),
+            str(fila.get("producto") or "").strip().lower(),
+            str(fila.get("genero") or "").strip().lower(),
+            str(fila.get("color") or "").strip().lower(),
+            normalizar_talla(fila.get("talla")),
+        ]
+    )
+
+
+def etiqueta_mo_sku(fila):
+    mo = str(fila.get("mo") or "").strip()
+    sku = str(fila.get("sku") or "").strip()
+    if mo.endswith(".0") and mo[:-2].isdigit():
+        mo = mo[:-2]
+    if isinstance(fila.get("mo"), float) and fila.get("mo") == int(fila.get("mo")):
+        mo = str(int(fila.get("mo")))
+    if mo and sku:
+        return mo + " — " + sku
+    return mo or sku or ""
+
+
+def resumir_detalle_gerencia(filas):
+    por = OrderedDict()
+    for f in filas:
+        c = clave_resumen_gerencia(f)
+        if c not in por:
+            por[c] = dict(f)
+            por[c]["clave"] = c
+            por[c]["cantidad"] = 0
+        por[c]["cantidad"] += numero_cantidad(f.get("cantidad"))
+    out = list(por.values())
+
+    def sort_key(x):
+        mo = str(normalizar_mo(x.get("mo")))
+        try:
+            nmo = float(mo) if mo != "" else None
+        except ValueError:
+            nmo = None
+        sku = str(x.get("sku") or "").strip().lower()
+        tal = str(normalizar_talla(x.get("talla")))
+        try:
+            ntal = float(tal)
+        except ValueError:
+            ntal = None
+        return (
+            0 if nmo is not None else 1,
+            nmo if nmo is not None else 0,
+            mo,
+            sku,
+            0 if ntal is not None else 1,
+            ntal if ntal is not None else 0,
+            tal,
+        )
+
+    out.sort(key=sort_key)
+    return out
+
+
+def construir_html_detalle_gerencia(filas):
+    headers = ["MO-SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"]
+    html = "<table>" + "".join("<th>%s</th>" % h for h in headers)
+    total = 0
+    for f in filas:
+        total += numero_cantidad(f.get("cantidad"))
+        html += "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (
+            etiqueta_mo_sku(f),
+            f.get("producto") or "",
+            f.get("genero") or "",
+            f.get("color") or "",
+            f.get("talla") or "",
+            f.get("cantidad"),
+        )
+    html += "<tr><td>TOTAL SEMANA</td><td></td><td></td><td></td><td></td><td>%s</td></tr></table>" % total
+    return html, total
+
+
 class TestTrackingCorreo(unittest.TestCase):
     def test_manifiesto_incluye_scopes_de_correo(self):
         with open(MANIFEST, encoding="utf-8") as f:
@@ -476,8 +611,13 @@ class TestTrackingCorreo(unittest.TestCase):
             'ASUNTO_REPORTE_CORREO_ = "Reporte de Producción Diaria y Proyección a Almacén"',
             src,
         )
+        self.assertIn(
+            'ASUNTO_REPORTE_GERENCIA_ = "Resumen semanal de producción — piezas en proceso hacia almacén y tienda"',
+            src,
+        )
         self.assertNotIn("📢", src)
         self.assertIn("<strong>NOTA PARA ALMACÉN:</strong>", src)
+        self.assertIn("NOTA PARA ALMACÉN Y TIENDA", src)
         self.assertNotIn("📦 NOTA PARA ALMACÉN", src)
         self.assertNotRegex(src, r"📦\s*NOTA PARA ALMAC")
 
@@ -641,7 +781,7 @@ class TestTrackingCorreo(unittest.TestCase):
     def test_script_reparte_turnos_en_tableros_y_detalle(self):
         with open(GS, encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("VERSIÓN 5.9.7", src)
+        self.assertIn("VERSIÓN 5.9.8", src)
         for token in (
             "function clasificarTurno_(",
             "function turnoDeBloque_(",
@@ -987,6 +1127,164 @@ class TestTrackingCorreo(unittest.TestCase):
             "MAR no debe reenviarse entero al cambiar MAR LOTE 1 → MAR: %s"
             % [(x.get("sku"), x["cantidad"]) for x in reenviados_completos[:8]],
         )
+
+    def test_script_correo_diario_y_gerencia_separados(self):
+        with open(GS, encoding="utf-8") as f:
+            src = f.read()
+        for token in (
+            "function enviarResumenGerencia(",
+            "function leerDestinatariosCorreo_(",
+            "function resumirDetalleGerencia_(",
+            "function construirHtmlDetalleGerencia_(",
+            "function construirHtmlCuerpoGerencia_(",
+            "COL_CORREO_DIARIO_",
+            "COL_CORREO_GERENCIA_",
+            '["MO-SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"]',
+            "ya salieron de producción",
+            "próximas a llegar a almacén",
+            "a tienda",
+            "Enviar Resumen Semanal (Gerencia)",
+            "Correos Diario",
+            "Correos Gerencia",
+        ):
+            self.assertIn(token, src, "Falta: %s" % token)
+        self.assertIn(
+            "leerDestinatariosCorreo_(hojaCorreo.getDataRange().getValues(), COL_CORREO_DIARIO_)",
+            src,
+        )
+        self.assertIn(
+            "leerDestinatariosCorreo_(hojaCorreo.getDataRange().getValues(), COL_CORREO_GERENCIA_)",
+            src,
+        )
+        self.assertNotIn("partirDetalleNuevo_(consolidados, enviadoMap)", src[src.find("function enviarResumenGerencia("):])
+        diario_fn = src[src.find("function enviarReporteProduccion("): src.find("function enviarResumenGerencia(")]
+        self.assertIn("partirDetalleNuevo_(consolidados, enviadoMap)", diario_fn)
+
+    def test_destinatarios_excel5_no_mezcla_columnas(self):
+        xlsx = "/home/ubuntu/.cursor/projects/workspace/uploads/Tracking_-_Produccion__5__aa7a.xlsx"
+        if not os.path.isfile(xlsx):
+            self.skipTest("Excel Tracking (5) no está en este entorno")
+        from openpyxl import load_workbook
+
+        wb = load_workbook(xlsx, data_only=True)
+        ws = wb["Correo"]
+        datos = []
+        for r in range(1, ws.max_row + 1):
+            datos.append([ws.cell(r, 1).value, ws.cell(r, 2).value])
+        diario = leer_destinatarios(datos, "diario")
+        gerencia = leer_destinatarios(datos, "gerencia")
+        self.assertGreaterEqual(len(diario), 10)
+        self.assertEqual(gerencia, ["analistaprocesoscuadro@gmail.com"])
+        self.assertIn("especialistaestampadocuadro@gmail.com", diario)
+        self.assertNotIn("especialistaestampadocuadro@gmail.com", gerencia)
+        self.assertTrue(all("@" in m for m in diario))
+        self.assertNotIn("Correos Diario", diario)
+        self.assertNotIn("Correos Gerencia", gerencia)
+
+    def test_destinatarios_hoja_vieja_solo_columna_a(self):
+        datos = [
+            ["taller@somoscuadro.com"],
+            ["logistica@somoscuadro.com"],
+        ]
+        self.assertEqual(
+            leer_destinatarios(datos, "diario"),
+            ["taller@somoscuadro.com", "logistica@somoscuadro.com"],
+        )
+        self.assertEqual(leer_destinatarios(datos, "gerencia"), [])
+
+    def test_resumen_gerencia_agrupa_mo_coincidente(self):
+        filas = [
+            {
+                "dia": "Lunes",
+                "linea": "Línea 1",
+                "turno": "Nocturno",
+                "mo": "3003",
+                "sku": "RIOMIKI13T2",
+                "producto": "RIO",
+                "genero": "KIDS",
+                "color": "AZUL REY",
+                "talla": 2,
+                "cantidad": 5,
+            },
+            {
+                "dia": "Martes",
+                "linea": "Línea 2",
+                "turno": "Diurno",
+                "mo": "3003",
+                "sku": "RIOMIKI13T2",
+                "producto": "RIO",
+                "genero": "KIDS",
+                "color": "AZUL REY",
+                "talla": 2,
+                "cantidad": 7,
+            },
+            {
+                "dia": "Lunes",
+                "linea": "Línea 1",
+                "turno": "Nocturno",
+                "mo": "3004",
+                "sku": "RIOMIKI13T4",
+                "producto": "RIO",
+                "genero": "KIDS",
+                "color": "AZUL REY",
+                "talla": 4,
+                "cantidad": 20,
+            },
+        ]
+        res = resumir_detalle_gerencia(filas)
+        self.assertEqual(len(res), 2)
+        por_mo = {str(x["mo"]): x["cantidad"] for x in res}
+        self.assertEqual(por_mo["3003"], 12)
+        self.assertEqual(por_mo["3004"], 20)
+        html, total = construir_html_detalle_gerencia(res)
+        self.assertEqual(total, 32)
+        self.assertIn("MO-SKU", html)
+        self.assertIn("3003 — RIOMIKI13T2", html)
+        self.assertNotIn(">Dia<", html)
+        self.assertNotIn(">Fecha<", html)
+        self.assertNotIn(">Linea<", html)
+        self.assertNotIn(">Turno<", html)
+        self.assertIn("TOTAL SEMANA", html)
+
+    def test_excel5_gerencia_resume_semana_completa(self):
+        xlsx = "/home/ubuntu/.cursor/projects/workspace/uploads/Tracking_-_Produccion__5__aa7a.xlsx"
+        if not os.path.isfile(xlsx):
+            self.skipTest("Excel Tracking (5) no está en este entorno")
+        from openpyxl import load_workbook
+
+        wb = load_workbook(xlsx, data_only=True)
+        wd = wb["Detalle Tracking - Produccion"]
+        det = []
+        for r in range(3, wd.max_row + 1):
+            cant = numero_cantidad(wd.cell(r, 12).value)
+            if cant <= 0:
+                continue
+            det.append(
+                {
+                    "dia": wd.cell(r, 2).value,
+                    "fecha": wd.cell(r, 3).value,
+                    "linea": wd.cell(r, 4).value,
+                    "turno": wd.cell(r, 5).value,
+                    "mo": wd.cell(r, 6).value,
+                    "sku": wd.cell(r, 7).value,
+                    "producto": wd.cell(r, 8).value,
+                    "genero": wd.cell(r, 9).value,
+                    "color": wd.cell(r, 10).value,
+                    "talla": wd.cell(r, 11).value,
+                    "cantidad": cant,
+                }
+            )
+        self.assertGreater(len(det), 80)
+        res = resumir_detalle_gerencia(det)
+        self.assertLess(len(res), len(det))
+        self.assertEqual(
+            sum(numero_cantidad(x["cantidad"]) for x in res),
+            sum(numero_cantidad(x["cantidad"]) for x in det),
+        )
+        html, total = construir_html_detalle_gerencia(res)
+        self.assertGreater(total, 1000)
+        self.assertIn("MO-SKU", html)
+        self.assertNotIn("partirDetalleNuevo", html)
 
 
 if __name__ == "__main__":
