@@ -243,7 +243,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       </div>
       <div class="sub" id="catalogSub">Expandir fila para ver variantes (SKU). La clase del producto es la del corte 80/15/5.</div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th></th><th>Clase</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock</th>
+        <th></th><th>Clase</th><th>Modelo / variante</th><th>Ingresos netos</th><th>Und.</th><th>Stock total</th>
       </tr></thead><tbody id="catalogBody"></tbody></table></div>
     </div>
   </section>
@@ -330,7 +330,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       <h3>Productos del cruce</h3>
       <div class="sub" id="xyzCount"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>Clase</th><th>XYZ</th><th>CV</th><th>Producto</th><th>Margen</th><th>Und.</th><th>Stock</th><th>Cobertura</th><th>Cómo comprarlo</th>
+        <th>Clase</th><th>XYZ</th><th>CV</th><th>Producto</th><th>Margen</th><th>Und.</th><th>Stock tienda</th><th>Venta/mes</th><th>Cobertura</th><th>Stock total</th><th>Cómo comprarlo</th>
       </tr></thead><tbody id="xyzBody"></tbody></table></div>
     </div>
   </section>
@@ -1200,7 +1200,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       })
       .filter(Boolean)
       .sort((a, b) => b.revenue - a.revenue);
-    if (sub) sub.textContent = (state.abcClass ? "Solo clase " + state.abcClass + " · " : "") + models.length + (models.length === 1 ? " producto" : " productos") + ", incluidos los agotados sin venta reciente · expandir para ver las variantes";
+    if (sub) sub.textContent = (state.abcClass ? "Solo clase " + state.abcClass + " · " : "") + models.length + (models.length === 1 ? " producto" : " productos") + ", incluidos los agotados sin venta reciente · el stock es tienda + taller + almacén de las variantes con margen · expandir para ver las variantes";
     paint(models, "Sin productos en esta clase");
   }
 
@@ -1813,6 +1813,12 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       const tie = inv.tienda || 0;
       const cen = inv.central || 0;
       if (tie <= 0 && cen <= 0) return;
+      const a = AGG.get(sku);
+      if (a) {
+        let mar = 0, und = 0;
+        idxs.forEach((i) => { mar += a.mar[i] || 0; und += a.ser[i] || 0; });
+        if (mar <= 0 && und > 0) return;
+      }
       const m = skuMeta(sku);
       if (state.category && m.categoria !== state.category) return;
       const g = get(sku);
@@ -1930,7 +1936,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     return '<div style="font-size:0.6rem;color:var(--mu)">colores: ' + ["A", "B", "C"].filter((c) => g.comp[c] > 0).map((c) => c + " " + Math.round((g.comp[c] / t) * 100) + "%").join(" · ") + (g.comp.n ? " (" + g.comp.n + ")" : "") + "</div>";
   }
   function opRow(g, withCtx) {
-    return "<tr><td>" + clsBadge(g) + "</td><td>" + g.xyz + (g.seasonal ? ' <span title="Más del 50% de la venta en 3 meses">🗓️</span>' : "") + "</td>" + (withCtx ? '<td style="font-size:0.65rem;color:var(--mu)">' + esc(g.ctx) + "</td>" : "") + '<td class="rn">' + esc(g.key) + compTxt(g) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + (g.mwin != null ? g.mwin + "/" + state.opWin : "—") + "</td><td>" + stTxt(g) + "</td><td>" + fmt(g.stock) + "</td><td>" + covTxt(g.cov) + "</td><td>" + estBadge(g.estado) + '</td><td style="font-size:0.7rem">' + esc(g.accion) + "</td><td>" + fmtMoney(g.value) + (g.exVal > 0 ? '<div style="font-size:0.6rem;color:#9A6B00">exceso ' + fmtMoney(g.exVal) + "</div>" : "") + "</td></tr>";
+    return "<tr><td>" + clsBadge(g) + "</td><td>" + g.xyz + (g.seasonal ? ' <span title="Más del 50% de la venta en 3 meses">🗓️</span>' : "") + "</td>" + (withCtx ? '<td style="font-size:0.65rem;color:var(--mu)">' + esc(g.ctx) + "</td>" : "") + '<td class="rn">' + esc(g.key) + compTxt(g) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + (g.mwin != null ? g.mwin + "/" + state.opWin : "—") + "</td><td>" + stTxt(g) + "</td><td>" + fmt(g.stock) + "</td><td>" + covTxt(g.cov) + "</td><td>" + fmt((g.stock || 0) + (g.stockCentral || 0)) + "</td><td>" + estBadge(g.estado) + '</td><td style="font-size:0.7rem">' + esc(g.accion) + "</td><td>" + fmtMoney(g.value) + (g.exVal > 0 ? '<div style="font-size:0.6rem;color:#9A6B00">exceso ' + fmtMoney(g.exVal) + "</div>" : "") + "</td></tr>";
   }
 
   function renderOperativa(invMap) {
@@ -2108,8 +2114,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if ((m.producto || sku) !== P) continue;
       const q = r[2] || 0;
       if (q <= 0) continue;
-      byLoc[loc] = (byLoc[loc] || 0) + q;
       if (!marginOk.has(sku)) { stockFuera += q; continue; }
+      byLoc[loc] = (byLoc[loc] || 0) + q;
       const t = m.talla || "Única";
       bySize[t] = bySize[t] || { sold: 0, u3: 0, stock: 0, tie: 0 };
       bySize[t].stock += q;
@@ -2152,7 +2158,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     h += kb(stTxt(pr), "Eficiencia (sell-through)", "solo stock de tienda · mediana " + (pr.stMed != null ? (pr.stMed * 100).toFixed(0) + "%" : "—"));
     h += kb(["A", "B", "C"].map((c) => c + " " + ((comp[c] / compT) * 100).toFixed(1) + "%").join(" · "), "Margen entre sus colores", ["A", "B", "C"].map((c) => compN[c] + " " + c).join(" · ") + " · corte 80/15/5 de este producto");
     h += kb(fmtMoney(pr.margin), "Margen en la ventana", fmt(pr.units) + " und");
-    h += kb(fmt(pr.stock), "Stock en tienda", (pr.stockCentral > 0 ? fmt(pr.stockCentral) + " en taller/almacén · " : "") + fmtMoney(pr.value) + " al costo");
+    h += kb(fmt((pr.stock || 0) + (pr.stockCentral || 0)), "Stock total", "igual que el catálogo · " + fmt(pr.stock) + " en tienda" + (pr.stockCentral > 0 ? " · " + fmt(pr.stockCentral) + " en taller/almacén" : "") + " · " + fmtMoney(pr.value) + " al costo");
     h += "</div>";
     // diagnóstico
     const dx = [];
@@ -2165,7 +2171,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const over = mc.filter((g) => g.estado === "Sobrestock" || g.estado === "Sin venta").sort((a, b) => b.stock - a.stock);
     const brk = mc.filter((g) => g.estado === "Quiebre").sort((a, b) => a.cov - b.cov);
     const agotCol = mc.filter((g) => g.estado === "Agotado").sort((a, b) => b.units - a.units);
-    if (over.length) dx.push("Colores por encima de su cobertura: <strong>" + over.map((g) => esc(g.color) + " (" + fmt(g.stock) + " und, " + covTxt(g.cov) + ")").join(", ") + "</strong>.");
+    if (over.length) dx.push("Colores por encima de su cobertura: <strong>" + over.map((g) => esc(g.color) + " (" + fmt(g.stock) + " und en tienda, " + covTxt(g.cov) + ")").join(", ") + "</strong>.");
     if (brk.length) dx.push("Colores por debajo de la cobertura mínima: <strong>" + brk.map((g) => esc(g.color) + " (" + covTxt(g.cov) + ")").join(", ") + "</strong>.");
     if (agotCol.length) dx.push("Colores agotados: <strong>" + agotCol.map((g) => esc(g.color)).join(", ") + "</strong>.");
     const sumSold = Object.values(bySize).reduce((s, v) => s + v.sold, 0);
@@ -2188,24 +2194,25 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     });
     h += "</tbody></table></div></div>";
     // colores
-    h += '<div class="card"><h3>Colores</h3><div class="sub">La letra de cada fila es la del catálogo completo. El recuadro de arriba reparte el margen de este producto entre sus colores. Cobertura y sell-through usan el stock de tienda.</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
+    h += '<div class="card"><h3>Colores</h3><div class="sub">La letra de cada fila es la del catálogo completo. Cobertura = stock de tienda ÷ venta mensual de la ventana. Stock total = tienda + taller + almacén, el mismo criterio del catálogo.</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock tienda</th><th>Cobertura</th><th>Stock total</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
     // tallas
-    h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">El stock es el del catálogo: tienda + taller + almacén, solo variantes con margen en el período' + (stockFuera > 0 ? ". " + fmt(stockFuera) + (stockFuera === 1 ? " und queda fuera porque su margen no es positivo, igual que en el catálogo" : " und quedan fuera porque su margen no es positivo, igual que en el catálogo") : "") + '. % de la venta frente a % de ese stock · rojo = sobrada, ámbar = corta · la cobertura usa solo el stock de tienda y la venta de los últimos 3 meses</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock</th><th>% stock</th><th>Venta/mes (3m)</th><th>Cobertura</th></tr></thead><tbody>';
+    const fueraTxt = stockFuera > 0 ? " " + fmt(stockFuera) + (stockFuera === 1 ? " und con margen no positivo queda fuera, igual que en el catálogo." : " und con margen no positivo quedan fuera, igual que en el catálogo.") : "";
+    h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">Cobertura = stock tienda ÷ venta/mes de los últimos 3 meses. Stock total = tienda + taller + almacén, el mismo número del catálogo.' + fueraTxt + ' Rojo = el % de stock total supera al % de venta; ámbar = se queda corto.</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock tienda</th><th>Venta/mes (3m)</th><th>Cobertura</th><th>Stock total</th><th>% stock</th></tr></thead><tbody>';
     sz.forEach(([t, v]) => {
       const ps = v.sold / totSold, pk = Math.max(0, v.stock) / totStk, a3 = v.u3 / 3, tie = v.tie || 0;
       const col = pk - ps > 0.1 ? "#E5532D" : ps - pk > 0.08 ? "#9A6B00" : "var(--tx)";
-      h += "<tr><td><strong>" + esc(t) + "</strong></td><td>" + fmt(v.sold) + "</td><td>" + pct(ps) + "</td><td>" + fmt(v.stock) + '</td><td style="color:' + col + ';font-weight:700">' + pct(pk) + "</td><td>" + fmt(a3, 1) + "</td><td>" + covTxt(a3 > 0 ? tie / a3 : tie > 0 ? Infinity : null) + "</td></tr>";
+      h += "<tr><td><strong>" + esc(t) + "</strong></td><td>" + fmt(v.sold) + "</td><td>" + pct(ps) + "</td><td>" + fmt(tie) + "</td><td>" + fmt(a3, 1) + "</td><td>" + covTxt(a3 > 0 ? tie / a3 : tie > 0 ? Infinity : null) + "</td><td>" + fmt(v.stock) + '</td><td style="color:' + col + ';font-weight:700">' + pct(pk) + "</td></tr>";
     });
     const sumTie = sz.reduce((s, [, v]) => s + Math.max(0, v.tie || 0), 0);
     const sumU3 = sz.reduce((s, [, v]) => s + v.u3, 0);
     const a3t = sumU3 / 3;
-    h += '<tr><td><strong>Total</strong></td><td><strong>' + fmt(sumSold) + '</strong></td><td>100%</td><td><strong>' + fmt(sumStock) + '</strong></td><td>100%</td><td>' + fmt(a3t, 1) + "</td><td>" + covTxt(a3t > 0 ? sumTie / a3t : sumTie > 0 ? Infinity : null) + "</td></tr>";
+    h += '<tr><td><strong>Total</strong></td><td><strong>' + fmt(sumSold) + '</strong></td><td>100%</td><td><strong>' + fmt(sumTie) + "</strong></td><td>" + fmt(a3t, 1) + "</td><td>" + covTxt(a3t > 0 ? sumTie / a3t : sumTie > 0 ? Infinity : null) + "</td><td><strong>" + fmt(sumStock) + "</strong></td><td>100%</td></tr>";
     h += "</tbody></table></div></div>";
     // ubicaciones
     const locs = DATA.locations.filter((l) => byLoc[l]);
     const totLoc = locs.reduce((s, l) => s + byLoc[l], 0) || 1;
     const storesSold = Object.entries(byStore).filter(([s]) => STORE2LOC[s]).reduce((s, [, v]) => s + v, 0) || 1;
-    h += '<div class="card"><h3>Dónde está el stock</h3><div class="sub">Taller y almacén se consultan como stock. La cobertura y el estado usan la venta y el stock de esa tienda.</div><div class="cscroll"><table class="ct"><thead><tr><th>Ubicación</th><th>Stock</th><th>% stock</th><th>Vendido (ventana)</th><th>% venta</th><th>Cobertura</th><th>Estado</th></tr></thead><tbody>';
+    h += '<div class="card"><h3>Dónde está el stock</h3><div class="sub">El total es el mismo del catálogo.' + fueraTxt + ' La cobertura de cada tienda = su stock ÷ la venta de la ventana. Taller y almacén se consultan como stock, sin cobertura.</div><div class="cscroll"><table class="ct"><thead><tr><th>Ubicación</th><th>Stock</th><th>% stock</th><th>Vendido (ventana)</th><th>% venta</th><th>Cobertura</th><th>Estado</th></tr></thead><tbody>';
     locs.sort((a, b) => byLoc[b] - byLoc[a]).forEach((l) => {
       const st = Object.keys(STORE2LOC).find((s) => STORE2LOC[s] === l);
       const sold = st ? byStore[st] || 0 : null;
@@ -2219,6 +2226,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       }
       h += "<tr><td>" + esc(l) + "</td><td>" + fmt(byLoc[l]) + "</td><td>" + pct(byLoc[l] / totLoc) + "</td><td>" + (sold === null ? "solo stock" : fmt(sold)) + "</td><td>" + (sold === null ? "—" : pct(sold / storesSold)) + "</td><td>" + cob + "</td><td>" + est + "</td></tr>";
     });
+    const sumLoc = locs.reduce((s, l) => s + byLoc[l], 0);
+    h += '<tr><td><strong>Total</strong></td><td><strong>' + fmt(sumLoc) + '</strong></td><td>100%</td><td></td><td></td><td></td><td></td></tr>';
     h += "</tbody></table></div></div>";
     box.innerHTML = h;
   }
@@ -2293,9 +2302,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const focus = state.xyzCell && cells[state.xyzCell] ? cells[state.xyzCell].items : ["A", "B", "C"].reduce((acc, a) => acc.concat(["X", "Y", "Z"].reduce((s, z) => s.concat(cells[a + z].items), [])), []);
     focus.sort((a, b) => b.margin - a.margin);
     const shown = focus.slice(0, 400);
-    body.innerHTML = shown.map((g) => "<tr><td>" + badge(g.cls) + "</td><td>" + g.xyz + "</td><td>" + (g.cv == null ? "—" : (g.cv * 100).toFixed(0) + "%") + '</td><td class="rn">' + esc(g.key) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + fmt((g.stock || 0) + (g.stockCentral || 0)) + "</td><td>" + covTxt(g.cov) + "</td><td>" + esc(XYZ_GUIDE[g.cls + g.xyz] || "") + "</td></tr>").join("") || '<tr><td colspan="9">Sin productos en este cruce</td></tr>';
+    body.innerHTML = shown.map((g) => "<tr><td>" + badge(g.cls) + "</td><td>" + g.xyz + "</td><td>" + (g.cv == null ? "—" : (g.cv * 100).toFixed(0) + "%") + '</td><td class="rn">' + esc(g.key) + "</td><td>" + fmtMoney(g.margin) + "</td><td>" + fmt(g.units) + "</td><td>" + fmt(g.stock) + "</td><td>" + fmt(g.avg6, 1) + "</td><td>" + covTxt(g.cov) + "</td><td>" + fmt((g.stock || 0) + (g.stockCentral || 0)) + "</td><td>" + esc(XYZ_GUIDE[g.cls + g.xyz] || "") + "</td></tr>").join("") || '<tr><td colspan="11">Sin productos en este cruce</td></tr>';
     const cnt = $("xyzCount");
-    if (cnt) cnt.textContent = (state.xyzCell || "Los 9 cruces") + " · " + focus.length + " productos" + (focus.length > 400 ? " (se muestran 400)" : "") + " · el stock incluye taller y almacén, igual que el catálogo; la cobertura usa solo la tienda";
+    if (cnt) cnt.textContent = (state.xyzCell || "Los 9 cruces") + " · " + focus.length + " productos" + (focus.length > 400 ? " (se muestran 400)" : "") + " · stock total = tienda + taller + almacén, el mismo del catálogo · cobertura = stock tienda ÷ venta/mes de la ventana";
   }
 
   function refresh() {
