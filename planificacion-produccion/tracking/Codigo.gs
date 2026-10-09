@@ -1,11 +1,12 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.6 (TOTAL DEL DÍA EN CORREO)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.7 (CANTIDAD CORREO SIN INFLAR)
  * =====================================================================
  *  Cambios de esta versión:
- *   - El correo copia también la columna extra del tablero (p. ej. % Cumplimiento)
- *     y el bloque TOTAL del día (diurno + nocturno por día).
- *   - Sigue incluyendo los tableros diurno y nocturno (v5.9.5).
+ *   - La cantidad del detalle ya no se infla ni se lee como fecha/talla:
+ *     historial con formato fecha, clave con un día de menos (America/Lima)
+ *     o el mismo SKU con otro nombre de producto (p. ej. MAR vs MAR LOTE 1).
+ *   - Sigue copiando Total del día y tableros diurno/nocturno (v5.9.6).
  * =====================================================================
  */
 
@@ -360,6 +361,9 @@ function actualizarTrackingProduccion() {
       .setHorizontalAlignment("center").setVerticalAlignment("middle")
       .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
     hojaDetalle.getRange(filaDatos, 3, registrosDetalle.length, 1).setNumberFormat("dd/MM/yyyy");
+    hojaDetalle.getRange(filaDatos, 6, registrosDetalle.length, 2).setNumberFormat("@");
+    hojaDetalle.getRange(filaDatos, 11, registrosDetalle.length, 1).setNumberFormat("@");
+    hojaDetalle.getRange(filaDatos, 12, registrosDetalle.length, 1).setNumberFormat("0");
     hojaDetalle.autoResizeColumns(2, nColsDet);
   }
 
@@ -1049,9 +1053,15 @@ function pad2_(n) {
   return (n < 10 ? "0" : "") + n;
 }
 
+function esFechaObjeto_(val) {
+  return Object.prototype.toString.call(val) === "[object Date]" && !isNaN(val.getTime());
+}
+
 function normalizarFechaClave_(val) {
-  if (Object.prototype.toString.call(val) === "[object Date]" && !isNaN(val.getTime())) {
-    return val.getFullYear() + "-" + pad2_(val.getMonth() + 1) + "-" + pad2_(val.getDate());
+  // Date-only cells from Sheets are UTC midnight of the calendar day.
+  // getDate() in America/Lima turns 2026-10-05 into 2026-10-04 and breaks the historial.
+  if (esFechaObjeto_(val)) {
+    return val.getUTCFullYear() + "-" + pad2_(val.getUTCMonth() + 1) + "-" + pad2_(val.getUTCDate());
   }
   var s = String(val == null ? "" : val).trim();
   var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
@@ -1061,6 +1071,66 @@ function normalizarFechaClave_(val) {
     return y + "-" + pad2_(parseInt(m[2], 10)) + "-" + pad2_(parseInt(m[1], 10));
   }
   return s.toLowerCase();
+}
+
+var MAX_CANTIDAD_CORREO_ = 100000;
+
+function numeroCantidadOk_(n) {
+  return typeof n === "number" && isFinite(n) && n >= 0 && n < MAX_CANTIDAD_CORREO_;
+}
+
+function numeroCantidad_(val, display) {
+  if (typeof val === "number" && isFinite(val)) {
+    return numeroCantidadOk_(val) ? val : 0;
+  }
+  if (display != null) {
+    var ds = String(display).trim().replace(/\s/g, "").replace(",", ".");
+    if (/^[0-9]+(\.[0-9]+)?$/.test(ds)) {
+      var dn = Number(ds);
+      if (numeroCantidadOk_(dn)) return dn;
+    }
+  }
+  if (esFechaObjeto_(val)) {
+    // Cell was stored as a number (p. ej. 5) then formatted as date → getValues() returns Date.
+    // Never use Number(date) (milliseconds). Recover the Sheets serial, with the 1900 leap bug.
+    var utcMidnight = Date.UTC(val.getUTCFullYear(), val.getUTCMonth(), val.getUTCDate());
+    var epoch = Date.UTC(1899, 11, 30);
+    var serial = Math.round((utcMidnight - epoch) / 86400000);
+    if (serial > 0 && serial < 61) serial -= 1;
+    return numeroCantidadOk_(serial) ? serial : 0;
+  }
+  var s = String(val == null ? "" : val).trim().replace(",", ".");
+  var n = Number(s);
+  return numeroCantidadOk_(n) ? n : 0;
+}
+
+function normalizarMoClave_(val) {
+  var s = String(val == null ? "" : val).trim().toLowerCase();
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+  return s;
+}
+
+function normalizarTallaClave_(val) {
+  if (typeof val === "number" && isFinite(val)) {
+    return String(val === Math.floor(val) ? Math.floor(val) : val);
+  }
+  if (esFechaObjeto_(val)) {
+    var n = numeroCantidad_(val);
+    return n ? String(n) : "";
+  }
+  return String(val == null ? "" : val).trim().toLowerCase();
+}
+
+function fechasVecinasClave_(yyyyMmDd) {
+  var s = String(yyyyMmDd || "");
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return [s];
+  var t = Date.UTC(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  function fmt(ms) {
+    var d = new Date(ms);
+    return d.getUTCFullYear() + "-" + pad2_(d.getUTCMonth() + 1) + "-" + pad2_(d.getUTCDate());
+  }
+  return [fmt(t), fmt(t - 86400000), fmt(t + 86400000)];
 }
 
 function lineaClaveCorreo_(s) {
@@ -1093,21 +1163,107 @@ function claveDetalleCorreo_(fila) {
     normalizarFechaClave_(fila.fecha),
     lineaClaveCorreo_(fila.linea),
     turnoClaveCorreo_(fila.turno),
-    String(fila.mo == null ? "" : fila.mo).trim().toLowerCase(),
+    normalizarMoClave_(fila.mo),
     String(fila.sku == null ? "" : fila.sku).trim().toLowerCase(),
     String(fila.producto == null ? "" : fila.producto).trim().toLowerCase(),
     String(fila.genero == null ? "" : fila.genero).trim().toLowerCase(),
     String(fila.color == null ? "" : fila.color).trim().toLowerCase(),
-    String(fila.talla == null ? "" : fila.talla).trim().toLowerCase()
+    normalizarTallaClave_(fila.talla)
   ].join("|");
 }
 
+function claveEstableCorreo_(fila) {
+  var fecha = normalizarFechaClave_(fila.fecha);
+  var linea = lineaClaveCorreo_(fila.linea);
+  var turno = turnoClaveCorreo_(fila.turno);
+  var mo = normalizarMoClave_(fila.mo);
+  var sku = String(fila.sku == null ? "" : fila.sku).trim().toLowerCase();
+  var talla = normalizarTallaClave_(fila.talla);
+  if (sku) return ["sku", fecha, linea, turno, mo, sku, talla].join("|");
+  return [
+    "nosku", fecha, linea, turno, mo,
+    String(fila.producto == null ? "" : fila.producto).trim().toLowerCase(),
+    String(fila.genero == null ? "" : fila.genero).trim().toLowerCase(),
+    String(fila.color == null ? "" : fila.color).trim().toLowerCase(),
+    talla
+  ].join("|");
+}
+
+function ponerCantidadMapa_(map, clave, cant) {
+  if (!clave) return;
+  map[clave] = Math.max(numeroCantidad_(map[clave]), numeroCantidad_(cant));
+}
+
+function estableDesdePartesClave_(parts) {
+  if (!parts || parts.length !== 10) return "";
+  if (parts[5]) return ["sku", parts[1], parts[2], parts[3], parts[4], parts[5], parts[9]].join("|");
+  return ["nosku", parts[1], parts[2], parts[3], parts[4], parts[6], parts[7], parts[8], parts[9]].join("|");
+}
+
+function registrarCantidadMapa_(map, clave, fila, cant) {
+  ponerCantidadMapa_(map, clave, cant);
+  var migrada = migrarClaveHistorialCorreo_(clave);
+  ponerCantidadMapa_(map, migrada, cant);
+  var parts = String(migrada).split("|");
+  ponerCantidadMapa_(map, estableDesdePartesClave_(parts), cant);
+  if (parts.length === 10) {
+    var sinProd = parts.slice();
+    sinProd[6] = "";
+    ponerCantidadMapa_(map, sinProd.join("|"), cant);
+  }
+  if (!fila) return;
+  ponerCantidadMapa_(map, claveDetalleCorreo_(fila), cant);
+  ponerCantidadMapa_(map, claveEstableCorreo_(fila), cant);
+  var reb = claveDetalleCorreo_(fila).split("|");
+  if (reb.length === 10) {
+    var sinReb = reb.slice();
+    sinReb[6] = "";
+    ponerCantidadMapa_(map, sinReb.join("|"), cant);
+  }
+}
+
+function clavesBusquedaCorreo_(fila) {
+  var base = fila.clave || claveDetalleCorreo_(fila);
+  var out = [];
+  function add(k) {
+    if (k && out.indexOf(k) === -1) out.push(k);
+  }
+  add(base);
+  add(migrarClaveHistorialCorreo_(base));
+  add(claveDetalleCorreo_(fila));
+  add(claveEstableCorreo_(fila));
+  var parts = String(base).split("|");
+  if (parts.length === 10) {
+    var fechas = fechasVecinasClave_(parts[1]);
+    for (var i = 0; i < fechas.length; i++) {
+      var p = parts.slice();
+      p[1] = fechas[i];
+      add(p.join("|"));
+      var sinProd = p.slice();
+      sinProd[6] = "";
+      add(sinProd.join("|"));
+    }
+  }
+  return out;
+}
+
+function cantidadEnviadaDeMapa_(map, fila) {
+  var keys = clavesBusquedaCorreo_(fila);
+  var best = 0;
+  for (var i = 0; i < keys.length; i++) {
+    if (!Object.prototype.hasOwnProperty.call(map, keys[i])) continue;
+    var n = numeroCantidad_(map[keys[i]]);
+    if (n > best) best = n;
+  }
+  return best;
+}
+
 function agregarCantidadMapa_(mapa, clave, cant) {
-  mapa[clave] = (mapa[clave] || 0) + (Number(cant) || 0);
+  mapa[clave] = (mapa[clave] || 0) + (numeroCantidad_(cant) || 0);
 }
 
 function deltaCantidadCorreo_(actual, enviado) {
-  var d = (Number(actual) || 0) - (Number(enviado) || 0);
+  var d = numeroCantidad_(actual) - numeroCantidad_(enviado);
   return d > 0 ? d : 0;
 }
 
@@ -1236,20 +1392,47 @@ function cargarEnviadoPorClave_(hoja) {
   var map = {};
   var last = hoja.getLastRow();
   if (last < 3) return map;
-  var lastCol = Math.max(hoja.getLastColumn(), 12);
+  var lastCol = Math.max(hoja.getLastColumn(), HEADERS_HISTORIAL_CORREO_.length);
   var headers = hoja.getRange(2, 1, 1, lastCol).getValues()[0];
-  var idxClave = 0;
-  var idxCant = 10;
+  var idx = {
+    clave: 0, dia: 1, fecha: 2, linea: 3, turno: 4, mo: 5, sku: 6,
+    producto: 7, genero: 8, color: 9, talla: 10, cant: 11
+  };
   for (var h = 0; h < headers.length; h++) {
     var n = quitarTildes_(String(headers[h] || "").toLowerCase().trim());
-    if (n === "clave") idxClave = h;
-    if (n.indexOf("cantidad") !== -1) idxCant = h;
+    if (n === "clave") idx.clave = h;
+    else if (n === "dia") idx.dia = h;
+    else if (n === "fecha") idx.fecha = h;
+    else if (n === "linea") idx.linea = h;
+    else if (n === "turno") idx.turno = h;
+    else if (n === "mo" || n === "m.o.") idx.mo = h;
+    else if (n === "sku") idx.sku = h;
+    else if (n === "producto" || n === "modelo") idx.producto = h;
+    else if (n.indexOf("genero") === 0) idx.genero = h;
+    else if (n === "color") idx.color = h;
+    else if (n === "talla") idx.talla = h;
+    else if (n.indexOf("cantidad") !== -1) idx.cant = h;
   }
-  var vals = hoja.getRange(3, 1, last - 2, Math.max(idxCant + 1, idxClave + 1)).getValues();
+  var nCols = Math.max(idx.cant + 1, idx.clave + 1, lastCol);
+  var vals = hoja.getRange(3, 1, last - 2, nCols).getValues();
+  var disps = hoja.getRange(3, 1, last - 2, nCols).getDisplayValues();
   for (var i = 0; i < vals.length; i++) {
-    var clave = migrarClaveHistorialCorreo_(String(vals[i][idxClave] || "").trim());
-    if (!clave) continue;
-    map[clave] = Number(vals[i][idxCant]) || 0;
+    var clave = migrarClaveHistorialCorreo_(String(vals[i][idx.clave] || "").trim());
+    var cant = numeroCantidad_(vals[i][idx.cant], disps[i][idx.cant]);
+    var fila = {
+      dia: vals[i][idx.dia],
+      fecha: vals[i][idx.fecha],
+      linea: vals[i][idx.linea],
+      turno: vals[i][idx.turno],
+      mo: vals[i][idx.mo],
+      sku: vals[i][idx.sku],
+      producto: vals[i][idx.producto],
+      genero: vals[i][idx.genero],
+      color: vals[i][idx.color],
+      talla: vals[i][idx.talla]
+    };
+    if (!clave && !String(fila.sku || "").trim() && !String(fila.producto || "").trim()) continue;
+    registrarCantidadMapa_(map, clave || claveDetalleCorreo_(fila), fila, cant);
   }
   return map;
 }
@@ -1271,6 +1454,9 @@ function guardarHistorialCorreo_(hoja, filasPersistir, ahora) {
   }
   hoja.getRange(3, 1, out.length, nCols).setValues(out);
   hoja.getRange(3, 3, out.length, 1).setNumberFormat("dd/MM/yyyy");
+  hoja.getRange(3, 6, out.length, 2).setNumberFormat("@");
+  hoja.getRange(3, 11, out.length, 1).setNumberFormat("@");
+  hoja.getRange(3, 12, out.length, 1).setNumberFormat("0");
   hoja.getRange(3, nCols, out.length, 1).setNumberFormat("dd/MM/yyyy HH:mm");
 }
 
@@ -1328,7 +1514,7 @@ function extraerFilasDetalleCorreo_(valores, displays) {
   for (var i = head + 1; i < valores.length; i++) {
     var fila = valores[i] || [];
     var disp = (displays && displays[i]) ? displays[i] : fila;
-    var cant = idxCant !== -1 ? Number(fila[idxCant]) || 0 : 0;
+    var cant = idxCant !== -1 ? numeroCantidad_(fila[idxCant], disp[idxCant]) : 0;
     if (cant <= 0) continue;
     var turnoVal = idxTurno !== -1 ? fila[idxTurno] : "";
     var turnoDisp = idxTurno !== -1 ? disp[idxTurno] : "";
@@ -1355,7 +1541,7 @@ function extraerFilasDetalleCorreo_(valores, displays) {
         genero: idxGen !== -1 ? disp[idxGen] : "",
         color: idxCol !== -1 ? disp[idxCol] : "",
         talla: idxTal !== -1 ? disp[idxTal] : "",
-        cantidad: idxCant !== -1 ? disp[idxCant] : cant
+        cantidad: cant
       }
     };
     obj.clave = claveDetalleCorreo_(obj);
@@ -1388,7 +1574,7 @@ function consolidarDetallePorClave_(filas) {
       };
       orden.push(clave);
     }
-    porClave[clave].cantidad += Number(f.cantidad) || 0;
+    porClave[clave].cantidad += numeroCantidad_(f.cantidad);
   }
   var out = [];
   for (var k = 0; k < orden.length; k++) out.push(porClave[orden[k]]);
@@ -1402,7 +1588,7 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
 
   for (var i = 0; i < consolidados.length; i++) {
     var f = consolidados[i];
-    var ya = enviadoMap[f.clave] || 0;
+    var ya = cantidadEnviadaDeMapa_(enviadoMap, f);
     var delta = deltaCantidadCorreo_(f.cantidad, ya);
     clavesVistas[f.clave] = true;
     persistir.push({
@@ -1417,7 +1603,7 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
       genero: f.genero,
       color: f.color,
       talla: f.talla,
-      enviado: Math.max(ya, Number(f.cantidad) || 0)
+      enviado: Math.max(ya, numeroCantidad_(f.cantidad))
     });
     if (delta > 0) {
       var copia = {};
@@ -1446,7 +1632,7 @@ function partirDetalleNuevo_(consolidados, enviadoMap) {
       genero: "",
       color: "",
       talla: "",
-      enviado: enviadoMap[clave]
+      enviado: numeroCantidad_(enviadoMap[clave])
     });
   }
   return { nuevos: nuevos, persistir: persistir };

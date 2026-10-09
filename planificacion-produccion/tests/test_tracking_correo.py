@@ -57,6 +57,58 @@ def fecha_clave(val):
     return s.lower()
 
 
+MAX_CANTIDAD_CORREO = 100000
+
+
+def numero_cantidad(val, display=None):
+    def ok(n):
+        return isinstance(n, (int, float)) and not isinstance(n, bool) and 0 <= n < MAX_CANTIDAD_CORREO
+
+    if isinstance(val, bool):
+        return 0
+    if isinstance(val, (int, float)):
+        return val if ok(val) else 0
+    if display is not None:
+        ds = str(display).strip().replace(" ", "").replace(",", ".")
+        if re.fullmatch(r"[0-9]+(\.[0-9]+)?", ds):
+            dn = float(ds)
+            if ok(dn):
+                return dn
+    if hasattr(val, "year") and hasattr(val, "month") and hasattr(val, "day"):
+        from datetime import datetime as dt
+
+        utc = dt(val.year, val.month, val.day)
+        epoch = dt(1899, 12, 30)
+        serial = (utc - epoch).days
+        if 0 < serial < 61:
+            serial -= 1
+        return serial if ok(serial) else 0
+    s = str(val or "").strip().replace(",", ".")
+    try:
+        n = float(s)
+    except ValueError:
+        return 0
+    return n if ok(n) else 0
+
+
+def normalizar_mo(val):
+    s = str(val or "").strip().lower()
+    if re.fullmatch(r"\d+", s):
+        return str(int(s))
+    return s
+
+
+def normalizar_talla(val):
+    if isinstance(val, bool):
+        return ""
+    if isinstance(val, (int, float)):
+        return str(int(val) if val == int(val) else val)
+    if hasattr(val, "year"):
+        n = numero_cantidad(val)
+        return str(int(n)) if n else ""
+    return str(val or "").strip().lower()
+
+
 def clasificar_turno(val):
     t = re.sub(r"\s+", " ", quitar_tildes(str(val or "").lower())).strip()
     if "nocturn" in t:
@@ -96,14 +148,122 @@ def clave_detalle(fila):
             fecha_clave(fila.get("fecha")),
             linea_clave(fila.get("linea")),
             clasificar_turno(fila.get("turno")),
-            str(fila.get("mo") or "").strip().lower(),
+            normalizar_mo(fila.get("mo")),
             str(fila.get("sku") or "").strip().lower(),
             str(fila.get("producto") or "").strip().lower(),
             str(fila.get("genero") or "").strip().lower(),
             str(fila.get("color") or "").strip().lower(),
-            str(fila.get("talla") or "").strip().lower(),
+            normalizar_talla(fila.get("talla")),
         ]
     )
+
+
+def clave_estable(fila):
+    fecha = fecha_clave(fila.get("fecha"))
+    linea = linea_clave(fila.get("linea"))
+    turno = clasificar_turno(fila.get("turno"))
+    mo = normalizar_mo(fila.get("mo"))
+    sku = str(fila.get("sku") or "").strip().lower()
+    talla = normalizar_talla(fila.get("talla"))
+    if sku:
+        return "|".join(["sku", fecha, linea, turno, mo, sku, talla])
+    return "|".join(
+        [
+            "nosku",
+            fecha,
+            linea,
+            turno,
+            mo,
+            str(fila.get("producto") or "").strip().lower(),
+            str(fila.get("genero") or "").strip().lower(),
+            str(fila.get("color") or "").strip().lower(),
+            talla,
+        ]
+    )
+
+
+def fechas_vecinas(yyyy_mm_dd):
+    s = str(yyyy_mm_dd or "")
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+    if not m:
+        return [s]
+    from datetime import datetime, timedelta
+
+    d = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return [
+        d.strftime("%Y-%m-%d"),
+        (d - timedelta(days=1)).strftime("%Y-%m-%d"),
+        (d + timedelta(days=1)).strftime("%Y-%m-%d"),
+    ]
+
+
+def estable_desde_partes(parts):
+    if not parts or len(parts) != 10:
+        return ""
+    if parts[5]:
+        return "|".join(["sku", parts[1], parts[2], parts[3], parts[4], parts[5], parts[9]])
+    return "|".join(["nosku", parts[1], parts[2], parts[3], parts[4], parts[6], parts[7], parts[8], parts[9]])
+
+
+def registrar_cantidad(mapa, clave, fila, cant):
+    cant = numero_cantidad(cant)
+
+    def put(k):
+        if not k:
+            return
+        mapa[k] = max(numero_cantidad(mapa.get(k)), cant)
+
+    put(clave)
+    migrada = migrar_clave_historial(clave)
+    put(migrada)
+    parts = str(migrada).split("|")
+    put(estable_desde_partes(parts))
+    if len(parts) == 10:
+        sin_prod = parts[:]
+        sin_prod[6] = ""
+        put("|".join(sin_prod))
+    if fila:
+        put(clave_detalle(fila))
+        put(clave_estable(fila))
+        reb = clave_detalle(fila).split("|")
+        if len(reb) == 10:
+            sin_reb = reb[:]
+            sin_reb[6] = ""
+            put("|".join(sin_reb))
+
+
+def claves_busqueda(fila):
+    base = fila.get("clave") or clave_detalle(fila)
+    out = []
+
+    def add(k):
+        if k and k not in out:
+            out.append(k)
+
+    add(base)
+    add(migrar_clave_historial(base))
+    add(clave_detalle(fila))
+    add(clave_estable(fila))
+    parts = str(base).split("|")
+    if len(parts) == 10:
+        for fch in fechas_vecinas(parts[1]):
+            p = parts[:]
+            p[1] = fch
+            add("|".join(p))
+            sin_prod = p[:]
+            sin_prod[6] = ""
+            add("|".join(sin_prod))
+    return out
+
+
+def cantidad_enviada_de_mapa(mapa, fila):
+    best = 0
+    for k in claves_busqueda(fila):
+        if k in mapa:
+            n = numero_cantidad(mapa[k])
+            if n > best:
+                best = n
+    return best
 
 
 def vacios_dias():
@@ -236,7 +396,7 @@ def partir_nuevo(consolidados, enviado_map):
     nuevos = []
     persistir = {}
     for f in consolidados:
-        ya = enviado_map.get(f["clave"], 0)
+        ya = cantidad_enviada_de_mapa(enviado_map, f)
         d = delta(f["cantidad"], ya)
         persistir[f["clave"]] = max(ya, f["cantidad"])
         if d > 0:
@@ -481,7 +641,7 @@ class TestTrackingCorreo(unittest.TestCase):
     def test_script_reparte_turnos_en_tableros_y_detalle(self):
         with open(GS, encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("VERSIÓN 5.9.6", src)
+        self.assertIn("VERSIÓN 5.9.7", src)
         for token in (
             "function clasificarTurno_(",
             "function turnoDeBloque_(",
@@ -493,6 +653,10 @@ class TestTrackingCorreo(unittest.TestCase):
             'HEADERS_DETALLE_TRACKING_ = ["Dia", "Fecha", "Linea", "Turno"',
             '"Turno", "MO", "SKU"',
             "migrarClaveHistorialCorreo_",
+            "function numeroCantidad_(",
+            "function cantidadEnviadaDeMapa_(",
+            "function claveEstableCorreo_(",
+            "cant: 11",
         ):
             self.assertIn(token, src, "Falta: %s" % token)
         self.assertIn("tablero diurno y el tablero nocturno", src)
@@ -630,6 +794,199 @@ class TestTrackingCorreo(unittest.TestCase):
         total = bloques[2]
         self.assertEqual(str(datos[total["last"]][1]).strip().upper(), "TOTAL")
         self.assertEqual(float(datos[total["last"]][3]), 427)
+
+    def test_numero_cantidad_no_usa_timestamp_ni_talla(self):
+        from datetime import datetime
+
+        self.assertEqual(numero_cantidad(20), 20)
+        self.assertEqual(numero_cantidad(5.0, "5"), 5)
+        dt = datetime(1900, 1, 5)
+        self.assertEqual(numero_cantidad(dt), 5)
+        self.assertEqual(numero_cantidad(dt, "05/01/1900"), 5)
+        self.assertEqual(numero_cantidad(-2208643200000), 0)
+        self.assertEqual(numero_cantidad(dt, "L"), 5)
+        self.assertEqual(normalizar_mo("02793"), "2793")
+        self.assertEqual(normalizar_mo("01534-002"), "01534-002")
+        self.assertEqual(normalizar_talla(14.0), "14")
+        self.assertEqual(normalizar_talla("L"), "l")
+
+    def test_screenshot_cantidad_es_real_menos_number_date(self):
+        """El correo mostró 2208713540005 / 2207417540020 / 2207849540015 = qty - Number(fecha)."""
+        from datetime import datetime
+
+        casos = [
+            ("RIOMIKI13T2", 2, 5, 2208713540005),
+            ("RIOMIKI13T4", 4, 20, 2207417540020),
+            ("RIOMIKI13T8", 8, 15, 2207849540015),
+        ]
+        with open(GS, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("function numeroCantidad_(", src)
+        self.assertIn("Never use Number(date)", src)
+
+        for sku, talla, real, mostrado in casos:
+            ya_buggy = real - mostrado
+            self.assertEqual(mostrado, real - ya_buggy)
+            self.assertLess(ya_buggy, -2.2e12)
+            self.assertEqual(numero_cantidad(ya_buggy), 0)
+            recuperada = numero_cantidad(datetime(1900, 1, real))
+            self.assertEqual(recuperada, real)
+            self.assertEqual(delta(real, recuperada), 0)
+            self.assertEqual(delta(real, numero_cantidad(ya_buggy)), real)
+            self.assertNotEqual(delta(real, numero_cantidad(ya_buggy)), mostrado)
+            self.assertLess(real, 100)
+            self.assertGreater(mostrado, 2e12)
+
+        fila = {
+            "dia": "Lunes",
+            "fecha": "05/10/2026",
+            "linea": "Línea 1",
+            "turno": "Nocturno",
+            "mo": "3003",
+            "sku": "RIOMIKI13T2",
+            "producto": "RIO",
+            "genero": "KIDS",
+            "color": "AZUL REY",
+            "talla": 2,
+            "cantidad": 5,
+        }
+        fila["clave"] = clave_detalle(fila)
+        enviado = {}
+        registrar_cantidad(enviado, fila["clave"], fila, numero_cantidad(datetime(1900, 1, 5)))
+        nuevos, _ = partir_nuevo(consolidar([fila]), enviado)
+        self.assertEqual(nuevos, [])
+        fila2 = dict(fila, cantidad=5)
+        fila2["clave"] = clave_detalle(fila2)
+        nuevos_sin_hist, _ = partir_nuevo(consolidar([fila2]), {})
+        self.assertEqual(nuevos_sin_hist[0]["cantidad"], 5)
+        self.assertNotEqual(nuevos_sin_hist[0]["cantidad"], 2208713540005)
+
+    def test_historial_encuentra_sku_aunque_cambie_producto_o_fecha(self):
+        hist_fila = {
+            "dia": "Lunes",
+            "fecha": "04/10/2026",
+            "linea": "Línea 1",
+            "turno": "Nocturno",
+            "mo": "2785",
+            "sku": "MARMIKI11T14",
+            "producto": "MAR LOTE 1",
+            "genero": "KIDS",
+            "color": "Azul Lavanda",
+            "talla": 14,
+            "cantidad": 12,
+        }
+        actual = {
+            "dia": "Lunes",
+            "fecha": "05/10/2026",
+            "linea": "Línea 1",
+            "turno": "Nocturno",
+            "mo": "02785",
+            "sku": "MARMIKI11T14",
+            "producto": "MAR",
+            "genero": "KIDS",
+            "color": "Azul Lavanda",
+            "talla": "14",
+            "cantidad": 12,
+        }
+        actual["clave"] = clave_detalle(actual)
+        enviado = {}
+        registrar_cantidad(enviado, clave_detalle(hist_fila), hist_fila, 12)
+        nuevos, persistir = partir_nuevo(consolidar([actual]), enviado)
+        self.assertEqual(nuevos, [])
+        self.assertEqual(cantidad_enviada_de_mapa(enviado, actual), 12)
+        self.assertGreater(persistir[actual["clave"]], 0)
+
+        otra = dict(actual, cantidad=18)
+        otra["clave"] = clave_detalle(otra)
+        nuevos2, _ = partir_nuevo(consolidar([otra]), enviado)
+        self.assertEqual(len(nuevos2), 1)
+        self.assertEqual(nuevos2[0]["cantidad"], 6)
+
+    def test_excel3_correo_enviado_cantidades_fecha_no_inflan(self):
+        xlsx = "/home/ubuntu/.cursor/projects/workspace/uploads/Tracking_-_Produccion__3__edd2.xlsx"
+        if not os.path.isfile(xlsx):
+            self.skipTest("Excel Tracking (3) no está en este entorno")
+        from datetime import datetime
+        from openpyxl import load_workbook
+
+        wb = load_workbook(xlsx, data_only=True)
+        wh = wb["_Correo Enviado"]
+        fechas_como_cant = 0
+        recuperadas = []
+        naive_huge = 0
+        for r in range(3, wh.max_row + 1):
+            clave = wh.cell(r, 1).value
+            if not clave:
+                continue
+            raw = wh.cell(r, 12).value
+            cant = numero_cantidad(raw)
+            self.assertLess(cant, 1000, "cantidad recuperada absurda en r%s: %s" % (r, cant))
+            if isinstance(raw, datetime):
+                fechas_como_cant += 1
+                recuperadas.append(cant)
+                if abs(float(raw.timestamp()) * 1000) > 1000000:
+                    naive_huge += 1
+        self.assertGreaterEqual(fechas_como_cant, 50)
+        self.assertGreaterEqual(naive_huge, 50)
+        self.assertTrue(all(c > 0 for c in recuperadas))
+        self.assertIn(5, recuperadas)
+
+        wd = wb["Detalle Tracking - Produccion"]
+        det = []
+        for r in range(3, wd.max_row + 1):
+            cant = wd.cell(r, 12).value
+            try:
+                cantn = float(cant or 0)
+            except (TypeError, ValueError):
+                continue
+            if cantn <= 0:
+                continue
+            fila = {
+                "dia": wd.cell(r, 2).value,
+                "fecha": wd.cell(r, 3).value,
+                "linea": wd.cell(r, 4).value,
+                "turno": wd.cell(r, 5).value,
+                "mo": wd.cell(r, 6).value,
+                "sku": wd.cell(r, 7).value,
+                "producto": "MAR" if str(wd.cell(r, 8).value or "").upper().startswith("MAR") else wd.cell(r, 8).value,
+                "genero": wd.cell(r, 9).value,
+                "color": wd.cell(r, 10).value,
+                "talla": wd.cell(r, 11).value,
+                "cantidad": cantn,
+            }
+            fila["clave"] = clave_detalle(fila)
+            det.append(fila)
+
+        enviado = {}
+        for r in range(3, wh.max_row + 1):
+            clave = wh.cell(r, 1).value
+            if not clave:
+                continue
+            fila = {
+                "dia": wh.cell(r, 2).value,
+                "fecha": wh.cell(r, 3).value,
+                "linea": wh.cell(r, 4).value,
+                "turno": wh.cell(r, 5).value,
+                "mo": wh.cell(r, 6).value,
+                "sku": wh.cell(r, 7).value,
+                "producto": wh.cell(r, 8).value,
+                "genero": wh.cell(r, 9).value,
+                "color": wh.cell(r, 10).value,
+                "talla": wh.cell(r, 11).value,
+            }
+            registrar_cantidad(enviado, str(clave), fila, numero_cantidad(wh.cell(r, 12).value))
+
+        cons = consolidar(det)
+        nuevos, _ = partir_nuevo(cons, enviado)
+        inflados = [x for x in nuevos if x["cantidad"] > 1000]
+        self.assertEqual(inflados, [])
+        reenviados_completos = [x for x in nuevos if x["sku"] and str(x["sku"]).upper().startswith("MAR")]
+        self.assertEqual(
+            reenviados_completos,
+            [],
+            "MAR no debe reenviarse entero al cambiar MAR LOTE 1 → MAR: %s"
+            % [(x.get("sku"), x["cantidad"]) for x in reenviados_completos[:8]],
+        )
 
 
 if __name__ == "__main__":
