@@ -200,7 +200,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   <button class="tab" data-tab="capital" onclick="AbcDashboard.st('capital')">Capital e inventario</button>
   <button class="tab" data-tab="matriz" onclick="AbcDashboard.st('matriz')">Matriz cruzada</button>
   <button class="tab" data-tab="xyz" onclick="AbcDashboard.st('xyz')">Matriz ABC × XYZ</button>
-  <button class="tab" data-tab="operativa" onclick="AbcDashboard.st('operativa')">Clasificación operativa</button>
   <button class="tab" data-tab="ficha" onclick="AbcDashboard.st('ficha')">Ficha</button>
   <button class="tab" data-tab="alertas" onclick="AbcDashboard.st('alertas')">Alertas</button>
 </div>
@@ -212,17 +211,17 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
       </div>
       <div class="card">
-        <h3>Margen ajustado por clase</h3><div class="sub">La porción es el margen ajustado (corta en 80/15/5). El monto de la leyenda es el margen real.</div>
+        <h3>Margen por clase</h3><div class="sub" id="margNote">Estos montos son margen (venta menos costo), con corte 80/15/5. No suman los ingresos de arriba.</div>
         <div class="chart-row"><div class="cw"><canvas id="cDonutMarg"></canvas></div><div class="side-legend" id="legendMarg"></div></div>
       </div>
     </div>
     <div class="g2">
       <div class="card">
-        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Margen ajustado del período frente al corte. El producto que cruza el 80% entra completo.</div>
+        <h3>Repaso visual 80 · 15 · 5</h3><div class="sub">Participación del margen. El producto que cruza el 80% entra completo.</div>
         <div class="cw s"><canvas id="cMarginBar"></canvas></div>
       </div>
       <div class="card">
-        <h3>Premisas vs resultado</h3><div class="sub">El corte 80/15/5 es de margen ajustado. Los SKUs son el resultado: no se parte un producto para forzar el 20%.</div>
+        <h3>Premisas vs resultado</h3><div class="sub">El 80/15/5 es del margen. Los SKUs son el resultado: no se parte un producto para forzar el 20%.</div>
         <div id="premisaCompare"></div>
       </div>
     </div>
@@ -232,7 +231,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       <h3>Clasificación ABC — productos</h3>
       <div class="sub" id="classTableSub"></div>
       <div class="cscroll"><table class="ct"><thead><tr>
-        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos (sin IVA)</th><th>Margen $</th><th>% margen ajustado</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
+        <th>#</th><th>Producto</th><th>Clase</th><th>Matriz</th><th>Ingresos netos (sin IVA)</th><th>Margen $</th><th>% del margen</th><th>Unidades</th><th>% mgn prod.</th><th>Rotación</th>
       </tr></thead><tbody id="classBody"></tbody></table></div>
     </div>
   </section>
@@ -295,35 +294,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       <div class="cscroll"><table class="ct"><thead><tr><th>!</th><th>Modelo</th><th>Género</th><th>Color</th><th>Talla</th><th>SKU</th><th>Cambio</th><th>Mes</th><th>Stock</th><th>Acción</th></tr></thead><tbody id="alertBody"></tbody></table></div>
     </div>
   </section>
-  <section class="sec" id="sec-operativa">
-    <div class="card">
-      <h3>Clasificación operativa</h3>
-      <div class="sub">Letra = margen ajustado, corte 80/15/5 en el contexto elegido · XYZ = regularidad de la demanda · Estado = cobertura frente a la meta de su clase</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0">
-        <label class="sub" style="margin:0">Nivel</label><select id="opLevel"><option value="mc" selected>Modelo-color</option><option value="prod">Modelo (con composición de colores)</option></select>
-        <label class="sub" style="margin:0">Contexto</label><select id="opCtx"><option value="cat">Por categoría (Caballero, Dama, Kids, Bolsos…)</option><option value="linea">Por línea (Manufactura / Equipamiento)</option><option value="global" selected>Todo el catálogo</option></select>
-        <span class="sub" id="opWinNote" style="margin:0">La ventana es el período elegido arriba.</span>
-        <label class="sub" style="margin:0">Clase</label><select id="opCls"><option value="">Todas</option><option>A</option><option>B</option><option>C</option><option value="N">Nuevos</option><option value="SV">Sin venta</option><option value="AG">Agotados sin rotación</option></select>
-        <label class="sub" style="margin:0">Estado</label><select id="opEst"><option value="">Todos</option><option>Agotado</option><option>Quiebre</option><option>Sano</option><option>Sobrestock</option><option>Sin venta</option></select>
-      </div>
-      <div class="kpi-bar" id="opKpis" style="margin-bottom:12px"></div>
-      <h3 style="margin-top:6px">Clase × estado del inventario</h3>
-      <div class="sub">Cantidad de modelo-color · capital al costo · acción sugerida en cada cruce</div>
-      <div class="cscroll" id="opMatrix"></div>
-      <div class="sub" style="margin-top:10px;line-height:1.6">
-        <strong>Cómo se asigna la clase:</strong> ① solo surtido activo (con stock o con venta en 3 meses) · ② <strong>margen ajustado por rotación</strong> = margen del período × (sell-through ÷ sell-through objetivo de su línea), con máximo 100% · el objetivo es meses ÷ (meses + cobertura de un A). Con 6 meses: Manufactura 60%, Equipamiento 43% · ③ Pareto 80/95 de ese margen ajustado. Por defecto es <strong>un solo ranking de todo el catálogo</strong>. A entra si el acumulado <em>antes</em> del producto es menor a 80%: el producto que cruza el corte entra completo, así que el resultado puede quedar en 80,0% y no en un 80,00 partido a la mitad. Si el contexto es por categoría o por línea, el 80/15/5 se cumple dentro de cada grupo y el total de la empresa es la suma · el % junto a la letra es la parte de su margen que cuenta · "com." = clase comercial (solo margen) cuando difiere · ⏱️ y N son marcas, no cambian la letra · eficiencia: sell-through frente a la mediana de su contexto (Rápido / Normal / Lento / Estancado).<br><strong>Exceso:</strong> stock por encima de la venta promedio del período × cobertura objetivo máxima de su clase, valorizado al costo; si lleva 6 meses o más sin vender, todo su stock es exceso. <strong>Metas de cobertura por línea:</strong> Manufactura A 1–4 meses · B 1–6 · C hasta 3 · Nuevos 1–4 | Equipamiento A 1–8 · B 1–10 · C hasta 6 · Nuevos 1–6. Agotado = sin stock con venta reciente · AG = sin stock y sin venta en 3 meses (fuera del ranking) · SV = con stock y sin venta · 🗓️ estacional.</div>
-    </div>
-    <div class="card">
-      <h3>🟣 Agotados que eran A o B — ¿reponer o dar de baja?</h3>
-      <div class="sub" id="agCount"></div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>Estado</th><th>Contexto</th><th>Modelo · color</th><th>Habría sido</th><th>Margen (ventana)</th><th>Und. (ventana)</th><th>Última venta</th><th>Decisión</th></tr></thead><tbody id="agBody"></tbody></table></div>
-    </div>
-    <div class="card">
-      <h3>Detalle por modelo-color</h3>
-      <div class="sub" id="opCount"></div>
-      <div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Contexto</th><th>Modelo · color</th><th>Margen (ventana)</th><th>Und. (ventana)</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock</th><th>Cobertura</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody id="opBody"></tbody></table></div>
-    </div>
-  </section>
   <section class="sec" id="sec-ficha">
     <div class="card">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -354,7 +324,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     </div>
   </section>
 </div>
-<div class="footer">ABC · margen de contribución sin IVA · una sola clase: margen ajustado, corte 80/15/5 del período (el producto que cruza el corte entra completo) · excluye SKUs sin margen positivo en el ranking · migración y alertas usan la misma clase; el ajuste por rotación usa el stock de hoy · margen de oct 2025 a may 2026 estimado (IVA por categoría); jun–sep 2026 es el de Odoo · ventas al 30/09/2026 · inventario al 08/10/2026 · inventario valorado al costo de Odoo, incluye Alm. de Equipamiento</div>
+<div class="footer">ABC · margen de contribución sin IVA · corte 80/15/5 del margen del período (el producto que cruza el corte entra completo) · los ingresos son la venta; el 80% es del margen · fuera del análisis: donación y Refresh · excluye SKUs sin margen positivo en el ranking · migración, alertas y ficha usan la misma clase · margen de oct 2025 a may 2026 estimado (IVA por categoría); jun–sep 2026 es el de Odoo · ventas al 30/09/2026 · inventario al 08/10/2026 · inventario valorado al costo de Odoo, incluye Alm. de Equipamiento</div>
 <script>
 
 /* Matriz ABC — dashboard compacto */
@@ -450,8 +420,15 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     return DATA.skuMaster[sku] || {};
   }
 
+  function excludedSku(sku) {
+    const m = skuMeta(sku);
+    const blob = ((m.producto || "") + " " + (m.modelo || "") + " " + (m.categoria || "")).toLowerCase();
+    return blob.indexOf("donaci") >= 0 || blob.indexOf("refresh") >= 0;
+  }
+
   function passesSkuFilter(sku) {
     const m = skuMeta(sku);
+    if (excludedSku(sku)) return false;
     if (state.modelo && (m.modelo || m.producto) !== state.modelo) return false;
     return true;
   }
@@ -482,6 +459,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       const r = DATA.invRows[i];
       if (r[2] <= 0 || !stockLocOk(DATA.locations[r[1]])) continue;
       const sku = DATA.skus[r[0]];
+      if (excludedSku(sku)) continue;
       if (state.category && (skuMeta(sku).categoria || "") !== state.category) continue;
       act.add(sku);
     }
@@ -490,6 +468,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (r[0] < n - 3 || r[4] <= 0 || !passesChannel(r[2])) continue;
       if (state.store && DATA.stores[r[2]] !== state.store) continue;
       const sku = DATA.skus[r[1]];
+      if (excludedSku(sku)) continue;
       if (state.category && (skuMeta(sku).categoria || "") !== state.category) continue;
       act.add(sku);
     }
@@ -561,6 +540,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (!passesChannel(r[2])) continue;
       if (state.category && DATA.categories[r[3]] !== state.category) continue;
       const sku = skus[r[1]];
+      if (excludedSku(sku)) continue;
       if (!skuMap.has(sku)) {
         const m = skuMeta(sku);
         skuMap.set(sku, {
@@ -672,6 +652,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     for (let i = 0; i < DATA.invRows.length; i++) {
       const r = DATA.invRows[i];
       const sku = DATA.skus[r[0]];
+      if (excludedSku(sku)) continue;
       if (!stockLocOk(DATA.locations[r[1]])) continue;
       if (state.category && (skuMeta(sku).categoria || "") !== state.category) continue;
       if (!scopeOnly && state.modelo && !passesSkuFilter(sku)) continue;
@@ -728,21 +709,21 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   }
 
   function summarizeFinal() {
-    // reparto de la clase final: SKUs activos y su margen ajustado por rotación (ventana de la clasificación)
-    const counts = { A: 0, B: 0, C: 0 }, by = { A: 0, B: 0, C: 0 }, real = { A: 0, B: 0, C: 0 };
+    const counts = { A: 0, B: 0, C: 0 }, by = { A: 0, B: 0, C: 0 };
     let n = 0;
     FINAL.sku.forEach((g) => {
       if (["A", "B", "C"].indexOf(g.cls) < 0) return;
       if (state.modelo && !passesSkuFilter(g.key)) return;
-      n++; counts[g.cls]++; by[g.cls] += g.score || 0; real[g.cls] += Math.max(0, g.margin);
+      n++; counts[g.cls]++; by[g.cls] += Math.max(0, g.margin);
     });
-    const t = by.A + by.B + by.C || 1, tr = real.A + real.B + real.C || 1;
+    const t = by.A + by.B + by.C || 1;
     return {
       counts, n, final: true,
       skuPct: { A: counts.A / (n || 1), B: counts.B / (n || 1), C: counts.C / (n || 1) },
       marginPct: { A: by.A / t, B: by.B / t, C: by.C / t },
-      realPct: { A: real.A / tr, B: real.B / tr, C: real.C / tr },
+      realPct: { A: by.A / t, B: by.B / t, C: by.C / t },
       marginBy: by,
+      real: by,
     };
   }
 
@@ -768,7 +749,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         const cls = ["A", "B", "C"].indexOf(m.cls) >= 0 ? m.cls : "C";
         if (!track[m.key]) { track[m.key] = {}; MIGINFO[m.key] = {}; }
         track[m.key][p.key] = cls;
-        MIGINFO[m.key][p.key] = { rank: m.scRank || m.mcRank || "—", cum: m.scCum || m.mcCum || 0, qty: m.units, margin: m.margin };
+        MIGINFO[m.key][p.key] = { rank: m.mcRank || m.scRank || "—", cum: m.mcCum || m.scCum || 0, qty: m.units, margin: m.margin };
       });
     });
     Object.keys(MIGINFO).forEach((mo) => (MIGINFO[mo]._mon = {}));
@@ -875,9 +856,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
             ["C", summary.counts.C, pct(summary.skuPct.C)],
           ]
         : [
-            ["A", "real " + fmtUsd(summary.real ? summary.real.A : summary.marginBy.A), pct(summary.marginPct.A) + " ajustado"],
-            ["B", "real " + fmtUsd(summary.real ? summary.real.B : summary.marginBy.B), pct(summary.marginPct.B) + " ajustado"],
-            ["C", "real " + fmtUsd(summary.real ? summary.real.C : summary.marginBy.C), pct(summary.marginPct.C) + " ajustado"],
+            ["A", fmtUsd(summary.marginBy.A), pct(summary.marginPct.A) + " del margen"],
+            ["B", fmtUsd(summary.marginBy.B), pct(summary.marginPct.B) + " del margen"],
+            ["C", fmtUsd(summary.marginBy.C), pct(summary.marginPct.C) + " del margen"],
           ];
     el.innerHTML = rows
       .map(
@@ -964,7 +945,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           labels: ["Clase A (obj. 80%)", "Clase B (obj. 15%)", "Clase C (obj. 5%)"],
           datasets: [
             {
-              label: "Margen ajustado",
+              label: "Margen",
               data: [
                 summary.marginPct.A * 100,
                 summary.marginPct.B * 100,
@@ -1015,17 +996,22 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       '</div><div class="kl">SKUs en A</div></div>' +
       '<div class="kpib"><div class="kv">' +
       pct(summary.marginPct.A) +
-      '</div><div class="kl">Margen ajustado A</div><div class="ksub">margen real ' + pct(summary.realPct.A) + " · " + state.opWin + " meses</div></div>" +
+      '</div><div class="kl">Margen clase A</div><div class="ksub">' + fmtMoney(summary.marginBy.A) + " de " + fmtMoney(summary.marginBy.A + summary.marginBy.B + summary.marginBy.C) + " de margen · " + state.opWin + " meses</div></div>" +
       '<div class="kpib"><div class="kv">' +
       fmtMoney(netRev) +
       '</div><div class="kl">Ingresos netos</div><div class="ksub">' +
-      esc(plabel) +
+      esc(plabel) + " · venta sin IVA" +
       "</div></div>" +
       '<div class="kpib"><div class="kv">' +
       fmt(stock, 0) +
       '</div><div class="kl">Stock und.</div>' +
       (state.store ? '<div class="ksub">' + (STORE2LOC[state.store] ? esc(STORE2LOC[state.store]) : "esta tienda no tiene ubicación de stock") + "</div>" : "") +
       "</div>";
+    const note = $("margNote");
+    if (note) {
+      const mt = summary.marginBy.A + summary.marginBy.B + summary.marginBy.C;
+      note.textContent = "A + B + C = " + fmtMoney(mt) + " de margen (venta menos costo), repartido 80/15/5. Los " + fmtMoney(netRev) + " de ingresos son la venta sin IVA y no se suman con este margen.";
+    }
   }
 
   function renderPremisaCard(summary) {
@@ -1033,7 +1019,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     if (!el) return;
     const t = DATA.meta.premisas;
     el.innerHTML =
-      '<table class="rt"><thead><tr><th></th><th>SKUs</th><th>Margen ajustado</th><th>Margen real</th></tr></thead><tbody>' +
+      '<table class="rt"><thead><tr><th></th><th>SKUs</th><th>Margen</th></tr></thead><tbody>' +
       ["A", "B", "C"]
         .map(
           (c) =>
@@ -1047,9 +1033,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
             pct(summary.marginPct[c]) +
             " / " +
             t[c].margen_pct +
-            "%</td><td>" +
-            pct(summary.realPct[c]) +
-            "</td></tr>"
+            "%</td></tr>"
         )
         .join("") +
       "</tbody></table>";
@@ -1060,7 +1044,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const sub = $("classTableSub");
     if (!body) return;
     const rows = filterModels(allModels);
-    if (sub) sub.textContent = rows.length + " productos · margen ajustado, corte 80/15/5, " + windowLabel();
+    if (sub) sub.textContent = rows.length + " productos · corte 80/15/5 del margen, " + windowLabel();
     body.innerHTML = rows
       .slice(0, 250)
       .map(
@@ -1208,7 +1192,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     const total = Object.keys(modelTrack).length;
     if (sub)
       sub.textContent =
-        rows.length + (state.migAll ? " productos" : " productos con cambios") + " / " + total + " con venta en algún mes · " + (state.migMode === "roll" ? "ventana móvil de 3 meses" : "cada mes por separado") + " · misma clase (margen ajustado; el ajuste usa el stock de hoy) · pase el cursor sobre cada punto";
+        rows.length + (state.migAll ? " productos" : " productos con cambios") + " / " + total + " con venta en algún mes · " + (state.migMode === "roll" ? "ventana móvil de 3 meses" : "cada mes por separado") + " · misma clase (corte 80/15/5 del margen) · pase el cursor sobre cada punto";
     head.innerHTML =
       "<tr><th>Producto</th>" +
       periods.map((p) => "<th>" + p.short + "</th>").join("") +
@@ -1463,12 +1447,12 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         fmtMoney(cap.C.v) +
         "</strong> de inventario al costo en clase C (esa clase es ~" +
         pct(summary.marginPct.C) +
-        " del margen ajustado). Revisar promoción o bajar recompra.</div>" +
+        " del margen). Revisar promoción o bajar recompra.</div>" +
         '<div class="diag g"><strong>' +
         fmtMoney(cap.A.v) +
         "</strong> de inventario al costo en clase A (esa clase es ~" +
         pct(summary.marginPct.A) +
-        " del margen ajustado). Proteger abastecimiento.</div></div>" +
+        " del margen). Proteger abastecimiento.</div></div>" +
         (cap.X.u > 0
           ? '<div class="diag m" style="margin-top:8px">' +
             fmt(cap.X.u, 0) +
@@ -1511,7 +1495,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           "</td></tr>"
       )
       .join("");
-    $("alertCount").textContent = rows.length + " movimientos · misma clase (margen ajustado, ventana móvil de 3 meses; el ajuste usa el stock de hoy)";
+    $("alertCount").textContent = rows.length + " movimientos · misma clase (corte 80/15/5 del margen, ventana móvil de 3 meses)";
   }
 
   function buildPeriodFilters() {
@@ -1552,6 +1536,8 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   function fillSelects() {
     const models = new Set();
     Object.values(DATA.skuMaster).forEach((m) => {
+      const blob = ((m.producto || "") + " " + (m.modelo || "") + " " + (m.categoria || "")).toLowerCase();
+      if (blob.indexOf("donaci") >= 0 || blob.indexOf("refresh") >= 0) return;
       if (m.modelo) models.add(m.modelo);
     });
     const fM = $("fModel");
@@ -1564,7 +1550,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       DATA.stores.map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
     $("fCat").innerHTML =
       '<option value="">Todas</option>' +
-      DATA.categories.map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
+      DATA.categories.filter((s) => s.toLowerCase().indexOf("refresh") < 0).map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
     $("fLoc").innerHTML =
       '<option value="">Todas</option>' +
       DATA.locations.map((s) => '<option value="' + esc(s) + '">' + esc(s) + "</option>").join("");
@@ -1664,6 +1650,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     if (state.store && DATA.stores[r[2]] !== state.store) return false;
     if (!passesChannel(r[2])) return false;
     const sku = DATA.skus[r[1]];
+    if (excludedSku(sku)) return false;
     if (state.category && skuMeta(sku).categoria !== state.category) return false;
     return true;
   }
@@ -1788,7 +1775,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       g.was = g.margin > 0 ? g.mcAll || "C" : g.units > 0 ? "C" : "—";
       if (g.inactive && useActive) g.cls = g.ser.some((v) => v > 0) ? "AG" : "—";
       else if (g.margin <= 0 && g.units <= 0) g.cls = g.stock > 0 ? "SV" : "—";
-      else g.cls = g.sc || "C";
+      else g.cls = g.mc || "C";
       g.comercial = ["A", "B", "C"].indexOf(g.cls) >= 0 ? (g.margin > 0 ? g.mc || "C" : "C") : g.cls;
       g.downgraded = ["A", "B", "C"].indexOf(g.cls) >= 0 && g.comercial !== g.cls;
       g.base = g.cls;
@@ -1835,10 +1822,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   const EST_COLOR = { Agotado: "#C70705", Quiebre: "#E5532D", Sano: "#1E7B34", Sobrestock: "#9A6B00", "Sin venta": "#8A8A8A", "Agotado sin rotación": "#7A5195", "—": "var(--mu)" };
   function clsBadge(g) {
     const t = g.cls === "SV" ? "SV" : g.cls === "N" ? "N" : g.cls;
-    const extra = (g.capped ? " · ⏱️ venta en solo " + g.mwin + " meses de la ventana (pico o evento)" : "") + (g.isNew ? " · N: menos de 3 meses vendiendo" : "") + (g.adjFactor != null && ["A", "B", "C"].indexOf(g.cls) >= 0 ? " · margen ajustado = " + Math.round(g.adjFactor * 100) + "% de su margen (sell-through " + Math.round((g.st || 0) * 100) + "% vs objetivo " + Math.round((g.stObj || 0) * 100) + "%)" : "") + (g.downgraded ? " · clase comercial (solo margen) " + g.comercial : "");
-    const tip0 = g.cls === "AG" ? "Agotado: sin stock y sin venta en 3 meses · era " + (g.was || "—") : g.cls === "SV" ? "Sin venta en la ventana" : g.cls === "N" ? "Nuevo (menos de 3 meses vendiendo) · base " + g.base : "Margen " + (g.mc || "—") + " · Unidades " + (g.uc || "—");
+    const extra = (g.capped ? " · venta en solo " + g.mwin + " meses de la ventana" : "") + (g.isNew ? " · nuevo: menos de 3 meses vendiendo" : "");
+    const tip0 = g.cls === "AG" ? "Agotado: sin stock y sin venta en 3 meses" : g.cls === "SV" ? "Sin venta en la ventana" : "Clase por margen de contribución";
     const tip = tip0 + (extra || "");
-    return '<span title="' + tip + '" style="display:inline-block;min-width:26px;text-align:center;font-weight:800;border-radius:6px;padding:2px 6px;border:1px solid ' + CLS_COLOR[g.cls] + ';color:' + CLS_COLOR[g.cls] + '">' + t + "</span>" + ((g.cls === "A" || g.cls === "B" || g.cls === "C") && g.adjFactor != null ? ' <span style="font-size:0.6rem;color:var(--mu)" title="% del margen que cuenta tras el ajuste por rotación">' + Math.round(g.adjFactor * 100) + "%</span>" : "") + (g.capped ? ' <span title="Venta concentrada en pocos meses">⏱️</span>' : "") + (g.downgraded ? ' <span title="Clase comercial (solo margen)" style="font-size:0.6rem;color:#7A5195">' + (LV[g.cls] > LV[g.comercial] ? "⬇️" : "⬆️") + " com. " + g.comercial + "</span>" : "") + (g.isNew ? ' <span title="Nuevo: menos de 3 meses vendiendo" style="font-size:0.6rem;color:#2B8A9E">N</span>' : "");
+    return '<span title="' + tip + '" style="display:inline-block;min-width:26px;text-align:center;font-weight:800;border-radius:6px;padding:2px 6px;border:1px solid ' + CLS_COLOR[g.cls] + ';color:' + CLS_COLOR[g.cls] + '">' + t + "</span>" + (g.capped ? ' <span title="Venta concentrada en pocos meses">⏱️</span>' : "") + (g.isNew ? ' <span title="Nuevo: menos de 3 meses vendiendo" style="font-size:0.6rem;color:#2B8A9E">N</span>' : "");
   }
   function estBadge(e) { return '<span style="color:' + EST_COLOR[e] + ';font-weight:700">' + e + "</span>"; }
 
@@ -1857,8 +1844,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
   }
 
   function renderOperativa(invMap) {
-    if (!$("opBody")) return;
     const mcAll = opCompute("mc", invMap);
+    OP = { invMap };
+    renderFichaOptions(mcAll);
+    if (!$("opBody")) return;
     let list = mcAll;
     if (state.opLevel === "prod") {
       list = opCompute("prod", invMap);
@@ -1932,7 +1921,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         const me = opCompute("prod", invMap, idxs, true).find((g) => g.key === producto);
         if (!me || !(me.margin > 0)) { res[mode].push(null); continue; }
         const cls = ["A", "B", "C"].indexOf(me.cls) >= 0 ? me.cls : "C";
-        res[mode].push({ cls, mc: me.sc || me.mc, rank: me.scRank, n: me.scN, cum: me.scCum });
+        res[mode].push({ cls, mc: me.mc, rank: me.mcRank, n: me.mcN, cum: me.mcCum });
       }
     }
     return res;
@@ -1985,7 +1974,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     // encabezado
     let h = '<div class="kpi-bar" style="margin-bottom:12px">';
     const kb = (v, l, s, c) => '<div class="kpib"><div class="kv" style="color:' + (c || "var(--a)") + '">' + v + '</div><div class="kl">' + l + '</div><div class="ksub">' + (s || "") + "</div></div>";
-    h += kb(pr.cls === "SV" ? "Sin venta" : pr.cls, "Clase", (pr.downgraded ? "comercial " + pr.comercial + " · " : "") + Math.round((pr.adjFactor || 0) * 100) + "% del margen cuenta · " + esc(pr.ctx) + (pr.isNew ? " · nuevo" : ""), CLS_COLOR[pr.cls]);
+    h += kb(pr.cls === "SV" ? "Sin venta" : pr.cls, "Clase", "corte 80/15/5 del margen · " + esc(pr.ctx) + (pr.isNew ? " · nuevo" : ""), CLS_COLOR[pr.cls]);
     h += kb(pr.xyz + (pr.seasonal ? " 🗓️" : ""), "Regularidad", pr.seasonal ? "Estacional: >50% en 3 meses" : "XYZ del período elegido");
     h += kb(estBadge(pr.estado), "Estado del inventario", "cobertura " + covTxt(pr.cov));
     h += kb(stTxt(pr), "Eficiencia (sell-through)", "mediana de su contexto " + (pr.stMed != null ? (pr.stMed * 100).toFixed(0) + "%" : "—"));
@@ -1996,10 +1985,10 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     // diagnóstico
     const dx = [];
     const recent = cm.roll[n - 1];
-    dx.push("<strong>" + (pr.cls === "N" ? "Producto nuevo" : "Clase " + pr.cls) + "</strong> en " + esc(pr.ctx) + (recent && recent.cum ? " · en los últimos 3 meses está en el puesto " + recent.rank + " de " + recent.n + " por margen ajustado, con " + (recent.cum * 100).toFixed(1) + "% acumulado" + (Math.abs(recent.cum - TH.A) < 0.04 || Math.abs(recent.cum - TH.B) < 0.03 ? " (cerca de un corte: los cambios de clase pueden ser ruido)" : "") : "") + ".");
+    dx.push("<strong>" + (pr.cls === "N" ? "Producto nuevo" : "Clase " + pr.cls) + "</strong> en " + esc(pr.ctx) + (recent && recent.cum ? " · en los últimos 3 meses está en el puesto " + recent.rank + " de " + recent.n + " por margen, con " + (recent.cum * 100).toFixed(1) + "% acumulado" + (Math.abs(recent.cum - TH.A) < 0.04 || Math.abs(recent.cum - TH.B) < 0.03 ? " (cerca de un corte: los cambios de clase pueden ser ruido)" : "") : "") + ".");
     dx.push("Vendió en <strong>" + pr.mwin + " de " + state.opWin + " meses</strong> de la ventana" + (pr.capped ? " ⏱️ venta concentrada en pocos meses (pico o evento): revisar antes de reponer" : "") + ".");
     if (pr.st !== null) dx.push("Sell-through de <strong>" + (pr.st * 100).toFixed(0) + "%</strong> frente a un objetivo de " + (pr.stObj != null ? (pr.stObj * 100).toFixed(0) + "%" : "—") + " y una mediana de " + (pr.stMed * 100).toFixed(0) + "% en su contexto → eficiencia <strong>" + pr.band + "</strong>.");
-    dx.push("Margen ajustado por rotación: cuenta el <strong>" + Math.round((pr.adjFactor || 0) * 100) + "%</strong> de su margen (" + fmtMoney(pr.score || 0) + " de " + fmtMoney(pr.margin) + ")" + (pr.downgraded ? " → clase comercial (solo margen) <strong>" + pr.comercial + "</strong>, clase <strong>" + pr.cls + "</strong>" : " → clase <strong>" + pr.cls + "</strong>") + ".");
+    dx.push("La letra sale del margen del período, con corte 80/15/5. Este producto aporta <strong>" + fmtMoney(pr.margin) + "</strong>.");
     const stuck = mc.filter((g) => g.band === "Estancado" || g.band === "Lento").sort((a, b) => b.stock - a.stock);
     if (stuck.length) dx.push("Colores lentos o estancados: <strong>" + stuck.map((g) => esc(g.color) + " (" + (g.st * 100).toFixed(0) + "%)").join(", ") + "</strong>.");
     if (pr.seasonal) dx.push("Es <strong>estacional</strong>: más de la mitad de su venta del año se concentra en 3 meses.");
@@ -2019,7 +2008,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     dx.push("<strong>Acción sugerida:</strong> " + esc(pr.accion || "—") + ".");
     h += '<div class="card"><h3>Diagnóstico</h3><ul style="margin:6px 0 0 18px;line-height:1.6;font-size:0.8rem">' + dx.map((d) => "<li>" + d + "</li>").join("") + "</ul></div>";
     // mes a mes
-    h += '<div class="card"><h3>Comportamiento mes a mes</h3><div class="sub">La misma clase (margen ajustado, corte 80/15/5). "Mes" = solo ese mes · "3 m" = ventana móvil. El ajuste por rotación usa el stock de hoy. × prom = venta del mes frente a su promedio desde que se vende</div><div class="cscroll"><table class="ct"><thead><tr><th>Mes</th><th>Und.</th><th>Margen</th><th>× prom.</th><th>Clase mes</th><th>Puesto (margen)</th><th>Clase 3 m</th></tr></thead><tbody>';
+    h += '<div class="card"><h3>Comportamiento mes a mes</h3><div class="sub">La misma clase: corte 80/15/5 del margen. "Mes" = solo ese mes · "3 m" = ventana móvil. × prom = venta del mes frente a su promedio desde que se vende</div><div class="cscroll"><table class="ct"><thead><tr><th>Mes</th><th>Und.</th><th>Margen</th><th>× prom.</th><th>Clase mes</th><th>Puesto (margen)</th><th>Clase 3 m</th></tr></thead><tbody>';
     DATA.periods.forEach((p, i) => {
       if (i < pr.first) return;
       const s = cm.single[i], r = cm.roll[i], x = avg ? pr.ser[i] / avg : 0;
@@ -2087,7 +2076,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       } else outside++;
     });
     const sub = $("xyzSub");
-    if (sub) sub.textContent = "Filas = importancia (la misma clase A/B/C). Columnas = variabilidad de la demanda en el período: X si el coeficiente de variación es hasta 0,5 · Y hasta 1 · Z por encima. Con el corte de libro (10% y 25%) casi toda la ropa caería en Z. " + windowLabel() + " · X " + (band.X || 0) + " · Y " + (band.Y || 0) + " · Z " + (band.Z || 0) + (band["—"] ? " · sin XYZ " + band["—"] : "") + " · fuera de los 9 cruces (sin venta, agotados o sin XYZ): " + outside + ".";
+    const rowM = (a) => ["X", "Y", "Z"].reduce((s, z) => s + cells[a + z].margin, 0);
+    const mt = rowM("A") + rowM("B") + rowM("C") || 1;
+    if (sub) sub.textContent = "Filas = ABC del margen: A " + pct(rowM("A") / mt) + " · B " + pct(rowM("B") / mt) + " · C " + pct(rowM("C") / mt) + ". El producto que cruza el 80% entra completo. Columnas = variabilidad de la demanda: X hasta 0,5 · Y hasta 1 · Z por encima. " + windowLabel() + " · X " + (band.X || 0) + " · Y " + (band.Y || 0) + " · Z " + (band.Z || 0) + (band["—"] ? " · sin XYZ " + band["—"] : "") + " · fuera de los 9 cruces: " + outside + ".";
     const colName = { X: "X · estable", Y: "Y · variable", Z: "Z · impredecible" };
     const rowName = { A: "A · alto valor", B: "B · valor medio", C: "C · bajo valor" };
     let html = '<div class="xyz-grid"><div></div>';
@@ -2156,27 +2147,24 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       const summary = summarizeFinal();
       const invMap = invAll;
       const allModels = buildModelIndex(scopeMap);
-      let scoreTot = 0;
-      FINAL.prod.forEach((g) => { if (["A", "B", "C"].indexOf(g.cls) >= 0) scoreTot += g.score || 0; });
-      scoreTot = scoreTot || 1;
+      let marginTot = 0;
+      FINAL.prod.forEach((g) => { if (["A", "B", "C"].indexOf(g.cls) >= 0) marginTot += Math.max(0, g.margin); });
+      marginTot = marginTot || 1;
       allModels.forEach((m) => {
         const f = FINAL.prod.get(m.modelo);
         m.classicClass = m.abcClass;
         if (f && ["A", "B", "C"].indexOf(f.cls) >= 0) {
           m.abcClass = f.cls;
           m.comercialClass = f.comercial;
-          m.rank = f.scRank || 100000 + (m.rank || 0);
-          m.adjShare = (f.score || 0) / scoreTot;
+          m.rank = f.mcRank || 100000 + (m.rank || 0);
+          m.adjShare = Math.max(0, f.margin) / marginTot;
         }
         m.matrix = m.abcClass + m.rotClass;
       });
       allModels.sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
       const cmEl = $("classModeNote");
       if (cmEl) {
-        const ctxTxt = state.opCtx === "global" ? "de todo el catálogo" : state.opCtx === "linea" ? "dentro de cada línea" : "dentro de cada categoría";
-        let note = "Una sola clase: margen ajustado, " + windowLabel() + ", corte 80/15/5 " + ctxTxt + ". El producto que cruza el 80% entra completo.";
-        if (state.opCtx !== "global") note += " El total de la empresa es la suma de los grupos, así que puede alejarse de 80/15/5.";
-        cmEl.textContent = note;
+        cmEl.textContent = "ABC del margen de contribución, " + windowLabel() + ", corte 80/15/5 de todo el catálogo. El producto que cruza el 80% entra completo. Donación y Refresh no entran.";
       }
       const modelTrack = modelClassByPeriod(invAll);
       const alerts = detectTransitions(skuClassByPeriod(invAll));
@@ -2222,7 +2210,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       if (!AGG) buildAgg();
       opCompute("sku", invMap).forEach((g) => FINAL.sku.set(g.key, g));
     }
-    const lines = ["modelo,sku,genero,color,talla,clase,xyz,margen,margen_ajustado,ingresos_netos,qty,stock"];
+    const lines = ["modelo,sku,genero,color,talla,clase,xyz,margen,ingresos_netos,qty,stock"];
     scopeMap.forEach((it, sku) => {
       if (it.margin <= 0) return;
       if (state.modelo && it.modelo !== state.modelo) return;
@@ -2240,7 +2228,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
           cls,
           f ? f.xyz : "",
           (a ? a.margin : it.margin).toFixed(2),
-          ((f && f.score) || 0).toFixed(2),
           it.revenue.toFixed(2),
           it.qty,
           invMap.get(sku)?.total || 0,
@@ -2277,10 +2264,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     $("fActive").onchange = (e) => { state.activeOnly = e.target.checked; refresh(); };
     $("migMode").onchange = (e) => { state.migMode = e.target.value; refresh(); };
     $("migAll").onchange = (e) => { state.migAll = e.target.checked; refresh(); };
-    $("opCtx").onchange = (e) => { state.opCtx = e.target.value; refresh(); };
-    $("opLevel").onchange = (e) => { state.opLevel = e.target.value; refresh(); };
-    $("opCls").onchange = (e) => { state.opCls = e.target.value; refresh(); };
-    $("opEst").onchange = (e) => { state.opEst = e.target.value; refresh(); };
     $("fichaSel").onchange = (e) => { state.ficha = e.target.value; renderFicha(); };
     $("fChannel").onchange = (e) => {
       state.channel = e.target.value;
