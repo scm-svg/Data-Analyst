@@ -211,7 +211,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
         <div class="chart-row"><div class="cw"><canvas id="cDonutSku"></canvas></div><div class="side-legend" id="legendSku"></div></div>
       </div>
       <div class="card">
-        <h3>Margen por clase</h3><div class="sub" id="margNote">Estos montos son margen (venta menos costo), con corte 80/15/5. No suman los ingresos de arriba.</div>
+        <h3>Margen por clase</h3>
         <div class="chart-row"><div class="cw"><canvas id="cDonutMarg"></canvas></div><div class="side-legend" id="legendMarg"></div></div>
       </div>
     </div>
@@ -335,7 +335,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     </div>
   </section>
 </div>
-<div class="footer">ABC · margen de contribución sin IVA · corte 80/15/5 del margen del período · los ingresos son la venta; el 80% es del margen · fuera del análisis: donación y Refresh · migración, alertas y ficha usan la misma clase · margen de oct 2025 a may 2026 estimado (IVA por categoría); jun–sep 2026 es el de Odoo · ventas al 30/09/2026 · inventario al 08/10/2026 · inventario valorado al costo de Odoo, incluye taller y almacén</div>
 <script>
 
 /* Matriz ABC — dashboard compacto */
@@ -880,9 +879,9 @@ body{background:#fff;color:#1A1A1A;background-image:none}
             ["C", summary.counts.C, pct(summary.skuPct.C)],
           ]
         : [
-            ["A", fmtUsd(summary.marginBy.A), pct(summary.marginPct.A) + " del margen"],
-            ["B", fmtUsd(summary.marginBy.B), pct(summary.marginPct.B) + " del margen"],
-            ["C", fmtUsd(summary.marginBy.C), pct(summary.marginPct.C) + " del margen"],
+            ["A", fmtUsd(summary.marginBy.A), Math.round(summary.marginPct.A * 100) + "%"],
+            ["B", fmtUsd(summary.marginBy.B), Math.round(summary.marginPct.B * 100) + "%"],
+            ["C", fmtUsd(summary.marginBy.C), Math.round(summary.marginPct.C * 100) + "%"],
           ];
     el.innerHTML = rows
       .map(
@@ -1019,7 +1018,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       summary.counts.A +
       '</div><div class="kl">SKUs en A</div></div>' +
       '<div class="kpib"><div class="kv">' +
-      pct(summary.marginPct.A) +
+      Math.round(summary.marginPct.A * 100) + "%" +
       '</div><div class="kl">Margen clase A</div><div class="ksub">' + fmtMoney(summary.marginBy.A) + " de " + fmtMoney(summary.marginBy.A + summary.marginBy.B + summary.marginBy.C) + " de margen · " + state.opWin + " meses</div></div>" +
       '<div class="kpib"><div class="kv">' +
       fmtMoney(netRev) +
@@ -1031,11 +1030,6 @@ body{background:#fff;color:#1A1A1A;background-image:none}
       '</div><div class="kl">Stock und.</div>' +
       (state.store ? '<div class="ksub">' + (STORE2LOC[state.store] ? esc(STORE2LOC[state.store]) : "esta tienda no tiene ubicación de stock") + "</div>" : "") +
       "</div>";
-    const note = $("margNote");
-    if (note) {
-      const mt = summary.marginBy.A + summary.marginBy.B + summary.marginBy.C;
-      note.textContent = "A + B + C = " + fmtMoney(mt) + " de margen (venta menos costo), repartido 80/15/5. Los " + fmtMoney(netRev) + " de ingresos son la venta sin IVA y no se suman con este margen.";
-    }
   }
 
   function renderPremisaCard(summary) {
@@ -2197,7 +2191,7 @@ body{background:#fff;color:#1A1A1A;background-image:none}
     h += '<div class="card"><h3>Colores</h3><div class="sub">La letra de cada fila es la del catálogo completo. Cobertura = stock de tienda ÷ venta mensual de la ventana. Stock total = tienda + taller + almacén, el mismo criterio del catálogo.</div><div class="cscroll"><table class="ct"><thead><tr><th>Clase</th><th>XYZ</th><th>Modelo · color</th><th>Margen</th><th>Und.</th><th>Meses con venta</th><th>Sell-through · eficiencia</th><th>Stock tienda</th><th>Cobertura</th><th>Stock total</th><th>Estado</th><th>Acción</th><th>Capital</th></tr></thead><tbody>' + mc.sort((a, b) => b.margin - a.margin || b.stock - a.stock).map((g) => opRow(g, false)).join("") + "</tbody></table></div></div>";
     // tallas
     const fueraTxt = stockFuera > 0 ? " " + fmt(stockFuera) + (stockFuera === 1 ? " und con margen no positivo queda fuera, igual que en el catálogo." : " und con margen no positivo quedan fuera, igual que en el catálogo.") : "";
-    h += '<div class="card"><h3>Curva de tallas</h3><div class="sub">Cobertura = stock tienda ÷ venta/mes de los últimos 3 meses. Stock total = tienda + taller + almacén, el mismo número del catálogo.' + fueraTxt + ' Rojo = el % de stock total supera al % de venta; ámbar = se queda corto.</div><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock tienda</th><th>Venta/mes (3m)</th><th>Cobertura</th><th>Stock total</th><th>% stock</th></tr></thead><tbody>';
+    h += '<div class="card"><h3>Curva de tallas</h3><div class="cscroll"><table class="ct"><thead><tr><th>Talla</th><th>Vendido (ventana)</th><th>% venta</th><th>Stock tienda</th><th>Venta/mes (3m)</th><th>Cobertura</th><th>Stock total</th><th>% stock</th></tr></thead><tbody>';
     sz.forEach(([t, v]) => {
       const ps = v.sold / totSold, pk = Math.max(0, v.stock) / totStk, a3 = v.u3 / 3, tie = v.tie || 0;
       const col = pk - ps > 0.1 ? "#E5532D" : ps - pk > 0.08 ? "#9A6B00" : "var(--tx)";
