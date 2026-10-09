@@ -15,9 +15,6 @@ body{font-family:Montserrat,sans-serif;color:var(--ink);background:#fff;line-hei
 .hdr h1{font-size:1.05rem;font-weight:700}
 .hdr p{font-size:.7rem;color:rgba(255,255,255,.85);margin-top:2px}
 .wrap{max-width:920px;margin:0 auto;padding:22px 22px 64px}
-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
-nav a{background:var(--soft);color:var(--ink);text-decoration:none;border-radius:20px;padding:7px 12px;font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
-nav a:hover{background:var(--navy);color:#fff}
 h2{font-size:1.05rem;font-weight:800;color:var(--navy);margin:28px 0 8px}
 h2 b{display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-size:.72rem;margin-right:8px}
 p,li{font-size:.84rem}
@@ -55,16 +52,7 @@ tr:last-child td{border-bottom:0}
   </div>
 </header>
 <main class="wrap">
-<nav>
-  <a href="#letras">Letras</a>
-  <a href="#numeros">Números</a>
-  <a href="#decidir">Decidir</a>
-  <a href="#pantallas">Pantallas</a>
-  <a href="#stock">Stock</a>
-  <a href="#ojo">Cuidado</a>
-  <a href="#palabras">Palabras</a>
-</nav>
-<p>Esta pantalla ordena los productos por la plata que dejan, no por las unidades que salen. Abre en Retail: solo tiendas, sin pedidos de empresa.</p>
+<p>Esta pantalla ordena los productos por el dinero que dejan, no por las unidades que salen. Abre en Retail: solo tiendas, sin pedidos de empresa.</p>
 
 <h2 id="letras"><b>1</b>Qué es A, B y C</h2>
 <p>Se ordenan por margen: venta menos costo. Se suma de mayor a menor.</p>
@@ -73,7 +61,7 @@ tr:last-child td{border-bottom:0}
   <tbody>
     <tr><td><span class="pill pA">A</span></td><td>Intocable. No puede faltar. Si sobra en una tienda, se mueve y se sigue reponiendo.</td><td class="r">787</td><td class="r">$2,63M · 80%</td></tr>
     <tr><td><span class="pill pB">B</span></td><td>Clase media. Reponer con calma. Si sobra, pausar y redistribuir.</td><td class="r">844</td><td class="r">$492,4K · 15%</td></tr>
-    <tr><td><span class="pill pC">C</span></td><td>Cola. Muchas variantes y poca plata. Candidatas a liquidar.</td><td class="r">1.828</td><td class="r">$164,4K · 5%</td></tr>
+    <tr><td><span class="pill pC">C</span></td><td>Cola. Muchas variantes y poco dinero. Candidatas a liquidar.</td><td class="r">1.828</td><td class="r">$164,4K · 5%</td></tr>
   </tbody>
 </table>
 <div class="card ok">787 variantes de 3.459 dejan el 80% del margen. El producto que cruza el 80% entra entero en A. El que cruza el 95% entra entero en B. Colores y tallas usan la letra del producto.</div>
@@ -82,7 +70,7 @@ tr:last-child td{border-bottom:0}
 <h2 id="numeros"><b>2</b>Los cuatro números de arriba</h2>
 <div class="kpis">
   <div class="kpi"><div class="v">787</div><div class="l">SKUs en A</div><div class="s">Variantes dentro del 80%.</div></div>
-  <div class="kpi"><div class="v">80%</div><div class="l">Margen clase A</div><div class="s">$2,63M de $3,29M. Esa es la plata que dejó A.</div></div>
+  <div class="kpi"><div class="v">80%</div><div class="l">Margen clase A</div><div class="s">$2,63M de $3,29M. Ese es el dinero que dejó A.</div></div>
   <div class="kpi"><div class="v">$4,25M</div><div class="l">Ingresos netos</div><div class="s">Venta sin IVA. Va aparte del margen.</div></div>
   <div class="kpi"><div class="v">207.581</div><div class="l">Stock und.</div><div class="s">Piezas con margen, en tienda, taller y almacén.</div></div>
 </div>
@@ -103,7 +91,7 @@ tr:last-child td{border-bottom:0}
     <tr><td>Clasificación ABC</td><td>La lista, del que más deja al que menos deja.</td></tr>
     <tr><td>Catálogo</td><td>Abrir un modelo y ver color, talla y stock. El botón de agotados solo filtra la lista.</td></tr>
     <tr><td>Migración mensual</td><td>Ver si la letra se sostiene. La lectura firme es Móvil 3 meses.</td></tr>
-    <tr><td>Capital e inventario</td><td>Cuánta plata está parada en A, en B y en C.</td></tr>
+    <tr><td>Capital e inventario</td><td>Cuánto dinero está parado en A, en B y en C.</td></tr>
     <tr><td>Matriz cruzada</td><td>Margen contra velocidad de venta. Toque un cuadro para ver los productos.</td></tr>
     <tr><td>Matriz ABC × XYZ</td><td>Si la venta es pareja (X), movida (Y) o impredecible (Z).</td></tr>
     <tr><td>Ficha</td><td>Un modelo: meses, colores, tallas y en qué tienda está.</td></tr>
@@ -118,12 +106,7 @@ tr:last-child td{border-bottom:0}
   <p class="mini">En la curva, la venta por mes son los últimos 3 meses. En XYZ, es el período que tenga elegido arriba. Taller y almacén dicen «Solo stock»: no tienen meses ni estado.</p>
 </div>
 
-<h2 id="ojo"><b>6</b>Tres cuidados</h2>
-<div class="card"><b>El margen compara productos.</b> Es la venta menos el costo del producto en Odoo. Gastos de tienda, fletes y mano de obra no entran en esta cuenta.</div>
-<div class="card"><b>Las fechas.</b> Las ventas cierran el 30/09/2026, el último mes completo. El inventario es del 08/10/2026.</div>
-<div class="card"><b>Quién entra.</b> Donación, Refresh y lo que no tiene costo quedan fuera. Un agotado sin venta reciente sí entra: se vendió en el período, hoy no hay piezas y en 3 meses no ha salido. Sigue en la lista con su letra.</div>
-
-<h2 id="palabras"><b>7</b>Palabras</h2>
+<h2 id="palabras"><b>6</b>Palabras</h2>
 <table>
   <thead><tr><th>Palabra</th><th>En criollo</th></tr></thead>
   <tbody>
