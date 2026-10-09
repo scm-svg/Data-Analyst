@@ -1,4 +1,4 @@
-# Tracking de Producción v5.9.6 — total del día en el correo
+# Tracking de Producción v5.9.7 — cantidades correctas en el correo diario
 
 ## Cómo instalar (borrar y pegar)
 
@@ -25,6 +25,8 @@ En el archivo **Tracking de Producción** (no el de Planificación):
 - El **Resumen General** copia los tableros **diurno**, **nocturno** y el **Total del día** (diurno + nocturno por día), con todas las columnas del tablero (Plan/Real, Total Semana y la columna extra, p. ej. % Cumplimiento).
 - El **detalle** sí sale solo con **modelos y cantidades nuevas**, ahora con columna Turno. Lo ya enviado se guarda en `_Correo Enviado`. Un mismo SKU en diurno y nocturno no se mezcla.
 - Claves viejas del historial (sin turno) se leen como Diurno.
+- La cantidad **no** usa la talla ni una fecha mal leída del historial. Si el mismo SKU cambia de nombre (p. ej. `MAR LOTE 1` → `MAR`) o la clave tenía un día de menos por la zona `America/Lima`, se sigue restando lo ya enviado.
+- `_Correo Enviado` guarda **Cantidad Enviada** con formato número (no fecha) y Talla/MO como texto.
 - Si no hay nada nuevo, el script avisa y no manda correo.
 - Para reenviar todo (por un correo de prueba): menú **Tracking → Reiniciar historial de correo diario**.
 
