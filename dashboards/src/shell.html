@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--TITLE--></title>
+<link rel="icon" href="data:,">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style><!--CSS--></style>
+</head>
+<body>
+<div id="storeApp">
+<div class="hero">
+  <div class="hdr">
+    <div class="brand"><!--LOGO--></div>
+    <div class="badge" id="badge"></div>
+    <div>
+      <h1>Análisis de Tienda · Ventas y inventario</h1>
+      <p id="hdrSub"></p>
+    </div>
+    <div class="links">
+      <a id="chainLink" href="cadena.html">Cadena</a>
+      <div class="right" id="hdrR"></div>
+    </div>
+  </div>
+  <div class="persel">
+    <span class="fb-l">Período</span>
+    <span id="perChips"></span>
+    <span class="psub" id="perNote"></span>
+  </div>
+  <div class="krow" id="krow"></div>
+  <div class="flowWrap" id="flowWrap"></div>
+  <div class="tabs">
+    <button class="tab on" type="button" data-tab="resumen">Resumen</button>
+    <button class="tab" type="button" data-tab="salud">Salud del inventario</button>
+    <button class="tab" type="button" data-tab="modelos">Modelos</button>
+    <button class="tab" type="button" data-tab="dec">Decisiones</button>
+  </div>
+</div>
+<div class="page">
+  <div class="sec on" id="sec-resumen">
+    <p class="note" id="defn"></p>
+    <div class="g4" style="margin-bottom:14px" id="miniK"></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="ct">Curva ABC · <em id="abcEm">modelos del período</em></div>
+      <div class="g3" id="abcRow"></div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="ct" id="ctMes"></div>
+        <div class="cw h240"><canvas id="cMes"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="ct" id="ctEstado">Estado del inventario</div>
+        <div class="cw h240"><canvas id="cEstado"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec" id="sec-salud">
+    <div style="display:flex;gap:10px;margin-bottom:13px;flex-wrap:wrap" id="sKpis"></div>
+    <div class="fbar">
+      <span class="fb-l">Estado</span>
+      <span class="chip on" data-cl="">Todos</span>
+      <span class="chip" data-cl="QUIEBRE">Quiebre</span>
+      <span class="chip" data-cl="CRITICO">Crítico</span>
+      <span class="chip" data-cl="SALUDABLE">Saludable</span>
+      <span class="chip" data-cl="LENTO">Lento</span>
+      <span class="chip" data-cl="EXCESO">Exceso</span>
+      <span class="chip" data-cl="SIN VENTA">Sin venta</span>
+      <div class="sep"></div>
+      <span class="fb-l">Modelo</span>
+      <select class="srch" id="sMod" style="min-width:190px"></select>
+      <input class="srch" id="sSrch" placeholder="SKU, color, talla…">
+      <button class="export" type="button" data-csv="sku">Descargar CSV</button>
+      <span class="count" id="sCount"></span>
+    </div>
+    <div class="tblwrap">
+      <table>
+        <thead id="sHead"></thead>
+        <tbody id="sBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec" id="sec-modelos">
+    <div class="fbar">
+      <span class="fb-l">ABC</span>
+      <span class="chip on" data-abc="">Todos</span>
+      <span class="chip" data-abc="A">A</span>
+      <span class="chip" data-abc="B">B</span>
+      <span class="chip" data-abc="C">C</span>
+      <span class="chip" data-abc="SV">Sin venta</span>
+      <div class="sep"></div>
+      <input class="srch" id="mSrch" placeholder="Buscar modelo…">
+      <button class="export" type="button" data-csv="model">Descargar CSV</button>
+      <span class="count" id="mCount"></span>
+    </div>
+    <p class="note">El filtro A cuenta modelos, el mismo número de la tarjeta Clase A. Las columnas de meses suman la venta del período.</p>
+    <div class="tblwrap">
+      <table>
+        <thead id="mHead"></thead>
+        <tbody id="mBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec" id="sec-dec">
+    <p class="note" id="decNote"></p>
+    <div class="dgrid">
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#C70705"></span><span class="t-re">Reponer</span></div>
+        <div class="dpS" id="txtRep"></div>
+        <div class="dlist" id="dRep"></div>
+        <div class="dpS" style="margin-top:12px;font-weight:700">Variantes agotadas de modelos A o B, con 3 o más vendidas, y sin stock de sobra en la misma familia</div>
+        <div class="dlist" id="dQb" style="max-height:230px"></div>
+      </div>
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#1E7B34"></span><span class="t-gr">Mantener</span></div>
+        <div class="dpS" id="txtMan"></div>
+        <div class="dlist" id="dMan"></div>
+        <div class="dpT" style="margin-top:16px"><span class="dot" style="background:#9A6B00"></span>Agotados de baja rotación</div>
+        <div class="dpS">1 o 2 unidades vendidas y hoy en 0. No es una reposición urgente.</div>
+        <div class="dlist" id="dMarg" style="max-height:180px"></div>
+      </div>
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#9A6B00"></span><span class="t-am">Activar o promover</span></div>
+        <div class="dpS" id="txtAct"></div>
+        <div class="dlist" id="dAct"></div>
+      </div>
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#0B3F6B"></span><span class="t-cy">Rebalancear talla y color</span></div>
+        <div class="dpS" id="txtReb"></div>
+        <div class="dlist" id="dReb"></div>
+      </div>
+    </div>
+    <div class="dgrid">
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#75887d"></span>Sin movimiento</div>
+        <div class="dpS" id="txtSm"></div>
+        <div class="dlist" id="dSm"></div>
+      </div>
+      <div class="dpan">
+        <div class="dpT"><span class="dot" style="background:#9A6B00"></span>Sobre-stock chico</div>
+        <div class="dpS" id="txtSob"></div>
+        <div class="dlist" id="dSob"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="chainApp" style="display:none">
+  <div class="hero">
+    <div class="hdr">
+      <div class="brand"><!--LOGO--></div>
+      <div class="badge">CADENA</div>
+      <div>
+        <h1>Siete tiendas · Ventas e inventario</h1>
+        <p id="cSub"></p>
+      </div>
+    </div>
+    <div class="persel">
+      <span class="fb-l">Período</span>
+      <span id="cChips"></span>
+      <span class="psub" id="cNote"></span>
+    </div>
+  </div>
+  <div class="page">
+    <p class="note">Misma regla en todas las tiendas. Cada una recorta el período a los meses que realmente vendió. La cobertura con temporada usa el índice de esa tienda, propio o de red.</p>
+    <div class="tblwrap" style="max-height:none;margin-bottom:14px">
+      <table class="chainTable" id="cCmp"></table>
+    </div>
+    <div class="g2" style="margin-bottom:14px">
+      <div class="card"><div class="ct">Stock por tienda</div><div class="cw" style="height:340px"><canvas id="cStock"></canvas></div></div>
+      <div class="card"><div class="ct">Cobertura del período <em>· meses</em></div><div class="cw" style="height:340px"><canvas id="cCob"></canvas></div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="ct">Puente de inventario <em>· contra el stock del listado</em></div>
+      <div class="tblwrap" style="max-height:none"><table class="chainTable" id="cFlow"></table></div>
+    </div>
+    <div class="card">
+      <div class="ct" id="cTrTitle">Traslados</div>
+      <p class="note">Un SKU agotado en una tienda (3 o más vendidas en el período) y con exceso en otra. La cantidad es el mínimo entre lo que le falta al agotado y lo que al donante le sobra por encima de su objetivo de reposición.</p>
+      <div class="tblwrap" style="max-height:640px"><table class="chainTable" id="cTr"></table></div>
+    </div>
+  </div>
+</div>
+
+<script id="DATA" type="application/json"><!--DATA--></script>
+<script><!--JS--></script>
+</body>
+</html>
