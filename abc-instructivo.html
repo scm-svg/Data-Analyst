@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cómo leer la Matriz ABC · CUADRO</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --a:#0B3F6B;--b:#3F7AB3;--c:#8A8A8A;--ink:#1A1A1A;--mu:#5c5c5c;--mu2:#8a8a8a;
+  --line:#E6E6E6;--card:#F1F1F1;--green:#1E7B34;--amber:#9A6B00;--red:#C70705;--orange:#E5532D;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:#fff;color:var(--ink);font-family:'Montserrat',sans-serif;line-height:1.45}
+.hdr{background:var(--a);color:#fff;padding:18px 28px;display:flex;align-items:center;gap:18px}
+.mark{width:18px;height:18px;background:#fff;flex-shrink:0}
+.hdr h1{font-size:1.15rem;font-weight:700}
+.hdr h1 em{font-style:normal;font-weight:800}
+.hdr p{color:rgba(255,255,255,.82);font-size:.72rem;margin-top:3px}
+.wrap{max-width:1080px;margin:0 auto;padding:22px 22px 64px}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px}
+.nav a{background:var(--card);color:var(--ink);text-decoration:none;border-radius:20px;padding:8px 14px;font-size:.64rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.nav a:hover,.nav a:focus{background:var(--a);color:#fff}
+h2{font-size:1.05rem;font-weight:800;margin:28px 0 10px;letter-spacing:-.2px}
+h2 span{color:var(--a)}
+.lead{font-size:.92rem;max-width:720px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{background:var(--card);border-radius:18px;padding:16px 16px 14px}
+.card h3{font-size:.86rem;font-weight:700;margin-bottom:6px}
+.card p,.card li{font-size:.78rem;color:var(--ink)}
+.card p+p{margin-top:8px}
+.card ul{margin:6px 0 0 16px}
+.card li{margin:4px 0}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpib{background:#fff;border-radius:14px;padding:12px 14px}
+.kpib .kv{font-size:1.25rem;font-weight:800;color:var(--a)}
+.kpib .kl{font-size:.58rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-top:4px}
+.kpib .ks{font-size:.68rem;color:var(--mu);margin-top:4px}
+.abc{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border-radius:6px;font-weight:800;font-size:.72rem}
+.abc-A{background:var(--a);color:#fff}
+.abc-B{background:#dde8f3;color:var(--a)}
+.abc-C{background:#fff;color:#6b6b6b;box-shadow:inset 0 0 0 1px #cfcfcf}
+.row{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
+.row .abc{flex-shrink:0}
+.cut{display:flex;height:28px;border-radius:8px;overflow:hidden;margin:10px 0 6px;color:#fff;font-size:.68rem;font-weight:800}
+.cut span{display:flex;align-items:center;justify-content:center}
+.cut .a{flex:80;background:var(--a)}
+.cut .b{flex:15;background:var(--b)}
+.cut .c{flex:5;background:#b5b5b5;color:#1A1A1A}
+.note{font-size:.72rem;color:var(--mu);margin-top:6px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;font-size:.74rem}
+th{background:var(--a);color:#fff;text-align:left;font-size:.58rem;letter-spacing:.05em;text-transform:uppercase;padding:8px 10px}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.ex{background:#fff;border-radius:14px;padding:12px 14px;margin-top:10px}
+.ex strong{color:var(--a)}
+.formula{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chip{background:#fff;border-radius:10px;padding:8px 10px;font-weight:700;font-size:.78rem}
+.chip em{font-style:normal;color:var(--mu);font-weight:600;font-size:.62rem;display:block}
+.eq{font-weight:800;color:var(--a)}
+.st{font-weight:800}
+.st.sano{color:var(--green)}
+.st.quiebre{color:var(--orange)}
+.st.sobre{color:var(--amber)}
+.st.agot{color:var(--red)}
+.st.alm{color:var(--b)}
+.xyz{display:grid;grid-template-columns:108px 1fr 1fr 1fr;gap:6px;margin-top:8px}
+.xyz .h,.xyz .lab{font-size:.68rem;font-weight:800;color:var(--mu);display:flex;align-items:center}
+.xyz .h{justify-content:center;text-align:center}
+.xyz .lab{justify-content:flex-end;padding-right:6px;text-align:right}
+.cell{border-radius:10px;padding:10px 8px;text-align:center;min-height:78px}
+.cell b{display:block;font-size:.95rem}
+.cell span{display:block;font-size:.64rem;margin-top:3px}
+.x{background:rgba(30,123,52,.14)}
+.y{background:rgba(154,107,0,.16)}
+.z{background:rgba(199,7,5,.12)}
+.steps{counter-reset:paso}
+.step{background:#fff;border-radius:12px;padding:10px 12px 10px 42px;position:relative;margin-top:8px;font-size:.78rem}
+.step:before{counter-increment:paso;content:counter(paso);position:absolute;left:10px;top:10px;width:22px;height:22px;border-radius:6px;background:var(--a);color:#fff;font-size:.68rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+@media(max-width:800px){
+  .grid,.grid3,.kpis{grid-template-columns:1fr}
+  .xyz{grid-template-columns:72px 1fr 1fr 1fr}
+  .hdr{padding:16px}
+  .wrap{padding:16px 14px 48px}
+}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="mark" aria-hidden="true"></div>
+  <div>
+    <h1>Cómo leer la Matriz <em>ABC</em></h1>
+    <p>Instructivo del dashboard de inventario y ventas · octubre 2025 a septiembre 2026</p>
+  </div>
+</header>
+<main class="wrap">
+  <nav class="nav">
+    <a href="#regla">La letra</a>
+    <a href="#arriba">Arriba</a>
+    <a href="#pantallas">Pantallas</a>
+    <a href="#stock">Stock</a>
+    <a href="#estados">Estados</a>
+    <a href="#xyz">ABC × XYZ</a>
+    <a href="#ejemplo">Ejemplo</a>
+    <a href="#filtros">Filtros</a>
+  </nav>
+
+  <p class="lead">Hay una sola clase por producto. Sale del margen del período que esté elegido, con corte 80 / 15 / 5. El canal abre en Retail. Este texto dice qué significa cada recuadro y cómo revisar la cuenta.</p>
+
+  <section id="regla">
+    <h2><span>01</span> · La letra</h2>
+    <div class="card">
+      <p>Los productos se ordenan de mayor a menor margen. El margen es la venta menos el costo. Se va sumando hasta completar el período.</p>
+      <div class="cut" aria-hidden="true"><span class="a">A 80%</span><span class="b">B 15%</span><span class="c">C 5%</span></div>
+      <div class="row"><span class="abc abc-A">A</span><div><p><strong>Intocable.</strong> Entran los productos mientras el acumulado todavía no ha pasado el 80%. El producto que cruza el 80% entra entero.</p></div></div>
+      <div class="row"><span class="abc abc-B">B</span><div><p><strong>Clase media.</strong> Sigue el acumulado hasta el 95%. El producto que cruza el 95% entra entero.</p></div></div>
+      <div class="row"><span class="abc abc-C">C</span><div><p><strong>Lastre.</strong> El resto del margen, el último 5%.</p></div></div>
+      <p class="note">En pantalla la leyenda redondea a 80%, 15% y 5%. Las variantes usan la letra del producto. Donación, Refresh y las variantes sin costo quedan fuera del corte.</p>
+    </div>
+  </section>
+
+  <section id="arriba">
+    <h2><span>02</span> · Los cuatro recuadros</h2>
+    <div class="kpis">
+      <div class="kpib"><div class="kv">787</div><div class="kl">SKUs en A</div><div class="ks">Cuántas variantes quedaron en la clase A del período.</div></div>
+      <div class="kpib"><div class="kv">80%</div><div class="kl">Margen clase A</div><div class="ks">Parte del margen que concentra A. Debajo está el monto de A y el margen total.</div></div>
+      <div class="kpib"><div class="kv">$4.25M</div><div class="kl">Ingresos netos</div><div class="ks">Venta sin IVA. Es otro número: no se suma con el margen.</div></div>
+      <div class="kpib"><div class="kv">207.581</div><div class="kl">Stock und.</div><div class="ks">Unidades con margen positivo: tienda, taller y almacén.</div></div>
+    </div>
+    <p class="note">Ventas al 30/09/2026. Inventario al 08/10/2026. El período de arriba cambia la letra, el margen y los ingresos. El stock es la foto del inventario.</p>
+  </section>
+
+  <section id="pantallas">
+    <h2><span>03</span> · Cada pantalla</h2>
+    <div class="grid">
+      <article class="card">
+        <h3>Resumen</h3>
+        <p>Dos donas. La izquierda cuenta SKUs. La derecha reparte el margen: ahí se lee 80%, 15% y 5%.</p>
+        <p>La barra compara ese resultado con el objetivo 80 / 15 / 5. La tabla de premisas pone al lado el porcentaje de SKUs. El 20 / 30 / 50 de SKUs es una referencia: el corte no parte un producto para forzarlo.</p>
+      </article>
+      <article class="card">
+        <h3>Clasificación ABC</h3>
+        <p>El ranking de productos por margen. El puesto 1 es el de mayor margen. La columna de ingresos es la venta. La de margen es la que define la letra.</p>
+      </article>
+      <article class="card">
+        <h3>Catálogo</h3>
+        <p>Una fila por producto. Al abrirla se ven las variantes, todas con la letra del producto. La columna Stock total suma tienda, taller y almacén de las variantes con margen.</p>
+        <p>Los agotados sin venta reciente ya están en la lista y entran al corte con el margen del período. El botón «Ver solo agotados sin venta» deja la lista únicamente en ellos.</p>
+      </article>
+      <article class="card">
+        <h3>Migración mensual</h3>
+        <p>Cada mes arma de nuevo el corte 80 / 15 / 5 con el margen de ese mes. Por eso una letra puede cambiar cerca del 80% y del 95%.</p>
+        <p>«Móvil 3 meses» repite el corte con los tres meses juntos. Esa es la lectura estable. Octubre usa un mes y noviembre dos, porque antes no hay historia. «Mostrar todos» viene marcado y lista también los productos que no cambian de letra.</p>
+      </article>
+      <article class="card">
+        <h3>Capital e inventario</h3>
+        <p>Unidades y valor al costo de Odoo, con taller y almacén. La última tarjeta es el stock que no aportó margen positivo en el período. Ahí viven las variantes que el catálogo no suma.</p>
+      </article>
+      <article class="card">
+        <h3>Matriz cruzada</h3>
+        <p>La letra de margen contra la letra de rotación. La rotación ordena por unidades, con el mismo tipo de corte. Un cuadro se toca y abajo aparecen sus productos.</p>
+      </article>
+      <article class="card">
+        <h3>Ficha</h3>
+        <p>La lectura de un producto. Arriba: su letra, su regularidad, el estado del núcleo que vende el 70% y el stock total, el mismo del catálogo.</p>
+        <p>«Margen entre sus colores» hace un 80 / 15 / 5 interno de ese producto. La letra de cada fila de color sigue siendo la del catálogo completo.</p>
+      </article>
+      <article class="card">
+        <h3>Alertas</h3>
+        <p>Variantes que cambiaron de letra en una ventana de tres meses. El aviso más alto es pasar de A a C. Sirve para mirar promo, ubicación o stock, según el salto.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="stock">
+    <h2><span>04</span> · Stock y cobertura</h2>
+    <div class="card">
+      <p>Hay dos stocks y una sola cobertura. Van en este orden para que la división se pueda revisar.</p>
+      <div class="formula">
+        <div class="chip">424<em>stock tienda</em></div>
+        <div class="eq">÷</div>
+        <div class="chip">86,3<em>venta / mes</em></div>
+        <div class="eq">=</div>
+        <div class="chip">4,9 m<em>cobertura</em></div>
+        <div class="chip">729<em>stock total de la talla</em></div>
+      </div>
+      <p class="note">El 729 es tienda + taller + almacén. No entra en la cobertura. El total del producto, sumando tallas, es el stock del catálogo.</p>
+      <table>
+        <thead><tr><th>Columna</th><th>Qué es</th><th>Dónde se usa</th></tr></thead>
+        <tbody>
+          <tr><td>Stock tienda</td><td>Piso de venta de las tiendas.</td><td>Cobertura, sell-through y estado.</td></tr>
+          <tr><td>Venta / mes</td><td>En la curva de tallas, los últimos 3 meses. En XYZ y en colores, el período elegido.</td><td>El divisor de la cobertura.</td></tr>
+          <tr><td>Cobertura</td><td>Stock tienda ÷ venta por mes.</td><td>Al lado del stock de tienda.</td></tr>
+          <tr><td>Stock total</td><td>Tienda + Taller PT + Alm. Equipamiento, solo variantes con margen.</td><td>Catálogo, total de la curva, total de ubicaciones y matriz XYZ.</td></tr>
+        </tbody>
+      </table>
+      <p class="note">Taller y almacén se consultan como stock. Su fila dice «Solo stock»: no tienen cobertura ni estado. En la curva, rojo marca una talla con más stock que venta y ámbar una talla con menos stock que venta.</p>
+    </div>
+  </section>
+
+  <section id="estados">
+    <h2><span>05</span> · El estado y la acción</h2>
+    <div class="grid">
+      <article class="card">
+        <h3>En la ficha</h3>
+        <p>El estado de arriba mira las tiendas que juntan el 70% de la venta. Una tienda lenta conserva su propio estado en la tabla de ubicaciones.</p>
+        <table>
+          <thead><tr><th>Estado</th><th>Lectura</th></tr></thead>
+          <tbody>
+            <tr><td><span class="st sano">Sano</span></td><td>La cobertura está dentro del rango de su clase.</td></tr>
+            <tr><td><span class="st quiebre">Quiebre</span></td><td>Cubre menos del mínimo. En A y en B se repone.</td></tr>
+            <tr><td><span class="st sobre">Sobrestock</span></td><td>Pasa el máximo de su clase.</td></tr>
+            <tr><td><span class="st agot">Agotado</span></td><td>Sin stock de tienda y con venta en el período.</td></tr>
+            <tr><td><span class="st alm">En almacén</span></td><td>La tienda está en cero y el stock está en taller o almacén.</td></tr>
+          </tbody>
+        </table>
+      </article>
+      <article class="card">
+        <h3>Qué hacer con la letra</h3>
+        <div class="row"><span class="abc abc-A">A</span><div><p>Que no falte. Si sobra, se redistribuye y se sigue reponiendo lo que se vende. Un A no se pausa.</p></div></div>
+        <div class="row"><span class="abc abc-B">B</span><div><p>Reposición periódica. Con sobrestock: pausar y redistribuir.</p></div></div>
+        <div class="row"><span class="abc abc-C">C</span><div><p>Lotes pequeños. Con sobrestock: liquidar o descontinuar. Con quiebre: evaluar si vale reponer.</p></div></div>
+        <p class="note">Manufactura, clase A: sano entre 1 y 4 meses. Clase B: entre 1 y 6. Equipamiento admite más meses porque rota más lento.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="xyz">
+    <h2><span>06</span> · Matriz ABC × XYZ</h2>
+    <div class="card">
+      <p>La fila es la letra de margen. La columna es qué tan pareja viene la venta. X es estable, Y se mueve, Z es impredecible. El stock del cruce y de cada producto es el stock total del catálogo. La cobertura de la fila usa el stock de tienda.</p>
+      <div class="xyz">
+        <div></div>
+        <div class="h">X · estable</div>
+        <div class="h">Y · variable</div>
+        <div class="h">Z · impredecible</div>
+        <div class="lab" style="color:#0B3F6B">A · alto valor</div>
+        <div class="cell x"><b>AX</b><span>Reponer seguido</span></div>
+        <div class="cell y"><b>AY</b><span>Revisar y dejar colchón</span></div>
+        <div class="cell z"><b>AZ</b><span>Comprar con cuidado</span></div>
+        <div class="lab" style="color:#3F7AB3">B · valor medio</div>
+        <div class="cell x"><b>BX</b><span>Reposición programada</span></div>
+        <div class="cell y"><b>BY</b><span>Revisión periódica</span></div>
+        <div class="cell z"><b>BZ</b><span>Stock moderado</span></div>
+        <div class="lab" style="color:#6b6b6b">C · bajo valor</div>
+        <div class="cell x"><b>CX</b><span>Comprar por volumen</span></div>
+        <div class="cell y"><b>CY</b><span>Pedidos ocasionales</span></div>
+        <div class="cell z"><b>CZ</b><span>Mínimo y liquidar</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ejemplo">
+    <h2><span>07</span> · Un recorrido: MAR Original Cab</h2>
+    <div class="card">
+      <div class="steps">
+        <div class="step">En el catálogo es clase A y su stock total es 3.365. Ese número ya incluye tienda, taller y almacén.</div>
+        <div class="step">En la ficha, el recuadro de stock total repite 3.365: 2.036 en tienda y 1.329 en taller y almacén.</div>
+        <div class="step">La curva de la talla S se lee 424 en tienda, 86,3 de venta al mes y 4,9 meses. 424 ÷ 86,3 = 4,9. El 729 de esa fila es el stock total de la talla.</div>
+        <div class="step">La tabla de ubicaciones cierra en 3.365. Taller PT dice «Solo stock». Cada tienda tiene su propia cobertura.</div>
+        <div class="step">En ABC × XYZ el mismo producto muestra 2.036 en tienda, la venta mensual de la ventana y 3.365 de stock total.</div>
+        <div class="step">«Margen entre sus colores» reparte el margen de este producto: A 83,3% · B 13,9% · C 2,8%. La letra de cada color, en la tabla, sigue siendo la del catálogo.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="filtros">
+    <h2><span>08</span> · Antes de concluir</h2>
+    <div class="grid3">
+      <article class="card">
+        <h3>Canal</h3>
+        <p>Abre en Retail, sin corporativo ni pedidos. Si se cambia el canal, la letra se recalcula con esas ventas.</p>
+      </article>
+      <article class="card">
+        <h3>Período</h3>
+        <p>Todo, 3, 6 o 12 meses, o meses sueltos. La clase, el margen y la cobertura de XYZ usan esa ventana.</p>
+      </article>
+      <article class="card">
+        <h3>Migración</h3>
+        <p>Para ver si la letra es firme, pasar a «Móvil 3 meses». El mes suelto sirve para ver el salto, no para decidir solo con él.</p>
+      </article>
+    </div>
+  </section>
+</main>
+</body>
+</html>
