@@ -810,6 +810,57 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertEqual(normalizar_talla(14.0), "14")
         self.assertEqual(normalizar_talla("L"), "l")
 
+    def test_screenshot_cantidad_es_real_menos_number_date(self):
+        """El correo mostró 2208713540005 / 2207417540020 / 2207849540015 = qty - Number(fecha)."""
+        from datetime import datetime
+
+        casos = [
+            ("RIOMIKI13T2", 2, 5, 2208713540005),
+            ("RIOMIKI13T4", 4, 20, 2207417540020),
+            ("RIOMIKI13T8", 8, 15, 2207849540015),
+        ]
+        with open(GS, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("function numeroCantidad_(", src)
+        self.assertIn("Never use Number(date)", src)
+
+        for sku, talla, real, mostrado in casos:
+            ya_buggy = real - mostrado
+            self.assertEqual(mostrado, real - ya_buggy)
+            self.assertLess(ya_buggy, -2.2e12)
+            self.assertEqual(numero_cantidad(ya_buggy), 0)
+            recuperada = numero_cantidad(datetime(1900, 1, real))
+            self.assertEqual(recuperada, real)
+            self.assertEqual(delta(real, recuperada), 0)
+            self.assertEqual(delta(real, numero_cantidad(ya_buggy)), real)
+            self.assertNotEqual(delta(real, numero_cantidad(ya_buggy)), mostrado)
+            self.assertLess(real, 100)
+            self.assertGreater(mostrado, 2e12)
+
+        fila = {
+            "dia": "Lunes",
+            "fecha": "05/10/2026",
+            "linea": "Línea 1",
+            "turno": "Nocturno",
+            "mo": "3003",
+            "sku": "RIOMIKI13T2",
+            "producto": "RIO",
+            "genero": "KIDS",
+            "color": "AZUL REY",
+            "talla": 2,
+            "cantidad": 5,
+        }
+        fila["clave"] = clave_detalle(fila)
+        enviado = {}
+        registrar_cantidad(enviado, fila["clave"], fila, numero_cantidad(datetime(1900, 1, 5)))
+        nuevos, _ = partir_nuevo(consolidar([fila]), enviado)
+        self.assertEqual(nuevos, [])
+        fila2 = dict(fila, cantidad=5)
+        fila2["clave"] = clave_detalle(fila2)
+        nuevos_sin_hist, _ = partir_nuevo(consolidar([fila2]), {})
+        self.assertEqual(nuevos_sin_hist[0]["cantidad"], 5)
+        self.assertNotEqual(nuevos_sin_hist[0]["cantidad"], 2208713540005)
+
     def test_historial_encuentra_sku_aunque_cambie_producto_o_fecha(self):
         hist_fila = {
             "dia": "Lunes",
