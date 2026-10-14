@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Plan prioridades Mar / Rio · Tela Jabón</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--s3:#252637;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--mu2:#4a4b65;--ac:#5b6af7;--a2:#f75b8a;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;--r:14px}
+body.light{--bg:#f5f6fa;--surf:#ffffff;--s2:#f0f1f5;--s3:#e5e6ed;--brd:#d8d9e3;--tx:#1a1a2e;--mu:#6b6c85;--mu2:#9a9bb5}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0d0e13,#191a2d 55%,#0d0e13);border-bottom:1px solid var(--brd);padding:18px 40px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+body.light .hdr{background:linear-gradient(135deg,#e8e9f3,#f5f6fa 55%,#e8e9f3)}
+.hdr h1{font-family:var(--fh);font-size:1.45rem;font-weight:800}
+.hdr h1 em{color:var(--ac);font-style:normal}
+.hdr p{color:var(--mu);font-size:.8rem;margin-top:3px}
+.theme-btn{background:var(--s2);border:1px solid var(--brd);color:var(--tx);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.76rem}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;padding:16px 40px 0}
+.kpib{background:var(--s2);border:1px solid var(--brd);border-radius:10px;padding:10px 14px;min-width:110px;text-align:center}
+.kpib .kv{font-family:var(--fh);font-size:1.25rem;font-weight:800;color:var(--ac)}
+.kpib .kl{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.tabs{display:flex;gap:2px;padding:12px 40px 0;border-bottom:1px solid var(--brd);background:var(--surf);overflow-x:auto}
+.tab{padding:8px 16px;font-family:var(--fh);font-size:.78rem;font-weight:700;color:var(--mu);border:none;background:transparent;cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:var(--tx);border-bottom-color:var(--ac);background:var(--s2)}
+.content{padding:22px 40px;max-width:1600px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:980px){.g2{grid-template-columns:1fr}.content,.hdr,.kpis,.tabs{padding-left:16px;padding-right:16px}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px}
+.card h3{font-family:var(--fh);font-size:.9rem;margin-bottom:4px}
+.sub{font-size:.7rem;color:var(--mu);margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);padding:6px;text-align:left;border-bottom:1px solid var(--brd)}
+td{padding:6px;border-bottom:1px solid var(--brd);vertical-align:top}
+tr:hover td{background:rgba(91,106,247,.05)}
+.chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;border:1px solid rgba(255,255,255,.15);vertical-align:middle}
+.badge{font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:999px}
+.ok{background:#1f6f4a33;color:#4caf76}.par{background:#7a5b0033;color:#ffc107}.no{background:#7a1f1f33;color:#ef4444}
+.kids{background:#fff2cc22}
+.prio{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.pbox{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:12px 14px;min-width:150px;flex:1}
+.pbox.k{border-color:#c9a227}
+.pbox .n{font-size:.68rem;color:var(--mu);text-transform:uppercase}
+.pbox .t{font-family:var(--fh);font-weight:800;margin:4px 0}
+.pbox .u{font-size:.85rem}
+.note{font-size:.78rem;color:var(--mu);line-height:1.45;margin:6px 0}
+.lotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.lot{background:var(--s2);border:1px solid var(--brd);border-radius:12px;padding:12px}
+.lot h4{font-size:.82rem;margin-bottom:6px}
+.sizes{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.sz{background:var(--s3);border-radius:6px;padding:3px 7px;font-size:.72rem}
+.bar{height:7px;background:var(--s3);border-radius:99px;overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;background:var(--ac)}
+.footer{text-align:center;color:var(--mu);font-size:.68rem;padding:16px;border-top:1px solid var(--brd)}
+.alert{background:#3a2018;border:1px solid #ef444466;color:#ffb4a8;border-radius:10px;padding:10px 12px;font-size:.78rem;margin-bottom:10px}
+body.light .alert{background:#ffe8e4;color:#8a1f14}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <h1>Planificación · <em>Mar + Rio</em></h1>
+    <p>Prioridad Kids 50% del pendiente · tela Jabón disponible · máximos sugeridos · flexibilidad CAB/DAMA</p>
+  </div>
+  <button class="theme-btn" onclick="document.body.classList.toggle('light')">☀️ / 🌙</button>
+</div>
+<div class="kpis" id="kpis"></div>
+<div class="tabs">
+  <button class="tab active" onclick="st('resumen',this)">📊 Resumen</button>
+  <button class="tab" onclick="st('kids',this)">🧸 Kids</button>
+  <button class="tab" onclick="st('adultos',this)">👕 CAB / DAMA</button>
+  <button class="tab" onclick="st('tela',this)">🧵 Tela por color</button>
+  <button class="tab" onclick="st('lotes',this)">✂️ Lotes talla</button>
+</div>
+<div class="content">
+  <div class="sec active" id="sec-resumen"></div>
+  <div class="sec" id="sec-kids"></div>
+  <div class="sec" id="sec-adultos"></div>
+  <div class="sec" id="sec-tela"></div>
+  <div class="sec" id="sec-lotes"></div>
+</div>
+<div class="footer">Somos Cuadro · plan de corte según máximos sugeridos Mar/Rio · inventario foto Jabón · lote Mar Kids ya cortado descontado solo en unidades</div>
+<script>
+const D = __PAYLOAD__;
+function fmt(n){return (n||0).toLocaleString('es-VE')}
+function kg(n){return Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:1,maximumFractionDigits:1})}
+function badge(st){
+  if(st==='OK') return '<span class="badge ok">OK 50%/máx</span>';
+  if(st==='PARCIAL') return '<span class="badge par">PARCIAL · tela</span>';
+  return '<span class="badge no">SIN TELA</span>';
+}
+function chip(c){const h=D.colors[c]||'#888'; return `<span class="chip" style="background:${h}"></span>${c}`}
+function st(id,btn){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+const P = ['MAR KIDS','RIO KIDS','MAR CAB','MAR DAMA','RIO CAB','RIO DAMA'];
+document.getElementById('kpis').innerHTML = [
+  ['Und nuevas', fmt(D.kpis.und), 'a cortar ahora'],
+  ['Kg a usar', kg(D.kpis.kg), 'de '+kg(D.kpis.tela)+' kg usable'],
+  ['Mar Kids cortado', fmt(D.kpis.cortado), 'und ya en planta'],
+  ['Máx Mar', fmt(D.kpis.metas.MAR.CAB+D.kpis.metas.MAR.DAMA+D.kpis.metas.MAR.KIDS), 'CAB+DAMA+KIDS'],
+  ['Máx Rio', fmt(D.kpis.metas.RIO.CAB+D.kpis.metas.RIO.DAMA+D.kpis.metas.RIO.KIDS), 'CAB+DAMA+KIDS'],
+].map(([l,v,s])=>`<div class="kpib"><div class="kv">${v}</div><div class="kl">${l}</div><div class="kl" style="text-transform:none;opacity:.8">${s}</div></div>`).join('');
+
+const por = D.por;
+document.getElementById('sec-resumen').innerHTML = `
+  <div class="alert"><b>Cómo leerlo.</b> Kids al 50% del pendiente (Mar descuenta el lote 8/10/12/14 = 1.300 und). Tela de la foto se usa completa: el corte previo salió de WIP, no de este inventario. Adultos se llenan con lo que resta, intercambiables Mar↔Rio por color. Rojo no se produce. Morado = Púrpura.</div>
+  <div class="prio">${P.map((n,i)=>{
+    const d=por[n]||{und:0,kg:0,objetivo:0};
+    const pct=d.objetivo?Math.round(100*d.und/d.objetivo):0;
+    return `<div class="pbox ${n.includes('KIDS')?'k':''}"><div class="n">P${i+1}</div><div class="t">${n}</div><div class="u"><b>${fmt(d.und)}</b> und · ${kg(d.kg)} kg</div><div class="sub">objetivo ${fmt(d.objetivo)} · cubre ${pct}%</div><div class="bar"><i style="width:${Math.min(100,pct)}%"></i></div></div>`;
+  }).join('')}</div>
+  <div class="g2">
+    <div class="card"><h3>Reglas de flexibilidad</h3>
+      <p class="note">1. Si un color se queda corto, se recorta adultos de ambos modelos a la vez (no se casa con un solo género).</p>
+      <p class="note">2. Negro y Azul Marino (&gt;650 kg) dan para kids 50% + lotes CAB/DAMA en Mar y Rio.</p>
+      <p class="note">3. Verde Militar, Rosado Pastel, Gris Claro y Blanco son cuello de botella: primero kids.</p>
+      <p class="note">4. Mar Kids talla 14 ya está hecha (520). El lote nuevo prioriza 2, 4, 6, 8, 10 y 12.</p>
+      <p class="note">5. Vinotinto y Gris Claro se cortaron en kids aunque el Excel kids no los pide: no bajan otras metas.</p>
+    </div>
+    <div class="card"><h3>Consumo tela</h3>
+      <table><tr><th>Modelo</th><th>CAB</th><th>DAMA</th><th>KIDS</th></tr>
+      <tr><td>Mar</td><td>0,50 kg</td><td>0,40 kg</td><td>0,26 kg</td></tr>
+      <tr><td>Rio</td><td>0,66 kg</td><td>0,52 kg</td><td>0,32 kg</td></tr></table>
+      <p class="note" style="margin-top:10px">Rio consume más kg/prenda: con la misma tela salen menos und. En colores justos, un swap hacia Mar rinde más unidades; un swap hacia Rio cubre mejor el máximo sugerido en kg.</p>
+    </div>
+  </div>`;
+
+function blockTable(filtro, title, sub){
+  const rows=D.filas.filter(filtro);
+  const body=rows.map(f=>`<tr class="${f.genero==='KIDS'?'kids':''}"><td>P${f.prioridad}</td><td>${chip(f.color)}</td><td>${fmt(f.meta_max)}</td><td>${f.ya_cortado||'—'}</td><td>${fmt(f.pendiente)}</td><td>${fmt(f.objetivo)}</td><td><b>${fmt(f.und)}</b></td><td>${kg(f.kg)}</td><td>${kg(f.tela_despues)}</td><td>${badge(f.estado)}</td></tr>`).join('');
+  return `<div class="card" style="margin-bottom:14px"><h3>${title}</h3><div class="sub">${sub}</div>
+    <div style="overflow:auto"><table><thead><tr><th>P</th><th>Color</th><th>Máx</th><th>Cortado</th><th>Pendiente</th><th>Obj</th><th>Asignar</th><th>Kg</th><th>Tela resta</th><th>Estado</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+}
+document.getElementById('sec-kids').innerHTML =
+  `<div class="card" style="margin-bottom:14px"><h3>Lote Mar Kids ya cortado · 1.300 und</h3>
+   <div class="sub">Tallas 8=260 · 10=260 · 12=260 · 14=520 · 11 colores a partes iguales (~118 und/color). No resta kg de la foto.</div>
+   <div class="sizes">${Object.entries(D.lote_tallas).map(([t,u])=>`<span class="sz">T${t} · ${u}</span>`).join('')}</div>
+   <p class="note">Colores: Verde militar, Vinotinto, Azul marino, Azul rey, Rojo, Gris claro, Lavanda, Aguamarina, Rosado pastel, Negro, Lila.</p></div>` +
+  blockTable(f=>f.orden==='MAR KIDS','P1 · Mar Kids · 50% del pendiente','Descuenta el lote cortado. Blanco / Amarillo neón / Púrpura no venían en el corte: entran completos al 50%. Rojo queda en 0 por falta de tela.') +
+  blockTable(f=>f.orden==='RIO KIDS','P2 · Rio Kids · 50% del máximo','Misma tela, después de Mar Kids. Consumo 0,32 kg/und.');
+
+document.getElementById('sec-adultos').innerHTML =
+  `<p class="note" style="margin-bottom:12px">P3–P6 usan la tela que sobra por color. El reparto es proporcional a <b>kg de demanda máxima</b> (und × consumo), así Mar y Rio pueden intercambiarse: si un modelo no llega, el otro absorbe.</p>` +
+  P.filter(n=>!n.includes('KIDS')).map(n=>blockTable(f=>f.orden===n,'P'+ (P.indexOf(n)+1)+' · '+n, 'Tope = cantidad máxima sugerida. Estado PARCIAL = la tela no alcanza el máximo.')).join('');
+
+document.getElementById('sec-tela').innerHTML = `<div class="card"><h3>Inventario vs plan</h3><div class="sub">Cada color es un pozo de tela. Kids bebe primero; el resto se reparte entre géneros/modelos.</div>
+  <div style="overflow:auto"><table><thead><tr><th>Color</th><th>Stock kg</th><th>Usado</th><th>Resta</th><th>Mar K</th><th>Rio K</th><th>Mar CAB</th><th>Mar DA</th><th>Rio CAB</th><th>Rio DA</th><th>Flexibilidad</th></tr></thead>
+  <tbody>${D.flex.map(r=>`<tr><td>${chip(r.color)}</td><td>${kg(r.stock_kg)}</td><td>${kg(r.usado_kg)}</td><td><b>${kg(r.resta_kg)}</b></td><td>${r['MAR KIDS']}</td><td>${r['RIO KIDS']}</td><td>${r['MAR CAB']}</td><td>${r['MAR DAMA']}</td><td>${r['RIO CAB']}</td><td>${r['RIO DAMA']}</td><td>${r.recomendacion}</td></tr>`).join('')}</tbody></table></div></div>`;
+
+function lotCard(f){
+  const sizes=Object.entries(f.tallas||{}).filter(([,n])=>n>0).map(([t,n])=>`<span class="sz">${t} · ${n}</span>`).join('');
+  return `<div class="lot"><h4>${chip(f.color)} · ${f.modelo} ${f.genero}</h4>
+    <div class="sub">P${f.prioridad} · ${fmt(f.und)} und · ${kg(f.kg)} kg · ${badge(f.estado)}</div>
+    <div class="sizes">${sizes}</div></div>`;
+}
+document.getElementById('sec-lotes').innerHTML =
+  P.map(n=>{
+    const rows=D.filas.filter(f=>f.orden===n && f.und>0);
+    if(!rows.length) return `<div class="card" style="margin-bottom:14px"><h3>${n}</h3><p class="note">Sin unidades en este plan.</p></div>`;
+    return `<div class="card" style="margin-bottom:14px"><h3>${n} · ${fmt(rows.reduce((s,f)=>s+f.und,0))} und</h3>
+      <div class="lotgrid">${rows.map(lotCard).join('')}</div></div>`;
+  }).join('');
+(function openTabFromQuery(){
+  const tab=new URLSearchParams(location.search).get('tab');
+  if(!tab) return;
+  const btn=[...document.querySelectorAll('.tab')].find(t=>t.getAttribute('onclick')?.includes("'"+tab+"'"));
+  if(btn) st(tab, btn);
+})();
+</script>
+</body>
+</html>
