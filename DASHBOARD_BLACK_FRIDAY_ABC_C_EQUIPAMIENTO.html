@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Black Friday · ABC · Equipamiento C</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0e0f14;--surf:#16171f;--s2:#1e1f2b;--brd:#2a2b3a;--tx:#f0f0f5;--mu:#7a7b95;--ac:#5b6af7;--gr:#4caf76;--rd:#ef4444;--yw:#ffc107;--fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:var(--fb);min-height:100vh}
+.hdr{background:linear-gradient(135deg,#0d0e13,#1a1530);border-bottom:1px solid var(--brd);padding:22px 36px}
+.hdr h1{font-family:var(--fh);font-size:1.55rem;font-weight:800}
+.hdr h1 em{color:var(--ac);font-style:normal}
+.hdr p{color:var(--mu);font-size:.82rem;margin-top:4px}
+.kpis{display:flex;flex-wrap:wrap;gap:10px;padding:16px 36px}
+.kpi{background:var(--surf);border:1px solid var(--brd);border-radius:10px;padding:12px 16px;min-width:130px}
+.kpi .v{font-family:var(--fh);font-size:1.35rem;font-weight:800;color:var(--ac)}
+.kpi .l{font-size:.65rem;color:var(--mu);text-transform:uppercase;margin-top:2px}
+.tabs{display:flex;gap:4px;padding:0 36px;border-bottom:1px solid var(--brd);background:var(--surf)}
+.tab{padding:10px 16px;border:none;background:transparent;color:var(--mu);font-family:var(--fh);font-size:.78rem;font-weight:700;cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:var(--tx);border-bottom-color:var(--ac)}
+.main{padding:20px 36px;max-width:1400px;margin:0 auto}
+.sec{display:none}.sec.active{display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:12px;padding:16px}
+.card h3{font-family:var(--fh);font-size:.9rem;margin-bottom:10px}
+.sub{font-size:.72rem;color:var(--mu);margin-bottom:10px}
+.cw{height:240px;position:relative}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th,td{padding:7px 8px;border-bottom:1px solid var(--brd);text-align:left}
+th{color:var(--mu);font-size:.67rem;text-transform:uppercase}
+tr:hover td{background:rgba(91,106,247,.06)}
+.tag-c{background:rgba(255,193,7,.15);color:var(--yw);padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:700}
+.callout{background:rgba(91,106,247,.12);border:1px solid #3a3b65;border-left:4px solid var(--ac);padding:12px 14px;border-radius:8px;font-size:.85rem;color:#c5c8e8;margin-bottom:14px}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <h1>Propuesta <em>Black Friday</em> · ABC · Categoría C</h1>
+  <p>Manufacturado · Equipamiento · Cruce inventario + ventas (SKU) · Pareto por unidades vendidas</p>
+</header>
+<div class="kpis" id="kpis"></div>
+<nav class="tabs">
+  <button class="tab active" data-sec="resumen">Resumen</button>
+  <button class="tab" data-sec="abc">Clasificación ABC</button>
+  <button class="tab" data-sec="bf">Listado C · BF</button>
+  <button class="tab" data-sec="metodo">Metodología</button>
+</nav>
+<main class="main">
+  <section class="sec active" id="resumen">
+    <div class="callout" id="callout"></div>
+    <div class="grid2">
+      <div class="card"><h3>Inventario por línea de negocio</h3><div class="cw"><canvas id="chLinea"></canvas></div></div>
+      <div class="card"><h3>Ventas equipamiento (tendencia)</h3><div class="cw"><canvas id="chTrend"></canvas></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Inventario equipamiento por ABC</h3><div class="cw"><canvas id="chEquipAbc"></canvas></div></div>
+      <div class="card"><h3>Modelos ABC (conteo)</h3><div class="cw"><canvas id="chAbcCount"></canvas></div></div>
+    </div>
+  </section>
+  <section class="sec" id="abc">
+    <div class="card">
+      <h3>Equipamiento · distribución ABC (unidades en inventario)</h3>
+      <p class="sub">Los modelos A/B concentran rotación; la propuesta BF se centra en C con stock.</p>
+      <div id="abcTable"></div>
+    </div>
+  </section>
+  <section class="sec" id="bf">
+    <div class="card">
+      <h3>Listado priorizado · Categoría C · Manufacturado · Equipamiento</h3>
+      <p class="sub">Rangos de descuento sugeridos según exceso de inventario vs ventas del período.</p>
+      <div style="overflow:auto;max-height:520px">
+        <table id="tblBf"><thead><tr>
+          <th>Modelo</th><th>Ventas</th><th>Inventario</th><th>Cobertura</th><th>Descuento sugerido</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+  <section class="sec" id="metodo">
+    <div class="card">
+      <h3>Metodología y fuentes</h3>
+      <ul style="color:var(--mu);font-size:.85rem;line-height:1.6;padding-left:18px">
+        <li><strong style="color:var(--tx)">Inventario:</strong> INVENTARIO TOTAL CUADRO PARA ABC - PROPUESTA.xlsx (existencias por ubicación, agregado por SKU).</li>
+        <li><strong style="color:var(--tx)">Ventas:</strong> VENTAS CUADRO ACTUALIZADAS ARREGLADO.xlsx (2025–2026, unidades ordenadas).</li>
+        <li><strong style="color:var(--tx)">Cruce:</strong> clave única SKU (normalización de talla única y género para evitar duplicados).</li>
+        <li><strong style="color:var(--tx)">ABC:</strong> Pareto sobre unidades vendidas a nivel modelo; A ≤80% acumulado, B 80–95%, C &gt;95%.</li>
+        <li><strong style="color:var(--tx)">Equipamiento manufacturado:</strong> accesorios/equipo propio (gorras, bolsos, medias, toallas, etc.); excluye marcas de terceros (Contigo, Kambukka, Refresh).</li>
+        <li><strong style="color:var(--tx)">Excel detallado:</strong> <code>output/PROPUESTA_BLACK_FRIDAY_ABC_C_EQUIPAMIENTO.xlsx</code></li>
+      </ul>
+    </div>
+  </section>
+</main>
+<script>
+const DATA = {"resumen": {"Unidades vendidas (total período)": 155859, "Unidades en inventario (total)": 209877, "SKUs únicos con stock o venta": 3782, "Modelos únicos": 255, "Modelos ABC A (por ventas)": 52, "Modelos ABC B": 54, "Modelos ABC C": 149, "Modelos C · Equipamiento · Manufacturado": 25, "SKUs C · Equipamiento con stock": 87, "Inventario C · Equipamiento (und)": 6688}, "abc_modelos": {"C": 149, "B": 54, "A": 52}, "inventario_por_linea": {"Comprado / terceros": 528, "Confección (manufacturado)": 58572, "Equipamiento": 150777}, "inventario_equip_abc": {"A": 128675, "B": 15414, "C": 6688}, "top_bf_c_equip": [{"MODELO": "PELOTAS DE PADEL", "Ventas_Total": 15, "Inventario_Total": 2850, "Meses_Cobertura_Approx": 190.0, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.01, "cum_pct": 99.76}, {"MODELO": "MAXI TOTE", "Ventas_Total": 138, "Inventario_Total": 820, "Meses_Cobertura_Approx": 5.9, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.09, "cum_pct": 97.61}, {"MODELO": "CUADRO BAND ELASTIC", "Ventas_Total": 79, "Inventario_Total": 476, "Meses_Cobertura_Approx": 6.0, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.05, "cum_pct": 98.41}, {"MODELO": "ZENIT CUADRADO", "Ventas_Total": 112, "Inventario_Total": 472, "Meses_Cobertura_Approx": 4.2, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.07, "cum_pct": 97.92}, {"MODELO": "NO SHOW SOCKS CAB", "Ventas_Total": 223, "Inventario_Total": 438, "Meses_Cobertura_Approx": 2.0, "Propuesta_Descuento_BF": "25–35%", "pct_ventas": 0.14, "cum_pct": 95.43}, {"MODELO": "ZENIT REDONDO", "Ventas_Total": 217, "Inventario_Total": 363, "Meses_Cobertura_Approx": 1.7, "Propuesta_Descuento_BF": "25–35%", "pct_ventas": 0.14, "cum_pct": 95.71}, {"MODELO": "MANGAS GENERAL", "Ventas_Total": 169, "Inventario_Total": 249, "Meses_Cobertura_Approx": 1.5, "Propuesta_Descuento_BF": "15–25%", "pct_ventas": 0.11, "cum_pct": 97.23}, {"MODELO": "ANKLE SOCKS DAMA", "Ventas_Total": 156, "Inventario_Total": 245, "Meses_Cobertura_Approx": 1.6, "Propuesta_Descuento_BF": "25–35%", "pct_ventas": 0.1, "cum_pct": 97.33}, {"MODELO": "PORTAVASOS", "Ventas_Total": 30, "Inventario_Total": 230, "Meses_Cobertura_Approx": 7.7, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.02, "cum_pct": 99.59}, {"MODELO": "ANKLE SOCKS CAB", "Ventas_Total": 209, "Inventario_Total": 188, "Meses_Cobertura_Approx": 0.9, "Propuesta_Descuento_BF": "15–25%", "pct_ventas": 0.13, "cum_pct": 96.11}, {"MODELO": "FLEX COVER", "Ventas_Total": 125, "Inventario_Total": 129, "Meses_Cobertura_Approx": 1.0, "Propuesta_Descuento_BF": "15–25%", "pct_ventas": 0.08, "cum_pct": 97.78}, {"MODELO": "SUNNY CORD ORIGINAL", "Ventas_Total": 31, "Inventario_Total": 114, "Meses_Cobertura_Approx": 3.7, "Propuesta_Descuento_BF": "35–45%", "pct_ventas": 0.02, "cum_pct": 99.55}, {"MODELO": "STICKER", "Ventas_Total": 0, "Inventario_Total": 50, "Meses_Cobertura_Approx": null, "Propuesta_Descuento_BF": "40–50% (liquidación)", "pct_ventas": 0.0, "cum_pct": 100.03}, {"MODELO": "PELOTAS DE TENIS", "Ventas_Total": 0, "Inventario_Total": 39, "Meses_Cobertura_Approx": null, "Propuesta_Descuento_BF": "40–50% (liquidación)", "pct_ventas": 0.0, "cum_pct": 100.03}, {"MODELO": "TOALLA WAFFLE", "Ventas_Total": 74, "Inventario_Total": 19, "Meses_Cobertura_Approx": 0.3, "Propuesta_Descuento_BF": "10–20%", "pct_ventas": 0.05, "cum_pct": 98.56}, {"MODELO": "MANGAS SPORT MESH", "Ventas_Total": 4, "Inventario_Total": 3, "Meses_Cobertura_Approx": 0.8, "Propuesta_Descuento_BF": "10–20%", "pct_ventas": 0.0, "cum_pct": 100.03}, {"MODELO": "MESH CAP", "Ventas_Total": 203, "Inventario_Total": 1, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "10–20%", "pct_ventas": 0.13, "cum_pct": 96.5}, {"MODELO": "TOALLA CLIP ORIGINAL", "Ventas_Total": 13, "Inventario_Total": 1, "Meses_Cobertura_Approx": 0.1, "Propuesta_Descuento_BF": "10–20%", "pct_ventas": 0.01, "cum_pct": 99.82}, {"MODELO": "VISERA", "Ventas_Total": 192, "Inventario_Total": 1, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "10–20%", "pct_ventas": 0.12, "cum_pct": 96.88}, {"MODELO": "CAP SOLID", "Ventas_Total": 22, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.01, "cum_pct": 99.7}, {"MODELO": "ANKLE SOCKS", "Ventas_Total": 18, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.01, "cum_pct": 99.73}, {"MODELO": "MANGAS SPORT", "Ventas_Total": 5, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.0, "cum_pct": 100.03}, {"MODELO": "CREW SOCKS", "Ventas_Total": 72, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.05, "cum_pct": 98.66}, {"MODELO": "PACK ECO BAG PEQUENO", "Ventas_Total": 1, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.0, "cum_pct": 100.03}, {"MODELO": "PARCHES", "Ventas_Total": 10, "Inventario_Total": 0, "Meses_Cobertura_Approx": 0.0, "Propuesta_Descuento_BF": "Sin stock", "pct_ventas": 0.01, "cum_pct": 99.91}], "trend_equip": [{"periodo": "2025-diciembre", "Ventas": 12230}, {"periodo": "2025-noviembre", "Ventas": 11575}, {"periodo": "2025-octubre", "Ventas": 5419}, {"periodo": "2026-abril", "Ventas": 5232}, {"periodo": "2026-agosto", "Ventas": 12846}, {"periodo": "2026-enero", "Ventas": 2980}, {"periodo": "2026-febrero", "Ventas": 3997}, {"periodo": "2026-julio", "Ventas": 3690}, {"periodo": "2026-junio", "Ventas": 6742}, {"periodo": "2026-marzo", "Ventas": 4520}, {"periodo": "2026-mayo", "Ventas": 3841}, {"periodo": "2026-septiembre", "Ventas": 5432}], "bf_modelos_count": 25, "bf_inv_units": 6688};
+
+async function loadData(){
+  try{
+    const r = await fetch('output/dashboard_bf_abc_data.json');
+    if(r.ok) Object.assign(DATA, await r.json());
+  }catch(e){}
+  render();
+}
+function render(){
+  const R = DATA.resumen||{};
+  document.getElementById('kpis').innerHTML = [
+    ['Ventas período', R['Unidades vendidas (total período)']],
+    ['Inventario total', R['Unidades en inventario (total)']],
+    ['Modelos C · Equip.', R['Modelos C · Equipamiento · Manufacturado']],
+    ['Stock C · Equip.', R['Inventario C · Equipamiento (und)']],
+    ['SKUs con stock BF', R['SKUs C · Equipamiento con stock']]
+  ].map(([l,v])=>`<div class="kpi"><div class="v">${(v??0).toLocaleString('es')}</div><div class="l">${l}</div></div>`).join('');
+
+  document.getElementById('callout').innerHTML = `Foco para directiva: <strong>${DATA.bf_modelos_count||0} modelos</strong> en categoría <span class="tag-c">C</span> de equipamiento manufacturado, con <strong>${(DATA.bf_inv_units||0).toLocaleString('es')} unidades</strong> en inventario. Prioridad: liquidar exceso (ej. pelotas, bands, totes) sin comprometer líneas A/B de rotación.`;
+
+  const tbody = document.querySelector('#tblBf tbody');
+  tbody.innerHTML = (DATA.top_bf_c_equip||[]).map(r=>`<tr>
+    <td>${r.MODELO}</td><td>${r.Ventas_Total}</td><td>${r.Inventario_Total}</td>
+    <td>${r.Meses_Cobertura_Approx??'—'}</td><td><span class="tag-c">${r.Propuesta_Descuento_BF||'—'}</span></td>
+  </tr>`).join('');
+
+  const eq = DATA.inventario_equip_abc||{};
+  document.getElementById('abcTable').innerHTML = `<table><thead><tr><th>ABC Equip.</th><th>Inventario (und)</th></tr></thead><tbody>
+    ${Object.entries(eq).map(([k,v])=>`<tr><td>${k}</td><td>${v.toLocaleString('es')}</td></tr>`).join('')}
+  </tbody></table>`;
+
+  mkChart('chLinea','doughnut',Object.keys(DATA.inventario_por_linea||{}),Object.values(DATA.inventario_por_linea||{}),['#5b6af7','#f75b8a']);
+  mkChart('chEquipAbc','bar',Object.keys(eq),Object.values(eq),['#4caf76','#ffc107','#ef4444']);
+  mkChart('chAbcCount','pie',Object.keys(DATA.abc_modelos||{}),Object.values(DATA.abc_modelos||{}),['#4caf76','#ffc107','#ef4444']);
+  const tr = DATA.trend_equip||[];
+  mkChart('chTrend','line',tr.map(x=>x.periodo),tr.map(x=>x.Ventas),['#5b6af7']);
+}
+function mkChart(id,type,labels,data,colors){
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  if(ctx._chart) ctx._chart.destroy();
+  const bg = type==='line'? colors[0]+'55': (type==='doughnut'||type==='pie'? colors: colors[0]);
+  const label = id==='chTrend'?'Unidades': id==='chEquipAbc'?'Inventario':'';
+  ctx._chart = new Chart(ctx,{type,data:{labels,datasets:[{label,data,backgroundColor:bg,borderColor:colors[0],borderWidth:type==='line'?2:1,fill:type==='line',tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#a0a0b8'}}},scales:type==='line'||type==='bar'?{x:{ticks:{color:'#7a7b95'}},y:{ticks:{color:'#7a7b95'}}}:{}}});
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById(t.dataset.sec).classList.add('active');
+});
+loadData();
+</script>
+</body>
+</html>
