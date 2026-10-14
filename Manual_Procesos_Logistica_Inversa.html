@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOMOS CUADRO — Manuales de Proceso · Pedidos y Logística Inversa</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface2: #f0f3fa;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #0d9488;
+  --accent-light: #ccfbf1;
+  --green: #059669;
+  --green-bg: #d1fae5;
+  --orange: #d97706;
+  --orange-bg: #fef3c7;
+  --purple: #7c3aed;
+  --purple-bg: #ede9fe;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --shadow: 0 1px 3px rgba(15,23,42,.08), 0 4px 16px rgba(15,23,42,.06);
+  --radius: 14px;
+  --font-head: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font-body); background:var(--bg); color:var(--text); line-height:1.6; min-height:100vh; }
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #134e4a 0%, #0d9488 50%, #14b8a6 100%);
+  color: #fff;
+  padding: 28px 32px 0;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 4px 24px rgba(13,148,136,.25);
+}
+.header-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; padding-bottom:20px; }
+.brand-tag { font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-bottom:4px; }
+.header h1 { font-family:var(--font-head); font-size:1.65rem; font-weight:800; letter-spacing:-.02em; }
+.header p { font-size:.88rem; opacity:.85; margin-top:4px; max-width:620px; }
+.header-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.meta-chip { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:5px 14px; font-size:.75rem; font-weight:600; backdrop-filter:blur(4px); }
+
+/* Main tabs */
+.main-tabs { display:flex; gap:4px; overflow-x:auto; padding-bottom:0; scrollbar-width:none; }
+.main-tabs::-webkit-scrollbar { display:none; }
+.main-tab {
+  background:transparent; border:none; color:rgba(255,255,255,.7);
+  font-family:var(--font-head); font-size:.82rem; font-weight:700;
+  padding:10px 18px; cursor:pointer; white-space:nowrap;
+  border-bottom:3px solid transparent; transition:all .2s;
+  border-radius:8px 8px 0 0;
+}
+.main-tab:hover { color:#fff; background:rgba(255,255,255,.1); }
+.main-tab.active { color:#fff; border-bottom-color:#fff; background:rgba(255,255,255,.15); }
+
+/* Layout */
+.container { max-width:1200px; margin:0 auto; padding:28px 24px 60px; }
+.panel { display:none; animation: fadeIn .3s ease; }
+.panel.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+/* Hero cards on home */
+.hero-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; margin-bottom:28px; }
+.hero-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:24px; box-shadow:var(--shadow); cursor:pointer; transition:all .2s;
+  position:relative; overflow:hidden;
+}
+.hero-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
+.hero-card.blue::before { background:var(--accent); }
+.hero-card.green::before { background:var(--green); }
+.hero-card.purple::before { background:var(--purple); }
+.hero-card.orange::before { background:var(--orange); }
+.hero-card:hover { transform:translateY(-3px); box-shadow:0 8px 28px rgba(15,23,42,.12); border-color:var(--accent); }
+.hero-card .icon { font-size:2rem; margin-bottom:10px; }
+.hero-card h3 { font-family:var(--font-head); font-size:1.05rem; font-weight:800; margin-bottom:6px; }
+.hero-card p { font-size:.84rem; color:var(--muted); }
+.hero-card .arrow { position:absolute; bottom:20px; right:20px; color:var(--accent); font-size:1.2rem; font-weight:700; }
+
+/* Section title */
+.section-title { font-family:var(--font-head); font-size:1.3rem; font-weight:800; margin-bottom:6px; letter-spacing:-.02em; }
+.section-sub { color:var(--muted); font-size:.88rem; margin-bottom:22px; }
+
+/* Sub tabs */
+.sub-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:22px; }
+.sub-tab {
+  background:var(--surface); border:1.5px solid var(--border); color:var(--muted);
+  font-family:var(--font-head); font-size:.78rem; font-weight:700;
+  padding:7px 16px; border-radius:999px; cursor:pointer; transition:all .2s;
+}
+.sub-tab:hover { border-color:var(--accent); color:var(--accent); }
+.sub-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Cards */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:18px; }
+.card h4 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+
+/* Steps timeline */
+.steps { display:flex; flex-direction:column; gap:0; }
+.step {
+  display:grid; grid-template-columns:44px 1fr; gap:0 16px;
+  position:relative; padding-bottom:20px;
+}
+.step:not(:last-child)::before {
+  content:''; position:absolute; left:21px; top:44px; bottom:0;
+  width:2px; background:var(--border);
+}
+.step-num {
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-weight:800; font-size:.9rem; flex-shrink:0; z-index:1;
+}
+.step-body { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+.step-body h5 { font-family:var(--font-head); font-size:.88rem; font-weight:700; margin-bottom:4px; }
+.step-body p { font-size:.82rem; color:var(--muted); }
+
+/* Role badges */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:.7rem; font-weight:700; padding:3px 10px; border-radius:999px;
+  margin-top:8px; margin-right:6px;
+}
+.badge.supervisor { background:#ccfbf1; color:#115e59; }
+.badge.operador { background:#d1fae5; color:#065f46; }
+.badge.qa { background:#fef3c7; color:#92400e; }
+.badge.pedidos { background:#ede9fe; color:#5b21b6; }
+.badge.tienda { background:#fce7f3; color:#9d174d; }
+.badge.logistica { background:#dbeafe; color:#1d4ed8; }
+.badge.empaque { background:#ffedd5; color:#c2410c; }
+
+/* Legend */
+.legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.legend-item { display:flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; color:var(--muted); }
+.legend-dot { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+.legend-dot.start { background:var(--green-bg); border:2px solid var(--green); }
+.legend-dot.process { background:var(--accent-light); border:2px solid var(--accent); }
+.legend-dot.decision { background:var(--orange-bg); border:2px solid var(--orange); transform:rotate(45deg); border-radius:2px; width:12px; height:12px; }
+.legend-dot.end { background:var(--purple-bg); border:2px solid var(--purple); }
+.legend-dot.note { background:#f1f5f9; border:2px dashed #94a3b8; }
+
+/* Roles table */
+.roles-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+.role-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+.role-card h5 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin-bottom:4px; }
+.role-card .rel { font-size:.72rem; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.role-card ul { list-style:none; }
+.role-card li { font-size:.82rem; color:var(--muted); padding:4px 0; padding-left:16px; position:relative; }
+.role-card li::before { content:'→'; position:absolute; left:0; color:var(--accent); font-weight:700; }
+
+/* Records table */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th { background:var(--surface2); color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; padding:10px 14px; text-align:left; border-bottom:2px solid var(--border); font-weight:700; }
+td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(13,148,136,.04); }
+
+/* Systems pills */
+.systems { display:flex; flex-wrap:wrap; gap:10px; }
+.system-pill { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; flex:1; min-width:180px; box-shadow:var(--shadow); }
+.system-pill strong { display:block; font-family:var(--font-head); font-size:.85rem; font-weight:800; margin-bottom:4px; color:var(--accent); }
+.system-pill span { font-size:.78rem; color:var(--muted); }
+
+/* Alert / info box */
+.info-box { background:var(--accent-light); border:1px solid #5eead4; border-radius:12px; padding:14px 18px; font-size:.84rem; color:#115e59; margin-bottom:20px; display:flex; gap:10px; align-items:flex-start; }
+.info-box .ico { font-size:1.1rem; flex-shrink:0; }
+.info-box.warn { background:var(--orange-bg); border-color:#fcd34d; color:#92400e; }
+
+/* Process map visual — 3 nodos + flechas en una fila */
+.process-map { display:flex; align-items:stretch; gap:10px; margin:20px 0; }
+.map-node { background:var(--surface); border:2px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:all .2s; flex:1; min-width:0; }
+.map-node:hover, .map-node.highlight { border-color:var(--accent); background:var(--accent-light); }
+.map-node .num { font-family:var(--font-head); font-size:2rem; font-weight:800; color:var(--accent); opacity:.3; }
+.map-node h4 { font-family:var(--font-head); font-size:.9rem; font-weight:800; margin:6px 0; }
+.map-node p { font-size:.76rem; color:var(--muted); }
+.map-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem; flex:0 0 28px; }
+@media(max-width:768px){
+  .process-map { flex-direction:column; }
+  .map-arrow { transform:rotate(90deg); min-height:28px; }
+}
+
+/* Footer */
+.footer { text-align:center; padding:24px; color:var(--muted); font-size:.78rem; border-top:1px solid var(--border); margin-top:40px; }
+
+.sub-panel { display:none; }
+.sub-panel.active { display:block; animation: fadeIn .25s ease; }
+
+/* Recommendations & Analysis */
+.rec-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:22px; }
+.rec-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); border-left:4px solid var(--accent); }
+.rec-card.priority-high { border-left-color:var(--red); }
+.rec-card.priority-med { border-left-color:var(--orange); }
+.rec-card.priority-low { border-left-color:var(--green); }
+.rec-card .rec-tag { font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+.rec-card.priority-high .rec-tag { color:var(--red); }
+.rec-card.priority-med .rec-tag { color:var(--orange); }
+.rec-card.priority-low .rec-tag { color:var(--green); }
+.rec-card h5 { font-family:var(--font-head); font-size:.95rem; font-weight:800; margin-bottom:8px; }
+.rec-card p, .rec-card li { font-size:.84rem; color:var(--muted); }
+.rec-card ul { margin-top:8px; padding-left:18px; }
+.rec-card li { margin-bottom:4px; }
+
+.analysis-table td:first-child { font-weight:700; white-space:nowrap; }
+.status-auto { display:inline-block; font-size:.68rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+.status-auto.alto { background:#fee2e2; color:#991b1b; }
+.status-auto.medio { background:#fef3c7; color:#92400e; }
+.status-auto.bajo { background:#d1fae5; color:#065f46; }
+
+/* 5S */
+.s5-intro { background:linear-gradient(135deg,#f0fdfa,#ecfdf5); border:1px solid #99f6e4; border-radius:var(--radius); padding:18px 20px; margin-bottom:22px; font-size:.88rem; color:#134e4a; }
+.s5-pillars { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-bottom:24px; }
+.s5-pillar { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+.s5-pillar .s5-num { font-family:var(--font-head); font-size:1.5rem; font-weight:800; color:var(--accent); opacity:.35; line-height:1; }
+.s5-pillar h5 { font-family:var(--font-head); font-size:.88rem; font-weight:800; margin:6px 0 8px; }
+.s5-pillar p { font-size:.8rem; color:var(--muted); margin-bottom:8px; }
+.s5-zones td:first-child { font-weight:700; color:var(--accent); width:26%; }
+.s5-zones td { font-size:.8rem; vertical-align:top; }
+
+.step-num.blue { background:var(--accent-light); color:#0f766e; }
+.step-num.green { background:var(--green-bg); color:var(--green); }
+.step-num.orange { background:var(--orange-bg); color:var(--orange); }
+.step-num.purple { background:var(--purple-bg); color:var(--purple); }
+.flow-pre { font-family:ui-monospace,monospace; font-size:.78rem; background:#0f172a; color:#e2e8f0; padding:18px; border-radius:12px; line-height:1.55; overflow-x:auto; white-space:pre; }
+
+.kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:22px; }
+.kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow); }
+.kpi .k-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+.kpi .k-value { font-family:var(--font-head); font-size:1.35rem; font-weight:800; color:var(--accent); margin-top:4px; }
+.kpi .k-hint { font-size:.75rem; color:var(--muted); margin-top:2px; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-top">
+    <div>
+      <div class="brand-tag">SOMOS CUADRO · Pedidos y Logística Inversa</div>
+      <h1>Manual de Proceso — Pedidos &amp; Devoluciones</h1>
+      <p>Gestión y despacho de pedidos (habituales y corporativos) más recepción de devoluciones en Taller: picking, transferencias Odoo, QA y resguardo (SOP-LI-001).</p>
+    </div>
+    <div class="header-meta">
+      <span class="meta-chip">SOP-LI-001</span>
+      <span class="meta-chip">Pedidos + Logística Inversa</span>
+      <span class="meta-chip">Base: SOP Operativo Word</span>
+    </div>
+  </div>
+  <nav class="main-tabs" id="mainTabs">
+    <button class="main-tab active" data-panel="inicio">🏠 Inicio</button>
+    <button class="main-tab" data-panel="pedidos">📤 Pedidos</button>
+    <button class="main-tab" data-panel="corporativos">🏢 Corporativos</button>
+    <button class="main-tab" data-panel="inversa">↩️ Logística Inversa</button>
+    <button class="main-tab" data-panel="roles">👥 Roles</button>
+    <button class="main-tab" data-panel="registros">📊 Registros</button>
+    <button class="main-tab" data-panel="recomendaciones">💡 Recomendaciones</button>
+    <button class="main-tab" data-panel="analisis">⚡ Análisis / Automatización</button>
+    <button class="main-tab" data-panel="cinco-s">📐 Metodología 5S</button>
+  </nav>
+</header>
+
+<main class="container">
+
+  <section class="panel active" id="inicio">
+    <div class="info-box"><span class="ico">ℹ️</span><div>Este manual cubre <strong>Gestión de Pedidos</strong> (recolección, empaque, despacho a tiendas) y <strong>Logística Inversa</strong> (devoluciones desde tienda hacia Taller + entrega a QA). No sustituye el SOP de Producto Terminado de reposición de red.</div></div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="k-label">Picking habitual</div><div class="k-value">09:30 a.m.</div><div class="k-hint">Recolección físico-teórica</div></div>
+      <div class="kpi"><div class="k-label">Despacho final</div><div class="k-value">03:30 p.m.</div><div class="k-hint">NE + checklist de embarque</div></div>
+      <div class="kpi"><div class="k-label">Transferencias / pedido</div><div class="k-value">2 en Odoo</div><div class="k-hint">Manufacturado + Equipamiento</div></div>
+      <div class="kpi"><div class="k-label">Ingreso devoluciones</div><div class="k-value">SKU a SKU</div><div class="k-hint">Módulo Barcode Odoo + QA</div></div>
+    </div>
+
+    <div class="hero-grid">
+      <div class="hero-card blue" onclick="goTo('pedidos','fase-1')">
+        <div class="icon">📋</div><h3>Pedidos habituales</h3><p>Recepción, picking ítem a ítem y dos transferencias teóricas en Odoo (09:30 a.m.).</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card orange" onclick="goTo('corporativos')">
+        <div class="icon">🏢</div><h3>Pedidos corporativos</h3><p>Escaneo interactivo, congelamiento de stock y Zona de Resguardo Provisorio.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('pedidos','fase-4')">
+        <div class="icon">🚚</div><h3>Despacho 15:30</h3><p>Entrega de órdenes empaquetadas, Notas de Entrega y checklist de embarque.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card purple" onclick="goTo('inversa','inv-1')">
+        <div class="icon">↩️</div><h3>Devoluciones</h3><p>Notificación de bultos, descarga en Taller, barcode 1 a 1 y rack QA.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card blue" onclick="goTo('recomendaciones')">
+        <div class="icon">💡</div><h3>Mejoras</h3><p>Checklist digital, aviso automático de bultos y cierre de trazabilidad Odoo.</p><span class="arrow">→</span>
+      </div>
+      <div class="hero-card green" onclick="goTo('cinco-s')">
+        <div class="icon">📐</div><h3>Metodología 5S</h3><p>Separar outbound, corporativo y rack de devoluciones en Equipamiento.</p><span class="arrow">→</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Objetivo del SOP</h2>
+    <p class="section-sub">Texto formal del Manual de Procedimiento Operativo (Word) — módulo Gestión de Pedidos y Logística Inversa.</p>
+    <div class="card"><p style="font-size:.88rem;color:var(--muted)">Estandarizar la recolección físico-teórica de pedidos (habituales y de gran volumen), la entrega interna a empaque, el despacho con Notas de Entrega, y la recepción de devoluciones en Taller con conciliación SKU a SKU en Odoo y entrega formal a Aseguramiento de Calidad para evaluación, reacondicionamiento o disposición final.</p></div>
+
+    <h2 class="section-title">Mapa del proceso — Pedidos (ida)</h2>
+    <p class="section-sub">Flujo de punta a punta — desde solicitud formal hasta checklist de embarque a las 15:30.</p>
+    <div class="process-map">
+      <div class="map-node" onclick="goTo('pedidos','fase-1')"><div class="num">1</div><h4>Picking 09:30</h4><p>Manufacturado + Equipamiento</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('pedidos','fase-2')"><div class="num">2</div><h4>2 transferencias</h4><p>Odoo + docs físicos</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('pedidos','fase-4')"><div class="num">3</div><h4>Despacho 15:30</h4><p>NE + checklist embarque</p></div>
+    </div>
+
+    <h2 class="section-title">Mapa del proceso — Logística inversa (vuelta)</h2>
+    <p class="section-sub">Desde la orden de devolución en tienda hasta el rack de QA en Equipamiento.</p>
+    <div class="process-map">
+      <div class="map-node" onclick="goTo('inversa','inv-1')"><div class="num">1</div><h4>Aviso de bultos</h4><p>Odoo + Taller</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('inversa','inv-3')"><div class="num">2</div><h4>Barcode SKU a SKU</h4><p>Conciliar físico vs teórico</p></div>
+      <div class="map-arrow">→</div>
+      <div class="map-node" onclick="goTo('inversa','inv-4')"><div class="num">3</div><h4>Rack + QA</h4><p>Resguardo Equipamiento</p></div>
+    </div>
+
+    <div class="card">
+      <h4>🎨 Leyenda</h4>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot start"></div> Inicio</div>
+        <div class="legend-item"><div class="legend-dot process"></div> Actividad</div>
+        <div class="legend-item"><div class="legend-dot decision"></div> Decisión</div>
+        <div class="legend-item"><div class="legend-dot end"></div> Fin</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>📄 Flujo documental (SOP Word)</h4>
+      <div class="flow-pre">[Pedido formalizado — Área correspondiente]
+           │
+           ▼
+[Picking 09:30 · Manufacturado + Equipamiento]  →  [2 transferencias Odoo]
+           │
+           ▼
+[Entrega a estación de empaque + docs ↔ nº transferencia]
+           │
+           ├── Pedido habitual ──────────────────────────────┐
+           └── Pedido corporativo / gran volumen             │
+                  │                                          │
+                  ▼                                          │
+           [Escaneo + congelar stock]                        │
+                  │                                          │
+                  ▼                                          │
+           [Zona Resguardo Provisorio]                       │
+                  │                                          │
+                  ▼                                          │
+           [Auditoría etiquetas oficiales al cargar]         │
+                                                             ▼
+                              [Procesamiento entrega 15:30 + NE]
+                                             │
+                                             ▼
+                              [Checklist embarque · Logística]
+                                             │
+                                             ▼
+                              [Destino: tiendas]
+
+[Devolución — Líder Regional / Tienda genera TO en Odoo]
+           │
+           ▼
+[Aviso de bultos al Taller] → [Preparar capacidad]
+           │
+           ▼
+[Descarga + inspección visual de empaque]
+           │
+           ▼
+[Aviso a QA] → [Barcode Odoo · SKU a SKU]
+           │
+           ├── Discrepancia → investigación inmediata
+           │
+           ▼
+[Rack de Devoluciones · Almacén Equipamiento] → [QA: calidad / reacondicionamiento / disposición]</div>
+    </div>
+
+    <div class="card">
+      <h4>🔧 Sistemas</h4>
+      <div class="systems">
+        <div class="system-pill"><strong>Odoo — Transferencias</strong><span>2 movimientos teóricos por pedido (Manufacturado y Equipamiento)</span></div>
+        <div class="system-pill"><strong>Odoo — Barcode</strong><span>Ingreso de devoluciones SKU a SKU contra la TO</span></div>
+        <div class="system-pill"><strong>Lista de empaque / hoja de pedido</strong><span>Cotejo físico ítem por ítem en picking habitual</span></div>
+        <div class="system-pill"><strong>Notas de Entrega</strong><span>Documento oficial de despacho 15:30 hacia tiendas</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="pedidos">
+    <h2 class="section-title">Gestión y despacho de pedidos</h2>
+    <p class="section-sub">Sección 1 del SOP Word — Fases 1.1 a 1.4 (la 1.3 corporativa también está expandida en su propia pestaña).</p>
+    <div class="sub-tabs" id="pedidosSubTabs">
+      <button class="sub-tab active" data-sub="fase-1">1.1 · Recolección 09:30</button>
+      <button class="sub-tab" data-sub="fase-2">1.2 · Entrega a empaque</button>
+      <button class="sub-tab" data-sub="fase-3">1.3 · Corporativos</button>
+      <button class="sub-tab" data-sub="fase-4">1.4 · Despacho 15:30</button>
+    </div>
+
+    <div class="sub-panel active" id="fase-1">
+      <div class="card"><h4>1.1 Recolección físico-teórica de pedidos habituales</h4>
+        <div class="info-box"><span class="ico">🕘</span><div><strong>Horario de ejecución: 09:30 a. m.</strong> — arranque estándar del picking habitual.</div></div>
+        <div class="steps">
+          <div class="step"><div class="step-num green">1</div><div class="step-body"><h5>Recepción de solicitudes</h5><p>Se reciben las órdenes/pedidos formalizados por el área correspondiente.</p><span class="badge pedidos">Área de pedidos</span></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Picking (recolección física)</h5><p>Recorrido en ubicaciones de <strong>Manufacturado</strong> y <strong>Equipamiento</strong>, cotejando ítem por ítem con la lista de empaque / hoja de pedido.</p><span class="badge operador">Almacén / picking</span></div></div>
+          <div class="step"><div class="step-num purple">3</div><div class="step-body"><h5>Generación de movimientos teóricos</h5><p>Al concluir el picking se registran las transferencias internas en <strong>Odoo</strong>. Estándar: <strong>dos (2) transferencias teóricas por solicitud</strong> — una por cada almacén implicado.</p><span class="badge supervisor">Logística / Taller</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-2">
+      <div class="card"><h4>1.2 Entrega interna del material recolectado</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Traspaso físico a empaque</h5><p>La mercancía se entrega al personal asignado en la estación de empaque/procesamiento.</p><span class="badge empaque">Empaque / Procesamiento</span></div></div>
+          <div class="step"><div class="step-num orange">2</div><div class="step-body"><h5>Asociación documentos ↔ Odoo</h5><p>Se indica de forma expresa la asociación formal de los documentos físicos con los <strong>dos números de transferencia</strong> generados en Odoo, para su posterior validación.</p><span class="badge supervisor">Logística / Taller</span><span class="badge empaque">Empaque</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-3">
+      <div class="card"><h4>1.3 Procedimiento especial — Pedidos corporativos / gran volumen</h4>
+        <div class="info-box warn"><span class="ico">⚠️</span><div><strong>Objetivo:</strong> control rigoroso de stock, segregación oportuna del inventario y trazabilidad en pedidos de gran escala. Detalle operativo completo en la pestaña <strong>Corporativos</strong>.</div></div>
+        <div class="steps">
+          <div class="step"><div class="step-num purple">1</div><div class="step-body"><h5>Recepción del requerimiento</h5><p>Orden consolidada emitida por la supervisión del área de pedidos.</p><span class="badge pedidos">Supervisión de pedidos</span></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Recolección y transferencia interactiva</h5><p>Auditoría y entrega por familias de SKU, con registro simultáneo en Odoo para <strong>congelar</strong> disponibilidad teórica y física.</p><span class="badge pedidos">Pedidos</span><span class="badge supervisor">Logística</span></div></div>
+          <div class="step"><div class="step-num orange">3</div><div class="step-body"><h5>Zona de Resguardo Provisorio</h5><p>Tras embalaje, sellado e identificación, las unidades van a la zona corporativa temporal.</p><span class="badge pedidos">Supervisión de pedidos</span></div></div>
+          <div class="step"><div class="step-num green">4</div><div class="step-body"><h5>Auditoría previa a la carga</h5><p>Solo etiquetas oficiales del pedido; retirar cualquier rotulación previa.</p><span class="badge logistica">Personal logístico</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="fase-4">
+      <div class="card"><h4>1.4 Consolidación y despacho final de pedidos</h4>
+        <div class="info-box"><span class="ico">🕒</span><div><strong>Horario de ejecución: 03:30 p. m.</strong> — cierre diario de órdenes empaquetadas.</div></div>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Entrega formal de órdenes</h5><p>El equipo de procesamiento entrega la totalidad de las órdenes empaquetadas junto con sus <strong>Notas de Entrega</strong> con destino a tiendas.</p><span class="badge empaque">Procesamiento</span></div></div>
+          <div class="step"><div class="step-num green">2</div><div class="step-body"><h5>Checklist de embarque</h5><p>Logística ejecuta el checklist, asegura la salida y la entrega de la mercancía hacia sus destinos finales.</p><span class="badge logistica">Logística</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="corporativos">
+    <h2 class="section-title">Pedidos corporativos / gran volumen</h2>
+    <p class="section-sub">Procedimiento especial 1.3 — no usa el mismo ritmo 09:30 → 15:30 del pedido habitual; prioriza congelar stock en tiempo real.</p>
+
+    <div class="card">
+      <h4>¿Qué cambia vs pedido habitual?</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Aspecto</th><th>Pedido habitual</th><th>Corporativo / gran volumen</th></tr></thead>
+        <tbody>
+          <tr><td>Origen</td><td>Órdenes formalizadas del área correspondiente</td><td>Orden consolidada de supervisión de pedidos</td></tr>
+          <tr><td>Picking</td><td>Ítem a ítem vs lista de empaque, luego 2 TO en Odoo</td><td>Por familias de SKU, con escaneo/validación interactiva</td></tr>
+          <tr><td>Odoo</td><td>Transferencias al concluir la recolección física</td><td>Registro simultáneo para congelar stock teórico y físico</td></tr>
+          <tr><td>Ubicación intermedia</td><td>Estación de empaque/procesamiento</td><td>Zona de Resguardo Provisorio de Pedidos Corporativos</td></tr>
+          <tr><td>Control al cargar</td><td>Checklist de embarque 15:30 + NE</td><td>Auditoría de cajas: solo etiquetas oficiales del pedido</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card"><h4>Secuencia operativa</h4>
+      <div class="steps">
+        <div class="step"><div class="step-num purple">1</div><div class="step-body"><h5>Recepción del requerimiento</h5><p>Se recibe la orden consolidada por la supervisión del área de pedidos.</p><span class="badge pedidos">Supervisión de pedidos</span></div></div>
+        <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Recolección y transferencia interactiva</h5><p>En coordinación directa con supervisión de pedidos se audita y entrega la mercancía <strong>agrupada por familias de SKU</strong>.</p><span class="badge pedidos">Pedidos</span><span class="badge supervisor">Logística</span></div></div>
+        <div class="step"><div class="step-num orange">3</div><div class="step-body"><h5>Congelar inventario en tiempo real</h5><p>Simultáneamente se registra la salida/movimiento en Odoo para congelar la disponibilidad teórica y física y evitar discrepancias de stock.</p><span class="badge supervisor">Odoo · Logística</span></div></div>
+        <div class="step"><div class="step-num green">4</div><div class="step-body"><h5>Segregación y ubicación temporal</h5><p>Tras el embalaje, sellado e identificación por supervisión de pedidos, las unidades se trasladan a la <strong>Zona de Resguardo Provisorio de Pedidos Corporativos</strong>.</p><span class="badge pedidos">Supervisión de pedidos</span></div></div>
+        <div class="step"><div class="step-num purple">5</div><div class="step-body"><h5>Auditoría previa a la carga</h5><p>Durante la consolidación y carga en el vehículo, el personal logístico audita el estado exterior de las cajas y verifica que contengan <strong>únicamente las etiquetas oficiales del pedido</strong>, retirando cualquier otro identificador o rotulación previa.</p><span class="badge logistica">Personal logístico</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="inversa">
+    <h2 class="section-title">Logística inversa — recepción de devoluciones</h2>
+    <p class="section-sub">Sección 2 del SOP Word — Fases 2.1 a 2.4. Objetivo de ingreso: eliminar al 100% el margen de error operativo.</p>
+    <div class="sub-tabs" id="inversaSubTabs">
+      <button class="sub-tab active" data-sub="inv-1">2.1 · Notificación</button>
+      <button class="sub-tab" data-sub="inv-2">2.2 · Descarga</button>
+      <button class="sub-tab" data-sub="inv-3">2.3 · Barcode + QA</button>
+      <button class="sub-tab" data-sub="inv-4">2.4 · Rack y entrega QA</button>
+    </div>
+
+    <div class="sub-panel active" id="inv-1">
+      <div class="card"><h4>2.1 Notificación previa y planificación de capacidad</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num green">1</div><div class="step-body"><h5>Orden de transferencia por devolución</h5><p>Los Líderes Regionales / de Tienda generan la orden de transferencia por devolución en <strong>Odoo</strong>.</p><span class="badge tienda">Líder Regional / Tienda</span></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Aviso de bultos en tránsito</h5><p>Se notifica al almacén central (<strong>Taller</strong>) el número total de bultos/cajas en tránsito.</p><span class="badge tienda">Tienda</span><span class="badge supervisor">Taller</span></div></div>
+          <div class="step"><div class="step-num orange">3</div><div class="step-body"><h5>Preparar capacidad</h5><p>El equipo logístico prepara el espacio operativo y los recursos necesarios para procesar la carga entrante.</p><span class="badge logistica">Equipo logístico</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="inv-2">
+      <div class="card"><h4>2.2 Recepción física y descarga de mercancía</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Descarga en Taller</h5><p>Al arribo de la unidad de transporte a las instalaciones del taller se realiza la maniobra de descarga de los bultos/cajas de devolución.</p><span class="badge logistica">Logística / Taller</span></div></div>
+          <div class="step"><div class="step-num orange">2</div><div class="step-body"><h5>Inspección visual preliminar</h5><p>Verificación del estado externo de los empaques de transporte (daños, sellos, humedad) antes del ingreso teórico.</p><span class="badge operador">Recepción</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="inv-3">
+      <div class="card"><h4>2.3 Ingreso teórico y control de calidad (QA)</h4>
+        <div class="info-box"><span class="ico">🎯</span><div><strong>Objetivo:</strong> eliminar al 100% el margen de error operativo y conciliar el stock físico contra el inventario teórico.</div></div>
+        <div class="steps">
+          <div class="step"><div class="step-num purple">1</div><div class="step-body"><h5>Aviso de inicio a QA</h5><p>Se notifica al equipo de Aseguramiento de Calidad el inicio de la recepción.</p><span class="badge qa">QA</span><span class="badge supervisor">Taller</span></div></div>
+          <div class="step"><div class="step-num blue">2</div><div class="step-body"><h5>Abrir transferencia en Barcode</h5><p>Ingresar al módulo <strong>Barcode / Código de Barras</strong> de Odoo y ubicar el número de transferencia asociado.</p><span class="badge supervisor">Operador Odoo</span></div></div>
+          <div class="step"><div class="step-num green">3</div><div class="step-body"><h5>Escaneo SKU por SKU</h5><p>Confirmar el ingreso ítem por ítem. No se valida por bulto ni por conteo ciego de cajas.</p><span class="badge operador">Escaneo</span></div></div>
+          <div class="step"><div class="step-num orange">!</div><div class="step-body"><h5>Discrepancia = parar e investigar</h5><p>Cualquier diferencia entre lo escaneado y lo declarado en la orden inicial se reporta <strong>inmediatamente</strong> para investigación.</p><span class="badge qa">QA / Investigación</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub-panel" id="inv-4">
+      <div class="card"><h4>2.4 Almacenamiento temporal y entrega a Aseguramiento de Calidad</h4>
+        <div class="steps">
+          <div class="step"><div class="step-num blue">1</div><div class="step-body"><h5>Traslado a rack de devoluciones</h5><p>Finalizada la validación física y teórica, los bultos/productos se trasladan a la <strong>Ubicación de Resguardo / Rack de Devoluciones</strong> en el Almacén de Equipamiento.</p><span class="badge operador">Almacén Equipamiento</span></div></div>
+          <div class="step"><div class="step-num purple">2</div><div class="step-body"><h5>Notificación formal a QA</h5><p>Se informa la disponibilidad física del lote para evaluación de calidad, reacondicionamiento o disposición final.</p><span class="badge qa">QA</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="roles">
+    <h2 class="section-title">Roles y responsabilidades</h2>
+    <p class="section-sub">Matriz SOP — ejecución directa vs interfaz entre Pedidos, Logística, Empaque, Tienda y QA.</p>
+    <div class="roles-grid">
+      <div class="role-card"><div class="rel">Origen de demanda</div><h5>Área / Supervisión de Pedidos</h5><ul>
+        <li>Formaliza órdenes habituales</li>
+        <li>Emite orden consolidada corporativa</li>
+        <li>Coordina auditoría por familias de SKU</li>
+        <li>Embala, sella e identifica corporativos</li>
+      </ul></div>
+      <div class="role-card"><div class="rel">Ejecución de piso</div><h5>Logística / Taller</h5><ul>
+        <li>Picking 09:30 en ambos almacenes</li>
+        <li>Genera las 2 transferencias Odoo</li>
+        <li>Asocia documentos físicos a n.º TO</li>
+        <li>Checklist de embarque 15:30</li>
+        <li>Prepara capacidad de devoluciones</li>
+        <li>Descarga e ingreso Barcode SKU a SKU</li>
+      </ul></div>
+      <div class="role-card"><div class="rel">Estación intermedia</div><h5>Empaque / Procesamiento</h5><ul>
+        <li>Recibe mercancía recolectada</li>
+        <li>Valida docs vs 2 transferencias</li>
+        <li>Entrega órdenes empaquetadas + NE a las 15:30</li>
+      </ul></div>
+      <div class="role-card"><div class="rel">Red de tiendas</div><h5>Líder Regional / de Tienda</h5><ul>
+        <li>Crea TO de devolución en Odoo</li>
+        <li>Notifica bultos/cajas en tránsito al Taller</li>
+        <li>Recibe destinos de pedidos despachados</li>
+      </ul></div>
+      <div class="role-card"><div class="rel">Calidad</div><h5>Aseguramiento de Calidad (QA)</h5><ul>
+        <li>Recibe aviso de inicio de recepción</li>
+        <li>Investiga discrepancias de escaneo</li>
+        <li>Evalúa lote en rack: calidad, reacondicionamiento o disposición</li>
+      </ul></div>
+      <div class="role-card"><div class="rel">Inventario</div><h5>Almacenes Manufacturado y Equipamiento</h5><ul>
+        <li>Ubicaciones de picking de ida</li>
+        <li>Rack de Devoluciones (Equipamiento)</li>
+        <li>Zona de Resguardo Provisorio corporativo</li>
+      </ul></div>
+    </div>
+    <div class="card"><h4>Matriz de atribuciones (resumen Word)</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Área</th><th>Pedidos</th><th>Logística / Taller</th><th>Empaque</th><th>Tienda</th><th>QA</th></tr></thead>
+        <tbody>
+          <tr><td>Pedido habitual</td><td>Formaliza orden</td><td>Picking + 2 TO Odoo</td><td>Recibe y empaca</td><td>Destino final</td><td>—</td></tr>
+          <tr><td>Corporativo</td><td>Orden consolidada, sella e identifica</td><td>Escaneo + congela stock + auditoría de etiquetas</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>Despacho 15:30</td><td>—</td><td>Checklist de embarque</td><td>Entrega órdenes + NE</td><td>Recepción en destino</td><td>—</td></tr>
+          <tr><td>Devolución</td><td>—</td><td>Capacidad, descarga, barcode 1 a 1</td><td>—</td><td>Crea TO + avisa bultos</td><td>Inicio + evaluación lote</td></tr>
+          <tr><td>Discrepancias</td><td>—</td><td>Reporta inmediato</td><td>—</td><td>Soporta investigación</td><td>Investiga</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="registros">
+    <h2 class="section-title">Registros y soportes</h2>
+    <p class="section-sub">Documentación del flujo de pedidos e inversa según SOP.</p>
+    <div class="table-wrap card" style="padding:0;overflow:hidden"><table>
+      <thead><tr><th>Registro</th><th>Uso</th><th>Responsable</th></tr></thead>
+      <tbody>
+        <tr><td>Orden / pedido formalizado</td><td>Disparo del picking habitual 09:30</td><td>Área correspondiente / Pedidos</td></tr>
+        <tr><td>Lista de empaque / hoja de pedido</td><td>Cotejo ítem a ítem en piso</td><td>Picking · Logística</td></tr>
+        <tr><td>2 transferencias internas Odoo</td><td>Movimiento teórico Manufacturado + Equipamiento</td><td>Logística / Taller</td></tr>
+        <tr><td>Documentos físicos asociados a n.º TO</td><td>Validación posterior empaque vs sistema</td><td>Logística + Empaque</td></tr>
+        <tr><td>Orden consolidada corporativa</td><td>Pedido de gran volumen</td><td>Supervisión de pedidos</td></tr>
+        <tr><td>Etiquetas oficiales del pedido</td><td>Única rotulación permitida al cargar corporativo</td><td>Pedidos identifica · Logística audita</td></tr>
+        <tr><td>Notas de Entrega</td><td>Despacho 15:30 con destino a tiendas</td><td>Procesamiento entrega · Logística embarca</td></tr>
+        <tr><td>Checklist de embarque</td><td>Salida y entrega a destinos finales</td><td>Logística</td></tr>
+        <tr><td>TO de devolución Odoo</td><td>Orden de retorno desde tienda</td><td>Líder Regional / Tienda</td></tr>
+        <tr><td>Aviso de bultos/cajas en tránsito</td><td>Planificar capacidad en Taller</td><td>Tienda → Taller</td></tr>
+        <tr><td>Escaneo Barcode (ítem a ítem)</td><td>Conciliación físico vs teórico</td><td>Taller · reporta discrepancias a QA</td></tr>
+        <tr><td>Notificación formal a QA</td><td>Lote listo en rack de devoluciones</td><td>Logística → QA</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" id="recomendaciones">
+    <h2 class="section-title">Recomendaciones de mejora</h2>
+    <p class="section-sub">Alineadas al SOP Word: lo que ya es obligatorio vs lo que cierra huecos de trazabilidad.</p>
+    <div class="rec-grid">
+      <div class="rec-card priority-high"><div class="rec-tag">Prioridad operativa</div><h5>Congelar stock corporativo en el mismo acto del escaneo</h5><p>El SOP ya lo exige: no separar picking físico y movimiento Odoo en gran volumen. Evita vender o reasignar unidades ya comprometidas.</p></div>
+      <div class="rec-card priority-high"><div class="rec-tag">Prioridad operativa</div><h5>Devoluciones solo SKU a SKU en Barcode</h5><p>Cero validación por bulto. Toda diferencia vs la TO se investiga al momento, no al cierre de día.</p></div>
+      <div class="rec-card priority-med"><div class="rec-tag">Trazabilidad</div><h5>Vincular docs físicos a los 2 n.º de transferencia</h5><p>Impreso o QR en la hoja de pedido con ambos IDs de Odoo antes de soltar la mercancía a empaque.</p></div>
+      <div class="rec-card priority-med"><div class="rec-tag">Planificado / digital</div><h5>Checklist de embarque 15:30 en formato digital</h5><p>Pasar el checklist de papel a un registro fechado (NE, cantidad de bultos, destino, responsable).</p></div>
+      <div class="rec-card priority-med"><div class="rec-tag">Capacidad</div><h5>Aviso automático de bultos en tránsito</h5><p>Al confirmar la TO de devolución, notificar al Taller el conteo de cajas para preparar rack y turno QA.</p></div>
+      <div class="rec-card priority-low"><div class="rec-tag">Mediano plazo</div><h5>Tablets en picking habitual</h5><p>Sustituir la lista de empaque impresa por confirmación en Odoo, igual que el flujo corporativo interactivo.</p></div>
+    </div>
+  </section>
+
+  <section class="panel" id="analisis">
+    <h2 class="section-title">Análisis y automatización</h2>
+    <p class="section-sub">Enfoque Pedidos + Logística Inversa — dónde el SOP ya es digital y dónde sigue siendo manual.</p>
+    <div class="card"><h4>Estado deseado vs actual</h4>
+      <div class="table-wrap"><table class="analysis-table">
+        <thead><tr><th>Etapa</th><th>Hoy (SOP)</th><th>Objetivo</th><th>Impacto</th></tr></thead>
+        <tbody>
+          <tr><td>Picking habitual</td><td>Lista de empaque + 2 TO al final</td><td>Confirmación en dispositivo / Odoo</td><td><span class="status-auto alto">Alto</span></td></tr>
+          <tr><td>Transferencias</td><td>2 por solicitud, carga manual</td><td>Generación automática por almacén</td><td><span class="status-auto medio">Medio</span></td></tr>
+          <tr><td>Corporativos</td><td>Escaneo interactivo + congelar stock</td><td>Mantener; bloquear reserva si falta TO</td><td><span class="status-auto bajo">Bajo</span></td></tr>
+          <tr><td>Despacho 15:30</td><td>NE + checklist físico</td><td>Checklist digital con foto de carga</td><td><span class="status-auto medio">Medio</span></td></tr>
+          <tr><td>Aviso de bultos</td><td>Notificación a Taller</td><td>Campo obligatorio en TO de devolución</td><td><span class="status-auto medio">Medio</span></td></tr>
+          <tr><td>Ingreso devoluciones</td><td>Barcode SKU a SKU</td><td>Mantener; alerta automática de delta</td><td><span class="status-auto alto">Alto</span></td></tr>
+          <tr><td>Handoff a QA</td><td>Notificación formal</td><td>Estado de lote en Odoo (pendiente QA)</td><td><span class="status-auto medio">Medio</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="panel" id="cinco-s">
+    <h2 class="section-title">Metodología 5S — Pedidos e Inversa</h2>
+    <p class="section-sub">Tres corrientes físicas que no se mezclan: outbound habitual, resguardo corporativo y rack de devoluciones.</p>
+    <div class="s5-intro"><strong>Doble capa:</strong> cada S aplica en <strong>PISO (Taller / Equipamiento)</strong> y en <strong>ODOO</strong> (dos transferencias por pedido, TO de devolución, Barcode, estados QA).</div>
+    <div class="s5-pillars">
+      <div class="s5-pillar"><div class="s5-num">1S</div><h5>Clasificar</h5><p>Separar pedido habitual, corporativo en resguardo y devoluciones pendientes de QA. Nada de mezclar bultos de ida con bultos de vuelta.</p></div>
+      <div class="s5-pillar"><div class="s5-num">2S</div><h5>Ordenar</h5><p>Estación de empaque con docs atados a los 2 n.º TO. Zona de Resguardo Provisorio señalizada. Rack de Devoluciones solo en Equipamiento.</p></div>
+      <div class="s5-pillar"><div class="s5-num">3S</div><h5>Limpiar</h5><p>Al cargar corporativos: retirar rotulación previa. En recepción inversa: apartar empaques dañados antes del barcode.</p></div>
+      <div class="s5-pillar"><div class="s5-num">4S</div><h5>Estandarizar</h5><p>09:30 picking / 15:30 despacho. Siempre 2 transferencias. Devoluciones siempre SKU a SKU. Solo etiquetas oficiales en carga corporativa.</p></div>
+      <div class="s5-pillar"><div class="s5-num">5S</div><h5>Sostener</h5><p>Checklist de embarque diario y notificación formal a QA por cada lote recibido. Auditar discrepancias el mismo día.</p></div>
+    </div>
+    <div class="card"><h4>Mapa zona física ↔ Odoo</h4>
+      <div class="table-wrap"><table class="s5-zones">
+        <thead><tr><th>Zona física</th><th>Contenido</th><th>Odoo</th></tr></thead>
+        <tbody>
+          <tr><td>Almacén Manufacturado</td><td>Picking de pedidos (ida)</td><td>1ª transferencia teórica por solicitud</td></tr>
+          <tr><td>Almacén Equipamiento</td><td>Picking de pedidos (ida)</td><td>2ª transferencia teórica por solicitud</td></tr>
+          <tr><td>Estación de empaque</td><td>Mercancía + documentos físicos</td><td>Validación vs ambos n.º de TO</td></tr>
+          <tr><td>Zona Resguardo Provisorio</td><td>Pedidos corporativos sellados</td><td>Stock congelado / salida registrada</td></tr>
+          <tr><td>Muelle / embarque 15:30</td><td>Órdenes + NE a tiendas</td><td>Checklist de embarque</td></tr>
+          <tr><td>Rack de Devoluciones (Equipamiento)</td><td>Lote ya escaneado, pendiente QA</td><td>TO de devolución confirmada · aviso QA</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <div class="footer">Somos Cuadro · SOP-LI-001 · Gestión de Pedidos y Logística Inversa · Manual interactivo</div>
+</main>
+
+<script>
+document.querySelectorAll('.main-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
+function setupSubTabs(id) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  container.querySelectorAll('.sub-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const parentPanel = container.closest('.panel');
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      parentPanel.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.sub).classList.add('active');
+    });
+  });
+}
+setupSubTabs('pedidosSubTabs');
+setupSubTabs('inversaSubTabs');
+
+function goTo(panel, sub) {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const tabBtn = document.querySelector(`[data-panel="${panel}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
+  const panelEl = document.getElementById(panel);
+  if (panelEl) panelEl.classList.add('active');
+  if (sub && panelEl) {
+    const container = panelEl.querySelector('.sub-tabs');
+    if (container) {
+      container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      panelEl.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+      const targetTab = container.querySelector(`[data-sub="${sub}"]`);
+      const targetPanel = document.getElementById(sub);
+      if (targetTab) targetTab.classList.add('active');
+      if (targetPanel) targetPanel.classList.add('active');
+    }
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
