@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Tracking Producción</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+:root{
+  --bg:#eef2ef;
+  --bg2:#e4ebe6;
+  --paper:#fbfcfb;
+  --ink:#1c2421;
+  --muted:#5f6d66;
+  --line:#c9d4cd;
+  --teal:#0f6b5c;
+  --teal-soft:#d7eee8;
+  --amber:#b86a1a;
+  --amber-soft:#f7e6d0;
+  --rose:#a33b45;
+  --rose-soft:#f4d9dc;
+  --ok:#2f6b45;
+  --ok-soft:#d9eadf;
+  --fh:'Bricolage Grotesque',sans-serif;
+  --fb:'Figtree',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
+html{height:100%}
+body{
+  font-family:var(--fb);
+  color:var(--ink);
+  background:
+    radial-gradient(900px 420px at 8% -8%, #d9ebe4 0%, transparent 55%),
+    radial-gradient(700px 360px at 100% 0%, #e8e3d4 0%, transparent 50%),
+    var(--bg);
+  min-height:100%;
+}
+body::before{
+  content:"";
+  position:fixed;inset:0;pointer-events:none;opacity:.28;z-index:0;
+  background-image:repeating-linear-gradient(-18deg, transparent 0 11px, rgba(15,107,92,.035) 11px 12px);
+}
+.wrap{
+  position:relative;z-index:1;
+  width:100%;max-width:1400px;margin:0 auto;
+  padding:12px 14px 14px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.brand{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  flex:0 0 auto;
+}
+.brand h1{
+  font-family:var(--fh);font-weight:800;font-size:clamp(1.45rem,2.4vw,1.9rem);
+  letter-spacing:-.04em;line-height:1;color:var(--ink);
+}
+.brand h1 span{color:var(--teal);margin-left:.28em}
+.brand p{color:var(--muted);font-size:.78rem;margin-top:2px}
+.brand-actions{display:flex;gap:8px;align-items:center}
+.btn{
+  border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  font-family:var(--fb);font-weight:600;font-size:.8rem;
+  padding:7px 12px;border-radius:8px;cursor:pointer;
+}
+.btn:hover{border-color:var(--teal)}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+
+.kpis{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
+  flex:0 0 auto;
+}
+.kpi{
+  background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  min-width:0;
+}
+.kpi .l{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+.kpi .v{font-family:var(--fh);font-size:clamp(1.2rem,2vw,1.55rem);font-weight:800;letter-spacing:-.03em;margin-top:2px;line-height:1}
+.kpi .s{font-size:.7rem;color:var(--muted);margin-top:3px}
+.kpi.warn .v{color:var(--rose)}
+.kpi.ok .v{color:var(--ok)}
+.kpi.teal .v{color:var(--teal)}
+
+.panel{
+  background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+  min-width:0;width:100%;
+}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:6px 8px;align-items:end}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field.grow{min-width:0}
+.filters > .btn{align-self:end;white-space:nowrap}
+.field label{font-size:.6rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.field select,.field input{
+  width:100%;max-width:100%;border:1px solid var(--line);background:#fff;color:var(--ink);
+  border-radius:8px;padding:6px 8px;font:500 .78rem var(--fb);outline:none;
+}
+.field select:focus,.field input:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(15,107,92,.12)}
+
+.charts{
+  display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:10px;
+}
+.chart-card h3{font-family:var(--fh);font-size:.92rem;font-weight:800;letter-spacing:-.02em}
+.chart-card .sub{font-size:.7rem;color:var(--muted);margin:1px 0 6px}
+.cw{position:relative;height:220px;width:100%;max-width:100%}
+
+.tabs{
+  display:flex;gap:6px;flex:0 0 auto;
+}
+.tab{
+  border:1px solid var(--line);background:var(--paper);color:var(--muted);
+  font-family:var(--fb);font-weight:700;font-size:.8rem;
+  padding:7px 14px;border-radius:999px;cursor:pointer;
+}
+.tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.tab-panel{display:none;width:100%;min-width:0}
+.tab-panel.active{display:block}
+
+.table-wrap{
+  overflow:auto;max-height:380px;width:100%;max-width:100%;
+  border:1px solid var(--line);border-radius:10px;
+}
+.section-title{
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;
+}
+.section-title h2{font-family:var(--fh);font-size:.98rem;font-weight:800;letter-spacing:-.02em}
+.section-title span{font-size:.72rem;color:var(--muted)}
+
+.cal-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:10px;
+  width:100%;
+}
+.cal-day{
+  border:1px solid var(--line);border-radius:12px;padding:12px;
+  background:#fff;min-width:0;
+}
+.cal-day h3{font-family:var(--fh);font-size:1rem;font-weight:800;margin-bottom:2px}
+.cal-day .sum{font-size:.72rem;color:var(--muted);margin-bottom:8px}
+.cal-day ul{list-style:none;display:flex;flex-direction:column;gap:4px;max-height:280px;overflow:auto}
+.cal-day li{font-size:.74rem;line-height:1.25;color:var(--ink);padding:4px 0;border-bottom:1px solid #eef2ef}
+.cal-day li:last-child{border-bottom:none}
+.cal-day .name{font-weight:700}
+.cal-day .meta{color:var(--muted);font-size:.68rem;margin-top:1px}
+
+table{width:100%;border-collapse:collapse;font-size:.75rem;table-layout:auto}
+th{
+  position:sticky;top:0;background:#f3f7f4;color:var(--muted);text-align:left;
+  font-size:.58rem;letter-spacing:.04em;text-transform:uppercase;font-weight:700;
+  padding:7px 8px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;z-index:2;
+}
+td{
+  padding:6px 8px;border-bottom:1px solid #e6ece8;vertical-align:middle;
+  white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;
+}
+tr:hover td{background:#f5faf7}
+.num{font-variant-numeric:tabular-nums;font-weight:700;font-family:var(--fh)}
+.falt{color:var(--rose)}
+.done{color:var(--ok)}
+.chip{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:6px;
+  font-size:.66rem;font-weight:700;background:var(--teal-soft);color:var(--teal);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;
+}
+.chip.eq{background:var(--amber-soft);color:var(--amber)}
+.chip.wait{background:var(--amber-soft);color:var(--amber)}
+.chip.conf{background:var(--teal-soft);color:var(--teal)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.prog{background:var(--rose-soft);color:var(--rose)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.12);flex-shrink:0}
+.bar{height:6px;background:#e6ece8;border-radius:99px;overflow:hidden;min-width:48px;max-width:72px}
+.bar > i{display:block;height:100%;background:var(--teal);border-radius:99px}
+
+.empty{text-align:center;color:var(--muted);padding:16px 8px;font-size:.8rem}
+.toast{
+  position:fixed;right:14px;bottom:14px;background:var(--ink);color:#fff;
+  padding:8px 12px;border-radius:8px;font-size:.78rem;display:none;z-index:20;
+}
+.loading{padding:40px 16px;text-align:center;color:var(--muted);font-size:.95rem}
+
+@media(max-width:1100px){
+  .filters{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+}
+@media(max-width:900px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .charts,.cal-grid{grid-template-columns:minmax(0,1fr)}
+  .table-wrap{max-height:300px}
+}
+@media(max-width:560px){
+  .kpis{grid-template-columns:minmax(0,1fr)}
+  .filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .brand h1 span{display:block;margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="loading" id="boot">Cargando pedidos…</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>window.EMBEDDED_DATA = {"generatedAt": "2026-08-24T12:00:00", "startDate": "2026-08-24", "workdays": [1, 2, 3, 4, 5], "lineCaps": {"1": 130.0, "2": 130.0, "3": 130.0, "Estampado": 130.0}, "lineLoad": {"1": 323.0, "2": 323.0, "3": 1412.0}, "sheetName": "Por Hacer - Especial", "rows": [{"row": 3, "mo": "01845", "tipo": "Produccion", "sku": "MARMICA13TS", "producto": "MAR", "genero": "CAB", "color": "Azul Rey", "talla": "S", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "En Progreso", "cliente": "Changan", "concatenado": "MARMICA13TS51", "lineaAsignada": "1", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 4, "mo": "01847", "tipo": "Produccion", "sku": "MARMICA13TM", "producto": "MAR", "genero": "CAB", "color": "Azul Rey", "talla": "M", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "En Progreso", "cliente": "Changan", "concatenado": "MARMICA13TM51", "lineaAsignada": "2", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 5, "mo": "01848", "tipo": "Produccion", "sku": "MARMIDA13TM", "producto": "MAR", "genero": "DAMA", "color": "Azul Rey", "talla": "M", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA13TM40", "lineaAsignada": "1", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 6, "mo": "01849", "tipo": "Produccion", "sku": "MARMICA13TL", "producto": "MAR", "genero": "CAB", "color": "Azul Rey", "talla": "L", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA13TL51", "lineaAsignada": "2", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 7, "mo": "01850", "tipo": "Produccion", "sku": "MARMIDA13TL", "producto": "MAR", "genero": "DAMA", "color": "Azul Rey", "talla": "L", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA13TL40", "lineaAsignada": "1", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 8, "mo": "01851", "tipo": "Produccion", "sku": "MARMICA13TXL", "producto": "MAR", "genero": "CAB", "color": "Azul Rey", "talla": "XL", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA13TXL51", "lineaAsignada": "2", "diaInicioCola": 0, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 9, "mo": "01852", "tipo": "Produccion", "sku": "MARMIDA13TXL", "producto": "MAR", "genero": "DAMA", "color": "Azul Rey", "talla": "XL", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA13TXL40", "lineaAsignada": "1", "diaInicioCola": 0, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 10, "mo": "01853", "tipo": "Produccion", "sku": "MARMICA16TS", "producto": "MAR", "genero": "CAB", "color": "Blanco", "talla": "S", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA16TS51", "lineaAsignada": "1", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 11, "mo": "01854", "tipo": "Produccion", "sku": "MARMIDA16TS", "producto": "MAR", "genero": "DAMA", "color": "Blanco", "talla": "S", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA16TS40", "lineaAsignada": "2", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 12, "mo": "01855", "tipo": "Produccion", "sku": "MARMICA16TM", "producto": "MAR", "genero": "CAB", "color": "Blanco", "talla": "M", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA16TM51", "lineaAsignada": "2", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 13, "mo": "01856", "tipo": "Produccion", "sku": "MARMIDA16TM", "producto": "MAR", "genero": "DAMA", "color": "Blanco", "talla": "M", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA16TM40", "lineaAsignada": "1", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 14, "mo": "01857", "tipo": "Produccion", "sku": "MARMICA16TL", "producto": "MAR", "genero": "CAB", "color": "Blanco", "talla": "L", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA16TL51", "lineaAsignada": "1", "diaInicioCola": 1, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 15, "mo": "01858", "tipo": "Produccion", "sku": "MARMIDA16TL", "producto": "MAR", "genero": "DAMA", "color": "Blanco", "talla": "L", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA16TL40", "lineaAsignada": "2", "diaInicioCola": 1, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 16, "mo": "01859", "tipo": "Produccion", "sku": "MARMICA16TXL", "producto": "MAR", "genero": "CAB", "color": "Blanco", "talla": "XL", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMICA16TXL51", "lineaAsignada": "2", "diaInicioCola": 2, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 17, "mo": "01860", "tipo": "Produccion", "sku": "MARMIDA16TXL", "producto": "MAR", "genero": "DAMA", "color": "Blanco", "talla": "XL", "lineasRaw": "1, 2", "lineas": ["1", "2"], "solicitada": 40.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "MARMIDA16TXL40", "lineaAsignada": "1", "diaInicioCola": 2, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 18, "mo": "01861", "tipo": "Produccion", "sku": "CLAMICA16TS", "producto": "CLÁSICA", "genero": "CAB", "color": "Blanco", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA16TS55", "lineaAsignada": "3", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 19, "mo": "01862", "tipo": "Produccion", "sku": "CLAMIDA16TS", "producto": "CLÁSICA", "genero": "DAMA", "color": "Blanco", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 20.0, "faltante": 14.0, "cap": 130.0, "etapa": "En Confeccion", "status": "En Progreso", "cliente": "Changan", "concatenado": "CLAMIDA16TS35", "lineaAsignada": "3", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 57.1}, {"row": 20, "mo": "01863", "tipo": "Produccion", "sku": "CLAMICA16TM", "producto": "CLÁSICA", "genero": "CAB", "color": "Blanco", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA16TM55", "lineaAsignada": "3", "diaInicioCola": 0, "diaFinCola": 0, "diasHabiles": 1, "fechaEstimada": "2026-08-24", "avance": 0.0}, {"row": 21, "mo": "01866", "tipo": "Produccion", "sku": "CLAMIDA16TM", "producto": "CLÁSICA", "genero": "DAMA", "color": "Blanco", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA16TM35", "lineaAsignada": "3", "diaInicioCola": 0, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 22, "mo": "01872", "tipo": "Produccion", "sku": "CLAMICA16TL", "producto": "CLÁSICA", "genero": "CAB", "color": "Blanco", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 26.0, "faltante": 25.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA16TL55", "lineaAsignada": "3", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 47.3}, {"row": 23, "mo": "01873", "tipo": "Produccion", "sku": "CLAMIDA16TL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Blanco", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA16TL35", "lineaAsignada": "3", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 0.0}, {"row": 24, "mo": "01874", "tipo": "Produccion", "sku": "CLAMICA16TXL", "producto": "CLÁSICA", "genero": "CAB", "color": "Blanco", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 13.0, "faltante": 38.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA16TXL55", "lineaAsignada": "3", "diaInicioCola": 1, "diaFinCola": 1, "diasHabiles": 2, "fechaEstimada": "2026-08-25", "avance": 23.6}, {"row": 25, "mo": "01875", "tipo": "Produccion", "sku": "CLAMIDA16TXL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Blanco", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA16TXL35", "lineaAsignada": "3", "diaInicioCola": 1, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 26, "mo": "01877", "tipo": "Produccion", "sku": "CLAMICA30TS", "producto": "CLÁSICA", "genero": "CAB", "color": "Gris Claro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA30TS55", "lineaAsignada": "3", "diaInicioCola": 2, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 27, "mo": "01878", "tipo": "Produccion", "sku": "CLAMIDA30TS", "producto": "CLÁSICA", "genero": "DAMA", "color": "Gris Claro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA30TS35", "lineaAsignada": "3", "diaInicioCola": 2, "diaFinCola": 2, "diasHabiles": 3, "fechaEstimada": "2026-08-26", "avance": 0.0}, {"row": 28, "mo": "01893", "tipo": "Produccion", "sku": "CLAMICA30TM", "producto": "CLÁSICA", "genero": "CAB", "color": "Gris Claro", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA30TM55", "lineaAsignada": "3", "diaInicioCola": 2, "diaFinCola": 3, "diasHabiles": 4, "fechaEstimada": "2026-08-27", "avance": 0.0}, {"row": 29, "mo": "01895", "tipo": "Produccion", "sku": "CLAMIDA30TM", "producto": "CLÁSICA", "genero": "DAMA", "color": "Gris Claro", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA30TM35", "lineaAsignada": "3", "diaInicioCola": 3, "diaFinCola": 3, "diasHabiles": 4, "fechaEstimada": "2026-08-27", "avance": 0.0}, {"row": 30, "mo": "01904", "tipo": "Produccion", "sku": "CLAMICA30TL", "producto": "CLÁSICA", "genero": "CAB", "color": "Gris Claro", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA30TL55", "lineaAsignada": "3", "diaInicioCola": 3, "diaFinCola": 3, "diasHabiles": 4, "fechaEstimada": "2026-08-27", "avance": 0.0}, {"row": 31, "mo": "01908", "tipo": "Produccion", "sku": "CLAMICA30TXL", "producto": "CLÁSICA", "genero": "CAB", "color": "Gris Claro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 55.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA30TXL55", "lineaAsignada": "3", "diaInicioCola": 3, "diaFinCola": 4, "diasHabiles": 5, "fechaEstimada": "2026-08-28", "avance": 0.0}, {"row": 32, "mo": "01914", "tipo": "Produccion", "sku": "CLAMIDA30TXL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Gris Claro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 35.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA30TXL35", "lineaAsignada": "3", "diaInicioCola": 4, "diaFinCola": 4, "diasHabiles": 5, "fechaEstimada": "2026-08-28", "avance": 0.0}, {"row": 33, "mo": "01916", "tipo": "Produccion", "sku": "CLAMICA43TS", "producto": "CLÁSICA", "genero": "CAB", "color": "Negro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA43TS51", "lineaAsignada": "3", "diaInicioCola": 4, "diaFinCola": 4, "diasHabiles": 5, "fechaEstimada": "2026-08-28", "avance": 0.0}, {"row": 34, "mo": "01918", "tipo": "Produccion", "sku": "CLAMIDA43TS", "producto": "CLÁSICA", "genero": "DAMA", "color": "Negro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA43TS34", "lineaAsignada": "3", "diaInicioCola": 4, "diaFinCola": 5, "diasHabiles": 6, "fechaEstimada": "2026-08-31", "avance": 0.0}, {"row": 35, "mo": "01919", "tipo": "Produccion", "sku": "CLAMICA43TM", "producto": "CLÁSICA", "genero": "CAB", "color": "Negro", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA43TM34", "lineaAsignada": "3", "diaInicioCola": 5, "diaFinCola": 5, "diasHabiles": 6, "fechaEstimada": "2026-08-31", "avance": 0.0}, {"row": 36, "mo": "01925", "tipo": "Produccion", "sku": "CLAMICA43TL", "producto": "CLÁSICA", "genero": "CAB", "color": "Negro", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA43TL51", "lineaAsignada": "3", "diaInicioCola": 5, "diaFinCola": 5, "diasHabiles": 6, "fechaEstimada": "2026-08-31", "avance": 0.0}, {"row": 37, "mo": "01930", "tipo": "Produccion", "sku": "CLAMIDA43TL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Negro", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA43TL34", "lineaAsignada": "3", "diaInicioCola": 5, "diaFinCola": 6, "diasHabiles": 7, "fechaEstimada": "2026-09-01", "avance": 0.0}, {"row": 38, "mo": "01931", "tipo": "Produccion", "sku": "CLAMICA43TXL", "producto": "CLÁSICA", "genero": "CAB", "color": "Negro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA43TXL51", "lineaAsignada": "3", "diaInicioCola": 6, "diaFinCola": 6, "diasHabiles": 7, "fechaEstimada": "2026-09-01", "avance": 0.0}, {"row": 39, "mo": "01932", "tipo": "Produccion", "sku": "CLAMIDA43TXL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Negro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA43TXL34", "lineaAsignada": "3", "diaInicioCola": 6, "diaFinCola": 6, "diasHabiles": 7, "fechaEstimada": "2026-09-01", "avance": 0.0}, {"row": 40, "mo": "01933", "tipo": "Produccion", "sku": "CLAMICA66TS", "producto": "CLÁSICA", "genero": "CAB", "color": "Verde Militar", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA66TS51", "lineaAsignada": "3", "diaInicioCola": 6, "diaFinCola": 7, "diasHabiles": 8, "fechaEstimada": "2026-09-02", "avance": 0.0}, {"row": 41, "mo": "01934", "tipo": "Produccion", "sku": "CLAMIDA66TS", "producto": "CLÁSICA", "genero": "DAMA", "color": "Verde Militar", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA66TS34", "lineaAsignada": "3", "diaInicioCola": 7, "diaFinCola": 7, "diasHabiles": 8, "fechaEstimada": "2026-09-02", "avance": 0.0}, {"row": 42, "mo": "01935", "tipo": "Produccion", "sku": "CLAMICA66TM", "producto": "CLÁSICA", "genero": "CAB", "color": "Verde Militar", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA66TM51", "lineaAsignada": "3", "diaInicioCola": 7, "diaFinCola": 7, "diasHabiles": 8, "fechaEstimada": "2026-09-02", "avance": 0.0}, {"row": 43, "mo": "01937", "tipo": "Produccion", "sku": "CLAMIDA66TM", "producto": "CLÁSICA", "genero": "DAMA", "color": "Verde Militar", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA66TM34", "lineaAsignada": "3", "diaInicioCola": 7, "diaFinCola": 8, "diasHabiles": 9, "fechaEstimada": "2026-09-03", "avance": 0.0}, {"row": 44, "mo": "01938", "tipo": "Produccion", "sku": "CLAMICA66TL", "producto": "CLÁSICA", "genero": "CAB", "color": "Verde Militar", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 51.0, "producida": 0.0, "faltante": 51.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA66TL51", "lineaAsignada": "3", "diaInicioCola": 8, "diaFinCola": 8, "diasHabiles": 9, "fechaEstimada": "2026-09-03", "avance": 0.0}, {"row": 45, "mo": "01939", "tipo": "Produccion", "sku": "CLAMIDA66TL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Verde Militar", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA66TL34", "lineaAsignada": "3", "diaInicioCola": 8, "diaFinCola": 8, "diasHabiles": 9, "fechaEstimada": "2026-09-03", "avance": 0.0}, {"row": 46, "mo": "01940", "tipo": "Produccion", "sku": "CLAMICA66TXL", "producto": "CLÁSICA", "genero": "CAB", "color": "Verde Militar", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 1.0, "producida": 0.0, "faltante": 1.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMICA66TXL1", "lineaAsignada": "3", "diaInicioCola": 8, "diaFinCola": 8, "diasHabiles": 9, "fechaEstimada": "2026-09-03", "avance": 0.0}, {"row": 47, "mo": "01942", "tipo": "Produccion", "sku": "CLAMIDA66TXL", "producto": "CLÁSICA", "genero": "DAMA", "color": "Verde Militar", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 34.0, "producida": 0.0, "faltante": 34.0, "cap": 130.0, "etapa": "En Confeccion", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLAMIDA66TXL34", "lineaAsignada": "3", "diaInicioCola": 8, "diaFinCola": 8, "diasHabiles": 9, "fechaEstimada": "2026-09-03", "avance": 0.0}, {"row": 48, "mo": "01943", "tipo": "Produccion", "sku": "CLASTCA16TS", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Blanco", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 9.0, "producida": 0.0, "faltante": 9.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA16TS9", "lineaAsignada": "3", "diaInicioCola": 8, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 49, "mo": "01944", "tipo": "Produccion", "sku": "CLASTDA16TS", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Blanco", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 9.0, "producida": 40.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA16TS9", "lineaAsignada": "3", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 50, "mo": "01945", "tipo": "Produccion", "sku": "CLASTCA16TM", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Blanco", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 10.0, "producida": 0.0, "faltante": 10.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA16TM10", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 51, "mo": "01946", "tipo": "Produccion", "sku": "CLASTDA16TM", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Blanco", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 10.0, "producida": 79.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "En Progreso", "cliente": "Changan", "concatenado": "CLASTDA16TM10", "lineaAsignada": "3", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 52, "mo": "01947", "tipo": "Produccion", "sku": "CLASTCA16TL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Blanco", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 10.0, "producida": 0.0, "faltante": 10.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA16TL10", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 53, "mo": "01948", "tipo": "Produccion", "sku": "CLASTDA16TL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Blanco", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 10.0, "producida": 25.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA16TL10", "lineaAsignada": "3", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 54, "mo": "01949", "tipo": "Produccion", "sku": "CLASTCA16TXL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Blanco", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 9.0, "producida": 0.0, "faltante": 9.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA16TXL9", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 55, "mo": "01950", "tipo": "Produccion", "sku": "CLASTDA16TXL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Blanco", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 9.0, "producida": 10.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA16TXL9", "lineaAsignada": "3", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 56, "mo": "01953", "tipo": "Produccion", "sku": "CLASTCA43TS", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Negro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 72.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA43TS33", "lineaAsignada": "3", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 57, "mo": "01955", "tipo": "Produccion", "sku": "CLASTCA43TM", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Negro", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA43TM33", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 58, "mo": "01957", "tipo": "Produccion", "sku": "CLASTCA43TL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Negro", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA43TL33", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 9, "diasHabiles": 10, "fechaEstimada": "2026-09-04", "avance": 0.0}, {"row": 59, "mo": "01958", "tipo": "Produccion", "sku": "CLASTCA43TXL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "CAB", "color": "Negro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTCA43TXL33", "lineaAsignada": "3", "diaInicioCola": 9, "diaFinCola": 10, "diasHabiles": 11, "fechaEstimada": "2026-09-07", "avance": 0.0}, {"row": 60, "mo": "01960", "tipo": "Produccion", "sku": "CLASTDA43TS", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Negro", "talla": "S", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA43TS33", "lineaAsignada": "3", "diaInicioCola": 10, "diaFinCola": 10, "diasHabiles": 11, "fechaEstimada": "2026-09-07", "avance": 0.0}, {"row": 61, "mo": "01961", "tipo": "Produccion", "sku": "CLASTDA43TM", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Negro", "talla": "M", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA43TM33", "lineaAsignada": "3", "diaInicioCola": 10, "diaFinCola": 10, "diasHabiles": 11, "fechaEstimada": "2026-09-07", "avance": 0.0}, {"row": 62, "mo": "01963", "tipo": "Produccion", "sku": "CLASTDA43TL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Negro", "talla": "L", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 0.0, "faltante": 33.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA43TL33", "lineaAsignada": "3", "diaInicioCola": 10, "diaFinCola": 10, "diasHabiles": 11, "fechaEstimada": "2026-09-07", "avance": 0.0}, {"row": 63, "mo": "01965", "tipo": "Produccion", "sku": "CLASTDA43TXL", "producto": "CLÁSICA ALGODÓN STRETCH", "genero": "DAMA", "color": "Negro", "talla": "XL", "lineasRaw": "3", "lineas": ["3"], "solicitada": 33.0, "producida": 23.0, "faltante": 10.0, "cap": 130.0, "etapa": "Terminado", "status": "Confirmada", "cliente": "Changan", "concatenado": "CLASTDA43TXL33", "lineaAsignada": "3", "diaInicioCola": 10, "diaFinCola": 10, "diasHabiles": 11, "fechaEstimada": "2026-09-07", "avance": 69.7}, {"row": 64, "mo": "", "tipo": "Equipamiento", "sku": "TOA16CLI", "producto": "Toalla clip 2.0", "genero": "-", "color": "Blanco", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 56.0, "producida": 56.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA16CLI56", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 65, "mo": "", "tipo": "Equipamiento", "sku": "TOA43CLI", "producto": "Toalla clip 2.0", "genero": "-", "color": "Negro", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 57.0, "producida": 57.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA43CLI57", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 66, "mo": "", "tipo": "Equipamiento", "sku": "TOA12CLI", "producto": "Toalla clip 2.0", "genero": "-", "color": "Azul Marino", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 57.0, "producida": 57.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA12CLI57", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 67, "mo": "", "tipo": "Equipamiento", "sku": "TOA12SP", "producto": "Toalla sport", "genero": "-", "color": "Azul Marino", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 42.0, "producida": 42.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA12SP42", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 68, "mo": "", "tipo": "Equipamiento", "sku": "TOA13SP", "producto": "Toalla sport", "genero": "-", "color": "Azul Rey", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 42.0, "producida": 42.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA13SP42", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 69, "mo": "", "tipo": "Equipamiento", "sku": "TOA01SP", "producto": "Toalla sport", "genero": "-", "color": "Aguamarina", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 43.0, "producida": 43.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA01SP43", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 70, "mo": "", "tipo": "Equipamiento", "sku": "TOA43SP", "producto": "Toalla sport", "genero": "-", "color": "Negro", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 43.0, "producida": 43.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TOA43SP43", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 71, "mo": "", "tipo": "Equipamiento", "sku": "TRA1218L", "producto": "Travel bag 18L", "genero": "-", "color": "Azul Marino", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 85.0, "producida": 85.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TRA1218L85", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 72, "mo": "", "tipo": "Equipamiento", "sku": "TRA4318L", "producto": "Travel bag 18L", "genero": "-", "color": "Negro", "talla": "-", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 85.0, "producida": 85.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "TRA4318L85", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 73, "mo": "", "tipo": "Equipamiento", "sku": "", "producto": "Jacket 2.0", "genero": "CAB", "color": "Azul Polo", "talla": "S", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 74, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA162TS", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Azul Polo", "talla": "S", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA162TS34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 75, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA162TM", "producto": "Jacket 2.0", "genero": "CAB", "color": "Azul Polo", "talla": "M", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA162TM51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 76, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA162TM", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Azul Polo", "talla": "M", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA162TM34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 77, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA162TL", "producto": "Jacket 2.0", "genero": "CAB", "color": "Azul Polo", "talla": "L", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA162TL51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 78, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA162TL", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Azul Polo", "talla": "L", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA162TL34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 79, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA162TXL", "producto": "Jacket 2.0", "genero": "CAB", "color": "Azul Polo", "talla": "XL", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA162TXL51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 80, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA162TXL", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Azul Polo", "talla": "XL", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA162TXL34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 81, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA16TS", "producto": "Jacket 2.0", "genero": "CAB", "color": "Blanco", "talla": "S", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA16TS51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 82, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA16TS", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Blanco", "talla": "S", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA16TS34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 83, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA16TM", "producto": "Jacket 2.0", "genero": "CAB", "color": "Blanco", "talla": "M", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA16TM51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 84, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA16TM", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Blanco", "talla": "M", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA16TM34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 85, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA16TL", "producto": "Jacket 2.0", "genero": "CAB", "color": "Blanco", "talla": "L", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA16TL51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 86, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA16TL", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Blanco", "talla": "L", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA16TL34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 87, "mo": "", "tipo": "Equipamiento", "sku": "JAPCA16TXL", "producto": "Jacket 2.0", "genero": "CAB", "color": "Blanco", "talla": "XL", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 51.0, "producida": 51.0, "faltante": 0, "cap": 130.0, "etapa": "--", "status": "Confirmada", "cliente": "Changan", "concatenado": "JAPCA16TXL51", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}, {"row": 88, "mo": "", "tipo": "Equipamiento", "sku": "JAPDA16TXL", "producto": "Jacket 2.0", "genero": "DAMA", "color": "Blanco", "talla": "XL", "lineasRaw": "Estampado", "lineas": ["Estampado"], "solicitada": 34.0, "producida": 34.0, "faltante": 0, "cap": 130.0, "etapa": "Terminado", "status": "--", "cliente": "Changan", "concatenado": "JAPDA16TXL34", "lineaAsignada": "Estampado", "diaInicioCola": null, "diaFinCola": null, "diasHabiles": 0, "fechaEstimada": null, "avance": 100}], "meta": {"totalFilas": 86, "fechasEscritas": 0, "ultimaSalida": "2026-09-07", "wroteDates": false}};</script>
+<script>
+var DATA=null, SORT={k:'_cola',dir:1}, CHARTS={}, COLORS={
+  'Blanco':'#f4f4f0','Negro':'#2b2b2b','Azul Rey':'#1e4fd6','Verde Militar':'#4b6b2f',
+  'Azul Polo':'#2a6bd6','Gris Claro':'#b7b7b7','Azul Marino':'#16356b','Aguamarina':'#2bb3a0'
+};
+var C_TEAL='#0f6b5c', C_OK='#2f6b45', C_ROSE='#a33b45', C_AMBER='#b86a1a', C_MUTED='#5f6d66';
+
+function isGas(){return typeof google!=='undefined' && google.script && google.script.run;}
+function boot(){
+  if(window.EMBEDDED_DATA){init(window.EMBEDDED_DATA);return;}
+  if(isGas()){
+    google.script.run.withSuccessHandler(init).withFailureHandler(function(e){bootErr(e);}).getDashboardData(false);
+    return;
+  }
+  bootErr('Sin datos.');
+}
+function bootErr(e){
+  var el=document.getElementById('boot');
+  if(el) el.textContent='No se pudo cargar: '+(e&&e.message?e.message:e);
+}
+function init(payload){
+  try{
+    DATA=payload;
+    renderShell();
+    renderAll();
+  }catch(err){
+    bootErr(err);
+    console.error(err);
+  }
+}
+function toast(m){
+  var t=document.getElementById('toast');
+  t.textContent=m;t.style.display='block';
+  setTimeout(function(){t.style.display='none';},2400);
+}
+function recalc(){
+  if(!isGas()) return;
+  toast('Recalculando…');
+  google.script.run.withSuccessHandler(function(p){
+    DATA=p;renderAll();toast((p.meta&&p.meta.fechasEscritas||0)+' fechas escritas');
+  }).withFailureHandler(function(e){toast('Error: '+e);}).getDashboardData(true);
+}
+
+function uniq(arr){
+  var o={},out=[];
+  arr.forEach(function(v){if(v && !o[v]){o[v]=1;out.push(v);}});
+  return out.sort(function(a,b){return String(a).localeCompare(String(b),'es');});
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
+function fmtN(n){return Math.round(Number(n)||0).toLocaleString('es-VE');}
+function fmtDate(s){
+  if(!s) return '—';
+  var p=String(s).slice(0,10).split('-');
+  return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : s;
+}
+function sum(rows,k){return rows.reduce(function(a,r){return a+(Number(r[k])||0);},0);}
+function cn(c){return COLORS[c]||'#7a8a82';}
+
+function renderShell(){
+  var gasBtn=isGas()?'<button class="btn primary" onclick="recalc()">Recalcular fechas</button>':'';
+  document.getElementById('app').innerHTML=
+    '<header class="brand">'+
+      '<div><h1>Tracking<span>Producción</span></h1>'+
+      '<p id="sub">Pedidos, faltante y fecha estimada de salida</p></div>'+
+      '<div class="brand-actions">'+gasBtn+'</div>'+
+    '</header>'+
+    '<section class="kpis" id="kpis"></section>'+
+    '<section class="panel"><div class="filters" id="filters"></div></section>'+
+    '<nav class="tabs">'+
+      '<button class="tab active" type="button" data-tab="resumen" onclick="switchTab(\'resumen\')">Resumen</button>'+
+      '<button class="tab" type="button" data-tab="calendario" onclick="switchTab(\'calendario\')">Calendario de Salidas</button>'+
+    '</nav>'+
+    '<div class="tab-panel active" id="tab-resumen">'+
+      '<div class="charts">'+
+        '<section class="panel chart-card"><h3>Avance por producto</h3><p class="sub">Solicitado vs producido vs faltante</p><div class="cw"><canvas id="cProd"></canvas></div></section>'+
+        '<section class="panel chart-card"><h3>Piezas por etapa</h3><p class="sub">Faltante en proceso y piezas terminadas</p><div class="cw"><canvas id="cEtapa"></canvas></div></section>'+
+      '</div>'+
+      '<section class="panel" style="margin-top:10px">'+
+        '<div class="section-title"><h2>Pedidos</h2><span id="tblMeta"></span></div>'+
+        '<div class="table-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>'+
+      '</section>'+
+    '</div>'+
+    '<div class="tab-panel" id="tab-calendario">'+
+      '<section class="panel">'+
+        '<div class="section-title"><h2>Salidas estimadas por día</h2><span>SKUs que cierran su faltante ese día hábil</span></div>'+
+        '<div class="cal-grid" id="cal"></div>'+
+      '</section>'+
+    '</div>';
+  buildFilters();
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-tab')===name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(function(p){
+    p.classList.toggle('active', p.id==='tab-'+name);
+  });
+  if(name==='resumen'){
+    setTimeout(function(){
+      Object.keys(CHARTS).forEach(function(id){ try{ CHARTS[id].resize(); }catch(e){} });
+    }, 40);
+  }
+}
+
+function buildFilters(){
+  var rows=DATA.rows||[];
+  var fields=[
+    ['fProducto','Producto',uniq(rows.map(function(r){return r.producto;}))],
+    ['fTipo','Tipo',uniq(rows.map(function(r){return r.tipo;}))],
+    ['fLinea','Línea',uniq(rows.map(function(r){return r.lineasRaw;}))],
+    ['fEtapa','Etapa',uniq(rows.map(function(r){return r.etapa;}))],
+    ['fStatus','Status',uniq(rows.map(function(r){return r.status;}))],
+    ['fColor','Color',uniq(rows.map(function(r){return r.color;}))],
+    ['fTalla','Talla',uniq(rows.map(function(r){return r.talla;}))]
+  ];
+  var html=fields.map(function(f){
+    return '<div class="field"><label>'+f[1]+'</label><select id="'+f[0]+'" onchange="renderAll()">'+
+      '<option value="">Todos</option>'+f[2].map(function(v){return '<option>'+esc(v)+'</option>';}).join('')+
+      '</select></div>';
+  }).join('');
+  html+='<div class="field grow"><label>Buscar</label><input id="fQ" placeholder="MO, SKU, cliente…" oninput="renderAll()"></div>';
+  html+='<button class="btn" type="button" onclick="resetFilters()" style="align-self:end;margin-bottom:1px">Limpiar</button>';
+  document.getElementById('filters').innerHTML=html;
+}
+function resetFilters(){
+  ['fProducto','fTipo','fLinea','fEtapa','fStatus','fColor','fTalla'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  var q=document.getElementById('fQ'); if(q) q.value='';
+  SORT={k:'_cola',dir:1};
+  renderAll();
+}
+function fr(){
+  var get=function(id){var el=document.getElementById(id);return el?el.value:'';};
+  var q=(get('fQ')||'').toLowerCase();
+  var prod=get('fProducto'), tipo=get('fTipo'), linea=get('fLinea'), etapa=get('fEtapa');
+  var status=get('fStatus'), color=get('fColor'), talla=get('fTalla');
+  return (DATA.rows||[]).filter(function(r){
+    if(prod && r.producto!==prod) return false;
+    if(tipo && r.tipo!==tipo) return false;
+    if(linea && r.lineasRaw!==linea) return false;
+    if(etapa && r.etapa!==etapa) return false;
+    if(status && r.status!==status) return false;
+    if(color && r.color!==color) return false;
+    if(talla && r.talla!==talla) return false;
+    if(q){
+      var blob=[r.mo,r.sku,r.producto,r.color,r.cliente,r.concatenado].join(' ').toLowerCase();
+      if(blob.indexOf(q)<0) return false;
+    }
+    return true;
+  });
+}
+
+function chartOpts(extra){
+  var base={
+    responsive:true,maintainAspectRatio:false,
+    plugins:{
+      legend:{labels:{color:C_MUTED,font:{family:'Figtree',size:11},boxWidth:10}},
+      datalabels:{display:false},
+      tooltip:{backgroundColor:'#1c2421',titleFont:{family:'Bricolage Grotesque',weight:'bold'},bodyFont:{family:'Figtree'}}
+    },
+    scales:{
+      x:{grid:{color:'rgba(95,109,102,.12)'},ticks:{color:C_MUTED,font:{family:'Figtree',size:10}}},
+      y:{grid:{color:'rgba(95,109,102,.12)'},ticks:{color:C_MUTED,font:{family:'Figtree',size:10}}}
+    }
+  };
+  if(!extra) return base;
+  Object.keys(extra).forEach(function(k){
+    if(k==='plugins'||k==='scales'){
+      base[k]=base[k]||{};
+      Object.keys(extra[k]||{}).forEach(function(kk){base[k][kk]=extra[k][kk];});
+    } else base[k]=extra[k];
+  });
+  return base;
+}
+function mc(id,type,data,opts){
+  if(CHARTS[id]) CHARTS[id].destroy();
+  var el=document.getElementById(id); if(!el || typeof Chart==='undefined') return;
+  CHARTS[id]=new Chart(el,{type:type,data:data,options:opts||chartOpts(),plugins:typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]});
+}
+
+function renderCharts(rows){
+  var byP={};
+  rows.forEach(function(r){
+    if(!byP[r.producto]) byP[r.producto]={sol:0,prod:0,falt:0};
+    byP[r.producto].sol+=r.solicitada; byP[r.producto].prod+=r.producida; byP[r.producto].falt+=r.faltante;
+  });
+  var labs=Object.keys(byP);
+  mc('cProd','bar',{labels:labs,datasets:[
+    {label:'Solicitado',data:labs.map(function(k){return byP[k].sol;}),backgroundColor:C_TEAL+'cc',borderColor:C_TEAL,borderWidth:1,borderRadius:6},
+    {label:'Producido',data:labs.map(function(k){return byP[k].prod;}),backgroundColor:C_OK+'cc',borderColor:C_OK,borderWidth:1,borderRadius:6},
+    {label:'Faltante',data:labs.map(function(k){return byP[k].falt;}),backgroundColor:C_ROSE+'cc',borderColor:C_ROSE,borderWidth:1,borderRadius:6}
+  ]},chartOpts({plugins:{datalabels:{display:true,color:C_MUTED,anchor:'end',align:'end',font:{family:'Bricolage Grotesque',size:8,weight:'700'},formatter:function(v){return v>0?Math.round(v):'';}}}}));
+
+  var byE={}, eOrder=[];
+  rows.forEach(function(r){
+    var etapa=r.etapa||'—';
+    var e=String(etapa).toLowerCase();
+    var isDone=e.indexOf('termin')>=0;
+    // Terminado suele tener faltante 0: mostrar piezas solicitadas/producidas para que se vea
+    var val=isDone ? (r.solicitada || r.producida || 0) : (r.faltante || 0);
+    if(!byE[etapa]){ byE[etapa]=0; eOrder.push(etapa); }
+    byE[etapa]+=val;
+  });
+  var eLabs=eOrder.slice().sort(function(a,b){
+    var ra=String(a).toLowerCase().indexOf('termin')>=0?1:0;
+    var rb=String(b).toLowerCase().indexOf('termin')>=0?1:0;
+    return ra-rb || String(a).localeCompare(String(b),'es');
+  });
+  var eCols=[C_TEAL,C_ROSE,C_AMBER,C_OK,'#5b7c8a','#8b6f4e'];
+  var eData=eLabs.map(function(k){return byE[k];});
+  var eTotal=eData.reduce(function(a,b){return a+b;},0);
+  var eLegend=eLabs.map(function(label,i){return label+' ('+Math.round(eData[i]||0)+')';});
+  mc('cEtapa','doughnut',{
+    labels:eLegend,
+    datasets:[{
+      data:eData,
+      backgroundColor:eLabs.map(function(_,i){return eCols[i%eCols.length]+'dd';}),
+      borderColor:'#fbfcfb',
+      borderWidth:2,
+      hoverOffset:4
+    }]
+  }, chartOpts({
+    scales:{x:{display:false},y:{display:false}},
+    plugins:{
+      legend:{position:'right',labels:{color:C_MUTED,boxWidth:8,font:{size:10}}},
+      datalabels:{
+        display:function(ctx){return (ctx.dataset.data[ctx.dataIndex]||0)>0;},
+        color:'#fff',
+        font:{weight:'700',size:11,family:'Bricolage Grotesque'},
+        formatter:function(v){return eTotal && v ? Math.round(v) : '';}
+      }
+    }
+  }));
+}
+
+function renderAll(){
+  if(!DATA) return;
+  var rows=fr();
+  document.getElementById('sub').textContent=
+    (DATA.sheetName||'Tracking')+' · desde '+fmtDate(DATA.startDate)+' · '+fmtDate(DATA.generatedAt);
+  renderKpis(rows);
+  renderCharts(rows);
+  renderTable(rows);
+  renderCal(rows);
+}
+
+function renderKpis(rows){
+  var sol=sum(rows,'solicitada'), prod=sum(rows,'producida'), falt=sum(rows,'faltante');
+  var av=sol>0?Math.round(100*prod/sol):0;
+  var fechas=rows.map(function(r){return r.fechaEstimada;}).filter(Boolean).sort();
+  document.getElementById('kpis').innerHTML=
+    '<div class="kpi teal"><div class="l">Solicitado</div><div class="v">'+fmtN(sol)+'</div><div class="s">'+rows.length+' SKUs</div></div>'+
+    '<div class="kpi ok"><div class="l">Producido</div><div class="v">'+fmtN(prod)+'</div><div class="s">'+av+'% avance</div></div>'+
+    '<div class="kpi warn"><div class="l">Faltante</div><div class="v">'+fmtN(falt)+'</div><div class="s">'+(rows.filter(function(r){return r.faltante>0;}).length)+' en cola</div></div>'+
+    '<div class="kpi"><div class="l">Última salida</div><div class="v" style="font-size:1.55rem">'+(fechas.length?fmtDate(fechas[fechas.length-1]):'—')+'</div><div class="s">días lab. '+(DATA.workdays||[]).join(',')+'</div></div>';
+}
+
+function etapaChip(e){
+  var t=String(e||'').toLowerCase();
+  var cls='wait';
+  if(t.indexOf('espera')>=0) cls='wait';
+  else if(t.indexOf('confeccion')>=0) cls='conf';
+  else if(t.indexOf('termin')>=0) cls='ok';
+  return '<span class="chip '+cls+'">'+esc(e||'—')+'</span>';
+}
+function statusChip(s){
+  var t=String(s||'').toLowerCase();
+  var cls=t.indexOf('progreso')>=0?'prog':(t.indexOf('confirm')>=0?'ok':'eq');
+  return '<span class="chip '+cls+'">'+esc(s||'—')+'</span>';
+}
+
+var COLS=[
+  {k:'mo',l:'MO'},{k:'producto',l:'Producto'},{k:'sku',l:'SKU'},{k:'color',l:'Color'},
+  {k:'talla',l:'Talla'},{k:'solicitada',l:'Solic.'},{k:'producida',l:'Prod.'},
+  {k:'faltante',l:'Falt.'},{k:'avance',l:'Avance'},{k:'lineaAsignada',l:'Línea'},
+  {k:'fechaEstimada',l:'Salida'},{k:'etapa',l:'Etapa'},{k:'status',l:'Status'}
+];
+
+function etapaRank(etapa){
+  var e=String(etapa||'').toLowerCase()
+    .replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u');
+  if(e.indexOf('termin')>=0 || e.indexOf('complet')>=0 || e.indexOf('entreg')>=0) return 2;
+  if(e.indexOf('confeccion')>=0) return 0;
+  return 1;
+}
+
+function renderTable(rows){
+  var thead='<tr>'+COLS.map(function(c){
+    var mark=SORT.k===c.k?(SORT.dir>0?' ↑':' ↓'):'';
+    return '<th onclick="sortBy(\''+c.k+'\')">'+c.l+mark+'</th>';
+  }).join('')+'</tr>';
+  document.querySelector('#tbl thead').innerHTML=thead;
+
+  var sorted=rows.slice().sort(function(a,b){
+    if(SORT.k==='_cola'){
+      var ra=etapaRank(a.etapa), rb=etapaRank(b.etapa);
+      if(ra!==rb) return ra-rb;
+      var fa=a.fechaEstimada||'9999-99-99', fb=b.fechaEstimada||'9999-99-99';
+      if(fa!==fb) return fa<fb?-1:1;
+      return String(a.mo||'').localeCompare(String(b.mo||''),'es');
+    }
+    var va=a[SORT.k], vb=b[SORT.k];
+    if(va==null) va=''; if(vb==null) vb='';
+    if(typeof va==='number' && typeof vb==='number') return (va-vb)*SORT.dir;
+    return String(va).localeCompare(String(vb),'es')*SORT.dir;
+  });
+
+  document.querySelector('#tbl tbody').innerHTML=sorted.length?sorted.map(function(r){
+    var av=r.solicitada>0?Math.min(100,Math.round(100*r.producida/r.solicitada)):(r.faltante<=0?100:0);
+    return '<tr>'+
+      '<td class="num">'+esc(r.mo||'—')+'</td>'+
+      '<td>'+esc(r.producto)+' <span class="chip '+(r.tipo==='Equipamiento'?'eq':'')+'" style="margin-left:4px">'+esc(r.tipo||'')+'</span></td>'+
+      '<td>'+esc(r.sku||'—')+'</td>'+
+      '<td><span class="dot" style="background:'+cn(r.color)+'"></span> '+esc(r.color||'—')+'</td>'+
+      '<td>'+esc(r.talla||'—')+'</td>'+
+      '<td class="num">'+fmtN(r.solicitada)+'</td>'+
+      '<td class="num">'+fmtN(r.producida)+'</td>'+
+      '<td class="num '+(r.faltante>0?'falt':'done')+'">'+fmtN(r.faltante)+'</td>'+
+      '<td><div class="bar" title="'+av+'%"><i style="width:'+av+'%"></i></div></td>'+
+      '<td>'+esc(r.lineaAsignada||r.lineasRaw||'—')+'</td>'+
+      '<td class="num">'+fmtDate(r.fechaEstimada)+'</td>'+
+      '<td>'+etapaChip(r.etapa)+'</td>'+
+      '<td>'+statusChip(r.status)+'</td>'+
+    '</tr>';
+  }).join(''):'<tr><td colspan="13" class="empty">Sin pedidos con este filtro</td></tr>';
+
+  document.getElementById('tblMeta').textContent=
+    sorted.length+' filas · faltante '+fmtN(sum(sorted,'faltante'));
+}
+function sortBy(k){
+  if(SORT.k===k) SORT.dir*=-1; else {SORT.k=k;SORT.dir=1;}
+  renderTable(fr());
+}
+
+function productLabel(r){
+  var parts=[r.producto,r.color,r.talla].filter(function(x){return x && x!=='-';});
+  return parts.join(' ') || r.sku || 'Sin nombre';
+}
+
+function renderCal(rows){
+  var map={};
+  rows.filter(function(r){return r.fechaEstimada;}).forEach(function(r){
+    if(!map[r.fechaEstimada]) map[r.fechaEstimada]=[];
+    map[r.fechaEstimada].push(r);
+  });
+  var days=Object.keys(map).sort();
+  document.getElementById('cal').innerHTML=days.length?days.map(function(d){
+    var list=map[d].slice().sort(function(a,b){return (a.producto||'').localeCompare(b.producto||'','es') || (a.talla||'').localeCompare(b.talla||'','es');});
+    var pcs=sum(list,'faltante');
+    return '<div class="cal-day"><h3>'+fmtDate(d)+'</h3><div class="sum">'+list.length+' SKUs · '+fmtN(pcs)+' pz</div><ul>'+
+      list.map(function(r){
+        return '<li><div class="name">'+esc(productLabel(r))+'</div>'+
+          '<div class="meta">'+esc(r.sku||'—')+' · Línea '+esc(r.lineaAsignada||r.lineasRaw||'—')+' · '+fmtN(r.faltante)+' pz</div></li>';
+      }).join('')+
+      '</ul></div>';
+  }).join(''):'<div class="empty">Sin salidas pendientes en el filtro actual</div>';
+}
+
+boot();
+</script>
+</body>
+</html>
