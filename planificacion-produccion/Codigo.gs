@@ -1,10 +1,27 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.51 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.52 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - L5 DÍA DE INICIO SÍ ENTRA: un modelo de mejor prioridad (ej.
+ *     SHORT PLAYA Urgente) con fecha de inicio futura deja correr a
+ *     los ocupantes. El día que llega toma un cupo paralelo: si L5
+ *     ya tiene 2, desaloja al de peor banda (Baja cede, Media puede
+ *     quedarse). Antes L5 nunca desalojaba y el Urgente no salía.
+ *   - L5 PARALELO = MITAD DE CAP: con 2 familias, cada una trabaja
+ *     al 50% de su Cap Produccion por Dia (20/20 si cap 40; 20 y 15
+ *     si 40 y 30). Si una no llena su mitad, la otra toma el resto.
+ *     Un solo modelo sigue al 100%. Se quita la rueda de 5 pzas, que
+ *     desbalanceaba el día (15 vs 25).
+ *   - COLA NO SALTA AL LUNES: el remanente que cierra el viernes NO
+ *     pisa a quien abrió esa línea. ultimoModeloLinea solo lo graba
+ *     el modelo que arranca el día (carga 0). El lunes se restaura
+ *     ese ocupante, no el filler. Además, un modelo NO cede su línea
+ *     al hermano del lote (color/género) si ese hermano no puede
+ *     producir HOY en esa misma línea (lineaFija en otra). RIO DAMA
+ *     en L3 ya no se va al viernes de L2 porque CAB no puede usar L3.
  *   - APOYO L1 NO PISA PRENDAS PROPIAS: si la Línea 1 tiene piezas
  *     planificadas (ocupante nativo con faltante), NO comparte el 50%
  *     con el modelo de L2. L1 trabaja al 100% esas prendas. El apoyo
@@ -194,7 +211,9 @@
  *   - DÍA DE INICIO RECLAMA LA LÍNEA (L1-4): Urgente/mínima/especial
  *     con fecha de inicio futura deja correr al modelo actual. El día
  *     que llega, desaloja al ocupante de peor prioridad (MAR KIDS
- *     Urgente vs RIO CAB Media). L5 no echa a nadie (sigue en paralelo).
+ *     Urgente vs RIO CAB Media). L5: al llegar el Día de inicio, el
+ *     de mejor prioridad toma un cupo paralelo (desaloja al peor si
+ *     ya hay 2).
  *   - ESPECIAL CON DÍA DE INICIO: al llegar esa fecha, el Especial
  *     reclama su Linea de Produccion aunque otro modelo (RIO, etc.)
  *     la esté ocupando. Antes se quedaba en 0 hasta que el ocupante
@@ -256,10 +275,11 @@
  *   - PRIORIZACION - SKUs: no adelanta el modelo. Cuando el modelo
  *     entra a la línea, esos SKUs salen primero (todo su faltante);
  *     luego sigue la distribución de colores núcleo.
- *   - LÍNEA 5: trabaja 2 modelos en paralelo (rueda de 5 pzas
- *     cuando hay dos), salvo que sean el mismo producto en distinto
- *     género: esos van en secuencia. Si solo hay un modelo, usa su
- *     Cap Produccion por Dia (típico 40).
+ *   - LÍNEA 5: trabaja 2 modelos en paralelo al 50% de su cap,
+ *     salvo que sean el mismo producto en distinto género: esos van
+ *     en secuencia. Si solo hay un modelo, usa su Cap Produccion por
+ *     Dia (típico 40). Al llegar Día de inicio, el de mejor
+ *     prioridad toma un cupo (desaloja al peor si ya hay 2).
  *   - URGENTE (después de Especial y de la cantidad mínima), luego la
  *     fecha más próxima. Un modelo Urgente con 2+ líneas usa ambas.
  *     Líneas 1-4 = un modelo a la vez, salvo uno o dos modelos a
@@ -282,7 +302,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.51";
+var VERSION_SISTEMA = "5.9.52";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -2495,10 +2515,11 @@ function generarPlanificacionSemanal_() {
       var piezasCaben = Math.floor(avail * capLin + 0.0001);
       if (maxLote > 0) piezasCaben = Math.min(piezasCaben, maxLote);
       if (piezasCaben <= 0) return 0;
+      var cargaAntes = carga[lin][d];
       var puestas = asignar_(t, lin, d, piezasCaben);
       if (puestas > 0) {
         if (!t.esEspecial) lineaPorMO[clave] = lin;
-        ultimoModeloLinea[lin] = mP.nombre;
+        if (cargaAntes < 0.001) ultimoModeloLinea[lin] = mP.nombre;
         return puestas;
       }
     }
@@ -2615,17 +2636,22 @@ function generarPlanificacionSemanal_() {
     }
   }
 
-  function producirRuedaLinea5_(noms, d, overflow) {
+  function producirParaleloLinea5_(noms, d, overflow) {
     var lin = "5";
-    var iR = 0;
-    var estancado = 0;
-    while (carga[lin][d] < 0.999 && estancado < noms.length) {
-      var nom = noms[iR % noms.length];
-      iR++;
-      var soloMinima = restanteMinima_(mapaModelos[nom]) > 0;
-      var p = producirLote_(mapaModelos[nom], lin, d, overflow, LOTE_RUEDA_LINEA5, soloMinima);
-      estancado = p > 0 ? 0 : estancado + 1;
+    if (!noms || noms.length < 2) {
+      if (noms && noms.length) producirModeloDia_(mapaModelos[noms[0]], lin, d, overflow);
+      return;
     }
+    var mA = mapaModelos[noms[0]];
+    var mB = mapaModelos[noms[1]];
+    // Techo relativo: 50% de la cap de CADA modelo (carga es piezas/cap).
+    // Un techo absoluto 0.5 + 0.5 sobre la misma barra deja al segundo en 0.
+    var techoA = Math.min(1, carga[lin][d] + FRACCION_PARCIAL_DEFAULT);
+    producirModeloDia_(mA, lin, d, overflow, techoA);
+    var techoB = Math.min(1, carga[lin][d] + FRACCION_PARCIAL_DEFAULT);
+    producirModeloDia_(mB, lin, d, overflow, techoB);
+    if (carga[lin][d] < 0.999) producirModeloDia_(mA, lin, d, overflow, 1);
+    if (carga[lin][d] < 0.999) producirModeloDia_(mB, lin, d, overflow, 1);
   }
 
   function producirParaleloEstandar_(noms, lin, d, overflow) {
@@ -2913,7 +2939,19 @@ function generarPlanificacionSemanal_() {
     if (lote.m && !participaLoteFamilia_(lote.m)) return false;
     if (!compartenLineas_(m, lote.m, overflow)) return false;
     if (!lote.m.tareas.some(function (tLote) { return tareaVivaHoy_(tLote); })) return false;
-    return lineasDondeEsta_(lote.modelo).length === 0;
+    if (lineasDondeEsta_(lote.modelo).length > 0) return false;
+    return lotePuedeUsarLineasDe_(lote, m, overflow);
+  }
+
+  function lotePuedeUsarLineasDe_(lote, m, overflow) {
+    if (!lote || !lote.m || !m) return false;
+    var lineas = lineasDondeEsta_(m.nombre);
+    if (!lineas.length) lineas = lineasModelo_(m, overflow);
+    var iU;
+    for (iU = 0; iU < lineas.length; iU++) {
+      if (modeloPuedeProducirHoyNom_(lote.modelo, lineas[iU], d, overflow)) return true;
+    }
+    return false;
   }
 
   function debeEsperarHermano_(m, overflow) {
@@ -3034,7 +3072,6 @@ function generarPlanificacionSemanal_() {
     }
 
     function desalojarPara_(m, lin) {
-      if (String(lin) === "5" && maxOcupantes_(lin, m) > 1) return false;
       var occ = ocupante[lin] || [];
       if (occ.indexOf(m.nombre) !== -1) {
         if (esExclusivoLinea5_(m) && String(lin) === "5" && occ.length > 1) {
@@ -3050,10 +3087,10 @@ function generarPlanificacionSemanal_() {
         ocupante[lin] = [m.nombre];
         return true;
       }
+      var famNew = familiaModelo_(m);
+      if (famNew && familiaOcupaLinea_(famNew, lin, m.nombre)) return false;
       if (occ.length < maxOcupantes_(lin, m)) {
         if (esLineaEstandar_(lin) && lineaConParcial_(lin)) {
-          var famNew = familiaModelo_(m);
-          if (famNew && familiaOcupaLinea_(famNew, lin, m.nombre)) return false;
           if (esModeloParcial_(m) && occ.length > 0) return false;
         }
         ocupante[lin].push(m.nombre);
@@ -3122,9 +3159,7 @@ function generarPlanificacionSemanal_() {
         return modeloPuedeProducirHoyNom_(m.nombre, linLib, d, overflowL1);
       });
       if (libres.length === 0) {
-        libres = lineasDondePuedeHoy_(m).filter(function (lin) {
-          return String(lin) !== "5" || maxOcupantes_(lin, m) === 1;
-        });
+        libres = lineasDondePuedeHoy_(m);
         if (libres.length === 0) return;
         libres.sort(function (a, b) {
           var fam = familiaModelo_(m);
@@ -3279,7 +3314,7 @@ function generarPlanificacionSemanal_() {
             if (idx === 0) return true;
             return familiaModelo_(mapaModelos[nom]) !== fam0;
           });
-          if (paralelos.length >= 2) producirRuedaLinea5_(paralelos, d, overflow);
+          if (paralelos.length >= 2) producirParaleloLinea5_(paralelos, d, overflow);
           else producirModeloDia_(mapaModelos[noms[0]], lin, d, overflow);
         } else if (esLineaEstandar_(lin) && noms.length >= 2 && lineaConParcial_(lin)) {
           producirParaleloEstandar_(noms, lin, d, overflow);
@@ -3543,7 +3578,7 @@ function generarPlanificacionSemanal_() {
     "• Modelo a media estación (L1-4): " + ((cfg.modeloParcial && cfg.modeloParcial.activo)
       ? (textoModeloParcial_(cfg.modeloParcial) + ".")
       : "no. Al generar puedes marcar uno o dos modelos que no usen el 100%; cuando le toque a cada uno, se junta con el siguiente de la cola.") + "\n" +
-    "• Línea 5: hasta 2 familias en paralelo (rueda de 5 si hay dos), salvo Secuencia=No: ese modelo es el único ocupante. Un solo modelo usa su cap del día.\n" +
+    "• Línea 5: hasta 2 familias en paralelo, cada una al 50% de su cap (si una no llena, la otra toma el resto). Secuencia=No: ocupante exclusivo. Un solo modelo usa el 100%. Al llegar su Día de inicio, el de mejor prioridad toma un cupo (desaloja al peor si ya hay 2).\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: prioridad 1 en TODAS las Linea de Produccion asignadas (2+ líneas = las toma sí o sí al llegar Día de inicio). Si la celda viene vacía, 1. No desborda a L1.\n" +
     "• Apoyo L1 50%: " + ((cfg.apoyoL1 && cfg.apoyoL1.activo)
@@ -5543,7 +5578,7 @@ function supuestosDashboard_(capsModelo) {
     "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2, solo si L1 no tiene prendas propias planificadas. Si L1 está ocupada, trabaja al 100% lo suyo hasta que haya espacio.",
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
-    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo.",
+    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo, cada una al 50% de su Cap Produccion por Dia (si una no llena, la otra toma el resto). Un solo modelo usa el 100%. Al llegar el Día de inicio, el de mejor prioridad toma un cupo paralelo (desaloja al peor ocupante si ya hay 2).",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura. Una orden con Faltante 0 sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer; solo sale si está Hecho o Cancelada.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
     "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. En Calendario → Detalle diario el recuadro de variantes se puede entrar y bajar (clic para fijarlo). Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El modelo se muestra como Producto + Género + Lote N (lote 0 se omite). El mismo SKU puede repetirse si cambia la MO o el lote."
