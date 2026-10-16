@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.52 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.53 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -1846,6 +1846,28 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 lin,
             ))
             ocupante[libres[0]].append(m["nombre"])
+        if len(ocupante.get("5") or []) < max_ocupantes_ahora("5") and not linea5_ocupada_por_exclusivo():
+            fam_l5 = familia_modelo(modelos[ocupante["5"][0]]) if ocupante.get("5") else ""
+            for m_l5 in lista:
+                if len(ocupante.get("5") or []) >= max_ocupantes_ahora("5"):
+                    break
+                if restante_modelo(m_l5) <= 0:
+                    continue
+                if m_l5["nombre"] in (ocupante.get("5") or []):
+                    continue
+                if lineas_donde_esta(m_l5["nombre"]):
+                    continue
+                if es_exclusivo_linea5(m_l5):
+                    continue
+                if fam_l5 and familia_modelo(m_l5) == fam_l5:
+                    continue
+                if not modelo_puede(m_l5, d, "5", overflow):
+                    continue
+                if debe_esperar_lote_familia(m_l5, overflow):
+                    lote_l5 = lote_familia_activo(familia_modelo(m_l5), overflow)
+                    if lote_l5 and modelo_puede(lote_l5["m"], d, "5", overflow):
+                        continue
+                ocupante["5"].append(m_l5["nombre"])
         for m in vivos:
             if m["banda"] not in (BANDA_ESPECIAL, BANDA_MINIMA, BANDA_URGENTE):
                 continue
@@ -2127,7 +2149,11 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if str(lin) == "5" and para_paralelo and es_exclusivo_linea5(m):
                 continue
             if debe_esperar_hermano(m, overflow):
-                continue
+                if not (str(lin) == "5" and para_paralelo):
+                    continue
+                lote_h = lote_familia_activo(familia_modelo(m), overflow)
+                if lote_h and modelo_puede(lote_h["m"], d, lin, overflow):
+                    continue
             if not modelo_puede(m, d, lin, overflow):
                 continue
             return m["nombre"]
@@ -2148,6 +2174,10 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
                 next_pre = siguiente_candidato(lin, d, overflow_now, skip)
                 if next_pre:
                     ocupante[lin].append(next_pre)
+            if str(lin) == "5" and len(ocupante[lin]) < max_ocupantes_ahora(lin) and not linea5_ocupada_por_exclusivo():
+                next_pre_l5 = siguiente_candidato(lin, d, overflow_now, skip)
+                if next_pre_l5:
+                    ocupante[lin].append(next_pre_l5)
             noms = ocupante[lin]
             if str(lin) == "5":
                 excl = [nom for nom in noms if es_exclusivo_linea5(modelos.get(nom))]
@@ -3628,7 +3658,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3798,7 +3828,7 @@ class TestApoyoLinea1(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("APOYO L1 NO PISA PRENDAS PROPIAS", gs)
         self.assertIn("function linea1TieneNativoHoy_(d)", gs)
         self.assertIn("if (linea1TieneNativoHoy_(d)) return;", gs)
@@ -4137,7 +4167,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
@@ -4775,7 +4805,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -5016,7 +5046,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
@@ -5055,7 +5085,7 @@ class TestColumnaLoteModelo(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("function formatoModelo_", gs)
         self.assertIn("function textoLote_", gs)
         self.assertIn("function loteDeFila_", gs)
@@ -5185,7 +5215,7 @@ class TestV5952Linea5InicioCapacidadCola(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.52"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
         self.assertIn("function producirParaleloLinea5_(noms, d, overflow)", gs)
         self.assertIn("if (cargaAntes < 0.001) ultimoModeloLinea[lin] = mP.nombre;", gs)
         self.assertIn("function lotePuedeUsarLineasDe_(lote, m, overflow)", gs)
@@ -5197,6 +5227,91 @@ class TestV5952Linea5InicioCapacidadCola(unittest.TestCase):
         self.assertIn("desaloja al peor ocupante si ya hay 2", gs)
         self.assertIn("50% de la cap de cada modelo", html)
         self.assertIn("Día de inicio puede desalojar al peor ocupante", html)
+
+
+class TestV5953Linea5ParaleloAntesFecha(unittest.TestCase):
+    def _t(self, sku, modelo, cant, lineas, **kw):
+        d = {
+            "sku": sku, "modelo": modelo, "mo": "MO-" + sku,
+            "cantidad": cant, "cap": 40, "lineas": list(lineas),
+            "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20261001, "solicitadaOrig": cant,
+        }
+        d.update(kw)
+        return d
+
+    def _por(self, out, lin, d):
+        por = defaultdict(int)
+        for t in out:
+            por[t["modelo"]] += t["plan"][lin][d]
+        return dict((k, v) for k, v in por.items() if v > 0)
+
+    def test_linea5_paralelo_no_espera_urgente_futuro(self):
+        """A y B (familias distintas, Día 0) van 50/50; C Urgente día 7 no deja a B idle."""
+        tareas = [
+            self._t("A", "SHORT SPORT CAB", 400, ["5"], cap=40,
+                    prioridadNum=5, fechaKey=1, diaIngreso=0),
+            self._t("B", "Basic Line Pant Dama", 400, ["5"], cap=30,
+                    prioridadNum=3, fechaKey=2, diaIngreso=0),
+            self._t("C", "SHORT PLAYA CAB", 400, ["5"], cap=40,
+                    prioridadNum=1, fechaKey=1, diaIngreso=7),
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        for d in range(7):
+            por = self._por(out, "5", d)
+            self.assertEqual(
+                set(por), {"SHORT SPORT CAB", "Basic Line Pant Dama"},
+                "día %s debía ir en paralelo A+B, no esperar a PLAYA: %s" % (d, por),
+            )
+            self.assertEqual(por.get("SHORT SPORT CAB"), 20, por)
+            self.assertEqual(por.get("Basic Line Pant Dama"), 15, por)
+        d7 = self._por(out, "5", 7)
+        self.assertIn("SHORT PLAYA CAB", d7, d7)
+        self.assertNotIn("SHORT SPORT CAB", d7, "C desalojó a Baja: %s" % d7)
+        self.assertIn("Basic Line Pant Dama", d7, d7)
+        self.assertEqual(d7["SHORT PLAYA CAB"], 20, d7)
+        self.assertEqual(d7["Basic Line Pant Dama"], 15, d7)
+
+    def test_linea5_excel51_sport_entra_con_pant_antes_de_playa(self):
+        """Excel 51: Pant y SPORT pueden el 16/10 (día 4); PLAYA el 21/10 (día 7)."""
+        tareas = [
+            self._t("P", "Basic Line Pant Dama", 150, ["5"], cap=30,
+                    prioridadNum=1, fechaKey=20261016, diaIngreso=4),
+            self._t("S", "SHORT SPORT CAB", 232, ["5"], cap=40,
+                    prioridadNum=5, fechaKey=20261016, diaIngreso=4),
+            self._t("Y", "SHORT PLAYA CAB", 224, ["5"], cap=40,
+                    prioridadNum=1, fechaKey=20261021, diaIngreso=7),
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        for d in range(4):
+            self.assertEqual(self._por(out, "5", d), {}, "día %s vacío" % d)
+        for d in range(4, 7):
+            por = self._por(out, "5", d)
+            self.assertEqual(
+                set(por), {"Basic Line Pant Dama", "SHORT SPORT CAB"},
+                "día %s Pant+SPORT, no Pant solo hasta PLAYA: %s" % (d, por),
+            )
+            self.assertEqual(por.get("Basic Line Pant Dama"), 15, por)
+            self.assertEqual(por.get("SHORT SPORT CAB"), 20, por)
+        d7 = self._por(out, "5", 7)
+        self.assertIn("SHORT PLAYA CAB", d7, d7)
+        self.assertIn("Basic Line Pant Dama", d7, d7)
+
+    def test_gs_y_dashboard_v5953(self):
+        gs_path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
+        html_path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
+        with open(gs_path, encoding="utf-8") as f:
+            gs = f.read()
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.53', gs)
+        self.assertIn("L5 PARALELO NO ESPERA FECHA FUTURA", gs)
+        self.assertIn('String(lin) === "5" && ocupante[lin].length < maxOcupantes_(lin)', gs)
+        self.assertIn("var nextPreL5 = siguienteCandidato_(lin, d, overflow, skip);", gs)
+        self.assertIn("El 2º cupo se llena HOY", gs)
+        self.assertIn("el 2º cupo se llena hoy si hay otra familia lista", html)
+        self.assertIn("no espera un Día de inicio futuro", html)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,17 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.52 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.53 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - L5 PARALELO NO ESPERA FECHA FUTURA: si L5 tiene 1 ocupante
+ *     (y no es Secuencia=No), entra ya el siguiente de otra familia
+ *     que pueda producir HOY. No se deja el 2º cupo vacío hasta el
+ *     Día de inicio de un Urgente futuro. Excel 51: SHORT SPORT CAB
+ *     (Baja, 16/10) entra en paralelo con Basic Line Pant Dama desde
+ *     el 16/10; no espera a SHORT PLAYA CAB (21/10). El Día de inicio
+ *     sigue desalojando al peor cuando esa fecha llega.
  *   - L5 DÍA DE INICIO SÍ ENTRA: un modelo de mejor prioridad (ej.
  *     SHORT PLAYA Urgente) con fecha de inicio futura deja correr a
  *     los ocupantes. El día que llega toma un cupo paralelo: si L5
@@ -302,7 +309,7 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.52";
+var VERSION_SISTEMA = "5.9.53";
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -3185,6 +3192,24 @@ function generarPlanificacionSemanal_() {
       });
       ocupante[libres[0]].push(m.nombre);
     });
+    if ((ocupante["5"] || []).length < maxOcupantes_("5") && !linea5OcupadaPorExclusivo_()) {
+      var famL5occ = ocupante["5"].length ? familiaModelo_(mapaModelos[ocupante["5"][0]]) : "";
+      for (var iL5p = 0; iL5p < listaModelos.length; iL5p++) {
+        if ((ocupante["5"] || []).length >= maxOcupantes_("5")) break;
+        var mL5p = listaModelos[iL5p];
+        if (restanteModelo_(mL5p) <= 0) continue;
+        if (ocupante["5"].indexOf(mL5p.nombre) !== -1) continue;
+        if (lineasDondeEsta_(mL5p.nombre).length > 0) continue;
+        if (esExclusivoLinea5_(mL5p)) continue;
+        if (famL5occ && familiaModelo_(mL5p) === famL5occ) continue;
+        if (!modeloPuedeProducirHoyNom_(mL5p.nombre, "5", d, overflowL1)) continue;
+        if (debeEsperarLoteFamilia_(mL5p, overflowL1)) {
+          var loteL5p = loteFamiliaActivo_(familiaModelo_(mL5p), overflowL1);
+          if (loteL5p && modeloPuedeProducirHoyNom_(loteL5p.modelo, "5", d, overflowL1)) continue;
+        }
+        ocupante["5"].push(mL5p.nombre);
+      }
+    }
     vivos.forEach(function (m) {
       if (m.banda > BANDA_URGENTE) return;
       var owned = ["1", "2", "3", "4", "5"].filter(function (lin) {
@@ -3277,7 +3302,11 @@ function generarPlanificacionSemanal_() {
         if (yaOtra && !esEspecialExplosivo_(mC, overflow, d)) continue;
         if (paraParalelo && famRef && familiaModelo_(mC) === famRef) continue;
         if (String(lin) === "5" && paraParalelo && esExclusivoLinea5_(mC)) continue;
-        if (debeEsperarHermano_(mC, overflow)) continue;
+        if (debeEsperarHermano_(mC, overflow)) {
+          if (!(String(lin) === "5" && paraParalelo)) continue;
+          var loteHerm = loteFamiliaActivo_(familiaModelo_(mC), overflow);
+          if (loteHerm && modeloPuedeProducirHoy_(loteHerm.modelo, lin, d, overflow)) continue;
+        }
         if (!modeloPuedeProducirHoy_(mC.nombre, lin, d, overflow)) continue;
         return mC.nombre;
       }
@@ -3298,6 +3327,11 @@ function generarPlanificacionSemanal_() {
             ocupante[lin].length < maxOcupantes_(lin)) {
           var nextPre = siguienteCandidato_(lin, d, overflow, skip);
           if (nextPre) ocupante[lin].push(nextPre);
+        }
+        if (String(lin) === "5" && ocupante[lin].length < maxOcupantes_(lin) &&
+            !linea5OcupadaPorExclusivo_()) {
+          var nextPreL5 = siguienteCandidato_(lin, d, overflow, skip);
+          if (nextPreL5) ocupante[lin].push(nextPreL5);
         }
         var noms = ocupante[lin];
         if (String(lin) === "5") {
@@ -3578,7 +3612,7 @@ function generarPlanificacionSemanal_() {
     "• Modelo a media estación (L1-4): " + ((cfg.modeloParcial && cfg.modeloParcial.activo)
       ? (textoModeloParcial_(cfg.modeloParcial) + ".")
       : "no. Al generar puedes marcar uno o dos modelos que no usen el 100%; cuando le toque a cada uno, se junta con el siguiente de la cola.") + "\n" +
-    "• Línea 5: hasta 2 familias en paralelo, cada una al 50% de su cap (si una no llena, la otra toma el resto). Secuencia=No: ocupante exclusivo. Un solo modelo usa el 100%. Al llegar su Día de inicio, el de mejor prioridad toma un cupo (desaloja al peor si ya hay 2).\n" +
+    "• Línea 5: hasta 2 familias en paralelo, cada una al 50% de su cap (si una no llena, la otra toma el resto). Secuencia=No: ocupante exclusivo. Un solo modelo usa el 100%. El 2º cupo se llena HOY si hay otra familia que ya puede producir (no espera el Día de inicio de un Urgente futuro). Al llegar su Día de inicio, el de mejor prioridad toma un cupo (desaloja al peor si ya hay 2).\n" +
     "• SKUs de Priorizacion - SKUs salen primero cuando el modelo entra; luego colores núcleo.\n" +
     "• Especial: prioridad 1 en TODAS las Linea de Produccion asignadas (2+ líneas = las toma sí o sí al llegar Día de inicio). Si la celda viene vacía, 1. No desborda a L1.\n" +
     "• Apoyo L1 50%: " + ((cfg.apoyoL1 && cfg.apoyoL1.activo)
@@ -5578,7 +5612,7 @@ function supuestosDashboard_(capsModelo) {
     "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2, solo si L1 no tiene prendas propias planificadas. Si L1 está ocupada, trabaja al 100% lo suyo hasta que haya espacio.",
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
-    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo, cada una al 50% de su Cap Produccion por Dia (si una no llena, la otra toma el resto). Un solo modelo usa el 100%. Al llegar el Día de inicio, el de mejor prioridad toma un cupo paralelo (desaloja al peor ocupante si ya hay 2).",
+    "Líneas 1–4: un modelo a la vez, salvo que al generar se marque uno o dos modelos que no usan el 100% de las estaciones. Cuando le toca a cada uno, esa línea corre en paralelo con el siguiente de la cola (no obliga a los dos elegidos a coincidir). Línea 5: hasta 2 familias en paralelo, cada una al 50% de su Cap Produccion por Dia (si una no llena, la otra toma el resto). Un solo modelo usa el 100%. El 2º cupo se llena hoy si hay otra familia lista (no espera un Día de inicio futuro). Al llegar el Día de inicio, el de mejor prioridad toma un cupo paralelo (desaloja al peor ocupante si ya hay 2).",
     "El enlace web del dashboard no se recalcula solo: usa Producción → Actualizar Dashboard cuando quieras publicar números nuevos. Los checks de Impresión Digital se guardan con el botón Guardar, por MO y SKU, y no se borran al actualizar. Esa pestaña es una lista fija por prioridad (L1–4 vs L5): no se reordena si el taller mueve la semana de costura. Una orden con Faltante 0 sigue en el desglose (Solicitada / Producida / Faltante) mientras esté en Por Hacer; solo sale si está Hecho o Cancelada.",
     "Cantidad producida en Almacén sale de Cantida Producida (Por Hacer y Por Hacer - Especial), también si la MO no se planificó porque el Faltante ya es 0. Completo = Ya producida; con piezas hechas y faltante > 0 = Produccion Parcial; sin producción = en blanco. Un modelo no se marca Ya producida si el desglose de SKUs no está completo. Plan 12 sem es el plan del horizonte; Pendiente es lo que quedó fuera; A producir es el Faltante. El gráfico Planificado vs producido usa Cantidad Solicitada y Cantida Producida.",
     "En todo drill-down modelo → SKU (Calendario, Salida semanal, Seguimiento, Impresión Digital y Almacén) las variantes se listan por color: SKUs de Priorizacion - SKUs, Negro → Blanco → Marino, el resto por volumen del color, y talla. El día de arranque no parte un color. En Calendario → Detalle diario el recuadro de variantes se puede entrar y bajar (clic para fijarlo). Impresión Digital ordena los modelos por prioridad de producción (no por la semana del plan) y parte L1–4 vs L5. Un modelo con Division=Si en Priorizacion (col. I) se produce en dos vueltas al 50%. El modelo se muestra como Producto + Género + Lote N (lote 0 se omite). El mismo SKU puede repetirse si cambia la MO o el lote."
