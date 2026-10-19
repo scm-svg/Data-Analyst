@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Operaciones Taller</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card-kpi { border-radius: 10px; color: white; margin-bottom: 20px; }
+        .kpi-teorica { background-color: #0d6efd; }
+        .kpi-real { background-color: #198754; }
+        .kpi-dif { background-color: #dc3545; }
+        .kpi-util { background-color: #6f42c1; }
+        .table-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .chart-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .obs-container { background: #fff8e6; border: 1px solid #ffc107; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .obs-container h4 { color: #856404; }
+        .obs-item { background: white; border-left: 4px solid #ffc107; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+        .obs-item.critical { border-left-color: #dc3545; }
+        .obs-item h6 { margin-bottom: 6px; font-weight: 700; }
+        .obs-item p { margin: 0; color: #495057; font-size: 0.95rem; }
+        #loading { display: none; text-align: center; margin: 20px; font-weight: bold; color: #0d6efd; }
+        .pie-legend { font-size: 0.88rem; }
+        .pie-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dd-toggle { border: none; background: transparent; cursor: pointer; font-weight: 700; width: 100%; text-align: left; }
+        .dd-linea { background: #f1f3f5; font-weight: 700; cursor: pointer; }
+        .dd-linea:hover { background: #e9ecef; }
+        .dd-maq { background: #f8f9fa; cursor: pointer; }
+        .dd-maq:hover { background: #eef1f4; }
+        .dd-op td { background: #fff; }
+        .chev { display: inline-block; width: 1.1rem; color: #0d6efd; transition: transform .15s ease; }
+        .chev.open { transform: rotate(90deg); }
+        .indent-1 { padding-left: 1.6rem !important; }
+        .indent-2 { padding-left: 3.2rem !important; }
+        .util-bar { height: 8px; background: #e9ecef; border-radius: 99px; overflow: hidden; min-width: 80px; }
+        .util-bar > span { display: block; height: 100%; background: #198754; }
+        .util-bar.mid > span { background: #ffc107; }
+        .util-bar.low > span { background: #dc3545; }
+        .dd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .muted { color: #6c757d; font-size: 0.78rem; }
+        .adic-table th { font-size: 0.78rem; text-transform: uppercase; color: #6c757d; }
+        canvas.pie-canvas { max-height: 260px; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4 mb-5">
+    <h2 class="mb-1">Dashboard de Capacidades - Taller</h2>
+    <p class="text-muted mb-4">Operaciones por línea · Taller de Cuadro</p>
+
+    <div id="loading">Cargando datos desde Google Sheets...</div>
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <label class="form-label">Línea</label>
+            <select id="filter-linea" class="form-select filter-input">
+                <option value="All">Todas</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Máquina</label>
+            <select id="filter-maquina" class="form-select filter-input">
+                <option value="All">Todas</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Operación</label>
+            <select id="filter-operacion" class="form-select filter-input">
+                <option value="All">Todas</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Estatus</label>
+            <select id="filter-estatus" class="form-select filter-input">
+                <option value="All">Todos</option>
+                <option value="Activa">Activa</option>
+                <option value="Parcial">Parcial</option>
+                <option value="Inactiva">Inactiva</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card card-kpi kpi-teorica p-3">
+                <h5>Capacidad Teórica Total</h5>
+                <h2 id="kpi-teorica">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-kpi kpi-real p-3">
+                <h5>Capacidad Real Total</h5>
+                <h2 id="kpi-real">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-kpi kpi-dif p-3">
+                <h5>Diferencia (Pérdida)</h5>
+                <h2 id="kpi-dif">0</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-kpi kpi-util p-3">
+                <h5>Utilización</h5>
+                <h2 id="kpi-util">0%</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="obs-container" id="obs-section">
+        <h4 class="mb-3">Observaciones · Máquinas adicionales (Taller de Cuadro)</h4>
+        <div class="obs-item">
+            <h6>2 Rectas operativas para 4 líneas</h6>
+            <p>En adicionales hay <strong>2 Rectas activas</strong> compartidas entre <strong>4 líneas operativas</strong>. Esta proporción puede causar retrasos al producir grandes cantidades de un modelo que requiere esta máquina, porque las líneas compiten por el mismo recurso.</p>
+        </div>
+        <div class="obs-item critical">
+            <h6>2 Overlock de Cuellos inactivas por falta de personal</h6>
+            <p>Las dos Overlock de Cuellos están inactivas por falta de personal. Aunque se les asigne personal, <strong>no entrarían dentro de la operación diaria</strong> del taller: quedan como capacidad auxiliar, no como parte del flujo estándar de las líneas.</p>
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm adic-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Máquina</th>
+                        <th>Operación</th>
+                        <th>Estatus</th>
+                        <th class="text-end">Cap. teórica</th>
+                        <th class="text-end">Cap. real</th>
+                    </tr>
+                </thead>
+                <tbody id="adicionales-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5 class="mb-1">Capacidad real, teórica y diferencia</h5>
+                <p class="muted mb-3">La torta muestra cómo se reparte la teórica: real vs pérdida. El total del círculo es la capacidad teórica.</p>
+                <canvas id="capacidadPie" class="pie-canvas"></canvas>
+                <div class="pie-legend mt-3" id="capacidad-legend"></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h5 class="mb-1">Estatus de las máquinas</h5>
+                <p class="muted mb-3">Activa, inactiva y parciales (porcentaje de trabajo menor a la teórica).</p>
+                <canvas id="estatusPie" class="pie-canvas"></canvas>
+                <div class="pie-legend mt-3" id="estatus-legend"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <h5 class="mb-3">Capacidad teórica vs real por línea</h5>
+        <canvas id="capacidadesChart" height="90"></canvas>
+    </div>
+
+    <div class="table-container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h4 class="mb-0">Detalle de operaciones</h4>
+            <div class="dd-actions">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-expand">Expandir todo</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-collapse">Contraer todo</button>
+            </div>
+        </div>
+        <p class="muted mb-3">Clasificado por línea. Haz clic en la línea para ver sus máquinas, y en la máquina para ver cada operación.</p>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Línea / Máquina / Operación</th>
+                        <th>Estatus</th>
+                        <th class="text-end">Capacidad teórica</th>
+                        <th class="text-end">Capacidad real</th>
+                        <th>Utilización</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const EMBEDDED_DATA = [
+        {"Linea":"Linea 1","Maquina":"Overlock","Operacion":"Union / Montaje","Capacidad_Teorica":188,"Estatus":"Disponible","Capacidad_Real":188},
+        {"Linea":"Linea 1","Maquina":"Collaret","Operacion":"Recubrir Cuello","Capacidad_Teorica":392,"Estatus":"Disponible","Capacidad_Real":392},
+        {"Linea":"Linea 1","Maquina":"Overlock","Operacion":"Montaje / Cierre","Capacidad_Teorica":194,"Estatus":"Disponible","Capacidad_Real":194},
+        {"Linea":"Linea 1","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"Disponible","Capacidad_Real":196},
+        {"Linea":"Linea 2","Maquina":"Overlock","Operacion":"Union / Montaje","Capacidad_Teorica":188,"Estatus":"0.8","Capacidad_Real":150},
+        {"Linea":"Linea 2","Maquina":"Collaret","Operacion":"Recubrir Cuello","Capacidad_Teorica":392,"Estatus":"Disponible","Capacidad_Real":392},
+        {"Linea":"Linea 2","Maquina":"Overlock","Operacion":"Montaje / Cierre","Capacidad_Teorica":194,"Estatus":"Disponible","Capacidad_Real":194},
+        {"Linea":"Linea 2","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"Disponible","Capacidad_Real":196},
+        {"Linea":"Linea 3","Maquina":"Overlock","Operacion":"Union / Montaje","Capacidad_Teorica":188,"Estatus":"Disponible","Capacidad_Real":188},
+        {"Linea":"Linea 3","Maquina":"Collaret","Operacion":"Recubrir Cuello","Capacidad_Teorica":392,"Estatus":"Disponible","Capacidad_Real":392},
+        {"Linea":"Linea 3","Maquina":"Overlock","Operacion":"Montaje / Cierre","Capacidad_Teorica":194,"Estatus":"Disponible","Capacidad_Real":194},
+        {"Linea":"Linea 3","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"0.5","Capacidad_Real":98},
+        {"Linea":"Linea 3","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"Inactiva","Capacidad_Real":0},
+        {"Linea":"Linea 4","Maquina":"Overlock","Operacion":"Union / Montaje","Capacidad_Teorica":188,"Estatus":"Disponible","Capacidad_Real":188},
+        {"Linea":"Linea 4","Maquina":"Collaret","Operacion":"Recubrir Cuello","Capacidad_Teorica":392,"Estatus":"Disponible","Capacidad_Real":392},
+        {"Linea":"Linea 4","Maquina":"Overlock","Operacion":"Montaje / Cierre","Capacidad_Teorica":194,"Estatus":"Disponible","Capacidad_Real":194},
+        {"Linea":"Linea 4","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"Disponible","Capacidad_Real":196},
+        {"Linea":"Linea 4","Maquina":"Collaret","Operacion":"Ruedo","Capacidad_Teorica":196,"Estatus":"Inactiva","Capacidad_Real":0}
+    ];
+
+    const EMBEDDED_ADICIONALES = [
+        {"Linea":"Adicionales","Maquina":"Recta","Operacion":"","Capacidad_Teorica":0,"Estatus":"Activa","Capacidad_Real":0},
+        {"Linea":"Adicionales","Maquina":"Recta","Operacion":"","Capacidad_Teorica":0,"Estatus":"Activa","Capacidad_Real":0},
+        {"Linea":"Adicionales","Maquina":"Overlock Cuellos","Operacion":"Montaje / Cierre","Capacidad_Teorica":196,"Estatus":"Inactiva","Capacidad_Real":0},
+        {"Linea":"Adicionales","Maquina":"Overlock Cuellos","Operacion":"Montaje / Cierre","Capacidad_Teorica":196,"Estatus":"Inactiva","Capacidad_Real":0}
+    ];
+
+    const COLORS = {
+        teorica: '#0d6efd',
+        real: '#198754',
+        dif: '#dc3545',
+        activa: '#198754',
+        parcial: '#ffc107',
+        inactiva: '#dc3545'
+    };
+
+    let rawData = [];
+    let adicionalesData = [];
+    let myChart;
+    let capacidadPie;
+    let estatusPie;
+    const expanded = { lineas: new Set(), maquinas: new Set() };
+
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
+
+    function fmt(n) {
+        return Number(n || 0).toLocaleString('es-VE', { maximumFractionDigits: 0 });
+    }
+
+    function pct(real, teorica) {
+        if (!teorica) return 0;
+        return Math.round((real / teorica) * 100);
+    }
+
+    function categorizeStatus(item) {
+        const est = (item.Estatus === null || item.Estatus === undefined) ? '' : String(item.Estatus).trim();
+        const teorica = Number(item.Capacidad_Teorica) || 0;
+        const real = Number(item.Capacidad_Real) || 0;
+        const lower = est.toLowerCase();
+
+        if (lower === 'inactiva') return 'Inactiva';
+        if (lower === 'disponible' || lower === 'activa') {
+            if (teorica > 0 && real === 0) return 'Inactiva';
+            if (teorica > 0 && real > 0 && real < teorica * 0.99) return 'Parcial';
+            return 'Activa';
+        }
+
+        const numEst = Number(String(est).replace(',', '.'));
+        if (est !== '' && !isNaN(numEst) && est !== '') {
+            if (numEst <= 0) return 'Inactiva';
+            if (numEst < 1) return 'Parcial';
+            return 'Activa';
+        }
+
+        if (teorica > 0 && real === 0) return 'Inactiva';
+        if (teorica > 0 && real > 0 && real < teorica * 0.99) return 'Parcial';
+        if (real > 0) return 'Activa';
+        return 'Inactiva';
+    }
+
+    function statusLabel(item) {
+        const cat = categorizeStatus(item);
+        const est = String(item.Estatus || '').trim();
+        const numEst = Number(String(est).replace(',', '.'));
+        if (cat === 'Parcial' && !isNaN(numEst) && numEst > 0 && numEst < 1) {
+            return 'Parcial ' + Math.round(numEst * 100) + '%';
+        }
+        if (cat === 'Parcial') {
+            return 'Parcial ' + pct(item.Capacidad_Real, item.Capacidad_Teorica) + '%';
+        }
+        return cat;
+    }
+
+    function badgeClass(cat) {
+        if (cat === 'Activa') return 'bg-success';
+        if (cat === 'Inactiva') return 'bg-danger';
+        return 'bg-warning text-dark';
+    }
+
+    function isAppsScript() {
+        return typeof google !== 'undefined' && google.script && google.script.run;
+    }
+
+    function loadData() {
+        if (!isAppsScript()) {
+            rawData = EMBEDDED_DATA.slice();
+            adicionalesData = EMBEDDED_ADICIONALES.slice();
+            populateFilters();
+            renderAdicionales();
+            updateDashboard();
+            return;
+        }
+
+        document.getElementById('loading').style.display = 'block';
+        let pending = 2;
+        const finish = function() {
+            pending -= 1;
+            if (pending > 0) return;
+            document.getElementById('loading').style.display = 'none';
+            populateFilters();
+            renderAdicionales();
+            updateDashboard();
+        };
+
+        google.script.run
+            .withSuccessHandler(function(data) {
+                rawData = Array.isArray(data) ? data : [];
+                finish();
+            })
+            .withFailureHandler(function(error) {
+                alert('Error al cargar los datos: ' + error.message);
+                rawData = EMBEDDED_DATA.slice();
+                finish();
+            })
+            .getSheetData();
+
+        google.script.run
+            .withSuccessHandler(function(data) {
+                adicionalesData = Array.isArray(data) ? data : [];
+                finish();
+            })
+            .withFailureHandler(function() {
+                adicionalesData = EMBEDDED_ADICIONALES.slice();
+                finish();
+            })
+            .getAdicionalesData();
+    }
+
+    function populateFilters() {
+        const sets = {
+            Linea: new Set(),
+            Maquina: new Set(),
+            Operacion: new Set()
+        };
+        rawData.forEach(function(item) {
+            if (item.Linea) sets.Linea.add(item.Linea);
+            if (item.Maquina) sets.Maquina.add(item.Maquina);
+            if (item.Operacion) sets.Operacion.add(item.Operacion);
+        });
+
+        fillSelect('filter-linea', sets.Linea, 'Todas');
+        fillSelect('filter-maquina', sets.Maquina, 'Todas');
+        fillSelect('filter-operacion', sets.Operacion, 'Todas');
+    }
+
+    function fillSelect(id, values, allLabel) {
+        const select = document.getElementById(id);
+        const current = select.value || 'All';
+        select.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = 'All';
+        all.textContent = allLabel;
+        select.appendChild(all);
+        Array.from(values).sort().forEach(function(val) {
+            const option = document.createElement('option');
+            option.value = val;
+            option.textContent = val;
+            select.appendChild(option);
+        });
+        if (Array.from(select.options).some(function(o) { return o.value === current; })) {
+            select.value = current;
+        }
+    }
+
+    function filteredRows() {
+        const fLinea = document.getElementById('filter-linea').value;
+        const fMaquina = document.getElementById('filter-maquina').value;
+        const fOperacion = document.getElementById('filter-operacion').value;
+        const fEstatus = document.getElementById('filter-estatus').value;
+
+        return rawData.filter(function(item) {
+            if (!item.Linea && !item.Maquina) return false;
+            const cat = categorizeStatus(item);
+            return (fLinea === 'All' || item.Linea === fLinea) &&
+                   (fMaquina === 'All' || item.Maquina === fMaquina) &&
+                   (fOperacion === 'All' || item.Operacion === fOperacion) &&
+                   (fEstatus === 'All' || cat === fEstatus);
+        });
+    }
+
+    function machinesForStatusPie(data) {
+        const fLinea = document.getElementById('filter-linea').value;
+        const fMaquina = document.getElementById('filter-maquina').value;
+        const fOperacion = document.getElementById('filter-operacion').value;
+        const fEstatus = document.getElementById('filter-estatus').value;
+        const rows = data.slice();
+
+        if (fLinea === 'All' && fOperacion === 'All') {
+            adicionalesData.forEach(function(item) {
+                if (fMaquina !== 'All' && item.Maquina !== fMaquina) return;
+                const cat = categorizeStatus(item);
+                if (fEstatus !== 'All' && cat !== fEstatus) return;
+                rows.push(item);
+            });
+        }
+        return rows;
+    }
+
+    function updateDashboard() {
+        const filteredData = filteredRows();
+        updateKPIs(filteredData);
+        updateTable(filteredData);
+        updateChart(filteredData);
+        updateCapacidadPie(filteredData);
+        updateEstatusPie(machinesForStatusPie(filteredData));
+    }
+
+    function updateKPIs(data) {
+        const teorica = data.reduce(function(sum, item) { return sum + (Number(item.Capacidad_Teorica) || 0); }, 0);
+        const real = data.reduce(function(sum, item) { return sum + (Number(item.Capacidad_Real) || 0); }, 0);
+        const dif = teorica - real;
+        document.getElementById('kpi-teorica').innerText = fmt(teorica);
+        document.getElementById('kpi-real').innerText = fmt(real);
+        document.getElementById('kpi-dif').innerText = fmt(dif);
+        document.getElementById('kpi-util').innerText = (teorica ? pct(real, teorica) : 0) + '%';
+    }
+
+    function renderAdicionales() {
+        const tbody = document.getElementById('adicionales-body');
+        tbody.innerHTML = '';
+        const rows = adicionalesData.length ? adicionalesData : EMBEDDED_ADICIONALES;
+        rows.forEach(function(item) {
+            const cat = categorizeStatus(item);
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + escapeHtml(item.Maquina || '—') + '</td>' +
+                '<td>' + escapeHtml(item.Operacion || '—') + '</td>' +
+                '<td><span class="badge ' + badgeClass(cat) + '">' + escapeHtml(statusLabel(item)) + '</span></td>' +
+                '<td class="text-end">' + (item.Capacidad_Teorica ? fmt(item.Capacidad_Teorica) : '—') + '</td>' +
+                '<td class="text-end">' + (item.Capacidad_Real || item.Capacidad_Teorica ? fmt(item.Capacidad_Real) : '—') + '</td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function machineKey(linea, maquina) {
+        return linea + '::' + maquina;
+    }
+
+    function buildTree(data) {
+        const tree = {};
+        data.forEach(function(item, idx) {
+            const linea = item.Linea || 'Sin línea';
+            const maq = item.Maquina || 'Sin máquina';
+            if (!tree[linea]) tree[linea] = { teorica: 0, real: 0, machines: {} };
+            tree[linea].teorica += Number(item.Capacidad_Teorica) || 0;
+            tree[linea].real += Number(item.Capacidad_Real) || 0;
+            if (!tree[linea].machines[maq]) tree[linea].machines[maq] = { teorica: 0, real: 0, ops: [] };
+            tree[linea].machines[maq].teorica += Number(item.Capacidad_Teorica) || 0;
+            tree[linea].machines[maq].real += Number(item.Capacidad_Real) || 0;
+            tree[linea].machines[maq].ops.push(Object.assign({ _idx: idx }, item));
+        });
+        return tree;
+    }
+
+    function utilCell(real, teorica) {
+        const p = teorica ? pct(real, teorica) : 0;
+        const cls = p >= 90 ? '' : (p >= 50 ? 'mid' : 'low');
+        return '<div class="d-flex align-items-center gap-2">' +
+            '<div class="util-bar ' + cls + '"><span style="width:' + p + '%"></span></div>' +
+            '<span class="muted">' + p + '%</span></div>';
+    }
+
+    function updateTable(data) {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        const tree = buildTree(data);
+        const lineas = Object.keys(tree).sort();
+
+        lineas.forEach(function(linea) {
+            const node = tree[linea];
+            const lineaOpen = expanded.lineas.has(linea);
+            const lineaRow = document.createElement('tr');
+            lineaRow.className = 'dd-linea';
+            lineaRow.dataset.linea = linea;
+            lineaRow.innerHTML =
+                '<td><span class="chev ' + (lineaOpen ? 'open' : '') + '">▶</span> ' + escapeHtml(linea) +
+                ' <span class="muted">(' + Object.keys(node.machines).length + ' máquinas)</span></td>' +
+                '<td></td>' +
+                '<td class="text-end">' + fmt(node.teorica) + '</td>' +
+                '<td class="text-end">' + fmt(node.real) + '</td>' +
+                '<td>' + utilCell(node.real, node.teorica) + '</td>';
+            tbody.appendChild(lineaRow);
+
+            if (!lineaOpen) return;
+
+            Object.keys(node.machines).sort().forEach(function(maq) {
+                const m = node.machines[maq];
+                const key = machineKey(linea, maq);
+                const maqOpen = expanded.maquinas.has(key);
+                const maqRow = document.createElement('tr');
+                maqRow.className = 'dd-maq';
+                maqRow.dataset.linea = linea;
+                maqRow.dataset.maquina = maq;
+                maqRow.innerHTML =
+                    '<td class="indent-1"><span class="chev ' + (maqOpen ? 'open' : '') + '">▶</span> ' + escapeHtml(maq) +
+                    ' <span class="muted">(' + m.ops.length + ' ops.)</span></td>' +
+                    '<td></td>' +
+                    '<td class="text-end">' + fmt(m.teorica) + '</td>' +
+                    '<td class="text-end">' + fmt(m.real) + '</td>' +
+                    '<td>' + utilCell(m.real, m.teorica) + '</td>';
+                tbody.appendChild(maqRow);
+
+                if (!maqOpen) return;
+
+                m.ops.forEach(function(item) {
+                    const cat = categorizeStatus(item);
+                    const opRow = document.createElement('tr');
+                    opRow.className = 'dd-op';
+                    opRow.innerHTML =
+                        '<td class="indent-2">' + escapeHtml(item.Operacion || '—') + '</td>' +
+                        '<td><span class="badge ' + badgeClass(cat) + '">' + escapeHtml(statusLabel(item)) + '</span></td>' +
+                        '<td class="text-end">' + fmt(item.Capacidad_Teorica) + '</td>' +
+                        '<td class="text-end">' + fmt(item.Capacidad_Real) + '</td>' +
+                        '<td>' + utilCell(item.Capacidad_Real, item.Capacidad_Teorica) + '</td>';
+                    tbody.appendChild(opRow);
+                });
+            });
+        });
+    }
+
+    function setAllExpanded(open) {
+        const data = filteredRows();
+        const tree = buildTree(data);
+        expanded.lineas.clear();
+        expanded.maquinas.clear();
+        if (open) {
+            Object.keys(tree).forEach(function(linea) {
+                expanded.lineas.add(linea);
+                Object.keys(tree[linea].machines).forEach(function(maq) {
+                    expanded.maquinas.add(machineKey(linea, maq));
+                });
+            });
+        }
+        updateTable(data);
+    }
+
+    document.getElementById('table-body').addEventListener('click', function(e) {
+        const lineaRow = e.target.closest('tr.dd-linea');
+        if (lineaRow) {
+            const linea = lineaRow.dataset.linea;
+            if (expanded.lineas.has(linea)) expanded.lineas.delete(linea);
+            else expanded.lineas.add(linea);
+            updateTable(filteredRows());
+            return;
+        }
+        const maqRow = e.target.closest('tr.dd-maq');
+        if (maqRow) {
+            const key = machineKey(maqRow.dataset.linea, maqRow.dataset.maquina);
+            if (expanded.maquinas.has(key)) expanded.maquinas.delete(key);
+            else expanded.maquinas.add(key);
+            updateTable(filteredRows());
+        }
+    });
+
+    document.getElementById('btn-expand').addEventListener('click', function() { setAllExpanded(true); });
+    document.getElementById('btn-collapse').addEventListener('click', function() { setAllExpanded(false); });
+
+    function cleanScale() {
+        return {
+            display: false,
+            grid: { display: false, drawBorder: false },
+            border: { display: false },
+            ticks: { display: false }
+        };
+    }
+
+    function updateChart(data) {
+        const chartData = {};
+        data.forEach(function(item) {
+            const linea = item.Linea || 'Sin línea';
+            if (!chartData[linea]) chartData[linea] = { teorica: 0, real: 0 };
+            chartData[linea].teorica += Number(item.Capacidad_Teorica) || 0;
+            chartData[linea].real += Number(item.Capacidad_Real) || 0;
+        });
+
+        const labels = Object.keys(chartData).sort();
+        const dataTeorica = labels.map(function(l) { return chartData[l].teorica; });
+        const dataReal = labels.map(function(l) { return chartData[l].real; });
+
+        if (myChart) myChart.destroy();
+        const ctx = document.getElementById('capacidadesChart').getContext('2d');
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Capacidad teórica', data: dataTeorica, backgroundColor: COLORS.teorica, borderRadius: 6, maxBarThickness: 42 },
+                    { label: 'Capacidad real', data: dataReal, backgroundColor: COLORS.real, borderRadius: 6, maxBarThickness: 42 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } },
+                    title: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        offset: -2,
+                        color: '#495057',
+                        font: { size: 11, weight: '600' },
+                        formatter: function(v) { return fmt(v); }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); }
+                        }
+                    }
+                },
+                layout: { padding: { top: 18 } },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        border: { display: false },
+                        ticks: { color: '#495057', font: { weight: '600' } }
+                    },
+                    y: cleanScale()
+                }
+            }
+        });
+    }
+
+    function doughnutOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '62%',
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    color: '#fff',
+                    font: { weight: '700', size: 12 },
+                    formatter: function(value, ctx) {
+                        const total = ctx.chart.data.datasets[0].data.reduce(function(a, b) { return a + b; }, 0);
+                        if (!total || !value) return '';
+                        return Math.round(value / total * 100) + '%';
+                    }
+                }
+            }
+        };
+    }
+
+    function updateCapacidadPie(data) {
+        const teorica = data.reduce(function(sum, item) { return sum + (Number(item.Capacidad_Teorica) || 0); }, 0);
+        const real = data.reduce(function(sum, item) { return sum + (Number(item.Capacidad_Real) || 0); }, 0);
+        const dif = Math.max(teorica - real, 0);
+
+        if (capacidadPie) capacidadPie.destroy();
+        const ctx = document.getElementById('capacidadPie').getContext('2d');
+        capacidadPie = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Capacidad real', 'Diferencia'],
+                datasets: [{
+                    data: [real, dif],
+                    backgroundColor: [COLORS.real, COLORS.dif],
+                    borderWidth: 0
+                }]
+            },
+            options: doughnutOptions()
+        });
+
+        const util = teorica ? pct(real, teorica) : 0;
+        document.getElementById('capacidad-legend').innerHTML =
+            legendRow(COLORS.teorica, 'Capacidad teórica', fmt(teorica), '100% · total del círculo') +
+            legendRow(COLORS.real, 'Capacidad real', fmt(real), util + '% de la teórica') +
+            legendRow(COLORS.dif, 'Diferencia (pérdida)', fmt(dif), (teorica ? pct(dif, teorica) : 0) + '% no utilizada');
+    }
+
+    function updateEstatusPie(data) {
+        const counts = { Activa: 0, Parcial: 0, Inactiva: 0 };
+        data.forEach(function(item) {
+            counts[categorizeStatus(item)] += 1;
+        });
+        const total = counts.Activa + counts.Parcial + counts.Inactiva;
+
+        if (estatusPie) estatusPie.destroy();
+        const ctx = document.getElementById('estatusPie').getContext('2d');
+        estatusPie = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Activa', 'Parcial', 'Inactiva'],
+                datasets: [{
+                    data: [counts.Activa, counts.Parcial, counts.Inactiva],
+                    backgroundColor: [COLORS.activa, COLORS.parcial, COLORS.inactiva],
+                    borderWidth: 0
+                }]
+            },
+            options: doughnutOptions()
+        });
+
+        document.getElementById('estatus-legend').innerHTML =
+            legendRow(COLORS.activa, 'Activa', counts.Activa, share(counts.Activa, total)) +
+            legendRow(COLORS.parcial, 'Parcial', counts.Parcial, share(counts.Parcial, total) + ' · % de trabajo menor') +
+            legendRow(COLORS.inactiva, 'Inactiva', counts.Inactiva, share(counts.Inactiva, total));
+    }
+
+    function share(n, total) {
+        if (!total) return '0%';
+        return Math.round(n / total * 100) + '% de ' + total + ' máquinas';
+    }
+
+    function legendRow(color, label, value, note) {
+        return '<div class="d-flex justify-content-between align-items-center mb-1">' +
+            '<span><span class="dot" style="background:' + color + '"></span>' + escapeHtml(label) + '</span>' +
+            '<span><strong>' + escapeHtml(String(value)) + '</strong> <span class="muted">' + escapeHtml(note) + '</span></span></div>';
+    }
+
+    document.querySelectorAll('.filter-input').forEach(function(select) {
+        select.addEventListener('change', updateDashboard);
+    });
+
+    loadData();
+</script>
+</body>
+</html>
