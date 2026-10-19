@@ -1,0 +1,7 @@
+Grupo,Lineas_solicitud,Lineas_atendidas,Lineas_no_disponible,Lineas_sin_estado,Pct_lineas_atendidas,Pct_lineas_no_disponible,Und_solicitadas,Und_atendidas,Und_no_disponible,Pct_und_atendidas,Pct_und_no_disponible,SKUs,Sucursales_areas
+TIENDAS (solicitudes),417,322,83,12,0.7721822541966427,0.19904076738609114,15740.0,15225.0,502.0,0.9672808132147395,0.031893265565438374,79,7
+TALLER (movimientos salidas — demanda completa),369,369,0,0,1.0,0.0,1550.0,1550.0,0.0,1.0,0.0,75,1
+CRECO otras areas (solicitudes I+D/Almacen/Mant./etc.),56,49,7,0,0.875,0.125,160.0,151.0,9.0,0.94375,0.05625,32,5
+TALLER + CRECO OPS (combinado),425,418,7,0,0.9835294117647059,0.01647058823529412,1710.0,1701.0,9.0,0.9947368421052631,0.005263157894736842,76,6
+UNIFICADO (Tiendas + Taller mov. + CRECO ops),842,740,90,12,0.8788598574821853,0.10688836104513064,17450.0,16926.0,511.0,0.9699713467048711,0.029283667621776505,109,13
+"REF — Taller solicitudes viejas (INCOMPLETO, solo fill rate historico)",99,87,12,0,0.8787878787878788,0.12121212121212122,298.0,284.0,14.0,0.9530201342281879,0.04697986577181208,39,1
