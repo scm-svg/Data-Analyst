@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cuadro · Capacidad instalada en piezas y selección de maquinaria de costura</title>
+<style>
+  :root{
+    --ink:#12263A; --deep:#0E4C5C; --teal:#177E6D; --green:#2A9D8F;
+    --red:#C0392B; --amber:#B4801A; --muted:#4F5B62; --line:#DCD5C7;
+    --bg:#F7F5F0; --card:#fff; --soft:#EFEADF;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:"Segoe UI",Calibri,system-ui,-apple-system,sans-serif;
+       color:var(--ink);background:var(--bg);line-height:1.5;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:26px 22px 90px}
+
+  header.cover{background:linear-gradient(135deg,#12263A 0%,#0E4C5C 100%);color:#fff;
+               padding:38px 34px;border-radius:14px;margin-bottom:20px}
+  header.cover .kicker{letter-spacing:.14em;font-size:.7rem;text-transform:uppercase;opacity:.72}
+  header.cover h1{margin:10px 0 8px;font-size:1.9rem;line-height:1.22;max-width:34ch}
+  header.cover .sub{margin:0;max-width:70ch;color:rgba(255,255,255,.86)}
+  header.cover .sub strong{color:#fff}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .pill{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);
+        border-radius:999px;padding:4px 11px;font-size:.76rem}
+
+  h2{font-size:1.3rem;color:var(--deep);border-bottom:2px solid var(--line);
+     padding-bottom:7px;margin:38px 0 14px}
+  h3{font-size:1.05rem;color:var(--ink);margin:24px 0 8px}
+  h4{font-size:.93rem;margin:16px 0 6px;color:var(--deep);text-transform:uppercase;
+     letter-spacing:.05em}
+  p,li{color:var(--muted)}
+  strong{color:var(--ink)}
+  .lead{font-size:1.02rem}
+
+  .grid{display:grid;gap:11px}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g5,.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:13px 15px}
+  .kpi .n{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+  .kpi .l{font-size:.76rem;color:var(--muted);margin-top:3px;line-height:1.35}
+  .kpi.warn .n{color:var(--red)} .kpi.ok .n{color:var(--teal)} .kpi.amb .n{color:var(--amber)}
+  .kpi.hero{background:var(--ink);border-color:var(--ink)}
+  .kpi.hero .n{color:#fff} .kpi.hero .l{color:rgba(255,255,255,.8)}
+
+  .callout{border-radius:11px;padding:14px 16px;margin:14px 0 18px;border:1px solid var(--line);background:#fff}
+  .callout.red{border-left:4px solid var(--red);background:#FDF2F0}
+  .callout.teal{border-left:4px solid var(--teal);background:#F0F7F5}
+  .callout.amber{border-left:4px solid #D8A93A;background:#FFF9EA}
+  .callout.ink{border-left:4px solid var(--ink);background:#F2F4F6}
+  .callout p:last-child, .callout ul:last-child, .callout ol:last-child{margin-bottom:0}
+  .callout p:first-child{margin-top:0}
+
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:.83rem;margin:10px 0 16px;
+        border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  th,td{border-bottom:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
+  th{background:var(--soft);font-weight:600;color:var(--ink);font-size:.79rem}
+  tbody tr:nth-child(even) td{background:#FBFAF7}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.total td{background:#EAF1F0 !important;font-weight:700;color:var(--ink)}
+  tr.sep td{background:var(--ink) !important;color:#fff;font-weight:600;font-size:.78rem;
+            text-transform:uppercase;letter-spacing:.06em}
+  .neg{color:var(--red);font-weight:700}
+  .pos{color:var(--teal);font-weight:700}
+
+  .tag{display:inline-block;font-size:.69rem;font-weight:700;padding:2px 7px;border-radius:4px;
+       white-space:nowrap}
+  .t-red{background:#F7D5CE;color:#8E2A1D}
+  .t-ok{background:#D5EDE8;color:#136255}
+  .t-amb{background:#F7E7BC;color:#7E5B0E}
+  .t-gray{background:#E4E0D6;color:#4F5B62}
+
+  figure{margin:18px 0 10px}
+  figure img{width:100%;border:1px solid var(--line);border-radius:9px;background:#fff}
+  figcaption{font-size:.78rem;color:var(--muted);margin-top:7px;padding-left:2px}
+
+  nav.toc{background:#fff;border:1px solid var(--line);border-radius:11px;padding:16px 20px}
+  nav.toc h2{margin:0 0 8px;border:none;padding:0;font-size:1.05rem}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:26px}
+  @media(max-width:700px){nav.toc ol{columns:1}}
+  nav.toc a{color:var(--teal);text-decoration:none;font-size:.86rem}
+  nav.toc a:hover{text-decoration:underline}
+  nav.toc li{margin:3px 0}
+
+  .note{font-size:.8rem;color:var(--muted)}
+  .formula{background:#F2F4F6;border:1px solid var(--line);border-radius:8px;
+           padding:11px 14px;font-family:"Consolas",monospace;font-size:.81rem;
+           color:var(--ink);margin:10px 0;overflow-x:auto;white-space:nowrap}
+  .actions{margin:0 0 16px}
+  .btn{display:inline-block;background:var(--teal);color:#fff;text-decoration:none;
+       padding:9px 15px;border-radius:8px;font-size:.85rem;border:0;cursor:pointer;font-weight:600}
+  .btn.sec{background:#fff;color:var(--teal);border:1px solid var(--teal);margin-left:6px}
+  ol.tight li, ul.tight li{margin:5px 0}
+  .src{font-size:.76rem;color:#6B7780;font-style:italic}
+
+  @media print{
+    body{background:#fff;font-size:10.4pt}
+    .wrap{padding:0;max-width:none}
+    .actions{display:none}
+    header.cover{break-after:avoid;border-radius:0}
+    h2{break-after:avoid} h3{break-after:avoid}
+    figure,table,.callout,.kpi{break-inside:avoid}
+    tr{break-inside:avoid}
+    nav.toc{break-after:page}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Crecoindustrias, C.A. · Marca Cuadro · Confidencial — Gerencia</div>
+  <h1>Capacidad instalada del taller en piezas y selección de maquinaria de costura</h1>
+  <p class="sub">Techo actual teórico y real, dos configuraciones de línea con maquinaria nueva
+  y el déficit contra la demanda regular, el pico de diciembre y la apertura de tiendas.
+  Toda la capacidad está expresada en <strong>piezas por mes</strong>.</p>
+  <div class="meta">
+    <span class="pill">Corte: septiembre 2026</span>
+    <span class="pill">Unidad: piezas/mes · 20 días hábiles</span>
+    <span class="pill">Mix 50% MAR · 35% RIO · 15% Basic Line</span>
+    <span class="pill">Modelo reproducible: <code style="color:#fff">modelo_capacidad.py</code></span>
+  </div>
+</header>
+
+<div class="actions">
+  <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+  <a class="btn sec" href="dashboard_capacidad_piezas.html">Abrir dashboard interactivo</a>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="resumen">1. La decisión, en una página</h2>
+
+<p class="lead">El taller cubre la demanda regular con holgura y <strong>no cubre diciembre</strong>.
+Ese es el hallazgo central, y no se resuelve reparando lo que está roto: repararlo todo deja el
+pico todavía corto. La pregunta que Gerencia debe responder no es «¿compramos máquinas?»,
+sino <strong>¿para qué red dimensionamos el taller?</strong></p>
+
+<div class="grid g4">
+  <div class="kpi hero"><div class="n">7.008</div><div class="l">Piezas/mes de primera calidad<br>que el taller entrega hoy</div></div>
+  <div class="kpi amb"><div class="n">7.693</div><div class="l">Techo teórico en piezas<br>con las 22 máquinas al 100%</div></div>
+  <div class="kpi ok"><div class="n">4.145</div><div class="l">Demanda regular<br>cubierta 1,69× · sobra capacidad</div></div>
+  <div class="kpi warn"><div class="n">8.576</div><div class="l">Demanda pico diciembre<br>cubierta 0,82× · faltan 1.568 piezas</div></div>
+</div>
+
+<div class="callout red">
+  <p><strong>El techo teórico no alcanza el pico.</strong> Aunque mañana volvieran a producir las
+  cuatro máquinas caídas o parciales, el taller llegaría a <strong>7.693 piezas</strong> contra una
+  demanda de diciembre de <strong>8.576</strong>. Seguirían faltando <strong>883 piezas</strong>.
+  Reparar no es una alternativa a comprar: es el punto de partida.</p>
+</div>
+
+<h3>Las dos propuestas, resumidas</h3>
+<table>
+  <thead><tr>
+    <th>Propuesta</th><th class="num">Máquinas<br>nuevas</th><th class="num">Piezas/mes<br>de primera</th>
+    <th class="num">Δ vs hoy</th><th>¿Cubre diciembre<br>de la red actual?</th>
+    <th>¿Cubre diciembre<br>con tiendas nuevas?</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>Hoy · sin inversión</td><td class="num">0</td><td class="num">7.008</td>
+        <td class="num">—</td><td><span class="tag t-red">No · −1.568</span></td><td><span class="tag t-red">No</span></td></tr>
+    <tr><td><strong>2.1a</strong> · Inversión corta mínima</td><td class="num">6</td><td class="num">8.153</td>
+        <td class="num pos">+1.145</td><td><span class="tag t-red">Casi · −423</span></td><td><span class="tag t-red">No</span></td></tr>
+    <tr><td><strong>2.1b</strong> · Inversión corta recomendada</td><td class="num">12</td><td class="num">8.619</td>
+        <td class="num pos">+1.611</td><td><span class="tag t-ok">Sí · +43</span></td><td><span class="tag t-red">No · −1.551</span></td></tr>
+    <tr><td><strong>2.2a</strong> · Ambiciosa · 4 módulos</td><td class="num">20</td><td class="num">9.571</td>
+        <td class="num pos">+2.563</td><td><span class="tag t-ok">Sí · +995</span></td><td><span class="tag t-amb">Casi · −599</span></td></tr>
+    <tr><td><strong>2.2b</strong> · Ambiciosa · 5 módulos + shorts</td><td class="num">33</td><td class="num">11.827</td>
+        <td class="num pos">+4.819</td><td><span class="tag t-ok">Sí · +3.251</span></td><td><span class="tag t-ok">Sí, 1 tienda · +1.657</span></td></tr>
+    <tr><td><strong>2.2c</strong> · Ambiciosa · 6 módulos + shorts</td><td class="num">38</td><td class="num">14.016</td>
+        <td class="num pos">+7.008</td><td><span class="tag t-ok">Sí · +5.440</span></td><td><span class="tag t-ok">Sí, 3 tiendas · +1.303</span></td></tr>
+  </tbody>
+</table>
+
+<div class="callout teal">
+  <p><strong>Recomendación.</strong> Aprobar <strong>2.1b</strong> (12 máquinas) como piso
+  irrenunciable: es lo mínimo que cubre el diciembre de la red que ya existe, y es el paquete con
+  mejor rendimiento por máquina de los que cierran el pico. Aprobar en el mismo acto la
+  <strong>cotización</strong> de 2.2b, porque la tienda confirmada de este año deja a 2.1b en
+  déficit de 1.551 piezas en su primer diciembre. Comprar 2.1b y abrir la tienda sin 2.2b es
+  repetir este informe en doce meses.</p>
+</div>
+
+<div class="callout amber">
+  <p><strong>Guion de 10 minutos para la sesión.</strong></p>
+  <ol class="tight">
+    <li><strong>2 min · el hueco.</strong> 7.008 piezas hoy contra 8.576 de diciembre.
+    Faltan 1.568 piezas: cuatro días y medio de taller que el calendario no tiene.</li>
+    <li><strong>2 min · por qué no basta reparar.</strong> El techo teórico es 7.693. El ruedo
+    nace a la mitad del overlock: es diseño de línea, no avería.</li>
+    <li><strong>2 min · el peaje de calidad.</strong> 16,14% de reproceso medido. De cada
+    100 prendas, 16 vuelven a ocupar máquina y gente.</li>
+    <li><strong>2 min · las dos propuestas.</strong> 2.1b cierra el pico de hoy;
+    2.2b cierra el pico con la tienda nueva.</li>
+    <li><strong>2 min · el pedido.</strong> Aprobar 2.1b; cotizar 2.2b; liquidar la chatarra;
+    cerrar cuatro datos P0 antes del acta de inversión.</li>
+  </ol>
+</div>
+
+<!-- ================================================================= -->
+<nav class="toc">
+  <h2>Índice</h2>
+  <ol>
+    <li><a href="#resumen">La decisión, en una página</a></li>
+    <li><a href="#metodo">Método: por qué en piezas y no en operaciones</a></li>
+    <li><a href="#actual">Capacidad actual: teórica y real</a></li>
+    <li><a href="#calidad">El descuento de calidad</a></li>
+    <li><a href="#p21">Propuesta 2.1 — Inversión corta</a></li>
+    <li><a href="#p22">Propuesta 2.2 — Reestructuración ambiciosa</a></li>
+    <li><a href="#deficit">Déficit contra la demanda</a></li>
+    <li><a href="#capex">Rendimiento de cada máquina comprada</a></li>
+    <li><a href="#recom">Recomendación y secuencia</a></li>
+    <li><a href="#supuestos">Supuestos, sensibilidad y datos que faltan</a></li>
+    <li><a href="#anexos">Anexos</a></li>
+  </ol>
+</nav>
+
+<!-- ================================================================= -->
+<h2 id="metodo">2. Método: por qué este informe cuenta piezas y no operaciones</h2>
+
+<p>El expediente venía midiendo la capacidad en <strong>operaciones por día</strong>: 2.940
+teóricas, 2.649 reales. Es la unidad correcta para el taller y resolvió una discusión real entre
+Operaciones y Gerencia. Pero para decidir una compra hay que traducirla, porque
+<strong>una operación no es una pieza</strong> y la conversión no es una división.</p>
+
+<h3>2.1 El error del promedio</h3>
+<p>La tentación es dividir: 52.990 operaciones al mes entre 7,40 operaciones por pieza del mix
+da 7.161 piezas. Ese número está mal, y está mal <em>al alza</em>.</p>
+
+<div class="formula">
+  Método de suma de operaciones : 52.990 ops/mes &divide; 7,40 ops/pieza = <b>7.161 piezas/mes</b><br>
+  Método de cuello de botella   : 81,30 pzas/línea/día &times; 20 días &times; 4 líneas = <b>6.504 piezas/mes</b><br>
+  Sobreestimación del primer método .......................... <b>+10,1%</b>
+</div>
+
+<p>La diferencia son 657 piezas al mes que el taller no puede entregar. Sumar las operaciones de
+todas las máquinas supone que la capacidad es intercambiable: que las operaciones libres del
+overlock pueden hacer el trabajo del ruedo. No pueden. <strong>Una línea produce al ritmo de su
+estación más lenta</strong>, y el resto de las máquinas quedan esperando. Ese es exactamente el
+WIP que hoy se acumula en las mesas de remate.</p>
+
+<h3>2.2 Cómo se construye la cifra en piezas</h3>
+<p>Este informe no divide operaciones. Parte de la <strong>tasa de producción medida en campo</strong>,
+que ya viene en piezas y ya incorpora el cuello de botella de la línea.</p>
+
+<table>
+  <thead><tr><th class="num">Paso</th><th>Qué se hace</th><th>Por qué</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>Se fija el mix de planificación: MAR 50%, RIO 35%, Basic Line 15%, con 7, 6 y 12 operaciones por pieza.</td><td>MAR, RIO y Basic no cuestan lo mismo. Planificar sobre un promedio plano garantiza incumplir.</td></tr>
+    <tr><td class="num">2</td><td>Se toma la tasa de piezas por línea y por día medida en campo, para tres estados técnicos del parque.</td><td>Es una observación directa en la unidad que Gerencia pide, no una derivación.</td></tr>
+    <tr><td class="num">3</td><td>Tasa al mix = 0,50·MAR + 0,35·RIO + 0,15·Basic.</td><td>Convierte tres tasas en una sola cifra comparable mes a mes.</td></tr>
+    <tr><td class="num">4</td><td>Capacidad mensual = tasa al mix × 20 días × número de líneas.</td><td>Mismo criterio de 20 días hábiles que ya usa Gerencia de Operaciones.</td></tr>
+    <tr><td class="num">5</td><td>Se descuenta el retrabajo con el factor 1 ÷ (1 + tasa de reproceso × contenido de retrabajo).</td><td>La prenda que vuelve a la línea ocupa máquina y gente, y no es una pieza nueva.</td></tr>
+    <tr><td class="num">6</td><td>Déficit = demanda − capacidad neta de primera calidad.</td><td>La venta se hace con piezas vendibles, no con piezas que salen de línea.</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 Los tres estados técnicos del parque</h3>
+<p>Toda la comparación de escenarios se apoya en tres tasas medidas, una por estado del parque.
+Son el corazón del modelo y conviene que Gerencia las reconozca:</p>
+
+<table>
+  <thead><tr>
+    <th>Modelo</th><th class="num">Ops por<br>pieza</th><th class="num">Peso en<br>el mix</th>
+    <th class="num">A · Parque actual<br>(pzas/línea/día)</th>
+    <th class="num">B · Parque íntegro<br>o JACK K7</th>
+    <th class="num">C · Módulo<br>continuo</th>
+    <th class="num">C vs A</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>MAR</td><td class="num">7</td><td class="num">50%</td><td class="num">95</td><td class="num">105</td><td class="num">130</td><td class="num pos">+36,8%</td></tr>
+    <tr><td>RIO</td><td class="num">6</td><td class="num">35%</td><td class="num">73</td><td class="num">82</td><td class="num">101</td><td class="num pos">+38,4%</td></tr>
+    <tr><td>Basic Line</td><td class="num">12</td><td class="num">15%</td><td class="num">55</td><td class="num">61</td><td class="num">76</td><td class="num pos">+38,2%</td></tr>
+    <tr class="total"><td>MIX PONDERADO</td><td class="num">7,40</td><td class="num">100%</td><td class="num">81,30</td><td class="num">90,35</td><td class="num">111,75</td><td class="num">+37,5%</td></tr>
+  </tbody>
+</table>
+
+<ul class="tight">
+  <li><strong>A · parque actual.</strong> Lo que entrega hoy, con cuatro máquinas caídas o
+  parciales y la merma del 10% por estado de máquina.</li>
+  <li><strong>B · parque íntegro o JACK K7.</strong> El techo de diseño del layout actual.
+  Es lo que el plan de producción pide (105 MAR por línea) y lo que la sustitución por máquina
+  nueva recupera: corte y succión de hilo destraban la estación final y desaparece la merma.</li>
+  <li><strong>C · módulo continuo.</strong> Línea reestructurada en módulo autónomo de cinco
+  máquinas, sin salto de operaria y sin mesa de remate. La prenda entra y sale terminada.</li>
+</ul>
+
+<div class="callout ink">
+  <p><strong>Validación cruzada.</strong> El modelo en piezas y el tablero en operaciones dicen
+  lo mismo por caminos distintos, y eso es la mejor garantía de que ninguno está inventado:</p>
+  <ul class="tight">
+    <li>Utilización en operaciones: 2.649,5 ÷ 2.940 = <strong>90,1%</strong>.</li>
+    <li>Utilización en piezas: 6.504 ÷ 7.228 = <strong>90,0%</strong>.</li>
+    <li>Capacidad de las 4 líneas en módulo continuo: el modelo da <strong>8.940 piezas/mes</strong>,
+    exactamente la cifra del dashboard de capacidad.</li>
+    <li>Salto del módulo sobre el parque actual: el modelo da <strong>+37,5%</strong>;
+    el dashboard, +37,7%.</li>
+  </ul>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="actual">3. Capacidad actual del taller en piezas</h2>
+
+<h3>3.1 El parque y su cuello de botella</h3>
+
+<div class="grid g4">
+  <div class="kpi"><div class="n">22</div><div class="l">Máquinas dentro del KPI de capacidad</div></div>
+  <div class="kpi ok"><div class="n">18</div><div class="l">Activas · 82% del parque</div></div>
+  <div class="kpi warn"><div class="n">4</div><div class="l">Inactivas o parciales · 18%</div></div>
+  <div class="kpi warn"><div class="n">9%</div><div class="l">Chatarra que se deprecia sin producir</div></div>
+</div>
+
+<p>Las cuatro máquinas que fallan no están repartidas al azar: <strong>tres de las cuatro son
+collareteras de ruedo</strong>, y el ruedo es precisamente la estación más lenta de la línea.</p>
+
+<table>
+  <thead><tr><th>Línea</th><th>Máquina</th><th>Estatus</th>
+    <th class="num">Teórica<br>ops/día</th><th class="num">Real<br>ops/día</th><th class="num">Pérdida</th></tr></thead>
+  <tbody>
+    <tr><td>Línea 3</td><td>Collaretera de ruedo 1</td><td><span class="tag t-amb">Parcial 50%</span></td><td class="num">101</td><td class="num">50,5</td><td class="num neg">50,5</td></tr>
+    <tr><td>Línea 3</td><td>Collaretera de ruedo 2</td><td><span class="tag t-red">Inactiva</span></td><td class="num">100</td><td class="num">0</td><td class="num neg">100</td></tr>
+    <tr><td>Línea 4</td><td>Collaretera de ruedo 2</td><td><span class="tag t-red">Inactiva</span></td><td class="num">100</td><td class="num">0</td><td class="num neg">100</td></tr>
+    <tr><td>Línea 2</td><td>Overlock Unión/Montaje</td><td><span class="tag t-amb">Parcial 80%</span></td><td class="num">190</td><td class="num">150</td><td class="num neg">40</td></tr>
+    <tr class="total"><td colspan="3">Total de la pérdida</td><td class="num">491</td><td class="num">200,5</td><td class="num">290,5</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="anexos/figuras/05_cuello_ruedo.png" alt="El ruedo nace a la mitad del overlock" />
+  <figcaption>Figura 1. El cuello no es una avería: es el diseño de la línea. La collaretera de
+  ruedo tiene 101 operaciones/día contra 190 del overlock de unión. Cuando el ruedo se cae al 50%
+  o se apaga, la línea entera baja con él aunque el resto de las máquinas estén sanas.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Línea</th><th class="num">Teórica<br>ops/día</th><th class="num">Real<br>ops/día</th>
+    <th class="num">Pérdida</th><th class="num">Utilización</th><th>Diagnóstico</th></tr></thead>
+  <tbody>
+    <tr><td>Línea 1</td><td class="num">685</td><td class="num">685</td><td class="num">0</td>
+        <td class="num"><span class="tag t-ok">100%</span></td>
+        <td>Sana. Prueba de que el 100% es alcanzable. Un solo ruedo por diseño.</td></tr>
+    <tr><td>Línea 2</td><td class="num">685</td><td class="num">645</td><td class="num neg">40</td>
+        <td class="num"><span class="tag t-amb">94%</span></td>
+        <td>Overlock de unión al 80%. Un solo ruedo por diseño.</td></tr>
+    <tr><td>Línea 3</td><td class="num">785</td><td class="num">634,5</td><td class="num neg">150,5</td>
+        <td class="num"><span class="tag t-red">81%</span></td>
+        <td>La peor. Concentra el 52% de toda la pérdida del taller: ruedo 1 al 50% y ruedo 2 apagado.</td></tr>
+    <tr><td>Línea 4</td><td class="num">785</td><td class="num">685</td><td class="num neg">100</td>
+        <td class="num"><span class="tag t-amb">87%</span></td>
+        <td>Ruedo 2 apagado. Promete 785 y entrega lo mismo que una línea de 4 máquinas.</td></tr>
+    <tr class="total"><td>Total L1–L4</td><td class="num">2.940</td><td class="num">2.649,5</td>
+        <td class="num">290,5</td><td class="num">90,1%</td><td></td></tr>
+  </tbody>
+</table>
+
+<p><strong>Léase con cuidado el desbalanceo.</strong> Líneas 1 y 2 nacieron con un solo ruedo;
+líneas 3 y 4 se diseñaron con dos para equilibrar el overlock, y por eso prometen 785 en lugar de
+685. Pero <strong>los dos segundos ruedos están apagados</strong>. El resultado es que L3 y L4
+tienen overlock de línea grande y ruedo de línea chica: la promesa de 785 nunca se cumplió ni un
+solo día, y entre estaciones se acumula el WIP.</p>
+
+<h3>3.2 Capacidad teórica y capacidad real, en piezas</h3>
+
+<table>
+  <thead><tr><th>Bloque</th>
+    <th class="num">Teórica<br>pzas/mes</th><th class="num">Real<br>pzas/mes</th>
+    <th class="num">Pérdida</th><th>Base de cálculo</th></tr></thead>
+  <tbody>
+    <tr><td>Líneas 1–4 · tejido de punto</td><td class="num">7.228</td><td class="num">6.504</td>
+        <td class="num neg">724</td><td>90,35 y 81,30 pzas/línea/día × 20 días × 4 líneas</td></tr>
+    <tr><td>Línea de shorts y pants</td><td class="num">900</td><td class="num">900</td>
+        <td class="num">0</td><td>45 pzas/día × 20 días · muestra de campo, sin medición formal</td></tr>
+    <tr class="total"><td>TALLER COMPLETO · bruto</td><td class="num">8.128</td><td class="num">7.404</td>
+        <td class="num">724</td><td>Piezas que salen de línea</td></tr>
+    <tr><td>Descuento por retrabajo QA (16,14%)</td><td class="num neg">−435</td><td class="num neg">−396</td>
+        <td class="num">—</td><td>Factor neto 0,9465</td></tr>
+    <tr class="total"><td>TALLER COMPLETO · neto de primera</td><td class="num">7.693</td><td class="num">7.008</td>
+        <td class="num">685</td><td>Piezas vendibles</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="anexos/figuras/01_capacidad_actual_piezas.png" alt="Capacidad instalada en piezas por mes" />
+  <figcaption>Figura 2. Los tres techos del taller contra las dos demandas. La demanda regular
+  (4.145) queda muy por debajo incluso del techo neto. El pico de diciembre (8.576) queda por
+  encima de los tres.</figcaption>
+</figure>
+
+<div class="callout amber">
+  <p><strong>Lo que cuesta el estado del parque, en piezas.</strong> 685 piezas de primera
+  calidad al mes. En un diciembre son 685 prendas que no llegan a tienda en el mes que más pesa
+  en caja. Sobre la demanda regular no se nota, porque hay holgura; sobre el pico es exactamente
+  el 44% del hueco total.</p>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="calidad">4. El descuento de calidad: lo que se lleva el retrabajo</h2>
+
+<div class="grid g4">
+  <div class="kpi"><div class="n">10.502</div><div class="l">Piezas inspeccionadas<br>promedio mensual abr–ago 2026</div></div>
+  <div class="kpi warn"><div class="n">1.695</div><div class="l">Piezas rechazadas por QA</div></div>
+  <div class="kpi warn"><div class="n">16,14%</div><div class="l">Tasa de reproceso medida</div></div>
+  <div class="kpi amb"><div class="n">0,9465</div><div class="l">Factor neto de primera calidad</div></div>
+</div>
+
+<p>Esta es la parte del informe que el expediente anterior no podía cerrar: había mecanismo de
+defecto documentado, pero no había tasa. Ahora la hay, y cambia la conversación. <strong>Dieciséis
+de cada cien prendas vuelven a ocupar máquina y operaria</strong>, y esa capacidad no produce
+ninguna pieza nueva.</p>
+
+<div class="formula">
+  Para entregar G piezas hay que fabricar G &times; (1 + 0,1614 &times; 0,35) = G &times; 1,0565<br>
+  Factor neto de primera calidad = 1 &divide; 1,0565 = <b>0,9465</b><br>
+  Capacidad neta actual = 7.404 &times; 0,9465 = <b>7.008 piezas/mes</b>
+</div>
+
+<p>El 0,35 es el <strong>contenido de retrabajo</strong>: la fracción del contenido de operación
+original que consume una prenda retrabajada. Es un supuesto, y está declarado como tal. Se apoya
+en que los defectos documentados se concentran en el acabado —ruedo abierto, remate manual,
+limpieza de hilo, lavado por manchas de aceite— y no exigen rehacer la prenda completa.
+El apartado 10 muestra qué pasa si ese número es 20%, 50% o 100%: <strong>el orden de los
+escenarios no cambia; cambia el tamaño del déficit</strong>.</p>
+
+<h3>4.1 Por qué la maquinaria nueva baja la tasa, y no sólo sube el ritmo</h3>
+<p>Los siete defectos que Producción documentó son, uno por uno, atribuibles a la condición del
+parque, no al método ni al operario:</p>
+
+<table>
+  <thead><tr><th>Defecto</th><th>Causa en la máquina actual</th><th>Qué lo elimina en la máquina nueva</th></tr></thead>
+  <tbody>
+    <tr><td>Costura ondulada o estirada</td><td>Transporte diferencial desgastado; crítico en Microfibra, BioFlow y fitness</td><td>Diferencial de precisión y motor servo</td></tr>
+    <tr><td>Ruedos abiertos</td><td>Remate manual deficiente</td><td>Remate automático</td></tr>
+    <tr><td>Hilos sueltos y limpieza de hilo</td><td>Sin corte ni succión: existe una etapa completa que no entra a ningún reporte</td><td>Corte y succión de hilo en la estación</td></tr>
+    <tr><td>Manchas de aceite</td><td>Lubricación no controlada; golpea Blanco, Aguamarina y Amarillo Pastel</td><td>Lubricación sellada</td></tr>
+    <tr><td>Cortes accidentales de tela</td><td>Tijera manual sobre la máquina</td><td>Corte integrado: la tijera sale de la línea</td></tr>
+    <tr><td>Puntadas saltadas y rotura de hilo</td><td>Desgaste de mecanismo y tensión inestable</td><td>Control electrónico de tensión</td></tr>
+    <tr><td>Fruncido en montaje de manga</td><td>Diferencial sin ajuste fino</td><td>Diferencial regulable</td></tr>
+  </tbody>
+</table>
+
+<p>Por eso los escenarios con parque nuevo se modelan con una tasa de reproceso residual del
+<strong>6,0%</strong> en las líneas modernizadas, no con el 16,14% actual. Es un supuesto
+conservador: asume que sólo el 62% de los rechazos actuales se eliminan y que el 38% restante
+proviene de tela, corte, patrón o manipulación, que la máquina no corrige. En los escenarios
+donde sólo parte de las líneas se moderniza, la tasa se pondera por la fracción de días-línea
+con parque nuevo.</p>
+
+<figure>
+  <img src="anexos/figuras/07_efecto_reproceso.png" alt="Capacidad bruta contra capacidad neta" />
+  <figcaption>Figura 3. La distancia entre las dos barras es el peaje del retrabajo. Se estrecha a
+  medida que entra parque nuevo: en el escenario actual son 396 piezas al mes; con las cuatro
+  líneas en módulo continuo, 269 sobre una base mucho mayor.</figcaption>
+</figure>
+
+<!-- ================================================================= -->
+<h2 id="p21">5. Propuesta 2.1 — Inversión corta</h2>
+
+<p class="lead">Objetivo: <strong>la máxima capacidad alcanzable sin construir líneas nuevas</strong>.
+Se compra sólo donde el peso marginal es mayor —la estación de ruedo— y se aprovecha que las
+líneas 3 y 4 ya tienen cinco posiciones físicas instaladas. Convertirlas en módulo continuo es el
+camino más corto y más barato al techo C, porque no hay que crear la posición: hay que llenarla
+con máquina que funcione.</p>
+
+<h3>5.1 Configuración 2.1a — mínima · 6 máquinas</h3>
+
+<table>
+  <thead><tr><th>Ítem</th><th>Detalle</th><th class="num">Máquinas</th><th>Problema que ataca</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Módulo continuo para Línea 3</strong></td>
+        <td>Overlock de unión, overlock de cierre, collaretera de recubrir, collaretera de ruedo con corte y succión, recta dedicada</td>
+        <td class="num">5</td>
+        <td>L3 concentra el 52% de la pérdida. Ruedo 1 al 50% y ruedo 2 apagado.</td></tr>
+    <tr><td><strong>Overlock de unión para Línea 2</strong></td>
+        <td>Sustituye la máquina que trabaja al 80%</td><td class="num">1</td>
+        <td>Recupera 40 operaciones/día y la calidad de la unión de hombros y costados.</td></tr>
+    <tr><td>Recuperar el ruedo 2 de Línea 4</td>
+        <td>Con kit de repuestos, sin compra de máquina</td><td class="num">0</td>
+        <td>Devuelve L4 a su patrón de diseño de dos ruedos.</td></tr>
+    <tr><td>Reactivar los 2 overlock de cuellos</td>
+        <td>Sin compra · requiere 2 operarios</td><td class="num">0</td>
+        <td>Hoy están parados por personal, no por máquina. Libera la operación de montar cuello, que hoy carga los overlock de línea.</td></tr>
+    <tr><td>Kit de repuestos y contrato de suministro local</td>
+        <td>Agujas, cuchillas, diferenciales, loopers, con política mín-máx</td><td class="num">0</td>
+        <td>Tres equipos llevan meses esperando piezas: ≈40 piezas/día perdidas.</td></tr>
+    <tr class="total"><td colspan="2">Total 2.1a</td><td class="num">6</td>
+        <td>Resultado: L3 en módulo continuo; L1, L2 y L4 en techo de diseño.</td></tr>
+  </tbody>
+</table>
+
+<div class="grid g4">
+  <div class="kpi"><div class="n">8.556</div><div class="l">Piezas/mes brutas</div></div>
+  <div class="kpi amb"><div class="n">14,11%</div><div class="l">Reproceso ponderado</div></div>
+  <div class="kpi ok"><div class="n">8.153</div><div class="l">Piezas/mes de primera<br>+1.145 vs hoy · +16,3%</div></div>
+  <div class="kpi warn"><div class="n">−423</div><div class="l">Todavía falta para diciembre<br>de la red actual</div></div>
+</div>
+
+<div class="callout red">
+  <p><strong>2.1a no cierra el pico.</strong> Queda a 423 piezas de la demanda de diciembre.
+  Es la mejor relación piezas-por-máquina de todo el informe (191 piezas/mes por cada máquina
+  comprada), pero se queda corta justo en el mes que motiva la inversión. Sirve como fase de
+  arranque si hay restricción de caja; no sirve como respuesta a Gerencia.</p>
+</div>
+
+<h3>5.2 Configuración 2.1b — recomendada · 12 máquinas</h3>
+
+<p>Añade sobre 2.1a lo que falta para que <strong>ninguna línea quede con la estación de ruedo
+como techo</strong>:</p>
+
+<table>
+  <thead><tr><th>Ítem</th><th>Detalle</th><th class="num">Máquinas</th><th>Problema que ataca</th></tr></thead>
+  <tbody>
+    <tr><td colspan="4" class="sep" style="background:var(--ink);color:#fff;font-weight:600">Todo lo de 2.1a</td></tr>
+    <tr><td>Módulo continuo para Línea 3</td><td>5 máquinas</td><td class="num">5</td><td>Ver 2.1a</td></tr>
+    <tr><td>Overlock de unión para Línea 2</td><td>Sustitución</td><td class="num">1</td><td>Ver 2.1a</td></tr>
+    <tr><td colspan="4" class="sep" style="background:var(--ink);color:#fff;font-weight:600">Lo que agrega 2.1b</td></tr>
+    <tr><td><strong>Módulo continuo para Línea 4</strong></td>
+        <td>Igual que L3: cinco posiciones con máquina nueva</td><td class="num">5</td>
+        <td>L4 arrastra el mismo desbalanceo que L3. Ya tiene las cinco posiciones instaladas.</td></tr>
+    <tr><td><strong>Collaretera de ruedo para Línea 1 y Línea 2</strong></td>
+        <td>Segundo ruedo por línea, con corte y succión de hilo</td><td class="num">2</td>
+        <td>L1 y L2 nacen con un solo ruedo, a la mitad del overlock. Replica el patrón de diseño que L3 y L4 ya tienen.</td></tr>
+    <tr class="total"><td colspan="2">Total 2.1b</td><td class="num">12</td>
+        <td>Resultado: L3 y L4 en módulo continuo; L1 y L2 en techo de diseño con ruedo balanceado.</td></tr>
+  </tbody>
+</table>
+
+<div class="grid g4">
+  <div class="kpi"><div class="n">8.984</div><div class="l">Piezas/mes brutas</div></div>
+  <div class="kpi amb"><div class="n">12,08%</div><div class="l">Reproceso ponderado</div></div>
+  <div class="kpi ok"><div class="n">8.619</div><div class="l">Piezas/mes de primera<br>+1.611 vs hoy · +23,0%</div></div>
+  <div class="kpi ok"><div class="n">+43</div><div class="l">Cubre diciembre de la red actual<br>por margen mínimo</div></div>
+</div>
+
+<div class="callout teal">
+  <p><strong>2.1b es el piso irrenunciable.</strong> Con 12 máquinas el taller pasa a cubrir el
+  diciembre de la red que ya existe: 8.619 piezas de primera contra 8.576 de demanda.
+  El margen es de 43 piezas —medio día de producción—, así que hay que leerlo como
+  «empata», no como «sobra». Cualquier avería, corporativo o modelo complejo no previsto
+  vuelve a abrir el hueco.</p>
+</div>
+
+<div class="callout amber">
+  <p><strong>Condición no negociable de la Fase 2.1.</strong> Las dos máquinas de overlock de
+  cuellos están paradas por <strong>falta de operarios</strong>, no por avería. Comprar hierro sin
+  cerrar el headcount reproduce ese caso: máquina nueva, capacidad cero. El acta de inversión
+  debe incluir la dotación de las posiciones, o el resultado será menor que el proyectado.</p>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="p22">6. Propuesta 2.2 — Reestructuración ambiciosa</h2>
+
+<p class="lead">Objetivo: dejar de reparar el techo y <strong>comprar crecimiento</strong>. Las tres
+configuraciones son una escalera: cada peldaño cubre una red comercial distinta. Elegir peldaño es
+una decisión de Comercial tanto como de Taller, porque lo que se dimensiona es el diciembre de la
+red que se va a tener, no el de la que se tiene.</p>
+
+<h3>6.1 Las tres configuraciones</h3>
+
+<table>
+  <thead><tr><th>Config.</th><th>Qué se construye</th><th class="num">Máquinas<br>nuevas</th>
+    <th class="num">Bruto<br>pzas/mes</th><th class="num">Neto<br>pzas/mes</th><th class="num">Δ vs hoy</th></tr></thead>
+  <tbody>
+    <tr><td><strong>2.2a</strong></td>
+        <td>Las <strong>4 líneas de punto</strong> en módulo continuo de 5 máquinas. Cierra el estándar de calidad y de flujo en todo el taller: desaparecen las mesas de remate y la etapa de limpieza de hilo.</td>
+        <td class="num">20</td><td class="num">9.840</td><td class="num">9.571</td><td class="num pos">+2.563</td></tr>
+    <tr><td><strong>2.2b</strong></td>
+        <td>2.2a <strong>+ una 5ª línea de punto</strong> en módulo continuo <strong>+ la línea de shorts y pants completada y renovada</strong> (ojaladora, presilladora, engomadora, doble aguja, 2 rectas, 2 overlock).</td>
+        <td class="num">33</td><td class="num">12.075</td><td class="num">11.827</td><td class="num pos">+4.819</td></tr>
+    <tr><td><strong>2.2c</strong></td>
+        <td>2.2b <strong>+ una 6ª línea de punto</strong> en módulo continuo. Dimensionado explícitamente para el objetivo de tres tiendas nuevas por año, en mes pico.</td>
+        <td class="num">38</td><td class="num">14.310</td><td class="num">14.016</td><td class="num pos">+7.008</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="anexos/figuras/02_escenarios_capacidad_neta.png" alt="Capacidad neta por escenario" />
+  <figcaption>Figura 4. Los siete escenarios contra las dos demandas. La línea roja discontinua es
+  el pico de diciembre: el primer escenario que la cruza es 2.1b, y lo hace por 43 piezas.</figcaption>
+</figure>
+
+<h3>6.2 Por qué la línea de shorts entra en 2.2 y no en 2.1</h3>
+<p>La línea de shorts y pants es el punto ciego del expediente. Hoy aparece en el conteo de
+máquinas, produce, y <strong>no tiene techo medido</strong>: la única referencia es una muestra de
+campo de 45 piezas/día. Y lo que corre por ahí es lo más caro del catálogo en operaciones:</p>
+
+<table>
+  <thead><tr><th>Producto</th><th class="num">Operaciones<br>por pieza</th><th>Máquinas que exige</th><th>Estado del dato</th></tr></thead>
+  <tbody>
+    <tr><td>Short R1 — Externo</td><td class="num">17</td><td>Recta (4), Overlock (7), Collaretera, Engomadora, Presilladora, Presilla</td><td><span class="tag t-ok">Ficha completa</span></td></tr>
+    <tr><td>Short Sport</td><td class="num">15</td><td>Recta (3), Overlock (6), Doble aguja (2), Ojaladora, Engomadora, Presilladora</td><td><span class="tag t-ok">Ficha completa</span></td></tr>
+    <tr><td>Short R1 — Interno</td><td class="num">13</td><td>Collaretera (7), Recta, Overlock (4), Presilladora</td><td><span class="tag t-ok">Ficha completa</span></td></tr>
+    <tr><td>Explore Pants</td><td class="num">s/d</td><td>Probable ojal, presilla y engomado</td><td><span class="tag t-red">Celda vacía</span></td></tr>
+    <tr><td>Jacket 2.0</td><td class="num">s/d</td><td>Sin ficha de secuencia cargada</td><td><span class="tag t-red">Celda vacía</span></td></tr>
+  </tbody>
+</table>
+
+<p>Un short de 17 operaciones cuesta <strong>2,8 veces</strong> lo que un RIO de 6. Mientras no
+haya techo medido para esa línea, cualquier orden de shorts entra al taller sin cupo asignado y
+desplaza producción de punto sin que nadie lo vea en el tablero. Por eso 2.2b la incluye, y por eso
+el apartado 10 pide su medición como dato P1: <strong>es capacidad que existe y no se administra</strong>.</p>
+
+<h3>6.3 Qué se hace con el parque que sale</h3>
+<p>Las tres configuraciones liberan máquina. Dos collareteras son chatarra —el 9% del parque, que
+hoy se deprecia sin producir un segundo de valor— y a ellas se suman las sustituidas.
+La secuencia es: inventario a nivel de serie con valor en libros, canibalizar lo que la marca nueva
+no cubra, vender el resto y <strong>abatir el CAPEX con esa caja</strong>. Sin este paso el taller
+financia máquina nueva y además conserva y mantiene la vieja.</p>
+
+<!-- ================================================================= -->
+<h2 id="deficit">7. Déficit contra la demanda</h2>
+
+<h3>7.1 Los seis escenarios de demanda</h3>
+
+<table>
+  <thead><tr><th>Escenario de demanda</th><th class="num">Piezas/mes</th>
+    <th class="num">vs regular</th><th>Origen del dato</th></tr></thead>
+  <tbody>
+    <tr><td>Regular · red actual</td><td class="num">4.145</td><td class="num">1,00×</td><td>Dato de Gerencia</td></tr>
+    <tr><td>Regular · +1 tienda</td><td class="num">4.916</td><td class="num">1,19×</td><td>Factor 1,1859 derivado de los escenarios de red del expediente</td></tr>
+    <tr><td>Regular · +3 tiendas/año</td><td class="num">6.145</td><td class="num">1,48×</td><td>Factor 1,4824, ídem</td></tr>
+    <tr><td><strong>Pico diciembre · red actual</strong></td><td class="num">8.576</td><td class="num">2,07×</td><td>Dato de Gerencia</td></tr>
+    <tr><td>Pico diciembre · +1 tienda</td><td class="num">10.170</td><td class="num">2,45×</td><td>8.576 × 1,1859</td></tr>
+    <tr><td>Pico diciembre · +3 tiendas/año</td><td class="num">12.713</td><td class="num">3,07×</td><td>8.576 × 1,4824</td></tr>
+  </tbody>
+</table>
+
+<p class="src">Los factores de red se derivaron de los escenarios en operaciones que ya estaban en
+el expediente (58.800 → 69.732 con una tienda → 87.166 con tres al año), de modo que este informe
+no introduce un supuesto comercial nuevo: reutiliza el que ya se presentó. La Grieta se usa como
+ancla ≈20% del pico de la red. <strong>Son escenarios, no forecast firmado por Comercial.</strong></p>
+
+<div class="callout ink">
+  <p><strong>La estacionalidad es el problema, no el promedio.</strong> El pico de diciembre es
+  <strong>2,07 veces</strong> la demanda regular. Un taller dimensionado al promedio anual está
+  sobredimensionado once meses y quebrado en el mes que decide el año. Los tableros de producto lo
+  confirman colección por colección: entre 1,5× y 2,5× el mes anterior.</p>
+</div>
+
+<h3>7.2 Período regular: no hay problema de capacidad</h3>
+
+<div class="grid g3">
+  <div class="kpi ok"><div class="n">+2.863</div><div class="l">Superávit hoy sobre la demanda regular</div></div>
+  <div class="kpi ok"><div class="n">1,69×</div><div class="l">Cobertura de la demanda regular</div></div>
+  <div class="kpi ok"><div class="n">+863</div><div class="l">Superávit hoy incluso con 3 tiendas nuevas, en mes regular</div></div>
+</div>
+
+<p>Conviene decirlo sin adornos porque le da credibilidad al resto del informe:
+<strong>en período regular el taller no tiene un problema de capacidad</strong>. Cubre 4.145 piezas
+con 1,69× de holgura, y seguiría cubriendo incluso con tres tiendas nuevas encima (6.145 piezas,
+cobertura 1,14×). Si la justificación de la compra se planteara sobre el mes promedio, no habría
+justificación.</p>
+
+<p>Dos advertencias sobre esa holgura, que Operaciones ya señaló:</p>
+<ul class="tight">
+  <li>Parte de la demanda regular se está atendiendo con <strong>colchón de inventario</strong> por
+  pausa de consumo. Ese colchón se agota y no vuelve.</li>
+  <li>La holgura del mes regular <strong>no se puede guardar</strong> para diciembre más allá de lo
+  que aguanten el almacén y la caja. Producir contra el pico exige adelantar producción con meses
+  de anticipación, y eso inmoviliza capital en producto terminado y obliga a acertar la curva de
+  tallas y colores con mucha antelación.</li>
+</ul>
+
+<h3>7.3 Pico de diciembre: aquí está toda la justificación</h3>
+
+<div class="grid g4">
+  <div class="kpi warn"><div class="n">−1.568</div><div class="l">Piezas que faltan hoy en diciembre</div></div>
+  <div class="kpi warn"><div class="n">0,82×</div><div class="l">Cobertura del pico con el parque actual</div></div>
+  <div class="kpi warn"><div class="n">24,5</div><div class="l">Días de taller que exige diciembre<br>contra 20 hábiles disponibles</div></div>
+  <div class="kpi amb"><div class="n">−883</div><div class="l">Lo que faltaría incluso con<br>el parque íntegro</div></div>
+</div>
+
+<p>La cifra más clara para la sesión de directiva es la de los días.
+Al ritmo neto actual —350 piezas de primera por día— diciembre exige
+<strong>24,5 días hábiles de taller</strong>. El mes tiene 20.
+<strong>Faltan cuatro días y medio de producción que el calendario no tiene</strong>, y ninguna
+gestión de turnos, horas extra o prioridades los inventa.</p>
+
+<p>Y hay un segundo hecho que cierra la discusión sobre si basta con mantenimiento:
+con las 22 máquinas al 100% el taller llegaría a 7.693 piezas.
+<strong>Seguirían faltando 883.</strong> El techo teórico del layout actual está por debajo de la
+demanda de diciembre. Es un problema de configuración de líneas, no de estado de máquina.</p>
+
+<h3>7.4 Apertura de tiendas: el déficit se multiplica</h3>
+
+<figure>
+  <img src="anexos/figuras/08_escalera_decision.png" alt="Escalera de decisión: qué escenario cubre qué red" />
+  <figcaption>Figura 5. Las barras son demanda; las líneas horizontales, capacidad neta de cada
+  escenario. Se lee de un golpe qué peldaño de inversión cubre qué red. La tienda confirmada de
+  este año deja a 2.1b por debajo de su primer diciembre.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Red</th><th class="num">Pico<br>pzas/mes</th>
+    <th class="num">Hoy<br>7.008</th><th class="num">2.1b<br>8.619</th>
+    <th class="num">2.2a<br>9.571</th><th class="num">2.2b<br>11.827</th><th class="num">2.2c<br>14.016</th></tr></thead>
+  <tbody>
+    <tr><td>Red actual</td><td class="num">8.576</td>
+        <td class="num neg">−1.568</td><td class="num pos">+43</td><td class="num pos">+995</td>
+        <td class="num pos">+3.251</td><td class="num pos">+5.440</td></tr>
+    <tr><td>+1 tienda (tipo La Grieta)</td><td class="num">10.170</td>
+        <td class="num neg">−3.162</td><td class="num neg">−1.551</td><td class="num neg">−599</td>
+        <td class="num pos">+1.657</td><td class="num pos">+3.846</td></tr>
+    <tr><td>+3 tiendas/año (objetivo declarado)</td><td class="num">12.713</td>
+        <td class="num neg">−5.705</td><td class="num neg">−4.094</td><td class="num neg">−3.142</td>
+        <td class="num neg">−886</td><td class="num pos">+1.303</td></tr>
+  </tbody>
+</table>
+
+<div class="callout red">
+  <p><strong>Consecuencia directa para la decisión.</strong> Una sola tienda nueva consume
+  1.594 piezas del pico, más que todo lo que aporta reparar el parque completo (685).
+  Si la tienda confirmada de este año abre y sólo se aprobó 2.1b, el primer diciembre de esa
+  tienda arranca con un déficit de <strong>1.551 piezas</strong>. Abrir local y no tener prenda
+  quema el evento comercial: <strong>la inversión de la tienda se paga con producto, no con la
+  vitrina</strong>.</p>
+</div>
+
+<h3>7.5 Matriz completa</h3>
+
+<figure>
+  <img src="anexos/figuras/03_mapa_deficit.png" alt="Matriz de déficit por escenario y demanda" />
+  <figcaption>Figura 6. Matriz completa. Verde es superávit; rojo, déficit, en piezas de primera
+  calidad por mes. La frontera entre verde y rojo cruza la tabla en diagonal: cada tienda nueva
+  exige subir un peldaño de inversión.</figcaption>
+</figure>
+
+<figure>
+  <img src="anexos/figuras/04_deficit_por_periodo.png" alt="Déficit por período de demanda" />
+  <figcaption>Figura 7. El mismo dato en barras. La serie verde (mes regular) está siempre por
+  encima de cero en todos los escenarios; la roja (pico con tres tiendas) sólo cruza a positivo en
+  2.2c.</figcaption>
+</figure>
+
+<h3>7.6 Cobertura, en una sola tabla</h3>
+<p>Cobertura = capacidad neta ÷ demanda. Por debajo de 1,00 no se cubre.</p>
+<table>
+  <thead><tr><th>Escenario de demanda</th><th class="num">Pzas/mes</th>
+    <th class="num">Hoy</th><th class="num">Teórico</th><th class="num">2.1a</th><th class="num">2.1b</th>
+    <th class="num">2.2a</th><th class="num">2.2b</th><th class="num">2.2c</th></tr></thead>
+  <tbody>
+    <tr><td>Regular · red actual</td><td class="num">4.145</td>
+      <td class="num pos">1,69</td><td class="num pos">1,86</td><td class="num pos">1,97</td>
+      <td class="num pos">2,08</td><td class="num pos">2,31</td><td class="num pos">2,85</td><td class="num pos">3,38</td></tr>
+    <tr><td>Regular · +1 tienda</td><td class="num">4.916</td>
+      <td class="num pos">1,43</td><td class="num pos">1,56</td><td class="num pos">1,66</td>
+      <td class="num pos">1,75</td><td class="num pos">1,95</td><td class="num pos">2,41</td><td class="num pos">2,85</td></tr>
+    <tr><td>Regular · +3 tiendas/año</td><td class="num">6.145</td>
+      <td class="num pos">1,14</td><td class="num pos">1,25</td><td class="num pos">1,33</td>
+      <td class="num pos">1,40</td><td class="num pos">1,56</td><td class="num pos">1,92</td><td class="num pos">2,28</td></tr>
+    <tr><td><strong>Pico diciembre · red actual</strong></td><td class="num">8.576</td>
+      <td class="num neg">0,82</td><td class="num neg">0,90</td><td class="num neg">0,95</td>
+      <td class="num pos">1,01</td><td class="num pos">1,12</td><td class="num pos">1,38</td><td class="num pos">1,63</td></tr>
+    <tr><td>Pico diciembre · +1 tienda</td><td class="num">10.170</td>
+      <td class="num neg">0,69</td><td class="num neg">0,76</td><td class="num neg">0,80</td>
+      <td class="num neg">0,85</td><td class="num neg">0,94</td><td class="num pos">1,16</td><td class="num pos">1,38</td></tr>
+    <tr><td>Pico diciembre · +3 tiendas/año</td><td class="num">12.713</td>
+      <td class="num neg">0,55</td><td class="num neg">0,61</td><td class="num neg">0,64</td>
+      <td class="num neg">0,68</td><td class="num neg">0,75</td><td class="num neg">0,93</td><td class="num pos">1,10</td></tr>
+  </tbody>
+</table>
+
+<!-- ================================================================= -->
+<h2 id="capex">8. Rendimiento de cada máquina comprada</h2>
+
+<p>Sin cotización no hay payback en dólares. Lo que sí se puede calcular hoy, y es la mejor
+aproximación disponible a la eficiencia del capex, es <strong>cuántas piezas de primera al mes
+aporta cada máquina nueva</strong>.</p>
+
+<figure>
+  <img src="anexos/figuras/06_piezas_por_maquina.png" alt="Piezas ganadas por máquina nueva" />
+  <figcaption>Figura 8. Rendimiento marginal de cada paquete. Las dos puntas del gráfico son las
+  más eficientes por razones opuestas: 2.1a porque ataca el cuello exacto, 2.2c porque las líneas
+  nuevas nacen ya en módulo continuo sin arrastrar layout viejo.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Escenario</th><th class="num">Máquinas</th><th class="num">Piezas/mes<br>ganadas</th>
+    <th class="num">Piezas por<br>máquina</th><th>Lectura</th></tr></thead>
+  <tbody>
+    <tr><td>2.1a · corta mínima</td><td class="num">6</td><td class="num">1.145</td><td class="num">191</td>
+        <td>El mejor rendimiento del informe: ataca la estación exacta que limita la línea. No cierra el pico.</td></tr>
+    <tr><td>2.1b · corta recomendada</td><td class="num">12</td><td class="num">1.611</td><td class="num">134</td>
+        <td>Rendimiento menor porque las 2 collareteras de L1 y L2 compran balanceo, no ritmo. Es el primer escenario que cubre diciembre.</td></tr>
+    <tr><td>2.2a · 4 módulos</td><td class="num">20</td><td class="num">2.563</td><td class="num">128</td>
+        <td>El punto más bajo: modernizar L1 y L2, que ya estaban sanas, rinde menos por máquina. Compra calidad y flujo homogéneo.</td></tr>
+    <tr><td>2.2b · 5 módulos + shorts</td><td class="num">33</td><td class="num">4.819</td><td class="num">146</td>
+        <td>El rendimiento vuelve a subir: la línea nueva nace en módulo continuo y la de shorts sale del punto ciego.</td></tr>
+    <tr><td>2.2c · 6 módulos + shorts</td><td class="num">38</td><td class="num">7.008</td><td class="num">184</td>
+        <td>Duplica la capacidad del taller. Casi tan eficiente por máquina como 2.1a, y es el único que cubre 3 tiendas en pico.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout amber">
+  <p><strong>Advertencia sobre esta métrica.</strong> Piezas por máquina mide eficiencia técnica,
+  no valor económico. Falta el precio de cada tipo de máquina —una ojaladora y una collaretera no
+  cuestan lo mismo— y falta el margen bruto por pieza. Con esos dos datos, esta tabla se convierte
+  en payback y deja de ser un indicador auxiliar. Ambos están en la lista P0 del apartado 10.</p>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="recom">9. Recomendación y secuencia</h2>
+
+<h3>9.1 Qué se pide aprobar</h3>
+<table>
+  <thead><tr><th>Fase</th><th>Qué se aprueba ahora</th><th>Qué no se pide todavía</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Fase 1 — Cerrar el pico de hoy</strong></td>
+        <td>Compra de las <strong>12 máquinas de 2.1b</strong>: módulos continuos para L3 y L4,
+        overlock de unión para L2, segunda collaretera de ruedo para L1 y L2.
+        Más el kit de repuestos con contrato de suministro local y la
+        <strong>dotación de 2 operarios</strong> para los overlock de cuellos.</td>
+        <td>El monto. Falta cotización por tipo de máquina.</td></tr>
+    <tr><td><strong>Fase 2 — Comprar la red nueva</strong></td>
+        <td><strong>Cotizar 2.2b</strong> (33 máquinas) y presentarla junto al plan de aperturas
+        de Comercial. La condición de apertura de la tienda confirmada es que 2.2b esté aprobada,
+        no sólo cotizada.</td>
+        <td>Aprobar el capex de 2.2b a ciegas. Necesita cotización, layout y plan de dotación.</td></tr>
+    <tr><td><strong>Paralelo — Abatir el capex</strong></td>
+        <td>Inventario del parque a nivel de serie con valor en libros y
+        <strong>lote de salida</strong> de las 2 collareteras chatarra más las sustituidas.</td>
+        <td>Nada. Este paso no tiene dependencias y libera caja.</td></tr>
+  </tbody>
+</table>
+
+<h3>9.2 Secuencia</h3>
+<ol class="tight">
+  <li><strong>Ahora.</strong> Cotizar 2.1b y 2.2b en paralelo, al mismo proveedor y en el mismo
+  pedido de precios. Cotizar por separado encarece y retrasa.</li>
+  <li><strong>Antes del acta de inversión.</strong> Cerrar los cuatro datos P0 del apartado 10.
+  Sin margen bruto por pieza no hay payback, y sin las horas de parada del reporte de máquinas la
+  merma del 10% sigue siendo un supuesto.</li>
+  <li><strong>Ejecutar 2.1b empezando por Línea 3.</strong> Concentra el 52% de la pérdida:
+  es donde la primera máquina instalada se nota más y donde se valida el módulo antes de replicarlo.</li>
+  <li><strong>Antes de firmar la apertura de la tienda.</strong> Decidir 2.2b. El orden importa:
+  la capacidad tarda en instalarse y capacitarse; la tienda abre en una fecha.</li>
+  <li><strong>Continuo.</strong> Reportar a Gerencia en dos columnas siempre: piezas del mix y
+  operaciones. Es lo que resuelve la discrepancia de unidad entre Operaciones y Gerencia sin
+  quitarle razón a ninguno.</li>
+</ol>
+
+<h3>9.3 Reglas de planificación que salen de este análisis</h3>
+<ul class="tight">
+  <li><strong>Dimensionar al pico, no al promedio.</strong> El pico es 2,07× el mes regular.
+  Un taller al promedio quiebra en el mes que decide el año.</li>
+  <li><strong>No lanzar órdenes en piezas planas.</strong> 8.576 piezas de mix pesado y 8.576 de
+  mix ligero son dos talleres distintos. La orden tiene que declarar el mix.</li>
+  <li><strong>Nunca planificar con la suma de operaciones.</strong> Sobreestima el techo en 10,1%.
+  El número que vale es el de la estación más lenta.</li>
+  <li><strong>Asignar cupo a la línea de shorts.</strong> Mientras no tenga techo medido, cada
+  orden de shorts desplaza producción de punto de forma invisible.</li>
+  <li><strong>Reservar holgura para producto nuevo y corporativos.</strong> Explore Pants y
+  Jacket 2.0 no tienen operaciones cargadas, y los corporativos caen sobre el mismo techo,
+  no encima de él.</li>
+</ul>
+
+<!-- ================================================================= -->
+<h2 id="supuestos">10. Supuestos, sensibilidad y datos que faltan</h2>
+
+<h3>10.1 Lo que está medido y lo que está supuesto</h3>
+<table>
+  <thead><tr><th>Elemento</th><th>Estado</th><th>Fuente o criterio</th></tr></thead>
+  <tbody>
+    <tr><td>Capacidad por máquina y estatus del parque</td><td><span class="tag t-ok">Medido</span></td><td>Máquinas activas · Operaciones por línea · dashboard de capacidad</td></tr>
+    <tr><td>Tasas de piezas por línea y día (95/105/130 y equivalentes)</td><td><span class="tag t-ok">Medido</span></td><td>Muestra de campo · operaciones por línea</td></tr>
+    <tr><td>Operaciones por pieza de MAR, RIO, Basic y shorts</td><td><span class="tag t-ok">Medido</span></td><td>Operaciones por producto · fichas de secuencia</td></tr>
+    <tr><td>Tasa de reproceso 16,14%</td><td><span class="tag t-ok">Medido</span></td><td>Análisis de tasa de retrocesos QA · promedio abr–ago 2026</td></tr>
+    <tr><td>Demanda regular 4.145 y pico 8.576</td><td><span class="tag t-ok">Dado</span></td><td>Gerencia</td></tr>
+    <tr><td>Mix de planificación 50/35/15</td><td><span class="tag t-amb">Declarado</span></td><td>Dashboard de capacidad. Conviene revalidarlo contra la venta real del año.</td></tr>
+    <tr><td>Contenido de retrabajo 35%</td><td><span class="tag t-red">Supuesto</span></td><td>Los defectos se concentran en acabado. Sensibilidad en 10.2. Requiere dato P0.</td></tr>
+    <tr><td>Reproceso residual 6,0% con parque nuevo</td><td><span class="tag t-red">Supuesto</span></td><td>Asume que se elimina el 62% de los rechazos. Justificación técnica de calidad.</td></tr>
+    <tr><td>Factores de red 1,1859 y 1,4824</td><td><span class="tag t-red">Escenario</span></td><td>Derivados de los escenarios de red del expediente. No es forecast de Comercial.</td></tr>
+    <tr><td>Capacidad de la línea de shorts, 45 pzas/día</td><td><span class="tag t-red">Muestra única</span></td><td>Muestra de campo, sin estatus por máquina ni medición formal.</td></tr>
+    <tr><td>Capacidad individual de collaretera de recubrir y overlock de cierre</td><td><span class="tag t-amb">Suma conocida</span></td><td>Su suma es 394 ops/día. El detalle por máquina lo cierra el inventario de máquinas activas.</td></tr>
+  </tbody>
+</table>
+
+<h3>10.2 Sensibilidad al contenido de retrabajo</h3>
+<p>El supuesto más discutible del modelo es el 35%. Esta tabla mueve ese número entre 20% y 100%
+—el extremo en que una prenda rechazada se rehace completa— y muestra la capacidad neta resultante:</p>
+
+<table>
+  <thead><tr><th class="num">Contenido de<br>retrabajo</th><th class="num">Hoy</th><th class="num">2.1a</th>
+    <th class="num">2.1b</th><th class="num">2.2a</th><th class="num">2.2b</th><th class="num">2.2c</th>
+    <th>¿Cambia la conclusión?</th></tr></thead>
+  <tbody>
+    <tr><td class="num">20%</td><td class="num">7.172</td><td class="num">8.321</td><td class="num">8.772</td>
+        <td class="num">9.685</td><td class="num">11.932</td><td class="num">14.140</td>
+        <td>No. Hoy sigue por debajo del pico (−1.404).</td></tr>
+    <tr><td class="num"><strong>35% · caso central</strong></td><td class="num">7.008</td><td class="num">8.153</td>
+        <td class="num">8.619</td><td class="num">9.571</td><td class="num">11.827</td><td class="num">14.016</td>
+        <td>—</td></tr>
+    <tr><td class="num">50%</td><td class="num">6.851</td><td class="num">7.992</td><td class="num">8.472</td>
+        <td class="num">9.460</td><td class="num">11.723</td><td class="num">13.893</td>
+        <td>No, pero 2.1b deja de cubrir el pico (−104).</td></tr>
+    <tr><td class="num">100%</td><td class="num">6.375</td><td class="num">7.498</td><td class="num">8.015</td>
+        <td class="num">9.109</td><td class="num">11.392</td><td class="num">13.500</td>
+        <td>No. Refuerza el caso: el déficit de hoy sube a −2.201.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout teal">
+  <p><strong>Conclusión de la sensibilidad.</strong> En todo el rango, el orden de los escenarios
+  se mantiene y el diagnóstico no cambia: la demanda regular está cubierta y el pico no.
+  Lo único que se mueve es el margen de 2.1b, que en el caso central empata el pico por 43 piezas
+  y con un contenido de retrabajo del 50% pasa a un déficit de 104.
+  <strong>Eso es un argumento adicional para no quedarse en 2.1b si la red va a crecer</strong>, y
+  para cerrar cuanto antes el dato de minutos de retrabajo por prenda.</p>
+</div>
+
+<h3>10.3 Datos que faltan para cerrar el capex</h3>
+<table>
+  <thead><tr><th class="num">Pri.</th><th>Dato</th><th>Para qué</th><th>Dueño</th><th>Estado hoy</th></tr></thead>
+  <tbody>
+    <tr><td class="num"><span class="tag t-red">P0</span></td><td>Cotización por tipo de máquina, con flete, instalación y capacitación</td><td>Convierte las piezas ganadas en payback y monto de acta</td><td>Proveedor + Producción</td><td>No está</td></tr>
+    <tr><td class="num"><span class="tag t-red">P0</span></td><td>Reporte de máquinas 15-jul a 31-ago 2026: horas de parada por equipo</td><td>Sustituye la merma del 10% por disponibilidad medida (MTBF y MTTR) y valida el estatus parcial de cada máquina</td><td>Mantenimiento</td><td>Recolectado, no incorporado al modelo</td></tr>
+    <tr><td class="num"><span class="tag t-red">P0</span></td><td>Minutos de retrabajo por prenda y % de defectos atribuibles a máquina</td><td>Fija el factor neto, que hoy es el supuesto más sensible</td><td>Calidad / Taller</td><td>No medido</td></tr>
+    <tr><td class="num"><span class="tag t-red">P0</span></td><td>Margen bruto por pieza</td><td>Dolariza el déficit de 1.568 piezas del pico</td><td>Finanzas</td><td>No está</td></tr>
+    <tr><td class="num"><span class="tag t-amb">P1</span></td><td>Inventario de máquinas a nivel de serie: marca, modelo, año, valor en libros</td><td>Cierra las dos estaciones sin capacidad publicada y dimensiona el lote de salida</td><td>Mantenimiento / Admin</td><td>Pendiente de cargar</td></tr>
+    <tr><td class="num"><span class="tag t-amb">P1</span></td><td>Tasa de producción medida de la línea de shorts y pants</td><td>Hoy se usa una muestra única de 45 pzas/día para toda una línea</td><td>Taller</td><td>Muestra única</td></tr>
+    <tr><td class="num"><span class="tag t-amb">P1</span></td><td>Plan comercial: qué tienda, cuándo y de qué tamaño</td><td>Pasa los escenarios de red a presupuesto y fija el peldaño de 2.2</td><td>Comercial</td><td>1 confirmada, objetivo 3/año, sin fecha ni tamaño</td></tr>
+    <tr><td class="num"><span class="tag t-amb">P1</span></td><td>Operaciones por pieza de Explore Pants, Jacket 2.0 y Active Duo</td><td>El pico de 8.576 piezas puede estar subestimado en carga de máquina</td><td>Ingeniería</td><td>Celdas vacías</td></tr>
+    <tr><td class="num"><span class="tag t-gray">P2</span></td><td>Headcount por línea contra el estándar de 5 máquinas por módulo</td><td>Sin operarios, la máquina nueva repite el caso de los overlock de cuellos</td><td>RR.HH.</td><td>2 máquinas paradas por gente</td></tr>
+    <tr><td class="num"><span class="tag t-gray">P2</span></td><td>Volumen, mix y SLA del taller satélite</td><td>Evita duplicar capacidad que ya está tercerizada</td><td>Operaciones</td><td>Mencionado, sin data</td></tr>
+  </tbody>
+</table>
+
+<div class="callout ink">
+  <p><strong>Qué se puede afirmar hoy y qué no.</strong> Este informe sostiene el
+  <strong>diagnóstico</strong> (el pico no se cubre, ni siquiera con el parque íntegro), el
+  <strong>dimensionamiento en piezas</strong> de las dos propuestas y el <strong>orden de
+  prioridad</strong> de la compra. No sostiene un monto, un payback ni un acta de inversión:
+  para eso faltan los cuatro P0. La recomendación está formulada para poder aprobarse en concepto
+  y volumen ahora, y cerrarse en dinero cuando llegue la cotización.</p>
+</div>
+
+<!-- ================================================================= -->
+<h2 id="anexos">11. Anexos</h2>
+<ol class="tight">
+  <li><strong><code>anexos/Modelo_Capacidad_Piezas_Cuadro.xlsx</code></strong> — memoria de cálculo
+  en 13 hojas: método, contraste con el método de operaciones, parque y cuello de botella, tasas
+  por estado, escenarios, desglose por modelo, demanda, déficit, cobertura, calidad y sensibilidad,
+  capacidad máxima exclusiva, paquete de compra y datos faltantes.</li>
+  <li><strong><code>modelo_capacidad.py</code></strong> — el modelo completo, ejecutable. Todos los
+  parámetros están en la cabecera del archivo con su fuente. Cambiar un supuesto y volver a correrlo
+  regenera el Excel, las figuras y el dashboard.</li>
+  <li><strong><code>dashboard_capacidad_piezas.html</code></strong> — versión interactiva para la
+  sesión, con selector de escenario y de período de demanda.</li>
+  <li><strong><code>anexos/figuras/</code></strong> — las ocho figuras de este informe en PNG.</li>
+  <li><strong>Fuentes primarias</strong> — Máquinas activas; Reporte de máquinas (15-jul a
+  31-ago 2026); Muestra de campo; Operaciones por línea; Operaciones por producto; Análisis de tasa
+  de retrocesos QA; Informe de capacidad instalada y justificación de inversión en maquinaria de
+  costura; Justificación técnica de calidad — cambio de maquinaria; dashboard de capacidad de
+  maquinaria; correos de Gerencia de Operaciones y de Coordinación de Producción.</li>
+</ol>
+
+<div class="callout teal">
+  <p><strong>Trazabilidad de las cifras.</strong></p>
+  <ul class="tight">
+    <li><strong>Capacidad por máquina y estatus:</strong> máquinas activas y operaciones por línea, contrastadas contra el dashboard de capacidad (2.940 y 2.649,5 ops/día cuadran al peso).</li>
+    <li><strong>Tasas en piezas:</strong> muestra de campo. El modelo reproduce las 8.940 piezas/mes del dashboard para las cuatro líneas en módulo continuo.</li>
+    <li><strong>Reproceso:</strong> análisis de tasa de retrocesos QA (1.695 de 10.502).</li>
+    <li><strong>Defectología y efecto de la máquina nueva:</strong> justificación técnica de calidad, Coordinación de Producción.</li>
+    <li><strong>Demanda:</strong> 4.145 y 8.576 piezas/mes, dato de Gerencia. Los factores de red son escenarios de este informe y del anterior, no forecast comercial.</li>
+  </ul>
+</div>
+
+<p class="note" style="margin-top:26px;border-top:1px solid var(--line);padding-top:14px">
+Documento de decisión. No sustituye cotización ni acta de inversión. Todas las cifras de capacidad
+en piezas se recalculan con <code>modelo_capacidad.py</code>; las validaciones cruzadas contra el
+tablero en operaciones están en la hoja <code>02_Contraste_metodo</code> del anexo.
+Corte: septiembre 2026.
+</p>
+
+</div>
+</body>
+</html>
