@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cuadro · Informe de capacidad instalada y justificación de maquinaria</title>
+<style>
+  :root{
+    --ink:#1B3A4B; --teal:#0F5C4C; --green:#2A9D8F; --red:#C0392B;
+    --amber:#8A6A12; --muted:#5C574E; --line:#DDD6C8; --bg:#F6F4EF; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Calibri,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.45}
+  .wrap{max-width:920px;margin:0 auto;padding:28px 22px 80px}
+  header.cover{background:var(--ink);color:#fff;padding:36px 32px;border-radius:12px;margin-bottom:22px}
+  header.cover .kicker{letter-spacing:.12em;font-size:.72rem;text-transform:uppercase;opacity:.75}
+  header.cover h1{margin:8px 0 6px;font-size:1.85rem;line-height:1.2}
+  header.cover p{margin:0;opacity:.9}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:4px 10px;font-size:.78rem}
+  h2{font-size:1.25rem;color:var(--teal);border-bottom:2px solid var(--line);padding-bottom:6px;margin:32px 0 12px}
+  h3{font-size:1.02rem;color:var(--ink);margin:18px 0 8px}
+  h4{font-size:.92rem;margin:14px 0 6px}
+  p,li{color:var(--muted)}
+  strong{color:var(--ink)}
+  .grid{display:grid;gap:10px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:760px){.g4,.g3,.g2{grid-template-columns:1fr 1fr}}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .kpi .n{font-size:1.55rem;font-weight:700;color:var(--ink)}
+  .kpi .l{font-size:.78rem;color:var(--muted)}
+  .kpi.warn .n{color:var(--red)}
+  .kpi.ok .n{color:var(--teal)}
+  .callout{border-radius:10px;padding:12px 14px;margin:12px 0 16px;border:1px solid var(--line);background:#fff}
+  .callout.red{border-left:4px solid var(--red);background:#fdf2f0}
+  .callout.teal{border-left:4px solid var(--teal);background:#f1f7f5}
+  .callout.amber{border-left:4px solid #d4a017;background:#fff8e8}
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:.82rem;margin:8px 0 14px}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  th{background:#efe9dc;font-weight:600}
+  tr:nth-child(even) td{background:#fbfaf7}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:4px}
+  .t-red{background:#f5d0c8;color:var(--red)}
+  .t-ok{background:#d8efea;color:var(--teal)}
+  .t-amb{background:#f4e4b3;color:var(--amber)}
+  figure{margin:16px 0 8px}
+  figure img{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+  figcaption{font-size:.78rem;color:var(--muted);margin-top:6px}
+  .toc a{color:var(--teal);text-decoration:none}
+  .toc li{margin:3px 0}
+  .note{font-size:.8rem;color:var(--muted)}
+  .actions{margin:12px 0 0}
+  .btn{display:inline-block;background:var(--teal);color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:.85rem;border:0;cursor:pointer}
+  ol.tight li, ul.tight li{margin:4px 0}
+  @media print{
+    body{background:#fff}
+    .actions{display:none}
+    header.cover{break-after:avoid}
+    h2{break-after:avoid}
+    figure{break-inside:avoid}
+    table{break-inside:auto}
+    tr{break-inside:avoid}
+    .wrap{padding:0;max-width:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="cover">
+  <div class="kicker">Crecoindustrias, C.A. · Marca Cuadro · Confidencial — Directiva</div>
+  <h1>Informe de capacidad instalada del taller y justificación de compra de maquinaria de costura</h1>
+  <p>Borrador para decisión. Énfasis en capacidad teórica vs real, calidad de costura, pico octubre–diciembre y apertura de tiendas.</p>
+  <div class="meta">
+    <span class="pill">Corte: septiembre 2026</span>
+    <span class="pill">Unidad: operaciones / día · mes = ×20 días hábiles</span>
+    <span class="pill">Elaborado para sesión de directiva</span>
+  </div>
+</header>
+<div class="actions"><button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button></div>
+
+<div class="callout teal">
+  <strong>Cómo leer este documento.</strong> Primero el resumen ejecutivo y el pedido a la directiva.
+  Después el diagnóstico. Al final, lo que falta para un ROI en dólares. Los anexos Excel y las capturas del dashboard son la evidencia.
+</div>
+
+<h2>0. Cómo planteamos esto a la directiva</h2>
+<p>No abrir con “hay que comprar máquinas”. Abrir con tres hechos que ya están medidos, y una decisión en dos fases.</p>
+<ol class="tight">
+  <li><strong>El techo real ya se rompió en temporada alta.</strong> El taller declara 2.900 operaciones/día teóricas y entrega 2.617 reales (90%). En diciembre 2025 el mix de la marca exigió 58.109 ops/mes contra 52.340 de capacidad real. Faltaron ~5.800 operaciones — unas 650 prendas del mix pico.</li>
+  <li><strong>Ese hueco no es “temporada”: es parque caído.</strong> 8 de 22 máquinas están inactivas o parciales. El 52% de la pérdida está en la Línea 3 (ruedo). Recuperar ruedos de L3/L4 y el overlock de L2 recupera <em>aritméticamente todo</em> el −283 ops/día. Eso cubre el pico actual, no el crecimiento.</li>
+  <li><strong>La red se va a agrandar encima de un techo ya justo.</strong> Una tienda nueva tipo Grieta suma del orden de 11.600 ops en el mes pico. Tres tiendas por año, al mismo tamaño, empujan el pico hacia ~93.000 ops — casi el doble del techo real de hoy. En paralelo, Valentina ya pidió evaluar maquinaria por volumen <em>y</em> por calidad; Brayan documenta defectos que el parque actual produce (ondas, aceite, ruedos abiertos, hilo) y que Jack con servo/diferencial y corte automático elimina.</li>
+</ol>
+<div class="callout amber">
+  <strong>Guion de 12 minutos.</strong> 3 min KPIs teórica vs real + gráfico por línea.
+  3 min pico Dic-25 y escenarios de 1 y 3 tiendas.
+  3 min calidad (ondas, aceite, mesas de remate) y 3 máquinas paradas por piezas (40 pzas/día).
+  3 min pedido: Fase 1 recuperar el 2.900; Fase 2 cotizar módulos Jack de 5 máquinas/línea; no aprobar capex a ciegas sin cotización ni % de reproceso.
+</div>
+<p class="note">Tono: Operaciones y Taller ya coinciden en el problema; discrepan en la unidad (piezas vs operaciones). Este informe usa <strong>operaciones</strong> como unidad de capacidad y traduce a piezas solo con el mix declarado (8,90 ops/pieza). Eso resuelve el debate de Valentina vs Antonio sin restarle razón a ninguno.</p>
+
+<nav class="toc">
+  <h2>Índice</h2>
+  <ol>
+    <li><a href="#resumen">Resumen ejecutivo y pedido</a></li>
+    <li><a href="#contexto">Contexto — crecimiento, metas, calidad de las piezas</a></li>
+    <li><a href="#problema">Problema</a></li>
+    <li><a href="#impacto">Impacto del problema</a></li>
+    <li><a href="#propuesta">Propuesta</a></li>
+    <li><a href="#impacto-prop">Impacto de la propuesta</a></li>
+    <li><a href="#otras">Otras consideraciones</a></li>
+    <li><a href="#faltantes">Qué datos faltan para un informe exacto</a></li>
+    <li><a href="#anexos">Anexos</a></li>
+  </ol>
+</nav>
+
+<h2 id="resumen">1. Resumen ejecutivo y pedido a la directiva</h2>
+<div class="grid g4">
+  <div class="kpi"><div class="n">2.900</div><div class="l">Capacidad teórica ops/día<br>58.000 / mes</div></div>
+  <div class="kpi ok"><div class="n">2.617</div><div class="l">Capacidad real ops/día<br>52.340 / mes</div></div>
+  <div class="kpi warn"><div class="n">−283</div><div class="l">Pérdida diaria (10%)<br>−5.660 ops / mes</div></div>
+  <div class="kpi warn"><div class="n">90%</div><div class="l">Utilización del techo teórico<br>36% del parque caído o parcial</div></div>
+</div>
+<div class="grid g3" style="margin-top:10px">
+  <div class="kpi warn"><div class="n">58.109</div><div class="l">Ops exigidas en Dic-2025<br>ya por encima de las 52.340 reales</div></div>
+  <div class="kpi"><div class="n">8,90</div><div class="l">Ops por pieza en el mix pico<br>6.529 prendas ≠ 6.529 “cupos”</div></div>
+  <div class="kpi warn"><div class="n">+11,6k</div><div class="l">Ops extra en pico por 1 tienda 1× Grieta<br>(escenario, no forecast cerrado)</div></div>
+</div>
+
+<div class="callout red">
+  <strong>Conclusión.</strong> Con el parque actual el taller puede cubrir demanda baja y rozar la media.
+  <strong>No cubre un diciembre como 2025</strong> y <strong>no cubre una red que sume tiendas</strong>.
+  La teórica (58.000 ops/mes) apenas empata el último pico (58.109). Cualquier falla, corporativo o modelo complejo deja a la marca sin prenda.
+</div>
+
+<h3>Pedido (dos fases, no un cheque en blanco)</h3>
+<table>
+  <thead><tr><th>Fase</th><th>Qué se pide aprobar ahora</th><th>Qué no se pide aún</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Fase 1 — Recuperar el techo</strong></td><td>Mandato de compra/recuperación de <strong>collareteras de ruedo (2, evaluar 3ª)</strong> y <strong>overlock de L2</strong>; kit de piezas Jack para las 3 máquinas paradas; definir 2 operarios o no reactivar Overlock de cuellos.</td><td>Un monto: falta cotización.</td></tr>
+    <tr><td><strong>Fase 2 — Crecer con la marca</strong></td><td>Autorizar cotizar <strong>módulos Jack de 5 máquinas/línea</strong> (piloto en L3) + ojaladora/presilladora/engomadora según mix de Línea 5. Presentar ROI en 2–3 semanas con los P0 de la lista de faltantes.</td><td>Aprobar el capex de módulos sin SAM de máquinas nuevas ni % de reproceso.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="contexto">2. Contexto</h2>
+
+<h3>2.1 Crecimiento de Cuadro</h3>
+<p>Cuadro no está pidiendo máquinas “por si acaso”. La red física ya opera Cerro Verde, La Grieta, Sambil Chacao, Sambil Valencia y Grand Plaz, con Tolón y La Vela en distinto grado de madurez, más Web, Pedidos y Corporativo. Los dashboards de reabastecimiento modelan <strong>Margarita</strong> como tienda nueva (1× a 2× la velocidad de La Grieta, según colección). La instrucción de este informe: <strong>1 tienda confirmada este año</strong> y objetivo de <strong>3 tiendas nuevas por año</strong>.</p>
+<p>Eso cambia la pregunta. No es “¿alcanza el taller para el run-rate de hoy?”. Es “¿alcanza el taller para el octubre–diciembre de una red más grande, con el mix real (shorts de 18 ops, basic de 12,5, rio de 6)?”.</p>
+
+<h3>2.2 Incumplimiento de metas</h3>
+<p>No llegó al expediente un tablero de meta vs real 2025–2026 (piezas, ops, OTIF a tienda). Lo que sí está medido permite afirmar esto, con honestidad:</p>
+<ul class="tight">
+  <li>En demanda baja (25–35 mil ops/mes) el taller cubre. Operaciones advierte que hoy se vive de un <strong>colchón de inventario</strong> por pausa de consumo — ese colchón se acaba.</li>
+  <li>En demanda media (45–48 mil) se consume casi todo el techo <em>real</em>.</li>
+  <li>En alta / pico (54.950–58.109) <strong>se supera la capacidad real</strong>. Una meta plana de 10.500 piezas/mes con el mix de diciembre exigiría ~93.500 ops: quiebre.</li>
+</ul>
+<p>Si la directiva tiene metas internas de unidades o de fill-rate a tienda, hay que pegarlas aquí. Sin ese dato, “incumplimiento” se sostiene por <em>imposibilidad física en pico</em>, no por un KPI de plan vs real.</p>
+
+<h3>2.3 Problema de calidad en las piezas</h3>
+<p>La justificación no es solo volumen. Brayan Machado (Coordinador de Producción) documentó el 2-sep-2026 por qué el parque actual daña la prenda, sobre todo en Microfibra, BioFlow y fitness:</p>
+<ul class="tight">
+  <li>Diferencial desgastado → <strong>costura ondulada</strong> en hombros, costados y mangas.</li>
+  <li>Remate manual → <strong>ruedos abiertos</strong>.</li>
+  <li>Sin corte/succión de hilo → etapa de <strong>limpieza de hilo</strong> que no entra a los reportes, mesas de remate con WIP (capital inmovilizado).</li>
+  <li>Lubricación no controlada → <strong>manchas de aceite</strong> en Blanco, Aguamarina, Amarillo Pastel (lavado o venta como segunda).</li>
+  <li>Tijera en máquina → cortes de tela; puntadas saltadas; fruncido en manga.</li>
+</ul>
+<p>Máquinas nuevas (transporte diferencial de precisión, servo, corte y succión, remate automático, ancho de recubierto constante) sacan la prenda <strong>lista a control de calidad en el mismo turno</strong>. Brayan lo plantea como estándar que hoy no tiene la competencia en Venezuela. Valentina lo pidió explícitamente como segundo criterio de la compra, al mismo nivel que el techo de piezas.</p>
+<p class="note">Hueco declarado por el propio Taller: no hay % de reproceso ni minutos en mesa de remate. La calidad está cualitativamente cerrada; el ROI de calidad está abierto.</p>
+
+<h2 id="problema">3. Problema</h2>
+
+<h3>3.1 Incumplimiento de metas</h3>
+<p>Ver 2.2. En números: capacidad real 5.881 piezas/mes al mix pico vs 6.529 vendidas en Dic-2025. Déficit de <strong>648 piezas</strong> en el mes que más importa para caja y para tienda. Con 1 tienda nueva 1× Grieta el déficit de pico pasa a ~1.950 piezas. Con 3 tiendas/año, a ~4.600 piezas en el pico — cada temporada alta.</p>
+
+<h3>3.2 Reprocesos</h3>
+<p>No hay tasa. Lo que hay es el mecanismo: ondas, ruedos, hilo, aceite, cortes. Cada uno genera o retrabajo, o segunda, o devolución. Además hay una operación fantasma (limpieza de hilo) que come horas de gente y no aparece en el 90% de utilización. Tratar el 90% como “el taller está bien aprovechado” es incorrecto: parte del tiempo ni siquiera está en el denominador.</p>
+
+<h3>3.3 Cuellos de botella en línea</h3>
+<figure>
+  <img src="anexos/figuras/07_cuello_botella_linea3.png" alt="Cuello de botella Línea 3" />
+  <figcaption>Figura 1. Línea 3: Overlock sano, Collaret/Ruedo caído. El cuello no es “la línea”; es una operación.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>Línea</th><th class="num">Teórica</th><th class="num">Real</th><th class="num">Pérdida</th><th>Utilización</th><th>Cuello</th></tr></thead>
+  <tbody>
+    <tr><td>Línea 1</td><td class="num">676</td><td class="num">676</td><td class="num">0</td><td><span class="tag t-ok">100%</span></td><td>Ninguno. Patrón de referencia.</td></tr>
+    <tr><td>Línea 2</td><td class="num">676</td><td class="num">638</td><td class="num">38</td><td><span class="tag t-amb">94%</span></td><td>Overlock Unión/Montaje al 80% (188→150).</td></tr>
+    <tr><td>Línea 3</td><td class="num">774</td><td class="num">627</td><td class="num">147</td><td><span class="tag t-red">81%</span></td><td>Ruedo 1 al 50% + Ruedo 2 inactivo. 52% de la pérdida total.</td></tr>
+    <tr><td>Línea 4</td><td class="num">774</td><td class="num">676</td><td class="num">98</td><td><span class="tag t-amb">87%</span></td><td>Ruedo 2 inactivo (98→0).</td></tr>
+    <tr><td><strong>Total L1–L4</strong></td><td class="num"><strong>2.900</strong></td><td class="num"><strong>2.617</strong></td><td class="num"><strong>283</strong></td><td><strong>90%</strong></td><td></td></tr>
+  </tbody>
+</table>
+<p>En Clásica Algodón el estudio de tiempos (Angel De Benedictis) muestra otro cuello, de método: <strong>montaje de rib a 80 piezas/día</strong> (SAM 02:48), con el mismo operador cargando además unión de hombros y el rib (SAM de esa op. incompleto, #DIV/0!). Recubrir cuello tiene 196 piezas de holgura. Comprar solo collareteras no mueve el techo de ese modelo.</p>
+
+<h3>3.4 Desbalanceo de línea</h3>
+<p>Una prenda típica de polo/camiseta pide 2 ops de overlock (unión + cierre) y 2 de collaret (recubrir + ruedo). Capacidades de diseño: overlock ~188–196, recubrir 194, <strong>ruedo 98</strong>. El ruedo nace a la mitad. L3 y L4 intentaron balancear con un segundo collaret de ruedo (teórica 774 vs 676). Esos segundos equipos están <strong>inactivos</strong>, así que L3/L4 tienen overlock de línea grande y ruedo de línea chica. WIP entre estaciones, gente parada, promesa de 774 que nunca se cumple.</p>
+<p>Encima: <strong>2 rectas operativas para 4 líneas</strong>. No entran al KPI de 2.900, pero cuando el modelo las exige las cuatro líneas hacen cola. Esa espera no está en el 90%.</p>
+
+<h3>3.5 Problema de Línea 5</h3>
+<p>Línea 5 existe en el Excel y en el conteo de 22 máquinas, y no existe como capacidad:</p>
+<table>
+  <thead><tr><th>Máquina</th><th>Capacidad</th><th>Estatus</th><th>Por qué importa</th></tr></thead>
+  <tbody>
+    <tr><td>Recta (×2)</td><td>s/d</td><td>s/d</td><td>Las 2 rectas compartidas con L1–L4.</td></tr>
+    <tr><td>Overlock (×2)</td><td>s/d</td><td>s/d</td><td>Desborde / ops especiales.</td></tr>
+    <tr><td>Doble aguja</td><td>s/d</td><td>s/d</td><td>Pretina, costura paralela.</td></tr>
+    <tr><td>Ojaladora</td><td>s/d</td><td>s/d</td><td>Shorts, pants, chaquetas.</td></tr>
+    <tr><td>Presilladora</td><td>s/d</td><td>s/d</td><td>Refuerzos de estrés.</td></tr>
+    <tr><td>Engomadora</td><td>s/d</td><td>s/d</td><td>Elástico / pretina.</td></tr>
+  </tbody>
+</table>
+<p>El 2.900 es el techo del flujo Overlock+Collaret. <strong>Explore Pants, Short Playa, Jacket 2.0 y cualquier prenda con ojal o pretina no caben en ese número</strong> — y dos de esos modelos ni siquiera tienen ops por pieza cargadas. Planificar la marca con el 2.900 como si fuera “el taller” subestima el problema en los productos que más operaciones comen.</p>
+
+<h3>3.6 Capacidad instalada teórica vs capacidad real</h3>
+<figure>
+  <img src="anexos/figuras/01_teorica_vs_real_por_linea.png" alt="Teórica vs real por línea" />
+  <figcaption>Figura 2. Teórica vs real por línea (ops/día). L1 es la prueba de que 100% es posible.</figcaption>
+</figure>
+<div class="grid g2">
+  <figure>
+    <img src="anexos/figuras/02_donut_utilizacion.png" alt="Utilización 90%" />
+    <figcaption>Figura 3. 2.617 reales de 2.900 teóricas.</figcaption>
+  </figure>
+  <figure>
+    <img src="anexos/figuras/03_estatus_maquinas.png" alt="Estatus máquinas" />
+    <figcaption>Figura 4. 22 máquinas: 14 activas, 6 inactivas, 2 parciales.</figcaption>
+  </figure>
+</div>
+<p>Traducción mensual (×20 días, criterio ya usado con la Gerencia de Operaciones):</p>
+<table>
+  <thead><tr><th></th><th class="num">Ops / mes</th><th class="num">Piezas al mix pico (8,90)</th></tr></thead>
+  <tbody>
+    <tr><td>Teórica</td><td class="num">58.000</td><td class="num">6.517</td></tr>
+    <tr><td>Real</td><td class="num">52.340</td><td class="num">5.881</td></tr>
+    <tr><td>Pérdida de estatus</td><td class="num">5.660</td><td class="num">636</td></tr>
+    <tr><td>Overlock de cuellos inactivos (fuera del 2.900)</td><td class="num">7.840 teóricas en 0</td><td class="num">~881 si se activaran</td></tr>
+  </tbody>
+</table>
+<p>Tres máquinas adicionales esperan piezas: Brayan estima <strong>~40 piezas/día</strong> (~800/mes). Puede solaparse con las inactivas del tablero; no se suma a ciegas al −283. Sí documenta el déficit tecnológico: downtime de meses por repuesto.</p>
+
+<h3>3.7 Quiebre de capacidad cuando existe alta demanda</h3>
+<figure>
+  <img src="anexos/figuras/04_demanda_vs_capacidad.png" alt="Demanda vs capacidad" />
+  <figcaption>Figura 5. Bandas de demanda de Operaciones contra los dos techos. El pico ya está por encima del real y empatado con el teórico.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>Escenario</th><th class="num">Ops/mes</th><th>vs real 52.340</th><th>Lectura</th></tr></thead>
+  <tbody>
+    <tr><td>Baja (hoy, con colchón)</td><td class="num">25.000–35.000</td><td><span class="tag t-ok">Cubre</span></td><td>El inventario tapa el hueco de máquinas.</td></tr>
+    <tr><td>Media / rotación regular</td><td class="num">45.000–48.000</td><td><span class="tag t-amb">Límite</span></td><td>Casi todo el techo real. Cualquier falla = quiebre de SKU.</td></tr>
+    <tr><td>Alta temporada</td><td class="num">54.950–58.109</td><td><span class="tag t-red">No cubre</span></td><td>Dic-2025 = 58.109 ops / 6.529 pzas.</td></tr>
+    <tr><td>Meta plana 10.500 pzas, mismo mix</td><td class="num">~93.450</td><td><span class="tag t-red">Quiebre</span></td><td>El número “en piezas” miente si el mix es el de diciembre.</td></tr>
+  </tbody>
+</table>
+<figure>
+  <img src="anexos/figuras/06_complejidad_productos.png" alt="Complejidad por producto" />
+  <figcaption>Figura 6. Por qué Antonio tiene razón: 1.000 Rio = 6.000 ops; 1.000 Short Playa = 18.000 ops. El almacén ve mil prendas; el taller ve el triple de máquina.</figcaption>
+</figure>
+
+<h2 id="impacto">4. Impacto del problema</h2>
+
+<h3>4.1 Riesgo financiero</h3>
+<ul class="tight">
+  <li><strong>Margen no fabricado en pico:</strong> 648 piezas × margen (dato Finanzas, pendiente) cada diciembre, y más cuando haya tienda nueva.</li>
+  <li><strong>Segundas y lavado</strong> por aceite/ondas: costo directo + precio inferior. Sin % no se dolariza; el mecanismo está descrito.</li>
+  <li><strong>WIP en mesas de remate:</strong> capital de tela+MO que no se convierte en PT el mismo día. Brayan: con corte automático la prenda pasa a disponible en el mismo turno.</li>
+  <li><strong>Parque inactivo:</strong> 6 máquinas paradas depreciándose. Venta o canibalización no ejecutada.</li>
+  <li><strong>3 equipos esperando piezas:</strong> 40 pzas/día. Lead time de meses vs horas si se estandariza marca con stock local (Jack).</li>
+</ul>
+
+<h3>4.2 Riesgo de mercado</h3>
+<ul class="tight">
+  <li>Temporada alta (oct–dic) es cuando la tienda más necesita profundidad de talla/color. El taller es más corto exactamente entonces.</li>
+  <li>Apertura de tienda con fill-rate flojo quema el evento comercial: la inversión de local se paga con prenda, no con el local vacío.</li>
+  <li>Calidad de costura en microfibra es el argumento de diferenciación que Taller dice que la competencia local no tiene. Perderlo es perder precio.</li>
+  <li>968 SKUs del cruce maestro tienen venta sin stock (P1 del reporte SKU-GLOBAL). Parte es maestro/inventario; parte es un taller que no reponen a tiempo. No se atribuye todo al parque, pero es el mismo síntoma de red.</li>
+</ul>
+
+<h3>4.3 Baja operatividad / eficiencia</h3>
+<p>90% de utilización de un techo ya recortado no es eficiencia: es saturación. Líneas desbalanceadas, rectas compartidas, limpieza de hilo no medida, Overlock de cuellos parados por gente. El indicador de operatividad ID (otro frente del equipo) y este tablero hay que leerlos juntos: máquina “activa” en el conteo de 22 no significa que aporte al 2.900 (Línea 5).</p>
+
+<h3>4.4 Devaluación del taller</h3>
+<p>Cada mes con 27% del parque inactivo el activo se come solo. Sin plan de venta/recuperación, la directiva financia máquinas nuevas <em>y</em> conserva chatarra. La propuesta incluye un inventario de activos (marca, año, valor en libros) y un lote de salida.</p>
+
+<h3>4.5 Déficit tecnológico</h3>
+<p>No es antigüedad en abstracto. Es: diferencial que ya no transporta tela elástica; sin servo; sin corte de hilo; lubricación sucia; marca sin piezas en el país. El layout objetivo (5 máquinas por línea, módulo autónomo, prenda sale terminada) no se puede armar con 2 máquinas de flujo + 2 rectas para todo el piso.</p>
+
+<h2 id="propuesta">5. Propuesta</h2>
+
+<h3>5.1 Compra de maquinarias</h3>
+<p>Marca recomendada por Taller: <strong>Jack</strong>, por presencia y piezas en Venezuela. No es capricho de marca: hay 3 máquinas fuera esperando piezas y ~40 pzas/día perdidas.</p>
+<table>
+  <thead><tr><th>Fase</th><th>Ítem</th><th>Cant. indicativa</th><th>Efecto</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Collaretera de ruedo</td><td>2 (evaluar 3ª por L3 al 50%)</td><td>Hasta +245 ops/día. El grueso del −283.</td></tr>
+    <tr><td>1</td><td>Overlock Unión/Montaje (L2)</td><td>1 reemplazo</td><td>+38 ops/día.</td></tr>
+    <tr><td>1</td><td>Rectas</td><td>2 (1 por línea, hoy 2 para 4)</td><td>No mueve el 2.900; sí el lead time de modelos con recta.</td></tr>
+    <tr><td>1</td><td>Kit de piezas Jack + reactivar 3 paradas</td><td>1 kit</td><td>Hasta ~800 pzas/mes si las 3 vuelven.</td></tr>
+    <tr><td>2</td><td>Módulo 5 máquinas/línea (piloto L3)</td><td>1 línea completa</td><td>Calidad + flujo + sin mesa de remate. SAM nuevos pendientes.</td></tr>
+    <tr><td>2</td><td>Ojaladora / presilladora / engomadora</td><td>según mix L5</td><td>Hace planificable shorts/pants/jacket.</td></tr>
+  </tbody>
+</table>
+<div class="callout teal">
+  <strong>Aritmética de Fase 1.</strong> L3 ruedo 49→98 (+49) + L3 ruedo 0→98 (+98) + L4 ruedo 0→98 (+98) + L2 overlock 150→188 (+38) = <strong>+283 ops/día</strong>.
+  Se recupera todo el gap del tablero. No se cubre ni una tienda nueva, ni Línea 5, ni el salto de calidad de servo/diferencial.
+</div>
+<p><strong>No comprar Overlock de cuellos adicionales</strong> hasta tener 2 operarios. Hoy hay 392 ops/día teóricas en cero por gente, no por falta de hierro.</p>
+
+<h3>5.2 Ajuste de líneas</h3>
+<ul class="tight">
+  <li>Balancear L3 y L4 al patrón de “dos ruedos” que ya está en el Excel (teórica 774).</li>
+  <li>Sacar la recta del pool compartido: 1 recta asignada por línea o celda de recta con cola visible en planificación.</li>
+  <li>Piloto de módulo autónomo en L3 (la peor): prenda entra y sale terminada a QC.</li>
+  <li>Rebalancear Clásica: el cuello es rib/overlock a 80 pzas, no recubierto. Ingeniería debe cerrar el SAM #DIV/0! del rib.</li>
+  <li>Planificar en <strong>operaciones</strong> (Antonio) y reportar a directiva también en <strong>piezas del mix</strong> (Valentina). Las dos columnas, siempre.</li>
+</ul>
+
+<h3>5.3 Venta o recuperación de maquinarias viejas</h3>
+<p>Lote candidato: 6 inactivas del tablero + las que Fase 1 reemplace. Pasos: inventario (marca, modelo, año, serie, libros, estado), canibalizar lo que Jack no cubra, vender el resto, abatir capex. Sin este paso el taller se llena de equipos que no cose y sí ocupan metro y mantenimiento.</p>
+
+<h2 id="impacto-prop">6. Impacto de la propuesta</h2>
+
+<h3>6.1 Mejora del flujo de trabajo</h3>
+<p>Fase 1: L3 y L4 dejan de ser el tapón de ruedo; desaparece la cola entre overlock sano y collaret muerto. Fase 2: se eliminan mesas de remate y la operación fantasma de limpieza de hilo; el ciclo de la prenda cabe en un turno. Rectas por línea: se acaba la pelea de 4 líneas por 2 cabezales.</p>
+
+<h3>6.2 Planificación y operaciones más exactas y alcanzables</h3>
+<p>Hoy una meta en piezas es inalcanzable o holgada según el mix. Con techo real restaurado a 58.000 ops y mix declarado, planificación puede decir: “este mes el mix da 6.500 piezas, no 10.500”. Eso es lo que Valentina pidió: techo real, techo con máquinas nuevas, y tiempo de respuesta. El segundo techo (máquinas nuevas) falta porque no hay SAM de Jack ni cotización — por eso Fase 2 no se aprueba en esta sesión, se cotiza.</p>
+
+<h3>6.3 Crecimiento del taller en paralelo a la marca</h3>
+<figure>
+  <img src="anexos/figuras/05_escenarios_nuevas_tiendas.png" alt="Escenarios nuevas tiendas" />
+  <figcaption>Figura 7. Escenarios de mes pico. La línea verde es capacidad real de hoy; la punteada, teórica. Una sola tienda 1× Grieta ya deja el pico ~33% por encima del real.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>Escenario de red</th><th class="num">Ops pico</th><th class="num">vs real 52.340</th><th class="num">Brecha piezas mix</th></tr></thead>
+  <tbody>
+    <tr><td>Red actual (Dic-2025)</td><td class="num">58.109</td><td class="num">111%</td><td class="num">648</td></tr>
+    <tr><td>+1 tienda 1× Grieta</td><td class="num">69.732</td><td class="num">133%</td><td class="num">1.954</td></tr>
+    <tr><td>+1 tienda 1,5× Grieta (varios modelos de Margarita)</td><td class="num">75.544</td><td class="num">144%</td><td class="num">2.607</td></tr>
+    <tr><td>+1 tienda 2× Grieta (techo Bags/Sport Lite)</td><td class="num">81.356</td><td class="num">155%</td><td class="num">3.260</td></tr>
+    <tr><td>+3 tiendas/año 1× Grieta c/u</td><td class="num">92.978</td><td class="num">178%</td><td class="num">4.566</td></tr>
+  </tbody>
+</table>
+<p class="note">Ancla: Grieta ≈ 20% del pico de la red (Rio, Short Playa, Bags, Sport Lite). No es un forecast de Comercial. Si Margarita es 2× Grieta, usar la fila 2×. Si Cerro Verde cierra, restar su volumen antes de sumar la tienda nueva.</p>
+<p>Fase 1 alinea el taller con <em>esta</em> red. Fase 2 es la que acompaña 3 tiendas/año. Aprobar solo Fase 1 y abrir 3 tiendas es repetir este informe en 12 meses, con más stockout.</p>
+
+<h2 id="otras">7. Otras consideraciones</h2>
+
+<h3>7.1 Picos de demanda (octubre–diciembre)</h3>
+<p>Los dashboards de producto confirman el patrón, no solo el correo de Dic-25. Ejemplos: Short Playa 470 en diciembre vs 192 en noviembre; Sport Mesh 295 vs 104; Rio 819 vs 277; Bags 2.500 vs 957. El pico no es un rumor: es 1,5× a 2,5× el mes anterior según colección. Planificar capacidad al promedio anual garantiza quiebre en Q4.</p>
+
+<h3>7.2 Pedidos corporativos</h3>
+<p>El canal existe en los dashboards (a veces en negativo por ajustes). No hay volumen, ventana ni mix. Un corporativo de shorts o de un color claro (aceite) pega dos veces: ops y calidad. Hay que meterlo en el mismo techo, no “encima”. Dato P1 para Comercial.</p>
+
+<h3>7.3 Productos nuevos</h3>
+<p>Spots arranca con poco histórico. Explore Pants y Jacket 2.0 ya venden en volumen de pico (627 y 775 en Dic-25) y <strong>no tienen n.º de operaciones</strong> en la tabla que usó Operaciones para las 58.109. Si se cosen en este taller, el pico está subestimado en varios miles de ops. Si se van a satélite, hay que decirlo y sacarles el cupo interno.</p>
+
+<h3>7.4 Productos manufacturados en taller satélite</h3>
+<p>Mencionado en el encargo; sin lista, sin %, sin SLA. Riesgo dual: duplicar capex en lo que ya se tercia, o asumir que el satélite absorberá el pico y que no pueda. Pedir a Operaciones el mix satélite vs interno antes de dimensionar Fase 2.</p>
+
+<h3>7.5 Sistema de planificación y reabastecimiento de piezas</h3>
+<p>Dos “piezas” distintas, las dos rotas:</p>
+<ul class="tight">
+  <li><strong>Piezas de recambio de máquina:</strong> 3 equipos abajo, lead time de meses. Estandarizar Jack + min-max de agujas, cuchillas, diferenciales, loopers. Sin eso, Fase 1 compra fierros que volverán a pararse.</li>
+  <li><strong>Piezas/prendas a tienda:</strong> los dashboards de reabastecimiento ya proyectan Margarita/Tolón/Vela. Un sistema de planificación que dispare órdenes en ops (no solo en unidades) evita cargar 10.500 piezas de mix pesado en un mes de 52.000 ops.</li>
+</ul>
+
+<h2 id="faltantes">8. Qué datos faltan para un informe exacto</h2>
+<p>Este borrador es suficiente para <strong>aprobar el diagnóstico y la Fase 1 en concepto</strong>. No es suficiente para un capex cerrado. Prioridad:</p>
+<table>
+  <thead><tr><th>Pri.</th><th>Dato</th><th>Para qué</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag t-red">P0</span></td><td>Cotización Jack por tipo + flete, instalación, capacitación</td><td>Monto y payback</td></tr>
+    <tr><td><span class="tag t-red">P0</span></td><td>% reproceso y % segundas 3–6 meses, por defecto</td><td>Dolarizar calidad</td></tr>
+    <tr><td><span class="tag t-red">P0</span></td><td>Minutos/prenda en mesa de remate y limpieza de hilo</td><td>WIP y ciclo</td></tr>
+    <tr><td><span class="tag t-red">P0</span></td><td>Ops/pieza de Explore, Jacket, Active Duo, y lista satélite</td><td>Pico real</td></tr>
+    <tr><td><span class="tag t-amb">P1</span></td><td>Forecast de tiendas (cuál, cuándo, × Grieta o und)</td><td>Pasar de escenario a presupuesto</td></tr>
+    <tr><td><span class="tag t-amb">P1</span></td><td>SAM del rib (#DIV/0!) y SAM de modelos top además de Clásica</td><td>Techo por producto</td></tr>
+    <tr><td><span class="tag t-amb">P1</span></td><td>Capacidad real de Línea 5 y de las 2 rectas activas</td><td>Shorts/pants/jacket</td></tr>
+    <tr><td><span class="tag t-amb">P1</span></td><td>Meta vs real 2025–26, OTIF, quiebres de stock</td><td>Inequívoco “incumplimiento”</td></tr>
+    <tr><td><span class="tag t-amb">P1</span></td><td>Corporativos: volumen, ventana, mix</td><td>Carga no retail</td></tr>
+    <tr><td><span class="tag t-ok">P2</span></td><td>Inventario de activos, hora-taller, margen/pieza, headcount vs 5/línea, lead time de piezas, SLA satélite</td><td>ROI fino y no duplicar capex</td></tr>
+  </tbody>
+</table>
+<p>Dueños naturales: Brayan (parque, calidad, Jack), Antonio (ops por producto, satélite), Angel De Benedictis (SAM), Valentina/Comercial (tiendas y corporativos), Finanzas (margen y libros), RR.HH. (operarios de Overlock de cuellos).</p>
+
+<h2 id="anexos">9. Anexos</h2>
+<ol class="tight">
+  <li><strong>Calculos_capacidad_taller_Cuadro.xlsx</strong> — siete hojas: KPIs, operación a operación, Línea 5, mix Dic-25, escenarios de tiendas, SAM Clásica y pérdidas no monetizadas, datos faltantes, paquete de compra.</li>
+  <li><strong>Figuras 1–7</strong> (carpeta <code>anexos/figuras</code>) — las del cuerpo.</li>
+  <li><strong>Capturas del Dashboard de Capacidades-Taller</strong> (<code>anexos/dashboards</code>) — fuente de los 2.900 / 2.617 / 283 / 90% y de las observaciones de rectas y Overlock de cuellos.</li>
+  <li><strong>Operaciones Por Linea.xlsx</strong> — L1–L4, Adicionales, Línea 5 vacía.</li>
+  <li><strong>Operaciones por Producto.xlsx</strong> — 6 a 22 ops/pieza. Explore Pants en blanco en el correo de Antonio.</li>
+  <li><strong>Operaciones - Clasica Algodon.xlsx</strong> — SAM, 80 pzas/día de cuello en montaje de rib.</li>
+  <li><strong>Solicitud de Información - Capacidad Instalada del Taller.pdf</strong> — Valentina (techo en piezas + calidad) vs Antonio (capacidad en operaciones) y bandas de demanda.</li>
+  <li><strong>Justificación técnica de calidad — cambio de maquinaria.pdf</strong> — Brayan: defectos, módulos de 5, Jack, 3 máquinas / 40 pzas/día, huecos de reproceso y remate.</li>
+  <li><strong>Dashboards de ventas del repositorio</strong> — contrastan Dic-25 y modelan Margarita / Tolón / Vela.</li>
+</ol>
+
+<div class="callout teal">
+  <strong>Fuentes y dueños de la cifra.</strong>
+  Capacidad L1–L4: tablero + Excel de operaciones por línea (cuadran al peso: 2.900 / 2.617).
+  Demanda pico y bandas: correo de Operaciones a la Gerencia (Valentina Herrera).
+  Calidad y Jack: correo de Brayan Machado.
+  SAM Clásica: Angel De Benedictis.
+  Escenarios de tienda: construcción de este informe; marcarlos como escenario hasta que Comercial firme el forecast.
+</div>
+
+<p class="note">Documento borrador. No sustituye cotización ni acta de inversión. Cifras de capacidad diaria verificadas contra el Excel de líneas (676+676+774+774=2.900; 676+638+627+676=2.617). Mensual = ×20 días, igual que el correo a Valentina.</p>
+</div>
+</body>
+</html>
