@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consumibles · Taller + Tiendas | Somos Cuadro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,500;75,700;75,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3F5F7; --panel:#FFFFFF; --ink:#182432; --muted:#66717F; --line:#E2E7ED;
+  --petrol:#0E6E6B; --petrol-soft:#E2F0EF; --amber:#C98A0B; --amber-soft:#FCF3E0;
+  --coral:#C7523F; --coral-soft:#FBE9E5; --sem:#2E6DA4; --sem-soft:#E4EEF7;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:13px;line-height:1.45}
+.wrap{max-width:1260px;margin:0 auto;padding:18px 20px 40px}
+.num{font-family:'Archivo',sans-serif;font-variant-numeric:tabular-nums;font-stretch:75%}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.brand h1{font-family:'Archivo',sans-serif;font-stretch:75%;font-weight:800;font-size:26px;letter-spacing:.2px;text-transform:uppercase}
+.brand h1 em{font-style:normal;color:var(--petrol)}
+.brand p{color:var(--muted);font-size:12px;margin-top:2px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dial{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.dial button{border:0;background:transparent;padding:8px 16px;font:600 12px 'Inter';color:var(--muted);cursor:pointer;letter-spacing:.4px}
+.dial button.on{background:var(--ink);color:#fff}
+.dial button:focus-visible{outline:2px solid var(--petrol);outline-offset:-2px}
+.colchon{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:5px 10px}
+.colchon label{font-size:11px;color:var(--muted);font-weight:600}
+.colchon input{width:46px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:600 12px 'Inter';text-align:center;color:var(--ink)}
+
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi .v{font-family:'Archivo';font-stretch:75%;font-weight:800;font-size:24px;line-height:1.05}
+.kpi .l{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.kpi.aten .bar{height:5px;background:var(--line);border-radius:3px;margin-top:7px;overflow:hidden}
+.kpi.aten .bar i{display:block;height:100%;border-radius:3px}
+.kpi .sub{font-size:10.5px;font-weight:600;margin-top:3px;color:var(--muted)}
+.kpi .sub.alert{color:var(--coral)}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filters input[type=search],.filters select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:500 12.5px 'Inter';color:var(--ink)}
+.filters input[type=search]{flex:1;min-width:180px}
+.filters select:focus,.filters input:focus{outline:2px solid var(--petrol);outline-offset:-1px}
+.chip-count{align-self:center;color:var(--muted);font-size:12px;margin-left:auto}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:12px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card h2{font:700 11px 'Inter';text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:11px 14px 9px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.card h2 .tag{color:var(--petrol);font-size:10.5px;text-transform:none;letter-spacing:0}
+.scrollbox{max-height:560px;overflow:auto}
+.scrollbox::-webkit-scrollbar{width:8px;height:8px}
+.scrollbox::-webkit-scrollbar-thumb{background:#C9D2DB;border-radius:4px}
+
+table{width:100%;border-collapse:collapse}
+thead th{font:600 10.5px 'Inter';text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:var(--panel);z-index:2}
+thead th:first-child{text-align:left;padding-left:14px}
+thead th.sorted{color:var(--ink)}
+tbody td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle}
+tbody td:first-child{text-align:left;padding-left:14px}
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover{background:#F8FAFB}
+.pname{font-weight:600;font-size:12.5px}
+.pmeta{font-size:10.5px;color:var(--muted)}
+.demb{display:inline-block;vertical-align:middle;height:6px;border-radius:3px;background:var(--petrol);opacity:.85;margin-right:6px}
+.ped{font-family:'Archivo';font-stretch:75%;font-weight:800;font-size:15px}
+.ped small{font:600 9.5px 'Inter';color:var(--muted);margin-left:2px}
+.napill{display:inline-block;font:700 10px 'Inter';color:var(--coral);background:var(--coral-soft);border-radius:20px;padding:2px 7px}
+.src{display:inline-block;font:700 9px 'Inter';letter-spacing:.5px;border-radius:4px;padding:2px 5px}
+.src.A{background:var(--petrol-soft);color:var(--petrol)}
+.src.T{background:var(--sem-soft);color:var(--sem)}
+.src.D{background:var(--amber-soft);color:var(--amber)}
+tr.detail td{background:#F8FAFB;padding:10px 14px 12px}
+.split{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px}
+.split b{font-family:'Archivo';font-stretch:75%;font-size:14px}
+.sucbars{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:8px}
+.sucbar{text-align:center}
+.sucbar .bx{height:38px;display:flex;align-items:flex-end;justify-content:center}
+.sucbar .bx i{width:70%;background:var(--sem);border-radius:3px 3px 0 0;min-height:2px}
+.sucbar.tall .bx i{background:var(--petrol)}
+.sucbar .sl{font-size:8.5px;color:var(--muted);margin-top:3px;letter-spacing:.2px}
+.sucbar.tall .sl{color:var(--petrol);font-weight:700}
+.sucbar .sv{font:700 10px 'Archivo';font-stretch:75%}
+
+.sucwrap{padding:10px 14px 14px}
+.sucrow{display:flex;align-items:center;gap:8px;margin-top:7px}
+.sucrow .sn{width:110px;font-size:11px;font-weight:600;color:var(--ink)}
+.sucrow.tall .sn{color:var(--petrol)}
+.sucrow .sb{flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.sucrow .sb i{display:block;height:100%;background:var(--sem);border-radius:4px}
+.sucrow.tall .sb i{background:var(--petrol)}
+.sucrow .sv{width:56px;text-align:right;font:700 12px 'Archivo';font-stretch:75%}
+.note{padding:10px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--line)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+@media(max-width:960px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.kpis .kpi:last-child{grid-column:span 2}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand">
+    <h1>Consumibles <em>· Taller + Tiendas</em></h1>
+    <p>Demanda histórica 02 jun – 05 ago 2026 · exclusiones aplicadas · fechas corregidas · Somos Cuadro</p>
+  </div>
+  <div class="controls">
+    <div class="dial" role="tablist" aria-label="Frecuencia de pedido">
+      <button data-f="1" role="tab">SEMANAL</button>
+      <button data-f="2" role="tab">QUINCENAL</button>
+      <button data-f="4.35" class="on" role="tab">MENSUAL</button>
+    </div>
+    <div class="colchon"><label for="fs">Colchón</label><input id="fs" type="number" min="0" max="100" step="5" value="10"><span style="font-weight:700">%</span></div>
+  </div>
+</header>
+
+<div class="kpis">
+  <div class="kpi aten"><div class="v num" id="kAtT"></div><div class="l">Atención Taller</div><div class="bar"><i id="kAtTb" style="background:var(--petrol)"></i></div></div>
+  <div class="kpi aten"><div class="v num" id="kAtD"></div><div class="l">Atención Tiendas</div><div class="bar"><i id="kAtDb" style="background:var(--amber)"></i></div><div class="sub alert" id="kAtDs"></div></div>
+  <div class="kpi"><div class="v num" id="kN"></div><div class="l">Artículos en vista</div></div>
+  <div class="kpi"><div class="v num" id="kDem"></div><div class="l" id="kDemL">Demanda del período</div></div>
+  <div class="kpi"><div class="v num" style="color:var(--petrol)" id="kPed"></div><div class="l" id="kPedL">Pedido sugerido</div><div class="sub" id="kPedS"></div></div>
+</div>
+
+<div class="filters">
+  <input type="search" id="q" placeholder="Buscar artículo o código…">
+  <select id="cat"><option value="">Todas las categorías</option></select>
+  <select id="src"><option value="">Taller y tiendas</option><option value="AMBOS">Ambas fuentes</option><option value="TALLER">Solo taller</option><option value="TIENDAS">Solo tiendas</option></select>
+  <span class="chip-count" id="count"></span>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Detalle por artículo <span class="tag">clic en una fila para ver el desglose</span></h2>
+    <div class="scrollbox">
+    <table>
+      <thead><tr>
+        <th data-k="p">Artículo</th>
+        <th data-k="w" title="Promedio semanal">Prom/sem</th>
+        <th data-k="dem" id="thDem">Demanda</th>
+        <th data-k="ped" class="sorted">Pedido ▾</th>
+        <th data-k="na">No atendida</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    </div>
+    <div class="note">Pedido por artículo = demanda del período × (1 + colchón), <b>redondeado hacia arriba al entero</b>. Por eso, incluso con colchón 0%, el pedido total supera la demanda: es la suma de los redondeos de cada artículo (no se piden fracciones). El desglose exacto aparece bajo el KPI de pedido.</div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Demanda por ubicación <span class="tag">unidades del histórico</span></h2>
+      <div class="sucwrap scrollbox" style="max-height:420px" id="sucs"></div>
+      <div class="note">Taller PT: consumos de 65 días (02/06–05/08). Tiendas: solicitudes de 58 días (08/06–04/08), incluye no disponibles. Refleja los filtros activos.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const D = {"items": [{"c": "BPAPESM", "p": "BOLSA DE PAPELERA", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 370, "td": 505, "wt": 39.83, "wd": 60.92, "w": 100.74, "na": 190, "s": [120, 100, 145, 50, 50, 10, 30]}, {"c": "BBASUSM", "p": "BOLSAS DE BASURA", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 180, "td": 386, "wt": 19.38, "wd": 46.56, "w": 65.94, "na": 50, "s": [56, 85, 140, 0, 80, 25, 0]}, {"c": "BENVM", "p": "BOLSA DE ENVIO MEDIANA", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 58, "td": 266, "wt": 6.24, "wd": 32.09, "w": 38.33, "na": 70, "s": [0, 0, 135, 31, 100, 0, 0]}, {"c": "SOBRESM", "p": "SOBRES DE BILLETES", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 10, "td": 200, "wt": 1.08, "wd": 24.13, "w": 25.2, "na": 0, "s": [0, 0, 100, 100, 0, 0, 0]}, {"c": "BCELOSM", "p": "BOLSAS DE CELOFAN", "cat": "SUMINISTROS", "u": "UND", "f": "TALLER", "tt": 200, "td": 0, "wt": 21.53, "wd": 0, "w": 21.53, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "BENVG", "p": "BOLSA DE ENVIO GRANDE", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 12, "td": 140, "wt": 1.29, "wd": 16.89, "w": 18.18, "na": 100, "s": [0, 0, 20, 20, 100, 0, 0]}, {"c": "CINEBSM", "p": "CINTA DE EMBALAJE", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 121, "td": 29, "wt": 13.02, "wd": 3.5, "w": 16.52, "na": 2, "s": [5, 9, 3, 2, 0, 4, 6]}, {"c": "CAFAMASM", "p": "CAFE", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 60, "td": 45, "wt": 6.46, "wd": 5.43, "w": 11.89, "na": 4, "s": [3, 5, 12, 5, 6, 0, 4]}, {"c": "LAPISM", "p": "LAPIZ", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 48, "td": 26, "wt": 5.17, "wd": 3.14, "w": 8.3, "na": 5, "s": [23, 0, 0, 3, 0, 0, 0]}, {"c": "SERVIL", "p": "SERVILLETAS", "cat": "LIMPIEZA E HIGIENE", "u": "PACK", "f": "AMBOS", "tt": 3, "td": 55, "wt": 0.32, "wd": 6.63, "w": 6.96, "na": 26, "s": [9, 16, 9, 14, 5, 0, 2]}, {"c": "BOLISM", "p": "BOLIGRAFOS", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 52, "td": 5, "wt": 5.6, "wd": 0.6, "w": 6.2, "na": 0, "s": [1, 0, 2, 2, 0, 0, 0]}, {"c": "SPLASM", "p": "ESENCIA SPLASH PARA BOLSAS", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 46, "wt": 0, "wd": 5.55, "w": 5.55, "na": 17, "s": [11, 12, 8, 8, 0, 3, 4]}, {"c": "TAPASM", "p": "TAPABOCAS", "cat": "INSUMOS MEDICOS", "u": "UND", "f": "TALLER", "tt": 50, "td": 0, "wt": 5.38, "wd": 0, "w": 5.38, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "ROFI5SM", "p": "ROLLO DE IMPRESORA FISCAL PAQ 5 UNDS", "cat": "SUMINISTROS", "u": "PACK", "f": "AMBOS", "tt": 1, "td": 42, "wt": 0.11, "wd": 5.07, "w": 5.17, "na": 15, "s": [9, 2, 16, 5, 5, 3, 2]}, {"c": "SOBMESM", "p": "SOBRES MEDIA CARTA", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 1, "td": 42, "wt": 0.11, "wd": 5.07, "w": 5.17, "na": 0, "s": [20, 20, 0, 2, 0, 0, 0]}, {"c": "SBGRA", "p": "SOBRE GRANDE", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 1, "td": 40, "wt": 0.11, "wd": 4.83, "w": 4.93, "na": 0, "s": [20, 20, 0, 0, 0, 0, 0]}, {"c": "SOBMASM", "p": "SOBRE MANILA TAMANO CARTA", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 1, "td": 40, "wt": 0.11, "wd": 4.83, "w": 4.93, "na": 0, "s": [0, 0, 20, 0, 20, 0, 0]}, {"c": "TIRROSM", "p": "TIRRO", "cat": "OFICINA", "u": "ROLLO", "f": "AMBOS", "tt": 15, "td": 20, "wt": 1.61, "wd": 2.41, "w": 4.03, "na": 2, "s": [4, 7, 4, 1, 4, 0, 0]}, {"c": "AMBSM", "p": "AMBIENTADOR GLADE", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 24, "td": 19, "wt": 2.58, "wd": 2.29, "w": 4.88, "na": 5, "s": [0, 3, 5, 5, 2, 0, 0]}, {"c": "DESINSM", "p": "DESINFECTANTE", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 13, "td": 16, "wt": 1.4, "wd": 1.93, "w": 3.33, "na": 0, "s": [3, 4, 2, 2, 2, 0, 2]}, {"c": "PAPELINDUSM", "p": "PAPEL SANITARIO INDUSTRIAL", "cat": "LIMPIEZA E HIGIENE", "u": "PACK", "f": "AMBOS", "tt": 23, "td": 7, "wt": 2.48, "wd": 0.84, "w": 3.32, "na": 0, "s": [0, 0, 3, 2, 1, 0, 0]}, {"c": "CINTER", "p": "CINTA TERMICA", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 3, "td": 24, "wt": 0.32, "wd": 2.9, "w": 3.22, "na": 1, "s": [5, 3, 4, 5, 2, 3, 0]}, {"c": "GRASM", "p": "GRAPAS", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 21, "td": 4, "wt": 2.26, "wd": 0.48, "w": 2.74, "na": 0, "s": [2, 1, 0, 0, 0, 0, 0]}, {"c": "PAÑOSM", "p": "PANO AMARILLO", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 8, "td": 17, "wt": 0.86, "wd": 2.05, "w": 2.91, "na": 12, "s": [10, 0, 3, 4, 0, 0, 0]}, {"c": "MARMAFISM", "p": "MARCADOR PERMANENTE PUNTA FINA", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 11, "td": 11, "wt": 1.18, "wd": 1.33, "w": 2.51, "na": 1, "s": [4, 2, 1, 2, 0, 0, 2]}, {"c": "CLOROSM", "p": "CLORO", "cat": "LIMPIEZA E HIGIENE", "u": "GAL", "f": "AMBOS", "tt": 14, "td": 11, "wt": 1.51, "wd": 1.33, "w": 2.83, "na": 0, "s": [2, 4, 2, 1, 2, 0, 0]}, {"c": "ROVE5SM", "p": "ROLLO DE PUNTO DE VENTA PAQ 5 UNDS", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 22, "wt": 0, "wd": 2.65, "w": 2.65, "na": 0, "s": [5, 0, 10, 0, 5, 0, 0]}, {"c": "CINDOFA", "p": "CINTA DOBLE FAZ", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 18, "wt": 0, "wd": 2.17, "w": 2.17, "na": 15, "s": [8, 6, 0, 2, 1, 0, 1]}, {"c": "EXASM", "p": "CUTTERS (EXACTO)", "cat": "SUMINISTROS", "u": "PACK", "f": "AMBOS", "tt": 14, "td": 5, "wt": 1.51, "wd": 0.6, "w": 2.11, "na": 0, "s": [2, 0, 3, 0, 0, 0, 0]}, {"c": "RESBLANC", "p": "RESMA DE HOJAS BLANCAS", "cat": "OFICINA", "u": "PACK", "f": "AMBOS", "tt": 12, "td": 8, "wt": 1.29, "wd": 0.97, "w": 2.26, "na": 2, "s": [0, 1, 2, 2, 2, 0, 0]}, {"c": "BATAAASM", "p": "BATERIAS AAA", "cat": "SUMINISTROS", "u": "PACK", "f": "AMBOS", "tt": 9, "td": 10, "wt": 0.97, "wd": 1.21, "w": 2.18, "na": 1, "s": [0, 0, 0, 3, 1, 4, 0]}, {"c": "POSTITS", "p": "POST ITS", "cat": "OFICINA", "u": "PACK", "f": "AMBOS", "tt": 5, "td": 10, "wt": 0.54, "wd": 1.21, "w": 1.74, "na": 4, "s": [0, 0, 5, 0, 0, 4, 1]}, {"c": "LAVATOSM", "p": "LAVATODO", "cat": "LIMPIEZA E HIGIENE", "u": "GAL", "f": "AMBOS", "tt": 7, "td": 7, "wt": 0.75, "wd": 0.84, "w": 1.6, "na": 2, "s": [1, 1, 2, 2, 0, 0, 1]}, {"c": "MARCAGRSM", "p": "MARCADOR PERMANENTE PUNTA GRUESA", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 11, "td": 5, "wt": 1.18, "wd": 0.6, "w": 1.79, "na": 2, "s": [0, 0, 2, 1, 0, 0, 0]}, {"c": "PIQUET", "p": "PIQUETAS", "cat": "SUMINISTROS", "u": "UND", "f": "TALLER", "tt": 14, "td": 0, "wt": 1.51, "wd": 0, "w": 1.51, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CINMET", "p": "CINTA METRICA", "cat": "SUMINISTROS", "u": "UND", "f": "TALLER", "tt": 13, "td": 0, "wt": 1.4, "wd": 0, "w": 1.4, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "ALCSM", "p": "ALCOHOL", "cat": "LIMPIEZA E HIGIENE", "u": "GAL", "f": "AMBOS", "tt": 8, "td": 6, "wt": 0.86, "wd": 0.72, "w": 1.58, "na": 0, "s": [2, 1, 0, 0, 0, 0, 1]}, {"c": "COLESM", "p": "COLETO 3 RAYAS", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 10, "td": 5, "wt": 1.08, "wd": 0.6, "w": 1.68, "na": 1, "s": [3, 0, 0, 1, 0, 0, 0]}, {"c": "ESPJSM", "p": "ESPONJA", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 11, "wt": 0, "wd": 1.33, "w": 1.33, "na": 6, "s": [5, 1, 1, 4, 0, 0, 0]}, {"c": "TIJESM", "p": "TIJERAS NUEVAS", "cat": "OFICINA", "u": "PACK", "f": "AMBOS", "tt": 9, "td": 5, "wt": 0.97, "wd": 0.6, "w": 1.57, "na": 0, "s": [0, 2, 1, 0, 1, 0, 0]}, {"c": "PINZDEV", "p": "PINZA DE DEVASTADO", "cat": "SUMINISTROS", "u": "PACK", "f": "AMBOS", "tt": 9, "td": 5, "wt": 0.97, "wd": 0.6, "w": 1.57, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "BATAASM", "p": "BATERIAS AA", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 8, "td": 4, "wt": 0.86, "wd": 0.48, "w": 1.34, "na": 0, "s": [0, 1, 1, 0, 1, 1, 0]}, {"c": "JABMAN", "p": "GEL DE BANO", "cat": "LIMPIEZA E HIGIENE", "u": "GAL", "f": "AMBOS", "tt": 4, "td": 6, "wt": 0.43, "wd": 0.72, "w": 1.15, "na": 0, "s": [1, 2, 1, 2, 0, 0, 0]}, {"c": "CIN28EQ", "p": "CINTA DE REGALO FUCSIA", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 1, "td": 6, "wt": 0.11, "wd": 0.72, "w": 0.83, "na": 0, "s": [0, 0, 4, 1, 1, 0, 0]}, {"c": "CIN13EQ", "p": "CINTA DE REGALO AZUL REY", "cat": "SUMINISTROS", "u": "UND", "f": "AMBOS", "tt": 1, "td": 6, "wt": 0.11, "wd": 0.72, "w": 0.83, "na": 0, "s": [0, 0, 3, 2, 1, 0, 0]}, {"c": "JB250SM", "p": "JABON LAS LLAVES PANELA 250 G", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TALLER", "tt": 7, "td": 0, "wt": 0.75, "wd": 0, "w": 0.75, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "PAPEL400HSM", "p": "PAPEL SANITARIO ROLLO 400 H", "cat": "LIMPIEZA E HIGIENE", "u": "PACK", "f": "AMBOS", "tt": 5, "td": 4, "wt": 0.54, "wd": 0.48, "w": 1.02, "na": 0, "s": [0, 2, 0, 0, 1, 0, 0]}, {"c": "GASESTIM", "p": "GASA ESTERIL MEDAID", "cat": "INSUMOS MEDICOS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 5, "wt": 0, "wd": 0.6, "w": 0.6, "na": 0, "s": [0, 0, 0, 5, 0, 0, 0]}, {"c": "MOUSM", "p": "MOUSE", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 5, "wt": 0, "wd": 0.6, "w": 0.6, "na": 2, "s": [0, 1, 2, 0, 2, 0, 0]}, {"c": "ROVE10SM", "p": "ROLLO DE PUNTO DE VENTA PAQ 10 UNDS", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 5, "wt": 0, "wd": 0.6, "w": 0.6, "na": 0, "s": [3, 0, 0, 2, 0, 0, 0]}, {"c": "CIN16EQ", "p": "CINTA DE REGALO BLANCO", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 5, "wt": 0, "wd": 0.6, "w": 0.6, "na": 0, "s": [0, 0, 3, 1, 1, 0, 0]}, {"c": "REMVINL", "p": "REMOVEDOR VINIL", "cat": "SUMINISTROS", "u": "UND", "f": "TALLER", "tt": 5, "td": 0, "wt": 0.54, "wd": 0, "w": 0.54, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "GANSM", "p": "GANCHOS PARA CARPETA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 5, "td": 0, "wt": 0.54, "wd": 0, "w": 0.54, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "MOUPADSM", "p": "MOUSE PAD", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 4, "wt": 0, "wd": 0.48, "w": 0.48, "na": 3, "s": [0, 0, 0, 4, 0, 0, 0]}, {"c": "RESAL02SM", "p": "RESALTADOR FUCSIA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 4, "td": 0, "wt": 0.43, "wd": 0, "w": 0.43, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "PAPEL300SM", "p": "PAPEL SANITARIO ROLLO 300 H", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 3, "wt": 0, "wd": 0.36, "w": 0.36, "na": 0, "s": [0, 2, 0, 0, 1, 0, 0]}, {"c": "PRIDESM", "p": "PRIDE", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 3, "wt": 0, "wd": 0.36, "w": 0.36, "na": 0, "s": [1, 1, 0, 0, 1, 0, 0]}, {"c": "CUASM", "p": "CUADERNOS", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 3, "wt": 0, "wd": 0.36, "w": 0.36, "na": 1, "s": [0, 0, 2, 1, 0, 0, 0]}, {"c": "LIMPRCN", "p": "LIMPIA PORCELANA", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 3, "wt": 0, "wd": 0.36, "w": 0.36, "na": 0, "s": [0, 1, 1, 1, 0, 0, 0]}, {"c": "VENSOSM", "p": "VENSOL", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 1, "td": 2, "wt": 0.11, "wd": 0.24, "w": 0.35, "na": 0, "s": [0, 0, 0, 1, 0, 0, 1]}, {"c": "CORRESM", "p": "LIQUI PAPER CORRECTOR", "cat": "OFICINA", "u": "ROLLO", "f": "AMBOS", "tt": 1, "td": 2, "wt": 0.11, "wd": 0.24, "w": 0.35, "na": 0, "s": [0, 0, 0, 2, 0, 0, 0]}, {"c": "KITOFICE", "p": "KIT DE OFICINA (MAUSE Y TECLADO)", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "AMBOS", "tt": 2, "td": 1, "wt": 0.22, "wd": 0.12, "w": 0.34, "na": 0, "s": [0, 0, 1, 0, 0, 0, 0]}, {"c": "MARACRI", "p": "MARCADOR ACRILICO", "cat": "OFICINA", "u": "UND", "f": "AMBOS", "tt": 2, "td": 1, "wt": 0.22, "wd": 0.12, "w": 0.34, "na": 0, "s": [0, 0, 0, 1, 0, 0, 0]}, {"c": "JB900SM", "p": "JABON LAS LLAVES POLVO 900 G", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TALLER", "tt": 4, "td": 0, "wt": 0.43, "wd": 0, "w": 0.43, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CARCASM", "p": "CARPETAS MARRONES CARTA", "cat": "OFICINA", "u": "PACK", "f": "TALLER", "tt": 6, "td": 0, "wt": 0.65, "wd": 0, "w": 0.65, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "RESAL03SM", "p": "RESALTADOR AMARILLO", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 4, "td": 0, "wt": 0.43, "wd": 0, "w": 0.43, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "TIZLIQASM", "p": "TIZA LIQUIDA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 4, "td": 0, "wt": 0.43, "wd": 0, "w": 0.43, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "RESAL01SM", "p": "RESALTADOR NARANJA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 4, "td": 0, "wt": 0.43, "wd": 0, "w": 0.43, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CUCPLO", "p": "CUCHILLA DE PLOTTER", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 2, "wt": 0, "wd": 0.24, "w": 0.24, "na": 0, "s": [0, 0, 0, 0, 0, 0, 2]}, {"c": "BORRASM", "p": "BORRADOR", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 2, "wt": 0, "wd": 0.24, "w": 0.24, "na": 2, "s": [2, 0, 0, 0, 0, 0, 0]}, {"c": "CIN42EQ", "p": "CINTA DE REGALO NARANJA", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 2, "wt": 0, "wd": 0.24, "w": 0.24, "na": 0, "s": [0, 0, 0, 1, 1, 0, 0]}, {"c": "SACASM", "p": "SACAPUNTAS", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 2, "wt": 0, "wd": 0.24, "w": 0.24, "na": 2, "s": [2, 0, 0, 0, 0, 0, 0]}, {"c": "RESCOLOR", "p": "RESMA DE HOJAS DE COLORES", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 2, "wt": 0, "wd": 0.24, "w": 0.24, "na": 0, "s": [0, 2, 0, 0, 0, 0, 0]}, {"c": "CEPMAN", "p": "CEPILLO DE MANO", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "AMBOS", "tt": 1, "td": 1, "wt": 0.11, "wd": 0.12, "w": 0.23, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "PALSCB", "p": "PALO DE ESCOBA", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TALLER", "tt": 2, "td": 0, "wt": 0.22, "wd": 0, "w": 0.22, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CINPÑSM", "p": "CINTA ADHESIVA PEQUENA", "cat": "SUMINISTROS", "u": "UND", "f": "TALLER", "tt": 2, "td": 0, "wt": 0.22, "wd": 0, "w": 0.22, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "HUELL", "p": "HUELLERO", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 3, "td": 0, "wt": 0.32, "wd": 0, "w": 0.32, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "RESAL04SM", "p": "RESALTADOR AZUL", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 2, "td": 0, "wt": 0.22, "wd": 0, "w": 0.22, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "RESAL04SMPF", "p": "RESALTADOR AZUL PUNTA FINA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 2, "td": 0, "wt": 0.22, "wd": 0, "w": 0.22, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CEPBAR", "p": "CEPILLO DE BARRER", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TALLER", "tt": 2, "td": 0, "wt": 0.22, "wd": 0, "w": 0.22, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "CIN26EQ", "p": "CINTA DE REGALO AZUL / DORADO", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 1, 0, 0, 0]}, {"c": "ALGIM", "p": "ALGODON", "cat": "INSUMOS MEDICOS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "ACORDASM", "p": "CARPETA ACORDEON", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "SACGRASM", "p": "SACAGRAPAS", "cat": "OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "TON05A80A", "p": "TONER 05A/80A", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 1, 0, 0, 0, 0]}, {"c": "CIN68EQ", "p": "CINTA DE REGALO VERDE OLIVA", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 1, 0, 0, 0]}, {"c": "CIN43EQ", "p": "CINTA DE REGALO NEGRO", "cat": "SUMINISTROS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 1, 0, 0, 0]}, {"c": "TOAHUM", "p": "TOALLAS HUMEDAS", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 1, "s": [0, 0, 0, 1, 0, 0, 0]}, {"c": "LIMVISM", "p": "LIMPIA VIDRIOS", "cat": "LIMPIEZA E HIGIENE", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 1, 0, 0, 0, 0]}, {"c": "CURTADH", "p": "CURITAS ADHESIVAS", "cat": "INSUMOS MEDICOS", "u": "UND", "f": "TIENDAS", "tt": 0, "td": 1, "wt": 0, "wd": 0.12, "w": 0.12, "na": 0, "s": [0, 0, 0, 0, 0, 0, 1]}, {"c": "CARPDOC", "p": "CARPETA DE DOCUMENTOS", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "BORRPZSM", "p": "BORRADOR DE PIZARRA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "LAMP", "p": "LAMPARAS", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "POTAPA", "p": "PORTA PAPELES", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "REG30SM", "p": "REGLA 30CM", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "RESAL05SM", "p": "RESALTADOR VERDE", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "SEPCOSM", "p": "SEPARADORES DE COLORES", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "TIZASM", "p": "TIZA", "cat": "OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}, {"c": "TONMLTD111L", "p": "TONER MLTD111L", "cat": "EQUIPOS DE OFICINA", "u": "UND", "f": "TALLER", "tt": 1, "td": 0, "wt": 0.11, "wd": 0, "w": 0.11, "na": 0, "s": [0, 0, 0, 0, 0, 0, 0]}], "sucs": ["TOLON", "SAMBIL CHACAO", "GRIETA", "SAMBIL VALENCIA", "CERRO VERDE", "GRAND PLAZ", "MARGARITA"], "kpi": {"atenT": 0.85, "atenTi": 0.769, "nprod": 99}, "cats": ["EQUIPOS DE OFICINA", "INSUMOS MEDICOS", "LIMPIEZA E HIGIENE", "OFICINA", "SUMINISTROS"]};
+const $=s=>document.querySelector(s);
+let freq=4.35, fs=0.10, sortK='ped', sortDir=-1, open=null;
+const FRN={1:'semanal',2:'quincenal',4.35:'mensual'};
+const fmt=n=>n.toLocaleString('es-VE');
+
+D.cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c.charAt(0)+c.slice(1).toLowerCase();$('#cat').appendChild(o);});
+
+function calc(d){const dem=d.w*freq; return {...d, dem, ped: dem>0?Math.ceil(dem*(1+fs)):0};}
+function filtered(){
+  const q=$('#q').value.trim().toUpperCase(), cat=$('#cat').value, src=$('#src').value;
+  return D.items.map(calc).filter(d=>
+    (!q||d.p.includes(q)||d.c.toUpperCase().includes(q)) &&
+    (!cat||d.cat===cat) && (!src||d.f===src)
+  ).sort((a,b)=>{
+    let r;
+    if(sortK==='p') r=a.p.localeCompare(b.p);
+    else r=(a[sortK]||0)-(b[sortK]||0);
+    return r*sortDir || b.ped-a.ped;
+  });
+}
+function srcTag(f){return f==='AMBOS'?'<span class="src A">T+T</span>':f==='TALLER'?'<span class="src T">TALLER</span>':'<span class="src D">TIENDAS</span>';}
+
+function render(){
+  const rows=filtered();
+  const maxDem=Math.max(...rows.map(r=>r.dem),1);
+  const frn=FRN[freq];
+  $('#kAtT').textContent=(D.kpi.atenT*100).toFixed(0)+'%'; $('#kAtTb').style.width=(D.kpi.atenT*100)+'%';
+  $('#kAtD').textContent=(D.kpi.atenTi*100).toFixed(1)+'%'; $('#kAtDb').style.width=(D.kpi.atenTi*100)+'%';
+  $('#kAtDs').textContent=((1-D.kpi.atenTi)*100).toFixed(1)+'% no atendida';
+  const demT=rows.reduce((s,r)=>s+r.dem,0);
+  const pedT=rows.reduce((s,r)=>s+r.ped,0);
+  const colch=Math.round(demT*fs);
+  const redond=pedT-Math.round(demT)-colch;
+  $('#kN').textContent=rows.length;
+  $('#kDem').textContent=fmt(Math.round(demT));
+  $('#kPed').textContent=fmt(pedT);
+  $('#kDemL').textContent='Demanda '+frn+' (und)';
+  $('#kPedL').textContent='Pedido '+frn;
+  $('#kPedS').textContent='= demanda + '+fmt(colch)+' colchón ('+Math.round(fs*100)+'%) + '+fmt(redond)+' redondeo';
+  $('#thDem').textContent='Demanda '+(freq===1?'sem':freq===2?'quin':'mes');
+  $('#count').textContent=rows.length+' de '+D.items.length+' artículos';
+  const tb=$('#tb'); tb.innerHTML='';
+  if(!rows.length){tb.innerHTML='<tr><td colspan="5" class="empty">Ningún artículo coincide con los filtros. Ajusta la búsqueda o limpia los filtros.</td></tr>';}
+  rows.forEach(d=>{
+    const tr=document.createElement('tr'); tr.className='row';
+    tr.innerHTML=`<td><div class="pname">${d.p}</div><div class="pmeta">${srcTag(d.f)} ${d.cat.charAt(0)+d.cat.slice(1).toLowerCase()} · ${d.c||'s/código'}</div></td>
+    <td class="num">${d.w.toFixed(1)}</td>
+    <td><span class="demb" style="width:${Math.max(3,d.dem/maxDem*70)}px"></span><span class="num">${fmt(Math.round(d.dem))}</span></td>
+    <td><span class="ped">${fmt(d.ped)}<small>${d.u}</small></span></td>
+    <td>${d.na>0?'<span class="napill">'+fmt(d.na)+' und</span>':'<span style="color:var(--muted)">—</span>'}</td>`;
+    tr.onclick=()=>{open=open===d.p?null:d.p;render();};
+    tb.appendChild(tr);
+    if(open===d.p){
+      const dt=document.createElement('tr'); dt.className='detail';
+      const locs=[{n:'TALLER PT',v:d.tt,t:1}].concat(D.sucs.map((s,i)=>({n:s.replace('SAMBIL ','S. ').replace('GRAND PLAZ','G. PLAZA'),v:d.s[i],t:0})));
+      const maxL=Math.max(...locs.map(l=>l.v),1);
+      dt.innerHTML=`<td colspan="5">
+        <div class="split">
+          <span>Taller: <b class="num">${d.wt.toFixed(1)}</b> und/sem (${fmt(d.tt)} total)</span>
+          <span>Tiendas: <b class="num">${d.wd.toFixed(1)}</b> und/sem (${fmt(d.td)} total)</span>
+          ${d.na>0?`<span style="color:var(--coral)">No atendida en tiendas: <b class="num">${fmt(d.na)}</b> und</span>`:''}
+        </div>
+        <div class="sucbars">${locs.map(l=>`<div class="sucbar${l.t?' tall':''}"><div class="bx"><i style="height:${Math.max(4,l.v/maxL*100)}%"></i></div><div class="sv num">${l.v||''}</div><div class="sl">${l.n}</div></div>`).join('')}</div>
+      </td>`;
+      tb.appendChild(dt);
+    }
+  });
+  const totT=rows.reduce((s,r)=>s+r.tt,0);
+  const tot=D.sucs.map((_,i)=>rows.reduce((s,r)=>s+r.s[i],0));
+  const all=[{n:'Taller PT',v:totT,t:1}].concat(D.sucs.map((s,i)=>({n:s.charAt(0)+s.slice(1).toLowerCase(),v:tot[i],t:0})));
+  const maxT=Math.max(...all.map(a=>a.v),1);
+  $('#sucs').innerHTML=all.map(a=>`<div class="sucrow${a.t?' tall':''}"><div class="sn">${a.n}</div><div class="sb"><i style="width:${a.v/maxT*100}%"></i></div><div class="sv num">${fmt(a.v)}</div></div>`).join('');
+}
+
+document.querySelectorAll('.dial button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.dial button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); freq=parseFloat(b.dataset.f); render();
+});
+$('#fs').oninput=e=>{fs=Math.max(0,Math.min(100,+e.target.value||0))/100; render();};
+['q','cat','src'].forEach(id=>$('#'+id).addEventListener('input',()=>{open=null;render();}));
+document.querySelectorAll('thead th').forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; if(!k)return;
+  if(sortK===k){sortDir*=-1;}else{sortK=k;sortDir=(k==='p')?1:-1;}
+  document.querySelectorAll('thead th').forEach(x=>{x.classList.remove('sorted');x.textContent=x.textContent.replace(/ [▾▴]$/,'');});
+  th.classList.add('sorted'); th.textContent=th.textContent+(sortDir===-1?' ▾':' ▴');
+  render();
+});
+render();
+</script>
+</body>
+</html>
