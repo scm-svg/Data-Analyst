@@ -1,4 +1,4 @@
-# Planificación de Producción v5.9.53 — códigos listos para pegar
+# Planificación de Producción v5.9.54 — códigos listos para pegar
 
 ## Cómo instalar (borrar y pegar)
 
@@ -14,7 +14,19 @@ El botón **Actualizar Dashboard** no regenera el plan: solo lee las pestañas y
 
 Los checks de **Impresión Digital** se graban con el botón **Guardar** de esa pestaña, en la hoja oculta `_ImpresionChecks`. La clave es `M|MO|SKU` (la semana no entra). Si al regenerar el plan la orden cambia de semana o de fila, el logo listo sigue. Las claves antiguas `semana|SKU|MO` se siguen leyendo y se reescriben al guardar. **Actualizar Dashboard** no borra esa hoja. Marcar un check no lo envía solo: hay que pulsar Guardar. Si hay cambios sin guardar y alguien sale del dashboard, el navegador avisa.
 
-Esta versión incluye **L5 paralelo desde el primer día que hay dos familias listas** (**5.9.53**), **L5 Día de inicio / 50% de cap / cola de semana** (**5.9.52**), **apoyo L1 que no pisa prendas propias** (**5.9.51**), **columna Lote en Por Hacer** (**5.9.50**), **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+Esta versión incluye **rotación semanal L2 → L4 → L3 → L2** (**5.9.54**), **L5 paralelo desde el primer día que hay dos familias listas** (**5.9.53**), **L5 Día de inicio / 50% de cap / cola de semana** (**5.9.52**), **apoyo L1 que no pisa prendas propias** (**5.9.51**), **columna Lote en Por Hacer** (**5.9.50**), **Calendario Detalle diario con tooltip que se puede bajar** (**5.9.49**), **Impresión Digital con faltante 0** (**5.9.48**), **Impresión Digital sin filtro Prioridad** (**5.9.47**), **Impresión Digital lista fija** en el dashboard en línea (**5.9.46**), **color sin saltos en Proyeccion - SKUS** (**5.9.45**), **Secuencia=No sin lote familiar** (**5.9.44**), **asignar MO sin que Actualizar MOs la borre** (**5.9.43**), **uno o dos modelos a media estación**, cada uno con la cola cuando le toca (**5.9.42**), la selección de dos nombres en el prompt (**5.9.41**), el paralelo automático (**5.9.40**), **lotes / Division / secuencia de color** (**5.9.39**), el **orden de salida de SKUs** en todo drill-down (**5.9.38**), **Produccion Parcial** y KPIs del encabezado (**5.9.37**), **Ya producida** en almacén (**5.9.36**), el almacén del dashboard (**5.9.35**), el registro de logos por orden (**5.9.34**), el motor **5.9.33** (Especial con 2+ líneas produce en todas las asignadas), **5.9.32** (RIO DAMA no suelta L2 a un hermano que aún no llega a su Día de inicio), **5.9.31** (urgente que explota líneas en fecha estimada), **Secuencia=No en Línea 5**, horizonte de **12 semanas** y el dashboard web compartido.
+
+## Motor · Rotación semanal L2 → L4 → L3 → L2 (5.9.54)
+
+Las líneas 2, 3 y 4 están hechas de operarias: si llevan muchas semanas en el mismo modelo se fatigan. El motor **arranca cada modelo en la línea prevista** (`Linea de Produccion` / Día de inicio). **Cada lunes**, si **las tres** (L2, L3 y L4) tienen ocupante que sigue, se intercambian:
+
+- lo que estaba en **L2** pasa a **L4**
+- lo que estaba en **L4** pasa a **L3**
+- lo que estaba en **L3** pasa a **L2**
+
+El remanente viaja con el modelo (la MO no se parte el mismo día). Un **Especial** que ocupe una de esas tres líneas y no rote, o un modelo que **arranca hoy** en un destino, **cancelan el giro esa semana**. Si falta una de las tres, no hay intercambio (no se deja una línea vacía). **L1 y L5 no giran**. Un modelo nuevo que entra a mitad de semana lo hace en la línea donde estaba previsto.
+
+Excel 52: en semana 1, RIO CAB corre en L2, RIO KIDS en L3 y MAR CAB Lote 1 en L4. El lunes de semana 2, RIO KIDS pasa a L2, MAR a L3 y RIO CAB a L4.
 
 ## Motor · L5 no espera una fecha futura para el paralelo (5.9.53)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.53 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.54 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -22,6 +22,8 @@ MAX_MODELOS_PARALELO = MAX_MODELOS_LINEA5
 MAX_MODELOS_L14_PARCIAL = 2
 LOTE_RUEDA_LINEA5 = 5
 CAP_POR_LINEA = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
+ROTACION_L234 = {"2": "4", "4": "3", "3": "2"}
+LINEAS_ROTACION = ["2", "4", "3"]
 SEMANAS_DEFAULT = 12
 SEMANAS_MAX = 12
 NOMBRES_HOJAS_SEMANAS = [
@@ -1336,6 +1338,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     carga = {lin: [0.0] * total_dias for lin in caps_lineas}
     linea_por_mo = {}
     ultimo_modelo = {lin: "" for lin in caps_lineas}
+    linea_rotada = {}
     dia_ctx = {"d": 0}
 
     def restante_modelo(m):
@@ -1415,7 +1418,80 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
 
     def elegibles(t, overflow):
         ls = list(t["lineas"])
+        fija = t.get("lineaFija")
+        if fija and fija in carga and fija not in ls:
+            ls.append(fija)
+        dest = None if t.get("esEspecial") else linea_rotada.get(t.get("modelo"))
+        if dest and dest in carga and dest not in ls:
+            ls.append(dest)
         return [l for l in ls if l in carga]
+
+    def remapear_modelo_a_linea(nom, from_lin, to_lin):
+        linea_rotada[nom] = to_lin
+        m_r = modelos.get(nom)
+        if not m_r:
+            return
+        for t_r in m_r["tareas"]:
+            if t_r["restante"] <= 0 or t_r.get("esEspecial"):
+                continue
+            mo_r = t_r.get("mo") or t_r["sku"]
+            fija_r = linea_por_mo.get(mo_r) or t_r.get("lineaFija")
+            if fija_r and fija_r != from_lin:
+                continue
+            t_r["lineaFija"] = to_lin
+            linea_por_mo[mo_r] = to_lin
+
+    def modelo_arranca_hoy_en(m, lin, d_hoy):
+        if not m or restante_modelo(m) <= 0:
+            return False
+        for t_arr in m["tareas"]:
+            if t_arr["restante"] <= 0:
+                continue
+            if dia_inicio_efectivo(t_arr) != d_hoy:
+                continue
+            if lin not in (t_arr.get("lineas") or []):
+                continue
+            if d_hoy < DIAS_LABORALES and (d_hoy % DIAS_LABORALES) == t_arr.get("diaNoLaborable", -1):
+                continue
+            return True
+        return False
+
+    def destino_bloqueado_rotacion(to_lin, d_hoy, seen_r):
+        dest_nom = ultimo_modelo.get(to_lin) or ""
+        dest_m = modelos.get(dest_nom)
+        if dest_m and restante_modelo(dest_m) > 0 and dest_m.get("esEspecial") and dest_nom not in seen_r:
+            return True
+        for m_b in lista:
+            if seen_r.get(m_b["nombre"]):
+                continue
+            if modelo_arranca_hoy_en(m_b, to_lin, d_hoy):
+                return True
+        return False
+
+    def rotar_ocupantes_234(d_hoy, ocupante_hoy):
+        nonlocal linea_rotada
+        linea_rotada = {}
+        if not (d_hoy > 0 and d_hoy % DIAS_LABORALES == 0):
+            return
+        moves = []
+        seen_r = {}
+        for from_lin in LINEAS_ROTACION:
+            nom_r = ultimo_modelo.get(from_lin) or ""
+            if not nom_r or nom_r in seen_r:
+                continue
+            m_from = modelos.get(nom_r)
+            if not m_from or restante_modelo(m_from) <= 0 or m_from.get("esEspecial"):
+                continue
+            moves.append((nom_r, from_lin, ROTACION_L234.get(from_lin, from_lin)))
+            seen_r[nom_r] = True
+        if len(moves) < 3:
+            return
+        for nom_r, from_lin, to_lin in moves:
+            if destino_bloqueado_rotacion(to_lin, d_hoy, seen_r):
+                return
+        for nom_r, from_lin, to_lin in moves:
+            remapear_modelo_a_linea(nom_r, from_lin, to_lin)
+            ocupante_hoy[to_lin] = [nom_r]
 
     def runnable(t, d, lin, overflow):
         if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
@@ -1700,6 +1776,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if d % DIAS_LABORALES == 0:
             for lin in list(ocupante):
                 ocupante[lin] = []
+            rotar_ocupantes_234(d, ocupante)
         for lin, mods in list(ocupante.items()):
             kept = []
             for mod in mods:
@@ -3658,7 +3735,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3828,7 +3905,7 @@ class TestApoyoLinea1(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("APOYO L1 NO PISA PRENDAS PROPIAS", gs)
         self.assertIn("function linea1TieneNativoHoy_(d)", gs)
         self.assertIn("if (linea1TieneNativoHoy_(d)) return;", gs)
@@ -4167,7 +4244,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
@@ -4805,7 +4882,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -5046,7 +5123,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
@@ -5085,7 +5162,7 @@ class TestColumnaLoteModelo(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("function formatoModelo_", gs)
         self.assertIn("function textoLote_", gs)
         self.assertIn("function loteDeFila_", gs)
@@ -5215,7 +5292,7 @@ class TestV5952Linea5InicioCapacidadCola(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
         self.assertIn("function producirParaleloLinea5_(noms, d, overflow)", gs)
         self.assertIn("if (cargaAntes < 0.001) ultimoModeloLinea[lin] = mP.nombre;", gs)
         self.assertIn("function lotePuedeUsarLineasDe_(lote, m, overflow)", gs)
@@ -5297,21 +5374,133 @@ class TestV5953Linea5ParaleloAntesFecha(unittest.TestCase):
         self.assertIn("SHORT PLAYA CAB", d7, d7)
         self.assertIn("Basic Line Pant Dama", d7, d7)
 
-    def test_gs_y_dashboard_v5953(self):
+class TestRotacionLineas234(unittest.TestCase):
+    def _t(self, sku, modelo, cant, lineas, **kw):
+        d = {
+            "sku": sku, "modelo": modelo, "mo": "MO-" + sku,
+            "cantidad": cant, "cap": 130, "lineas": list(lineas),
+            "color": "Negro", "prioridadNum": 3, "esEspecial": False,
+            "diaIngreso": 0, "fechaKey": 20261001, "solicitadaOrig": cant,
+        }
+        d.update(kw)
+        return d
+
+    def _por(self, out, lin, d):
+        por = defaultdict(int)
+        for t in out:
+            por[t["modelo"]] += t["plan"][lin][d]
+        return dict((k, v) for k, v in por.items() if v > 0)
+
+    def test_semana1_arranca_en_linea_prevista_y_lunes_rota_234(self):
+        """Excel 52: arranque L2/L4/L3; el lunes L2→L4, L4→L3, L3→L2."""
+        tareas = [
+            self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+            self._t("B", "MODELO B L4", 2000, ["4"], cap=130, fechaKey=2),
+            self._t("C", "MODELO C L3", 2000, ["3"], cap=130, fechaKey=3),
+        ]
+        seq = {"MODELO A L2": "No", "MODELO B L4": "No", "MODELO C L3": "No"}
+        out = planificar(tareas, {}, total_dias=15, mapa_secuencia=seq)
+        for d in range(5):
+            self.assertEqual(self._por(out, "2", d), {"MODELO A L2": 130}, "s1 L2 d%s" % d)
+            self.assertEqual(self._por(out, "4", d), {"MODELO B L4": 130}, "s1 L4 d%s" % d)
+            self.assertEqual(self._por(out, "3", d), {"MODELO C L3": 130}, "s1 L3 d%s" % d)
+        d5 = {lin: self._por(out, lin, 5) for lin in ("2", "3", "4")}
+        self.assertEqual(d5["4"], {"MODELO A L2": 130}, d5)
+        self.assertEqual(d5["3"], {"MODELO B L4": 130}, d5)
+        self.assertEqual(d5["2"], {"MODELO C L3": 130}, d5)
+        d10 = {lin: self._por(out, lin, 10) for lin in ("2", "3", "4")}
+        self.assertEqual(d10["3"], {"MODELO A L2": 130}, d10)
+        self.assertEqual(d10["2"], {"MODELO B L4": 130}, d10)
+        self.assertEqual(d10["4"], {"MODELO C L3": 130}, d10)
+
+    def test_l1_y_l5_no_rotan(self):
+        tareas = [
+            self._t("D", "NATIVO L1", 2000, ["1"], cap=130, fechaKey=1),
+            self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+            self._t("B", "MODELO B L4", 2000, ["4"], cap=130, fechaKey=2),
+            self._t("C", "MODELO C L3", 2000, ["3"], cap=130, fechaKey=3),
+            self._t("E", "NATIVO L5", 400, ["5"], cap=40, fechaKey=1),
+        ]
+        seq = {
+            "NATIVO L1": "No", "MODELO A L2": "No", "MODELO B L4": "No",
+            "MODELO C L3": "No", "NATIVO L5": "No",
+        }
+        out = planificar(tareas, {}, total_dias=10, mapa_secuencia=seq)
+        self.assertEqual(self._por(out, "1", 0), {"NATIVO L1": 130})
+        self.assertEqual(self._por(out, "1", 5), {"NATIVO L1": 130})
+        self.assertEqual(self._por(out, "5", 0), {"NATIVO L5": 40})
+        self.assertEqual(self._por(out, "5", 5), {"NATIVO L5": 40})
+        self.assertEqual(self._por(out, "4", 5), {"MODELO A L2": 130})
+        self.assertEqual(self._por(out, "3", 5), {"MODELO B L4": 130})
+        self.assertEqual(self._por(out, "2", 5), {"MODELO C L3": 130})
+
+    def test_especial_en_destino_cancela_el_giro(self):
+        tareas = [
+            self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+            self._t("B", "ESPECIAL L4", 2000, ["4"], cap=130, fechaKey=1,
+                    esEspecial=True, prioridadNum=0),
+            self._t("C", "MODELO C L3", 2000, ["3"], cap=130, fechaKey=3),
+        ]
+        seq = {"MODELO A L2": "No", "MODELO C L3": "No"}
+        out = planificar(tareas, {}, total_dias=10, mapa_secuencia=seq)
+        self.assertEqual(self._por(out, "2", 5), {"MODELO A L2": 130})
+        self.assertEqual(self._por(out, "4", 5), {"ESPECIAL L4": 130})
+        self.assertEqual(self._por(out, "3", 5), {"MODELO C L3": 130})
+
+    def test_sin_las_tres_lineas_ocupadas_no_se_mueve(self):
+        """Sin L2+L3+L4 juntos, no hay intercambio (ni una sola, ni solo dos)."""
+        solo = [
+            self._t("A", "SOLO L4", 2000, ["4"], cap=130, fechaKey=1, prioridadNum=1),
+        ]
+        out = planificar(solo, {}, total_dias=10, mapa_secuencia={"SOLO L4": "No"})
+        self.assertEqual(self._por(out, "4", 5), {"SOLO L4": 130})
+        self.assertEqual(self._por(out, "3", 5), {})
+        dos = [
+            self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+            self._t("B", "MODELO B L4", 2000, ["4"], cap=130, fechaKey=2),
+        ]
+        seq = {"MODELO A L2": "No", "MODELO B L4": "No"}
+        out2 = planificar(dos, {}, total_dias=10, mapa_secuencia=seq)
+        self.assertEqual(self._por(out2, "2", 5), {"MODELO A L2": 130})
+        self.assertEqual(self._por(out2, "4", 5), {"MODELO B L4": 130})
+        self.assertEqual(self._por(out2, "3", 5), {})
+
+    def test_dia_inicio_en_destino_cancela_el_giro(self):
+        """OVERSIZED arranca L2 el lunes: DAMA no se va de L3 ni CAB de L2 por rotación."""
+        tareas = [
+            self._t("CB", "RIO CAB", 2000, ["2"], cap=130, fechaKey=1),
+            self._t("DB", "RIO DAMA", 2000, ["3"], cap=130, fechaKey=1),
+            self._t("UG", "OVERSIZED L2", 800, ["2"], cap=130,
+                    prioridadNum=1, fechaKey=1, diaIngreso=5),
+        ]
+        out = planificar(tareas, {}, total_dias=10)
+        self.assertEqual(self._por(out, "2", 5), {"OVERSIZED L2": 130})
+        self.assertEqual(self._por(out, "3", 5).get("RIO DAMA"), 130)
+
+    def test_gs_y_dashboard_v5954(self):
         gs_path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         html_path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
         with open(gs_path, encoding="utf-8") as f:
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.53"', gs)
-        self.assertIn('SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.53', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.54', gs)
+        self.assertIn("ROTACIÓN SEMANAL L2 → L4 → L3 → L2", gs)
+        self.assertIn('var ROTACION_L234 = { "2": "4", "4": "3", "3": "2" }', gs)
+        self.assertIn("function rotarOcupantes234_(dHoy)", gs)
+        self.assertIn("function remapearModeloALinea_(nom, fromLin, toLin)", gs)
+        self.assertIn("function destinoBloqueadoRotacion_(toLin, dHoy, seenR)", gs)
+        self.assertIn("if (moves.length < 3) return;", gs)
+        self.assertIn("rotarOcupantes234_(d)", gs)
         self.assertIn("L5 PARALELO NO ESPERA FECHA FUTURA", gs)
         self.assertIn('String(lin) === "5" && ocupante[lin].length < maxOcupantes_(lin)', gs)
         self.assertIn("var nextPreL5 = siguienteCandidato_(lin, d, overflow, skip);", gs)
         self.assertIn("El 2º cupo se llena HOY", gs)
         self.assertIn("el 2º cupo se llena hoy si hay otra familia lista", html)
         self.assertIn("no espera un Día de inicio futuro", html)
+        self.assertIn("Rotación semanal L2-L4-L3", html)
+        self.assertIn("2 → 4 → 3 → 2", html)
 
 
 if __name__ == "__main__":
