@@ -1,10 +1,21 @@
 /**
  * =====================================================================
- *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.53 (COMPLETO)
+ *  SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.54 (COMPLETO)
  * =====================================================================
  *  Pegar este archivo completo en el editor de Apps Script (Codigo.gs).
  *
  *  Cambios de esta versión:
+ *   - ROTACIÓN SEMANAL L2 → L4 → L3 → L2: las operarias de 2, 3 y 4
+ *     se fatigan si llevan semanas en el mismo modelo. El modelo
+ *     ARRANCA donde está previsto (Linea de Produccion / Día de
+ *     inicio). Cada lunes, si L2, L3 y L4 tienen ocupante que sigue,
+ *     el de L2 pasa a L4, el de L4 a L3 y el de L3 a L2, con su
+ *     remanente. Si falta una de las tres, no hay intercambio. Un
+ *     Especial que no rote, o un modelo que ARRANCA hoy en un
+ *     destino, cancelan el giro esa semana.
+ *     L1 y L5 no giran. Excel 52: RIO CAB (L2), MAR CAB Lote 1 (L4)
+ *     y RIO KIDS (L3) intercambian el lunes; no se quedan 3 semanas
+ *     en la misma línea.
  *   - L5 PARALELO NO ESPERA FECHA FUTURA: si L5 tiene 1 ocupante
  *     (y no es Secuencia=No), entra ya el siguiente de otra familia
  *     que pueda producir HOY. No se deja el 2º cupo vacío hasta el
@@ -309,7 +320,9 @@
  * =====================================================================
  */
 
-var VERSION_SISTEMA = "5.9.53";
+var VERSION_SISTEMA = "5.9.54";
+var ROTACION_L234 = { "2": "4", "4": "3", "3": "2" };
+var LINEAS_ROTACION = ["2", "4", "3"];
 var SYNC_COSTURA_ESQUEMA = "SYNC-V13";
 var BANDA_ESPECIAL = 0;
 var BANDA_MINIMA = 1;
@@ -1110,6 +1123,35 @@ function generoDeTarea_(t) {
 
 function capFallbackLinea_(lin) {
   return CAP_POR_LINEA[String(lin)] || 130;
+}
+
+function destinoRotacionL234_(lin) {
+  var d = ROTACION_L234[String(lin)];
+  return d || String(lin);
+}
+
+function esLineaRotacion234_(lin) {
+  return Object.prototype.hasOwnProperty.call(ROTACION_L234, String(lin));
+}
+
+/** True si la MO produjo en 2+ líneas el mismo día (explosión). La rotación semanal no cuenta. */
+function moProduceEnVariasLineasElMismoDia_(t) {
+  if (!t || !t.plan) return false;
+  var maxD = 0;
+  var lin;
+  for (lin in t.plan) {
+    var n = (t.plan[lin] || []).length;
+    if (n > maxD) maxD = n;
+  }
+  var d;
+  for (d = 0; d < maxD; d++) {
+    var nLin = 0;
+    for (lin in t.plan) {
+      if (((t.plan[lin] || [])[d] || 0) > 0) nLin++;
+    }
+    if (nLin > 1) return true;
+  }
+  return false;
 }
 
 function capDeTarea_(t, lin) {
@@ -2421,6 +2463,7 @@ function generarPlanificacionSemanal_() {
 
   var lineaPorMO = {};
   var ultimoModeloLinea = { "1": "", "2": "", "3": "", "4": "", "5": "" };
+  var lineaRotadaModelo = {};
 
   function estimarDiaFinLinea_(t, lin, fromDay) {
     var rest = t.restante;
@@ -2489,7 +2532,75 @@ function generarPlanificacionSemanal_() {
 
   function elegiblesTarea_(t, overflow) {
     var ls = t.lineas.slice();
+    if (t.lineaFija && carga[t.lineaFija] !== undefined && ls.indexOf(t.lineaFija) === -1) {
+      ls.push(t.lineaFija);
+    }
+    var dest = (!t.esEspecial && t.modelo) ? lineaRotadaModelo[t.modelo] : "";
+    if (dest && carga[dest] !== undefined && ls.indexOf(dest) === -1) ls.push(dest);
     return ls.filter(function (l) { return carga[l] !== undefined; });
+  }
+
+  function remapearModeloALinea_(nom, fromLin, toLin) {
+    var mR = mapaModelos[nom];
+    if (!mR) return;
+    lineaRotadaModelo[nom] = toLin;
+    mR.tareas.forEach(function (tR) {
+      if (!(tR.restante > 0) || tR.esEspecial) return;
+      var claveR = claveMO_(tR);
+      var fijaR = lineaPorMO[claveR] || tR.lineaFija;
+      if (fijaR && fijaR !== fromLin) return;
+      tR.lineaFija = toLin;
+      lineaPorMO[claveR] = toLin;
+    });
+  }
+
+  function modeloArrancaHoyEn_(m, lin, dHoy) {
+    if (!m || !(restanteModelo_(m) > 0)) return false;
+    return m.tareas.some(function (tArr) {
+      if (!(tArr.restante > 0)) return false;
+      if (diaInicioEfectivo_(tArr) !== dHoy) return false;
+      if ((tArr.lineas || []).indexOf(lin) === -1) return false;
+      if (dHoy < DIAS_LABORALES && (dHoy % DIAS_LABORALES) === tArr.diaNoLaborable) return false;
+      return true;
+    });
+  }
+
+  function destinoBloqueadoRotacion_(toLin, dHoy, seenR) {
+    var destNom = ultimoModeloLinea[toLin] || "";
+    var destM = destNom ? mapaModelos[destNom] : null;
+    if (destM && restanteModelo_(destM) > 0 && destM.esEspecial && !seenR[destNom]) return true;
+    var iB;
+    for (iB = 0; iB < listaModelos.length; iB++) {
+      var mB = listaModelos[iB];
+      if (seenR[mB.nombre]) continue;
+      if (modeloArrancaHoyEn_(mB, toLin, dHoy)) return true;
+    }
+    return false;
+  }
+
+  function rotarOcupantes234_(dHoy) {
+    lineaRotadaModelo = {};
+    if (!(dHoy > 0) || (dHoy % DIAS_LABORALES) !== 0) return;
+    var moves = [];
+    var seenR = {};
+    var iR;
+    for (iR = 0; iR < LINEAS_ROTACION.length; iR++) {
+      var fromR = LINEAS_ROTACION[iR];
+      var nomR = ultimoModeloLinea[fromR] || "";
+      if (!nomR || seenR[nomR]) continue;
+      var mFromR = mapaModelos[nomR];
+      if (!mFromR || restanteModelo_(mFromR) <= 0 || mFromR.esEspecial) continue;
+      moves.push({ nom: nomR, from: fromR, to: destinoRotacionL234_(fromR) });
+      seenR[nomR] = true;
+    }
+    if (moves.length < 3) return;
+    for (iR = 0; iR < moves.length; iR++) {
+      if (destinoBloqueadoRotacion_(moves[iR].to, dHoy, seenR)) return;
+    }
+    for (iR = 0; iR < moves.length; iR++) {
+      remapearModeloALinea_(moves[iR].nom, moves[iR].from, moves[iR].to);
+      ocupante[moves[iR].to] = [moves[iR].nom];
+    }
   }
 
   function capRestanteSemana_(lin, d, capRef) {
@@ -3007,6 +3118,7 @@ function generarPlanificacionSemanal_() {
     refrescarColaModelos_();
     if (d % DIAS_LABORALES === 0) {
       ["1", "2", "3", "4", "5"].forEach(function (lin) { ocupante[lin] = []; });
+      rotarOcupantes234_(d);
     }
     var overflowL1 = !nativosLinea1Pendientes_(d);
     ["1", "2", "3", "4", "5"].forEach(function (lin) {
@@ -3538,7 +3650,8 @@ function generarPlanificacionSemanal_() {
         lineasUsadasTarea.length === 2 &&
         lineasUsadasTarea.indexOf("1") !== -1 &&
         lineasUsadasTarea.indexOf("2") !== -1;
-      if (esApoyoL1L2) mosAtomicas++;
+      var esRotacionSeq = !moProduceEnVariasLineasElMismoDia_(t);
+      if (esApoyoL1L2 || esRotacionSeq) mosAtomicas++;
       else mosMultiLinea++;
     } else if (lineasUsadasTarea.length === 1) mosAtomicas++;
   });
@@ -3608,6 +3721,7 @@ function generarPlanificacionSemanal_() {
     "• Especial con 2+ líneas: prioridad 1 en cada asignada desde su Día de inicio (Running Tank 1 y 2, Clásica 3 y 4). El faltante se reparte entre esas líneas.\n" +
     "• Misma familia en 2 líneas libres: géneros en paralelo. Si solo hay una línea, lotes por color y género.\n" +
     "• Priorizacion col. H Secuencia=No: el modelo NO entra al lote familiar (no espera ni cede color/género a un hermano). Corre solo en su línea hasta terminar; el sobrante va a la cola, no a RIO DAMA u otro hermano. El Negro→Blanco de SUS variantes se mantiene. En L5 además es ocupante exclusivo. No toma líneas de más ni parte MOs.\n" +
+    "• Rotación semanal L2→L4→L3→L2: el modelo arranca en la línea prevista. Cada lunes, si L2, L3 y L4 tienen ocupante que sigue, el de L2 pasa a L4, el de L4 a L3 y el de L3 a L2 (evita fatiga de operarias). Si falta una de las tres, no hay intercambio. Un Especial que no rote, o un modelo que arranca hoy en un destino, cancelan el giro. L1 y L5 no giran.\n" +
     "• Líneas 1-4: un modelo a la vez, salvo el modelo a media estación. Si termina, el sobrante del día pasa al siguiente.\n" +
     "• Modelo a media estación (L1-4): " + ((cfg.modeloParcial && cfg.modeloParcial.activo)
       ? (textoModeloParcial_(cfg.modeloParcial) + ".")
@@ -5606,9 +5720,11 @@ function supuestosDashboard_(capsModelo) {
     remanenteCortoL2Dias: DIAS_REMANENTE_CORTO_L2,
     maxModelosLinea5: MAX_MODELOS_LINEA5,
     capFallback: { "1": 130, "2": 130, "3": 130, "4": 130, "5": 40 },
+    rotacionL234: "2 → 4 → 3 → 2",
     capsModelo: capsModelo || {},
     notas: [
       "La planificación se puede regenerar (menú Producción → Generar Planificación) si hay consideraciones mayores: paros, cambio de mix, MOs nuevas o ajustes de prioridad.",
+      "Rotación semanal L2 → L4 → L3 → L2: el modelo arranca donde está previsto (Linea de Produccion). Cada lunes, si L2, L3 y L4 tienen ocupante que sigue, intercambian el modelo para que las operarias no se fatiguen. Si falta una de las tres, no hay intercambio. Un Especial que no rote, o un modelo que arranca hoy en un destino, cancelan el giro. L1 y L5 no giran.",
     "El 50% de la Línea 1 es un apoyo opcional al modelo de Línea 2, solo si L1 no tiene prendas propias planificadas. Si L1 está ocupada, trabaja al 100% lo suyo hasta que haya espacio.",
     "Fecha Entrada de Almacén = 4 días hábiles después de salir de costura.",
     "Capacidad diaria por modelo sale de Cap Produccion por Dia. Si la celda está vacía: L1–4 = 130, L5 = 40.",
