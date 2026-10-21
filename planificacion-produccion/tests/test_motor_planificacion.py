@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del motor de planificación v5.9.54 (espejo de las reglas en Codigo.gs)."""
+"""Tests del motor de planificación v5.9.55 (espejo de las reglas en Codigo.gs)."""
 import json
 import math
 import os
@@ -24,6 +24,60 @@ LOTE_RUEDA_LINEA5 = 5
 CAP_POR_LINEA = {"1": 130, "2": 130, "3": 130, "4": 130, "5": 40}
 ROTACION_L234 = {"2": "4", "4": "3", "3": "2"}
 LINEAS_ROTACION = ["2", "4", "3"]
+
+
+def qty_linea_semana_234(tareas, lin, week, total_dias):
+    d0 = week * DIAS_LABORALES
+    d1 = min(total_dias, d0 + DIAS_LABORALES)
+    tot = 0
+    for t in tareas:
+        arr = (t.get("plan") or {}).get(lin) or []
+        for d in range(d0, d1):
+            tot += arr[d] if d < len(arr) else 0
+    return tot
+
+
+def semana_tiene_las_tres_lineas_234(tareas, week, total_dias):
+    return all(qty_linea_semana_234(tareas, lin, week, total_dias) > 0 for lin in ("2", "3", "4"))
+
+
+def permutar_celda_234(v2, v3, v4, hops):
+    cur2, cur3, cur4 = v2, v3, v4
+    for _ in range(hops):
+        cur2, cur3, cur4 = cur3, cur4, cur2
+    return cur2, cur3, cur4
+
+
+def aplicar_rotacion_semanal_plan(tareas, total_dias):
+    """Post-proceso: relabela L2/L4/L3 por semana sin tocar la cola."""
+    if not tareas or not (total_dias > 0):
+        return tareas
+    n_sem = (total_dias + DIAS_LABORALES - 1) // DIAS_LABORALES
+    offset = 0
+    for w in range(n_sem):
+        if w > 0 and semana_tiene_las_tres_lineas_234(tareas, w, total_dias):
+            offset += 1
+        if offset == 0:
+            continue
+        d0 = w * DIAS_LABORALES
+        d1 = min(total_dias, d0 + DIAS_LABORALES)
+        for t in tareas:
+            plan = t.setdefault("plan", {})
+            for lin in ("2", "3", "4"):
+                arr = plan.get(lin)
+                if arr is None:
+                    arr = [0] * total_dias
+                    plan[lin] = arr
+                while len(arr) < total_dias:
+                    arr.append(0)
+            for d in range(d0, d1):
+                n2, n3, n4 = permutar_celda_234(
+                    plan["2"][d] or 0, plan["3"][d] or 0, plan["4"][d] or 0, offset
+                )
+                plan["2"][d] = n2
+                plan["3"][d] = n3
+                plan["4"][d] = n4
+    return tareas
 SEMANAS_DEFAULT = 12
 SEMANAS_MAX = 12
 NOMBRES_HOJAS_SEMANAS = [
@@ -1272,8 +1326,8 @@ def max_ocupantes(lin):
     return MAX_MODELOS_LINEA5 if str(lin) == "5" else 1
 
 
-def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None):
-    """Motor v5.9.45: color exacto en el lote; Secuencia=No sale del lote familiar; Division=Si; paralelo L1-4."""
+def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minimas_sku=None, mapa_secuencia=None, apoyo_l1=None, mapa_division=None, modelo_parcial=None, rotar_l234=True):
+    """Motor v5.9.55: planifica el ingreso y luego relabela L2/L4/L3 por semana."""
     if caps_lineas is None:
         caps_lineas = dict(CAP_POR_LINEA)
     mapa_secuencia = mapa_secuencia or {}
@@ -1338,7 +1392,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
     carga = {lin: [0.0] * total_dias for lin in caps_lineas}
     linea_por_mo = {}
     ultimo_modelo = {lin: "" for lin in caps_lineas}
-    linea_rotada = {}
     dia_ctx = {"d": 0}
 
     def restante_modelo(m):
@@ -1421,77 +1474,7 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         fija = t.get("lineaFija")
         if fija and fija in carga and fija not in ls:
             ls.append(fija)
-        dest = None if t.get("esEspecial") else linea_rotada.get(t.get("modelo"))
-        if dest and dest in carga and dest not in ls:
-            ls.append(dest)
         return [l for l in ls if l in carga]
-
-    def remapear_modelo_a_linea(nom, from_lin, to_lin):
-        linea_rotada[nom] = to_lin
-        m_r = modelos.get(nom)
-        if not m_r:
-            return
-        for t_r in m_r["tareas"]:
-            if t_r["restante"] <= 0 or t_r.get("esEspecial"):
-                continue
-            mo_r = t_r.get("mo") or t_r["sku"]
-            fija_r = linea_por_mo.get(mo_r) or t_r.get("lineaFija")
-            if fija_r and fija_r != from_lin:
-                continue
-            t_r["lineaFija"] = to_lin
-            linea_por_mo[mo_r] = to_lin
-
-    def modelo_arranca_hoy_en(m, lin, d_hoy):
-        if not m or restante_modelo(m) <= 0:
-            return False
-        for t_arr in m["tareas"]:
-            if t_arr["restante"] <= 0:
-                continue
-            if dia_inicio_efectivo(t_arr) != d_hoy:
-                continue
-            if lin not in (t_arr.get("lineas") or []):
-                continue
-            if d_hoy < DIAS_LABORALES and (d_hoy % DIAS_LABORALES) == t_arr.get("diaNoLaborable", -1):
-                continue
-            return True
-        return False
-
-    def destino_bloqueado_rotacion(to_lin, d_hoy, seen_r):
-        dest_nom = ultimo_modelo.get(to_lin) or ""
-        dest_m = modelos.get(dest_nom)
-        if dest_m and restante_modelo(dest_m) > 0 and dest_m.get("esEspecial") and dest_nom not in seen_r:
-            return True
-        for m_b in lista:
-            if seen_r.get(m_b["nombre"]):
-                continue
-            if modelo_arranca_hoy_en(m_b, to_lin, d_hoy):
-                return True
-        return False
-
-    def rotar_ocupantes_234(d_hoy, ocupante_hoy):
-        nonlocal linea_rotada
-        linea_rotada = {}
-        if not (d_hoy > 0 and d_hoy % DIAS_LABORALES == 0):
-            return
-        moves = []
-        seen_r = {}
-        for from_lin in LINEAS_ROTACION:
-            nom_r = ultimo_modelo.get(from_lin) or ""
-            if not nom_r or nom_r in seen_r:
-                continue
-            m_from = modelos.get(nom_r)
-            if not m_from or restante_modelo(m_from) <= 0 or m_from.get("esEspecial"):
-                continue
-            moves.append((nom_r, from_lin, ROTACION_L234.get(from_lin, from_lin)))
-            seen_r[nom_r] = True
-        if len(moves) < 3:
-            return
-        for nom_r, from_lin, to_lin in moves:
-            if destino_bloqueado_rotacion(to_lin, d_hoy, seen_r):
-                return
-        for nom_r, from_lin, to_lin in moves:
-            remapear_modelo_a_linea(nom_r, from_lin, to_lin)
-            ocupante_hoy[to_lin] = [nom_r]
 
     def runnable(t, d, lin, overflow):
         if t["restante"] <= 0 or d < dia_inicio_efectivo(t):
@@ -1776,7 +1759,6 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
         if d % DIAS_LABORALES == 0:
             for lin in list(ocupante):
                 ocupante[lin] = []
-            rotar_ocupantes_234(d, ocupante)
         for lin, mods in list(ocupante.items()):
             kept = []
             for mod in mods:
@@ -2322,6 +2304,8 @@ def planificar(tareas, mapa_minimas, total_dias=10, caps_lineas=None, mapa_minim
             if lin == "1":
                 continue
             producir_linea_dia(lin, d)
+    if rotar_l234:
+        aplicar_rotacion_semanal_plan(tareas, total_dias)
     return tareas
 
 
@@ -3735,7 +3719,7 @@ class TestSecuenciaFlag(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("function participaLoteFamilia_(m)", gs)
         self.assertIn("SECUENCIA=NO SIN FAMILIA", gs)
         self.assertIn("if (!participaLoteFamilia_(m)) return false;", gs)
@@ -3905,7 +3889,7 @@ class TestApoyoLinea1(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         with open(path, encoding="utf-8") as f:
             gs = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("APOYO L1 NO PISA PRENDAS PROPIAS", gs)
         self.assertIn("function linea1TieneNativoHoy_(d)", gs)
         self.assertIn("if (linea1TieneNativoHoy_(d)) return;", gs)
@@ -4244,7 +4228,7 @@ class TestDashboardUx(unittest.TestCase):
         self.assertIn("resp.modelosSinPlanificar", gs)
         self.assertIn("DASH-CACHE-V1", gs)
         self.assertIn("function tareaVivaHoy_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("CALENDARIO TOOLTIP FIJO", gs)
         self.assertIn("IMPRESIÓN DIGITAL FALTANTE 0", gs)
         self.assertIn("IMPRESIÓN DIGITAL SIN FILTRO PRIORIDAD", gs)
@@ -4882,7 +4866,7 @@ class TestActualizarMOsAsignacion(unittest.TestCase):
         self.assertIn("function resolverClaveActivaMO_(", gs)
         self.assertIn("marcarLoteConsumido_", gs)
         self.assertIn("var claveAct = resolverClaveActivaMO_(", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
 
 
 class TestModeloParcialParaleloL14(unittest.TestCase):
@@ -5123,7 +5107,7 @@ class TestModeloParcialParaleloL14(unittest.TestCase):
         self.assertNotIn("companeroParcialPreferido_", gs)
         self.assertIn("producirParaleloEstandar_", gs)
         self.assertIn("MAX_MODELOS_L14_PARCIAL", gs)
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("cfg.modeloParcial = preguntarModeloParcial_(listaModelos)", gs)
         self.assertIn("UNO o DOS", gs)
         self.assertIn("NO significa que corran juntos", gs)
@@ -5162,7 +5146,7 @@ class TestColumnaLoteModelo(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("function formatoModelo_", gs)
         self.assertIn("function textoLote_", gs)
         self.assertIn("function loteDeFila_", gs)
@@ -5292,7 +5276,7 @@ class TestV5952Linea5InicioCapacidadCola(unittest.TestCase):
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
         self.assertIn("function producirParaleloLinea5_(noms, d, overflow)", gs)
         self.assertIn("if (cargaAntes < 0.001) ultimoModeloLinea[lin] = mP.nombre;", gs)
         self.assertIn("function lotePuedeUsarLineasDe_(lote, m, overflow)", gs)
@@ -5434,7 +5418,17 @@ class TestRotacionLineas234(unittest.TestCase):
         self.assertEqual(self._por(out, "3", 5), {"MODELO B L4": 130})
         self.assertEqual(self._por(out, "2", 5), {"MODELO C L3": 130})
 
-    def test_especial_en_destino_cancela_el_giro(self):
+    def _primer_dia(self, out):
+        first = {}
+        for t in out:
+            for arr in (t.get("plan") or {}).values():
+                for d, q in enumerate(arr):
+                    if q > 0:
+                        first[t["modelo"]] = min(first.get(t["modelo"], 9999), d)
+        return first
+
+    def test_especial_tambien_gira_con_la_linea(self):
+        """Las líneas se mueven entre sí: el Especial de L4 pasa a L3 el lunes."""
         tareas = [
             self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
             self._t("B", "ESPECIAL L4", 2000, ["4"], cap=130, fechaKey=1,
@@ -5443,9 +5437,9 @@ class TestRotacionLineas234(unittest.TestCase):
         ]
         seq = {"MODELO A L2": "No", "MODELO C L3": "No"}
         out = planificar(tareas, {}, total_dias=10, mapa_secuencia=seq)
-        self.assertEqual(self._por(out, "2", 5), {"MODELO A L2": 130})
-        self.assertEqual(self._por(out, "4", 5), {"ESPECIAL L4": 130})
-        self.assertEqual(self._por(out, "3", 5), {"MODELO C L3": 130})
+        self.assertEqual(self._por(out, "4", 5), {"MODELO A L2": 130})
+        self.assertEqual(self._por(out, "3", 5), {"ESPECIAL L4": 130})
+        self.assertEqual(self._por(out, "2", 5), {"MODELO C L3": 130})
 
     def test_sin_las_tres_lineas_ocupadas_no_se_mueve(self):
         """Sin L2+L3+L4 juntos, no hay intercambio (ni una sola, ni solo dos)."""
@@ -5465,8 +5459,8 @@ class TestRotacionLineas234(unittest.TestCase):
         self.assertEqual(self._por(out2, "4", 5), {"MODELO B L4": 130})
         self.assertEqual(self._por(out2, "3", 5), {})
 
-    def test_dia_inicio_en_destino_cancela_el_giro(self):
-        """OVERSIZED arranca L2 el lunes: DAMA no se va de L3 ni CAB de L2 por rotación."""
+    def test_dia_inicio_sin_l4_no_gira(self):
+        """Sin L4 no hay triplete: OVERSIZED arranca en L2 el lunes y DAMA se queda en L3."""
         tareas = [
             self._t("CB", "RIO CAB", 2000, ["2"], cap=130, fechaKey=1),
             self._t("DB", "RIO DAMA", 2000, ["3"], cap=130, fechaKey=1),
@@ -5477,22 +5471,79 @@ class TestRotacionLineas234(unittest.TestCase):
         self.assertEqual(self._por(out, "2", 5), {"OVERSIZED L2": 130})
         self.assertEqual(self._por(out, "3", 5).get("RIO DAMA"), 130)
 
-    def test_gs_y_dashboard_v5954(self):
+    def test_orden_de_ingreso_igual_que_sin_rotar(self):
+        """La rotación no adelanta ni retrasa el día en que entra cada modelo."""
+        def make():
+            return [
+                self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+                self._t("B", "MODELO B L4", 2000, ["4"], cap=130, fechaKey=2),
+                self._t("C", "MODELO C L3", 2000, ["3"], cap=130, fechaKey=3),
+                self._t("D", "MODELO D L2", 800, ["2"], cap=130, fechaKey=9, prioridadNum=4),
+            ]
+        seq = {
+            "MODELO A L2": "No", "MODELO B L4": "No",
+            "MODELO C L3": "No", "MODELO D L2": "No",
+        }
+        base = planificar(make(), {}, total_dias=25, mapa_secuencia=seq, rotar_l234=False)
+        rot = planificar(make(), {}, total_dias=25, mapa_secuencia=seq, rotar_l234=True)
+        self.assertEqual(self._primer_dia(base), self._primer_dia(rot))
+        d_in = self._primer_dia(rot)["MODELO D L2"]
+        self.assertGreaterEqual(d_in, 10, "D no puede entrar el lunes de S2: llegó el día %s" % d_in)
+
+    def test_sucesor_sigue_al_mismo_modelo_solo_cambia_linea(self):
+        """D entra el mismo día que sin rotar; en S3 (2 hops) corre en L3, no se cuela en L2."""
+        def make():
+            return [
+                self._t("A", "MODELO A L2", 2000, ["2"], cap=130, fechaKey=1),
+                self._t("B", "MODELO B L4", 2000, ["4"], cap=130, fechaKey=2),
+                self._t("C", "MODELO C L3", 2000, ["3"], cap=130, fechaKey=3),
+                self._t("D", "MODELO D L2", 800, ["2"], cap=130, fechaKey=9, prioridadNum=4),
+            ]
+        seq = {
+            "MODELO A L2": "No", "MODELO B L4": "No",
+            "MODELO C L3": "No", "MODELO D L2": "No",
+        }
+        base = planificar(make(), {}, total_dias=25, mapa_secuencia=seq, rotar_l234=False)
+        rot = planificar(make(), {}, total_dias=25, mapa_secuencia=seq, rotar_l234=True)
+        d_in = self._primer_dia(base)["MODELO D L2"]
+        self.assertEqual(self._primer_dia(rot)["MODELO D L2"], d_in)
+        lin_base = None
+        lin_rot = None
+        for t in base:
+            if t["modelo"] != "MODELO D L2":
+                continue
+            for lin, arr in t["plan"].items():
+                if d_in < len(arr) and arr[d_in] > 0:
+                    lin_base = lin
+        for t in rot:
+            if t["modelo"] != "MODELO D L2":
+                continue
+            for lin, arr in t["plan"].items():
+                if d_in < len(arr) and arr[d_in] > 0:
+                    lin_rot = lin
+        self.assertEqual(lin_base, "2")
+        esperado = lin_base
+        hops = d_in // 5
+        for _ in range(hops):
+            esperado = ROTACION_L234.get(esperado, esperado)
+        self.assertEqual(lin_rot, esperado, "D día %s base L%s rot L%s hops=%s" % (d_in, lin_base, lin_rot, hops))
+
+    def test_gs_y_dashboard_v5955(self):
         gs_path = os.path.join(os.path.dirname(__file__), "..", "Codigo.gs")
         html_path = os.path.join(os.path.dirname(__file__), "..", "Dashboard.html")
         with open(gs_path, encoding="utf-8") as f:
             gs = f.read()
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('var VERSION_SISTEMA = "5.9.54"', gs)
-        self.assertIn('SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.54', gs)
-        self.assertIn("ROTACIÓN SEMANAL L2 → L4 → L3 → L2", gs)
+        self.assertIn('var VERSION_SISTEMA = "5.9.55"', gs)
+        self.assertIn('SISTEMA DE PLANIFICACIÓN DE PRODUCCIÓN — VERSIÓN 5.9.55', gs)
+        self.assertIn("ROTACIÓN SIN CAMBIAR EL ORDEN DE INGRESO", gs)
+        self.assertIn("function aplicarRotacionSemanalPlan_(tareas, totalDias)", gs)
+        self.assertIn("aplicarRotacionSemanalPlan_(tareas, totalDias)", gs)
+        self.assertNotIn("function rotarOcupantes234_(dHoy)", gs)
+        self.assertNotIn("function remapearModeloALinea_(nom, fromLin, toLin)", gs)
+        self.assertNotIn("rotarOcupantes234_(d)", gs)
         self.assertIn('var ROTACION_L234 = { "2": "4", "4": "3", "3": "2" }', gs)
-        self.assertIn("function rotarOcupantes234_(dHoy)", gs)
-        self.assertIn("function remapearModeloALinea_(nom, fromLin, toLin)", gs)
-        self.assertIn("function destinoBloqueadoRotacion_(toLin, dHoy, seenR)", gs)
-        self.assertIn("if (moves.length < 3) return;", gs)
-        self.assertIn("rotarOcupantes234_(d)", gs)
         self.assertIn("L5 PARALELO NO ESPERA FECHA FUTURA", gs)
         self.assertIn('String(lin) === "5" && ocupante[lin].length < maxOcupantes_(lin)', gs)
         self.assertIn("var nextPreL5 = siguienteCandidato_(lin, d, overflow, skip);", gs)
@@ -5501,6 +5552,7 @@ class TestRotacionLineas234(unittest.TestCase):
         self.assertIn("no espera un Día de inicio futuro", html)
         self.assertIn("Rotación semanal L2-L4-L3", html)
         self.assertIn("2 → 4 → 3 → 2", html)
+        self.assertIn("sin reabrir la cola", html)
 
 
 if __name__ == "__main__":

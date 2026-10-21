@@ -1920,7 +1920,7 @@ function renderSup(){
   html+='<tr><td>Apoyo Línea 1</td><td class="num">'+Math.round((s.apoyoL1Fraccion||0.5)*100)+'% de L1 al modelo de L2 (solo si L1 no tiene prendas propias)</td></tr>';
   html+='<tr><td>Remanente corto L2</td><td class="num">cede si quedan &lt; '+(s.remanenteCortoL2Dias||2)+' días</td></tr>';
   html+='<tr><td>Línea 5 en paralelo</td><td class="num">máx. '+(s.maxModelosLinea5||2)+' familias · 50% de la cap de cada modelo (el sobrante pasa al otro); un solo modelo usa el 100%; el 2º cupo se llena hoy si hay otra familia lista (no espera un Día de inicio futuro); Día de inicio puede desalojar al peor ocupante</td></tr>';
-  html+='<tr><td>Rotación semanal L2-L4-L3</td><td class="num">'+(s.rotacionL234||'2 → 4 → 3 → 2')+': el modelo arranca en la línea prevista y cada lunes esas líneas intercambian ocupante (evita fatiga). L1 y L5 no giran</td></tr>';
+  html+='<tr><td>Rotación semanal L2-L4-L3</td><td class="num">'+(s.rotacionL234||'2 → 4 → 3 → 2')+': se planifica el orden de ingreso igual que siempre; después L2, L4 y L3 intercambian el trabajo ya planificado (evita fatiga, sin reabrir la cola). L1 y L5 no giran</td></tr>';
   html+='<tr><td>Techo si no hay cap en el modelo</td><td class="num">L1–4 = '+(fb['1']||130)+' · L5 = '+(fb['5']||40)+'</td></tr>';
   html+='</tbody></table></div>';
   html+='<div class="card"><h3>Reajustes mayores</h3><p class="sub">Este dashboard lee el snapshot publicado. Para números nuevos: menú Producción → Actualizar Dashboard.</p>';
