@@ -408,9 +408,143 @@ def partir_nuevo(consolidados, enviado_map):
     return nuevos, persistir
 
 
-def html_celda_tablero(val, con_borde):
-    borde = "border: 1px solid #ccc;" if con_borde else "border: none;"
-    return "<td style='padding: 6px 8px; %s text-align: center;'>%s</td>" % (borde, val)
+def escape_html(s):
+    return (
+        str("" if s is None else s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def html_celda_tablero(tag, val, bg="", fg="", bold=False):
+    cls = " class='b'" if bold else ""
+    st = []
+    if bg:
+        st.append("background-color:" + bg)
+    if fg:
+        st.append("color:" + fg)
+    style = " style='%s'" % ";".join(st) if st else ""
+    return "<%s%s%s>%s</%s>" % (tag, cls, style, escape_html(val), tag)
+
+
+CSS_CORREO = (
+    "<style>table.trk{border-collapse:collapse;width:100%;font-size:13px;margin:0 0 16px 0}"
+    "table.trk th,table.trk td{padding:5px 7px;text-align:center;border:none}"
+    "table.trk.bd th,table.trk.bd td{border:1px solid #ccc}"
+    "table.trk .b{font-weight:700}</style>"
+)
+MAX_FILAS_DETALLE_INLINE = 80
+MAX_HTML_CORREO_BYTES = 180000
+HEADERS_DETALLE = [
+    "Dia",
+    "Fecha",
+    "Linea",
+    "Turno",
+    "MO",
+    "SKU",
+    "Producto",
+    "Genero",
+    "Color",
+    "Talla",
+    "Cantidad",
+]
+KEYS_DETALLE = [
+    "dia",
+    "fecha",
+    "linea",
+    "turno",
+    "mo",
+    "sku",
+    "producto",
+    "genero",
+    "color",
+    "talla",
+    "cantidad",
+]
+
+
+def html_detalle_gordo(filas):
+    html = (
+        "<table cellspacing='0' cellpadding='0' "
+        "style='border-collapse: collapse; width: 100%; font-size: 13px;'><tr>"
+    )
+    for h in HEADERS_DETALLE:
+        html += (
+            "<th style='padding: 6px 8px; border: 1px solid #ccc; text-align: center; "
+            "background-color: #434343; color: #FFFFFF; font-weight: bold;'>%s</th>" % escape_html(h)
+        )
+    html += "</tr>"
+    for f in filas:
+        html += "<tr>"
+        for k in KEYS_DETALLE:
+            html += (
+                "<td style='padding: 6px 8px; border: 1px solid #ccc; text-align: center; "
+                "background-color: #ffffff; color: #333333; '>%s</td>" % escape_html(f.get(k, ""))
+            )
+        html += "</tr>"
+    return html + "</table>"
+
+
+def html_detalle_compacto(filas):
+    html = "<table class='trk bd' cellspacing='0' cellpadding='0'><tr>"
+    for h in HEADERS_DETALLE:
+        html += html_celda_tablero("th", h, "#434343", "#FFFFFF", True)
+    html += "</tr>"
+    for f in filas:
+        html += "<tr>"
+        for k in KEYS_DETALLE:
+            html += html_celda_tablero("td", f.get(k, ""))
+        html += "</tr>"
+    return html + "</table>"
+
+
+def csv_escapar_correo(v):
+    s = "" if v is None else str(v)
+    if any(ch in s for ch in '",\n\r'):
+        return '"' + s.replace('"', '""') + '"'
+    return s
+
+
+def csv_detalle(filas):
+    lines = [",".join(csv_escapar_correo(h) for h in HEADERS_DETALLE)]
+    for f in filas:
+        lines.append(",".join(csv_escapar_correo(f.get(k, "")) for k in KEYS_DETALLE))
+    return "\ufeff" + "\r\n".join(lines)
+
+
+def es_error_tamano_cuerpo(err):
+    t = quitar_tildes(str(err or "").lower())
+    if "tamano del cuerpo" in t:
+        return True
+    if "message body size" in t:
+        return True
+    if "limite excedido" in t and "cuerpo" in t:
+        return True
+    if "limit exceeded" in t and "body" in t:
+        return True
+    if "demasiado grande" in t and "cuerpo" in t:
+        return True
+    return False
+
+
+def mensaje_error_envio_correo(err_gmail, err_mail):
+    if es_error_tamano_cuerpo(err_gmail) or es_error_tamano_cuerpo(err_mail):
+        return (
+            "Gmail rechazó el correo: el cuerpo HTML es demasiado grande.\n\n"
+            "GmailApp: %s\nMailApp: %s" % (err_gmail, err_mail)
+        )
+    return (
+        "Google bloqueó el envío por falta de autorización (OAuth).\n\n"
+        "GmailApp: %s\nMailApp: %s" % (err_gmail, err_mail)
+    )
+
+
+def tope_filas_correo(filas):
+    if not filas or len(filas) <= MAX_FILAS_DETALLE_INLINE:
+        return list(filas or [])
+    return list(filas[:MAX_FILAS_DETALLE_INLINE])
 
 
 def es_email_valido(val):
@@ -579,7 +713,10 @@ class TestTrackingCorreo(unittest.TestCase):
         idx_mail = src.rfind("MailApp.sendEmail")
         self.assertGreater(idx_gmail, 0)
         self.assertGreater(idx_mail, idx_gmail)
-        self.assertIn("enviarCorreoHtml_(correosUnidos", src)
+        self.assertIn("enviarCorreoConTope_(correosUnidos", src)
+        self.assertIn("function enviarCorreoConTope_(", src)
+        self.assertIn("function blobCsvCorreo_(", src)
+        self.assertIn("opciones.attachments = adjuntos", src)
 
     def test_fallback_gmail_luego_mailapp(self):
         def enviar(gmail_ok, mail_ok):
@@ -627,8 +764,10 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertIn("function construirHtmlTableroTracking_(", src)
         self.assertIn("function construirHtmlTablerosTracking_(", src)
         self.assertIn("htmlCeldaTablero_(tag, val, bg, fg, isHeader || esTotal || esMarcador, false)", src)
-        self.assertIn("border: none", src)
-        self.assertIn('table cellspacing=\'0\'', src)
+        self.assertIn("table.trk", src)
+        self.assertIn("border:none", src)
+        self.assertIn("table class='trk'", src)
+        self.assertNotIn("padding: 6px 8px", src)
 
     def test_resumen_copia_tablero_completo_detalle_solo_nuevo(self):
         with open(GS, encoding="utf-8") as f:
@@ -639,7 +778,7 @@ class TestTrackingCorreo(unittest.TestCase):
             "construirHtmlTablerosTracking_(datosTracking, fondosTracking, coloresTracking)",
             src,
         )
-        self.assertIn("construirHtmlDetalle_(filasNuevas", src)
+        self.assertIn("construirHtmlDetalle_(topeFilasCorreo_(filasNuevas)", src)
         self.assertIn("tal cual están en la hoja", src)
         self.assertIn("Turno Diurno", src)
         self.assertIn("Turno Nocturno", src)
@@ -738,11 +877,13 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertEqual(delta(35, 20), 15)
 
     def test_html_tablero_sin_borde(self):
-        html = html_celda_tablero("66", False)
-        self.assertIn("border: none;", html)
-        self.assertNotIn("border: 1px solid #ccc;", html)
-        html_det = html_celda_tablero("66", True)
-        self.assertIn("border: 1px solid #ccc;", html_det)
+        html = html_celda_tablero("td", "66")
+        self.assertEqual(html, "<td>66</td>")
+        self.assertNotIn("border", html)
+        html_head = html_celda_tablero("th", "Dia", "#434343", "#FFFFFF", True)
+        self.assertIn("class='b'", html_head)
+        self.assertIn("background-color:#434343", html_head)
+        self.assertIn("color:#FFFFFF", html_head)
 
     def test_clasificar_turno(self):
         self.assertEqual(clasificar_turno(""), "diurno")
@@ -781,7 +922,7 @@ class TestTrackingCorreo(unittest.TestCase):
     def test_script_reparte_turnos_en_tableros_y_detalle(self):
         with open(GS, encoding="utf-8") as f:
             src = f.read()
-        self.assertIn("VERSIÓN 5.9.8", src)
+        self.assertIn("VERSIÓN 5.9.9", src)
         for token in (
             "function clasificarTurno_(",
             "function turnoDeBloque_(",
@@ -1146,6 +1287,14 @@ class TestTrackingCorreo(unittest.TestCase):
             "Enviar Resumen Semanal (Gerencia)",
             "Correos Diario",
             "Correos Gerencia",
+            "function enviarCorreoConTope_(",
+            "function blobCsvCorreo_(",
+            "function esErrorTamanoCuerpo_(",
+            "MAX_FILAS_DETALLE_INLINE_ = 80",
+            "MAX_HTML_CORREO_BYTES_ = 180000",
+            "TEXTO_PLANO_CORREO_",
+            "detalle-produccion-nueva.csv",
+            "resumen-gerencia-semana.csv",
         ):
             self.assertIn(token, src, "Falta: %s" % token)
         self.assertIn(
@@ -1285,6 +1434,98 @@ class TestTrackingCorreo(unittest.TestCase):
         self.assertGreater(total, 1000)
         self.assertIn("MO-SKU", html)
         self.assertNotIn("partirDetalleNuevo", html)
+
+    def test_cuerpo_grande_no_se_disfraza_de_oauth(self):
+        size = "GmailApp: Exception: Límite excedido: Tamaño del cuerpo del mensaje."
+        oauth = "No tienes permiso para llamar a GmailApp.sendEmail"
+        msg = mensaje_error_envio_correo(size, size)
+        self.assertIn("demasiado grande", msg)
+        self.assertNotIn("OAuth", msg)
+        self.assertTrue(es_error_tamano_cuerpo(size))
+        self.assertTrue(es_error_tamano_cuerpo("Error: el cuerpo HTML es demasiado grande."))
+        msg_oauth = mensaje_error_envio_correo(oauth, oauth)
+        self.assertIn("OAuth", msg_oauth)
+        self.assertNotIn("demasiado grande", msg_oauth)
+        self.assertFalse(es_error_tamano_cuerpo(oauth))
+        with open(GS, encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("function mensajeErrorEnvioCorreo_(", src)
+        self.assertIn("el cuerpo HTML es demasiado grande", src)
+        self.assertIn("if (esErrorTamanoCuerpo_(errGmail) || esErrorTamanoCuerpo_(errMail))", src)
+
+    def test_tope_y_csv_dejan_html_bajo_limite_gmail(self):
+        filas = []
+        for i in range(216):
+            filas.append(
+                {
+                    "dia": "Lunes",
+                    "fecha": "19/10/2026",
+                    "linea": "Línea %s" % ((i % 5) + 1),
+                    "turno": "Diurno",
+                    "mo": "%05d" % (3200 + i),
+                    "sku": "MARMIKI04T%s" % (i % 8),
+                    "producto": "MAR",
+                    "genero": "KIDS",
+                    "color": "Amarillo Neon",
+                    "talla": str((i % 6) + 2),
+                    "cantidad": 5 + (i % 12),
+                }
+            )
+        gordo = html_detalle_gordo(filas)
+        compacto = CSS_CORREO + html_detalle_compacto(tope_filas_correo(filas))
+        self.assertGreater(len(gordo.encode("utf-8")), 200000)
+        self.assertLess(len(compacto.encode("utf-8")), MAX_HTML_CORREO_BYTES)
+        self.assertEqual(len(tope_filas_correo(filas)), MAX_FILAS_DETALLE_INLINE)
+        csv = csv_detalle(filas)
+        self.assertEqual(csv.count("\r\n"), 216)
+        self.assertTrue(csv.startswith("\ufeffDia,Fecha,Linea,Turno,MO,SKU"))
+        self.assertIn("MARMIKI04T", csv)
+
+    def test_excel6_html_gordo_rebosa_gmail_compacto_cabe(self):
+        xlsx = "/home/ubuntu/.cursor/projects/workspace/uploads/Tracking_-_Produccion__6__15ff.xlsx"
+        if not os.path.isfile(xlsx):
+            self.skipTest("Excel Tracking (6) no está en este entorno")
+        from openpyxl import load_workbook
+
+        wb = load_workbook(xlsx, data_only=True)
+        wd = wb["Detalle Tracking - Produccion"]
+        det = []
+        for r in range(3, wd.max_row + 1):
+            cant = numero_cantidad(wd.cell(r, 12).value)
+            if cant <= 0:
+                continue
+            fecha = wd.cell(r, 3).value
+            if hasattr(fecha, "strftime"):
+                fecha = fecha.strftime("%d/%m/%Y")
+            det.append(
+                {
+                    "dia": wd.cell(r, 2).value,
+                    "fecha": fecha,
+                    "linea": wd.cell(r, 4).value,
+                    "turno": wd.cell(r, 5).value,
+                    "mo": wd.cell(r, 6).value,
+                    "sku": wd.cell(r, 7).value,
+                    "producto": wd.cell(r, 8).value,
+                    "genero": wd.cell(r, 9).value,
+                    "color": wd.cell(r, 10).value,
+                    "talla": wd.cell(r, 11).value,
+                    "cantidad": cant,
+                }
+            )
+        self.assertGreaterEqual(len(det), 200)
+        gordo = html_detalle_gordo(det)
+        compacto = CSS_CORREO + html_detalle_compacto(tope_filas_correo(det))
+        slim = CSS_CORREO + "<p>El detalle completo va en el CSV adjunto (%s filas).</p>" % len(det)
+        self.assertGreater(
+            len(gordo.encode("utf-8")),
+            200000,
+            "El HTML viejo de Excel 6 debe rebasar el límite de Gmail",
+        )
+        self.assertLess(len(compacto.encode("utf-8")), MAX_HTML_CORREO_BYTES)
+        self.assertLess(len(slim.encode("utf-8")), 2000)
+        self.assertEqual(len(tope_filas_correo(det)), MAX_FILAS_DETALLE_INLINE)
+        csv = csv_detalle(det)
+        self.assertGreaterEqual(csv.count("\r\n"), 200)
 
 
 if __name__ == "__main__":

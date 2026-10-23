@@ -1,8 +1,15 @@
 /**
  * =====================================================================
- *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.8 (CORREO GERENCIA SEMANAL)
+ *  MÓDULO DE TRACKING DE PRODUCCIÓN — VERSIÓN 5.9.9 (CORREO SIN LÍMITE DE CUERPO)
  * =====================================================================
  *  Cambios de esta versión:
+ *   - El error "Límite excedido: Tamaño del cuerpo del mensaje" no es
+ *     OAuth: Gmail/MailApp rechazan un HTML > ~200 KB. El detalle iba
+ *     celda por celda con estilos + una copia en texto plano.
+ *   - El detalle completo viaja en un CSV adjunto. El HTML muestra
+ *     hasta 80 filas (o solo tableros si aún no cabe).
+ *   - CSS compacto; el texto plano del correo es un aviso corto.
+ *   - Si el fallo es de tamaño, el aviso ya no habla de autorización.
  *   - Pestaña Correo: columna "Correos Diario" (solo cantidades nuevas) y
  *     columna "Correos Gerencia" (resumen de toda la semana productiva).
  *   - El correo de gerencia se envía al cierre de semana: detalle MO-SKU,
@@ -1029,6 +1036,9 @@ var ASUNTO_REPORTE_CORREO_ = "Reporte de Producción Diaria y Proyección a Alma
 var ASUNTO_REPORTE_GERENCIA_ = "Resumen semanal de producción — piezas en proceso hacia almacén y tienda";
 var COL_CORREO_DIARIO_ = "diario";
 var COL_CORREO_GERENCIA_ = "gerencia";
+var MAX_FILAS_DETALLE_INLINE_ = 80;
+var MAX_HTML_CORREO_BYTES_ = 180000;
+var TEXTO_PLANO_CORREO_ = "Abre este correo en HTML para ver el reporte de producción.";
 
 function textoPlanoDeHtml_(html) {
   return String(html)
@@ -1273,6 +1283,28 @@ function deltaCantidadCorreo_(actual, enviado) {
   return d > 0 ? d : 0;
 }
 
+function esErrorTamanoCuerpo_(err) {
+  var t = quitarTildes_(String(err == null ? "" : err).toLowerCase());
+  if (t.indexOf("tamano del cuerpo") !== -1) return true;
+  if (t.indexOf("message body size") !== -1) return true;
+  if (t.indexOf("limite excedido") !== -1 && t.indexOf("cuerpo") !== -1) return true;
+  if (t.indexOf("limit exceeded") !== -1 && t.indexOf("body") !== -1) return true;
+  if (t.indexOf("demasiado grande") !== -1 && t.indexOf("cuerpo") !== -1) return true;
+  return false;
+}
+
+function mensajeErrorEnvioCorreo_(errGmail, errMail) {
+  if (esErrorTamanoCuerpo_(errGmail) || esErrorTamanoCuerpo_(errMail)) {
+    return (
+      "Gmail rechazó el correo: el cuerpo HTML es demasiado grande.\n\n" +
+      "El detalle completo ahora va en un CSV adjunto y el HTML se recorta. Vuelve a enviar el reporte.\n\n" +
+      "GmailApp: " + errGmail + "\n" +
+      "MailApp: " + errMail
+    );
+  }
+  return mensajePermisoCorreo_(errGmail, errMail);
+}
+
 function mensajePermisoCorreo_(errGmail, errMail) {
   return (
     "Google bloqueó el envío por falta de autorización (OAuth).\n\n" +
@@ -1352,9 +1384,73 @@ function autorizarEnvioCorreo() {
   );
 }
 
-function enviarCorreoHtml_(to, subject, htmlBody) {
-  var texto = textoPlanoDeHtml_(htmlBody);
+function bytesUtf8Aprox_(s) {
+  try {
+    return unescape(encodeURIComponent(String(s == null ? "" : s))).length;
+  } catch (e) {
+    return String(s == null ? "" : s).length;
+  }
+}
+
+function csvEscaparCorreo_(v) {
+  var s = String(v == null ? "" : v);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function valorCeldaDetalleCorreo_(f, key) {
+  var d = f && f.display ? f.display : {};
+  if (key === "mo-sku") return etiquetaMoSku_(f);
+  if (key === "cantidad") return f.cantidad;
+  if (key === "fecha") {
+    if (d.fecha != null && String(d.fecha).trim() !== "") return d.fecha;
+    return typeof f.fecha === "object" ? "" : f.fecha;
+  }
+  if (d[key] != null && String(d[key]).trim() !== "") return d[key];
+  return f[key];
+}
+
+function blobCsvCorreo_(nombre, headers, keys, filas) {
+  var lines = [headers.map(csvEscaparCorreo_).join(",")];
+  var i;
+  for (i = 0; i < (filas || []).length; i++) {
+    var f = filas[i];
+    var row = [];
+    var k;
+    for (k = 0; k < keys.length; k++) row.push(csvEscaparCorreo_(valorCeldaDetalleCorreo_(f, keys[k])));
+    lines.push(row.join(","));
+  }
+  return Utilities.newBlob("\uFEFF" + lines.join("\r\n"), "text/csv", nombre);
+}
+
+function topeFilasCorreo_(filas) {
+  if (!filas || filas.length <= MAX_FILAS_DETALLE_INLINE_) return filas || [];
+  return filas.slice(0, MAX_FILAS_DETALLE_INLINE_);
+}
+
+function notaTopeDetalle_(n, nombreCsv) {
+  var partes = [];
+  if (n > MAX_FILAS_DETALLE_INLINE_) {
+    partes.push("Se muestran " + MAX_FILAS_DETALLE_INLINE_ + " de " + n + " filas en el correo.");
+  }
+  if (n > 0 && nombreCsv) {
+    partes.push("El detalle completo está en el adjunto " + nombreCsv + " (" + n + " filas).");
+  }
+  if (!partes.length) return "";
+  return "<p style='color:#555'>" + escapeHtml_(partes.join(" ")) + "</p>";
+}
+
+function htmlConEstilo_(inner) {
+  return "<style>table.trk{border-collapse:collapse;width:100%;font-size:13px;margin:0 0 16px 0}" +
+    "table.trk th,table.trk td{padding:5px 7px;text-align:center;border:none}" +
+    "table.trk.bd th,table.trk.bd td{border:1px solid #ccc}" +
+    "table.trk .b{font-weight:700}</style>" + inner;
+}
+
+function enviarCorreoHtml_(to, subject, htmlBody, adjuntos) {
+  var texto = TEXTO_PLANO_CORREO_;
   var opciones = { htmlBody: htmlBody, name: "Tracking de Producción" };
+  if (adjuntos && adjuntos.length) opciones.attachments = adjuntos;
   var errGmail = "";
 
   try {
@@ -1365,15 +1461,28 @@ function enviarCorreoHtml_(to, subject, htmlBody) {
   }
 
   try {
-    MailApp.sendEmail({
+    var optsMail = {
       to: to,
       subject: subject,
       htmlBody: htmlBody,
       name: "Tracking de Producción"
-    });
+    };
+    if (adjuntos && adjuntos.length) optsMail.attachments = adjuntos;
+    MailApp.sendEmail(optsMail);
     return "MailApp";
   } catch (e2) {
-    throw new Error(mensajePermisoCorreo_(errGmail, e2.toString()));
+    throw new Error(mensajeErrorEnvioCorreo_(errGmail, e2.toString()));
+  }
+}
+
+function enviarCorreoConTope_(to, subject, htmlFull, htmlSlim, adjuntos) {
+  var cuerpo = htmlFull;
+  if (htmlSlim && bytesUtf8Aprox_(cuerpo) > MAX_HTML_CORREO_BYTES_) cuerpo = htmlSlim;
+  try {
+    return enviarCorreoHtml_(to, subject, cuerpo, adjuntos);
+  } catch (e) {
+    if (!esErrorTamanoCuerpo_(e) || !htmlSlim || cuerpo === htmlSlim) throw e;
+    return enviarCorreoHtml_(to, subject, htmlSlim, adjuntos);
   }
 }
 
@@ -1761,12 +1870,12 @@ function columnasUsadasTablero_(datos, first, last, lastCol, ocultar) {
 }
 
 function htmlCeldaTablero_(tag, val, bg, fg, bold, conBorde) {
-  var borde = conBorde ? "border: 1px solid #ccc;" : "border: none;";
-  var fondo = bg ? "background-color: " + bg + ";" : "";
-  var color = fg ? "color: " + fg + ";" : "";
-  var peso = bold ? "font-weight: bold;" : "";
-  return "<" + tag + " style='padding: 6px 8px; " + borde + " text-align: center; " + fondo + " " + color + " " + peso + "'>" +
-    escapeHtml_(val == null ? "" : val) + "</" + tag + ">";
+  var cls = bold ? " class='b'" : "";
+  var st = [];
+  if (bg) st.push("background-color:" + bg);
+  if (fg) st.push("color:" + fg);
+  var style = st.length ? " style='" + st.join(";") + "'" : "";
+  return "<" + tag + cls + style + ">" + escapeHtml_(val == null ? "" : val) + "</" + tag + ">";
 }
 
 function construirHtmlTableroEnRango_(datos, fondos, colores, first, last, lastCol) {
@@ -1774,7 +1883,7 @@ function construirHtmlTableroEnRango_(datos, fondos, colores, first, last, lastC
   var cols = columnasUsadasTablero_(datos, first, last, lastCol, {});
   if (!cols.length) return "";
 
-  var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; border: none; width: 100%; font-size: 13px; margin-bottom: 20px;'>";
+  var html = "<table class='trk' cellspacing='0' cellpadding='0'>";
   for (var i = first; i <= last; i++) {
     if (String((datos[i] || []).join("")).trim() === "") continue;
     var esLinea = esFilaLineaTablero_(datos[i]);
@@ -1814,7 +1923,7 @@ function construirHtmlTablerosTracking_(datos, fondos, colores) {
 }
 
 function construirHtmlDetalle_(filasNuevas, fondosHeader, colorHeader) {
-  var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; width: 100%; font-size: 13px;'>";
+  var html = "<table class='trk bd' cellspacing='0' cellpadding='0'>";
   var headers = ["Dia", "Fecha", "Linea", "Turno", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
   var keys = ["dia", "fecha", "linea", "turno", "mo", "sku", "producto", "genero", "color", "talla", "cantidad"];
   html += "<tr>";
@@ -1824,13 +1933,9 @@ function construirHtmlDetalle_(filasNuevas, fondosHeader, colorHeader) {
   html += "</tr>";
   for (var i = 0; i < filasNuevas.length; i++) {
     var f = filasNuevas[i];
-    var d = f.display || {};
     html += "<tr>";
     for (var k = 0; k < keys.length; k++) {
-      var val = d[keys[k]] != null && String(d[keys[k]]).trim() !== "" ? d[keys[k]] : f[keys[k]];
-      if (keys[k] === "cantidad") val = f.cantidad;
-      if (keys[k] === "fecha") val = d.fecha || (typeof f.fecha === "object" ? "" : f.fecha);
-      html += htmlCeldaTablero_("td", val, "#ffffff", "#333333", false, true);
+      html += htmlCeldaTablero_("td", valorCeldaDetalleCorreo_(f, keys[k]), "", "", false, true);
     }
     html += "</tr>";
   }
@@ -1959,8 +2064,9 @@ function totalCantidadFilas_(filas) {
 }
 
 function construirHtmlDetalleGerencia_(filas, fondosHeader, colorHeader) {
-  var html = "<table cellspacing='0' cellpadding='0' style='border-collapse: collapse; width: 100%; font-size: 13px;'>";
+  var html = "<table class='trk bd' cellspacing='0' cellpadding='0'>";
   var headers = ["MO-SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"];
+  var keys = ["mo-sku", "producto", "genero", "color", "talla", "cantidad"];
   html += "<tr>";
   for (var h = 0; h < headers.length; h++) {
     html += htmlCeldaTablero_("th", headers[h], fondosHeader || "#434343", colorHeader || "#FFFFFF", true, true);
@@ -1968,18 +2074,9 @@ function construirHtmlDetalleGerencia_(filas, fondosHeader, colorHeader) {
   html += "</tr>";
   for (var i = 0; i < (filas || []).length; i++) {
     var f = filas[i];
-    var d = f.display || {};
-    var vals = [
-      etiquetaMoSku_(f),
-      d.producto != null && String(d.producto).trim() !== "" ? d.producto : f.producto,
-      d.genero != null && String(d.genero).trim() !== "" ? d.genero : f.genero,
-      d.color != null && String(d.color).trim() !== "" ? d.color : f.color,
-      d.talla != null && String(d.talla).trim() !== "" ? d.talla : f.talla,
-      f.cantidad
-    ];
     html += "<tr>";
-    for (var k = 0; k < vals.length; k++) {
-      html += htmlCeldaTablero_("td", vals[k], "#ffffff", "#333333", false, true);
+    for (var k = 0; k < keys.length; k++) {
+      html += htmlCeldaTablero_("td", valorCeldaDetalleCorreo_(f, keys[k]), "", "", false, true);
     }
     html += "</tr>";
   }
@@ -2001,7 +2098,7 @@ function esCierreSemanaProductiva_(ahora) {
   return dia === 5 || dia === 6;
 }
 
-function construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas) {
+function construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas, extraHtml) {
   var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
   htmlBody += "<h2 style='color: #2b5797;'>Resumen semanal de producción</h2>";
   htmlBody += "<p>Estimada gerencia,</p>";
@@ -2016,7 +2113,8 @@ function construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas) {
   htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";
 
   htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>2. Detalle de producción (MO-SKU)</h3>";
-  htmlBody += "<div style='overflow-x: auto;'>" + htmlDetalle + "</div>";
+  htmlBody += extraHtml || "";
+  htmlBody += "<div style='overflow-x: auto;'>" + (htmlDetalle || "") + "</div>";
 
   htmlBody += "<br><br><div style='background-color: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffeeba;'>";
   htmlBody += "<strong>NOTA PARA ALMACÉN Y TIENDA:</strong> estas piezas ya no están en costura; proyectar ingreso a almacén en <strong>3 días hábiles</strong> y despacho posterior a tienda.";
@@ -2024,7 +2122,7 @@ function construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas) {
 
   htmlBody += "<p><br>Saludos cordiales,<br><em>Sistema Automático de Planificación</em></p>";
   htmlBody += "</div>";
-  return htmlBody;
+  return htmlConEstilo_(htmlBody);
 }
 
 // =========================================================================
@@ -2093,32 +2191,48 @@ function enviarReporteProduccion() {
   ss.toast("Generando tablas HTML...", "Enviando Reporte", 10);
 
   var htmlTableros = construirHtmlTablerosTracking_(datosTracking, fondosTracking, coloresTracking);
-  var htmlDetalle = construirHtmlDetalle_(filasNuevas, "#434343", "#FFFFFF");
+  var csvNombre = "detalle-produccion-nueva.csv";
+  var adjuntos = [blobCsvCorreo_(
+    csvNombre,
+    ["Dia", "Fecha", "Linea", "Turno", "MO", "SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"],
+    ["dia", "fecha", "linea", "turno", "mo", "sku", "producto", "genero", "color", "talla", "cantidad"],
+    filasNuevas
+  )];
+  var nota = notaTopeDetalle_(filasNuevas.length, csvNombre);
+  var htmlDetTope = construirHtmlDetalle_(topeFilasCorreo_(filasNuevas), "#434343", "#FFFFFF");
 
-  var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
-  htmlBody += "<h2 style='color: #2b5797;'>Reporte de Producción Diaria</h2>";
-  htmlBody += "<p>Estimado equipo,</p>";
-  htmlBody += "<p>El resumen copia los tableros diurno, nocturno y el total del día de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
+  function cuerpoDiario_(detHtml, extraNota) {
+    var htmlBody = "<div style='font-family: Arial, sans-serif; color: #333;'>";
+    htmlBody += "<h2 style='color: #2b5797;'>Reporte de Producción Diaria</h2>";
+    htmlBody += "<p>Estimado equipo,</p>";
+    htmlBody += "<p>El resumen copia los tableros diurno, nocturno y el total del día de Tracking. El detalle incluye solo la producción nueva desde el último correo:</p>";
 
-  htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen General (Tracking)</h3>";
-  htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";
+    htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>1. Resumen General (Tracking)</h3>";
+    htmlBody += "<div style='overflow-x: auto;'>" + htmlTableros + "</div>";
 
-  htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>2. Detalle de Producción</h3>";
-  htmlBody += "<div style='overflow-x: auto;'>" + htmlDetalle + "</div>";
+    htmlBody += "<h3 style='color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px;'>2. Detalle de Producción</h3>";
+    htmlBody += extraNota || "";
+    htmlBody += "<div style='overflow-x: auto;'>" + (detHtml || "") + "</div>";
 
-  htmlBody += "<br><br><div style='background-color: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffeeba;'>";
-  htmlBody += "<strong>NOTA PARA ALMACÉN:</strong> Se estima que estos productos llegarán al almacén de producto terminado en aproximadamente <strong>3 días hábiles</strong>.";
-  htmlBody += "</div>";
+    htmlBody += "<br><br><div style='background-color: #fff3cd; color: #856404; padding: 15px; border-left: 5px solid #ffeeba;'>";
+    htmlBody += "<strong>NOTA PARA ALMACÉN:</strong> Se estima que estos productos llegarán al almacén de producto terminado en aproximadamente <strong>3 días hábiles</strong>.";
+    htmlBody += "</div>";
 
-  htmlBody += "<p><br>Saludos cordiales,<br><em>Sistema Automático de Planificación</em></p>";
-  htmlBody += "</div>";
+    htmlBody += "<p><br>Saludos cordiales,<br><em>Sistema Automático de Planificación</em></p>";
+    htmlBody += "</div>";
+    return htmlConEstilo_(htmlBody);
+  }
+
+  var htmlFull = cuerpoDiario_(htmlDetTope, nota);
+  var htmlSlim = cuerpoDiario_("", "<p style='color:#555'>El detalle completo va en el CSV adjunto (" + filasNuevas.length + " filas).</p>");
 
   try {
-    var via = enviarCorreoHtml_(correosUnidos, ASUNTO_REPORTE_CORREO_, htmlBody);
+    var via = enviarCorreoConTope_(correosUnidos, ASUNTO_REPORTE_CORREO_, htmlFull, htmlSlim, adjuntos);
     guardarHistorialCorreo_(hojaHist, partido.persistir, new Date());
     ui.alert(
       "Éxito",
-      "Se envió el reporte diario (" + via + ") con " + filasNuevas.length + " ítems nuevos a:\n\n" + correosUnidos,
+      "Se envió el reporte diario (" + via + ") con " + filasNuevas.length + " ítems nuevos a:\n\n" + correosUnidos +
+        "\n\nEl detalle completo va en el CSV adjunto.",
       ui.ButtonSet.OK
     );
   } catch (error) {
@@ -2193,15 +2307,28 @@ function enviarResumenGerencia() {
   ss.toast("Generando resumen semanal...", "Enviando Gerencia", 10);
 
   var htmlTableros = construirHtmlTablerosTracking_(datosTracking, fondosTracking, coloresTracking);
-  var htmlDetalle = construirHtmlDetalleGerencia_(filasGerencia, "#434343", "#FFFFFF");
-  var htmlBody = construirHtmlCuerpoGerencia_(htmlTableros, htmlDetalle, totalPiezas);
+  var csvNombreG = "resumen-gerencia-semana.csv";
+  var adjuntosG = [blobCsvCorreo_(
+    csvNombreG,
+    ["MO-SKU", "Producto", "Genero", "Color", "Talla", "Cantidad"],
+    ["mo-sku", "producto", "genero", "color", "talla", "cantidad"],
+    filasGerencia
+  )];
+  var notaG = notaTopeDetalle_(filasGerencia.length, csvNombreG);
+  var htmlDetTopeG = construirHtmlDetalleGerencia_(topeFilasCorreo_(filasGerencia), "#434343", "#FFFFFF");
+  var htmlFullG = construirHtmlCuerpoGerencia_(htmlTableros, htmlDetTopeG, totalPiezas, notaG);
+  var htmlSlimG = construirHtmlCuerpoGerencia_(
+    htmlTableros, "", totalPiezas,
+    "<p style='color:#555'>El detalle completo va en el CSV adjunto (" + filasGerencia.length + " filas).</p>"
+  );
 
   try {
-    var via = enviarCorreoHtml_(correosUnidos, ASUNTO_REPORTE_GERENCIA_, htmlBody);
+    var via = enviarCorreoConTope_(correosUnidos, ASUNTO_REPORTE_GERENCIA_, htmlFullG, htmlSlimG, adjuntosG);
     ui.alert(
       "Éxito",
       "Se envió el resumen semanal de gerencia (" + via + ") con " +
-        filasGerencia.length + " MO-SKU y " + totalPiezas + " prendas a:\n\n" + correosUnidos,
+        filasGerencia.length + " MO-SKU y " + totalPiezas + " prendas a:\n\n" + correosUnidos +
+        "\n\nEl detalle completo va en el CSV adjunto.",
       ui.ButtonSet.OK
     );
   } catch (error) {
