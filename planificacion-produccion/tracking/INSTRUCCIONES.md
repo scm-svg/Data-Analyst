@@ -1,4 +1,4 @@
-# Tracking de Producción v5.9.8 — correo diario y resumen semanal de gerencia
+# Tracking de Producción v5.9.9 — correo diario y resumen semanal de gerencia
 
 ## Cómo instalar (borrar y pegar)
 
@@ -10,6 +10,19 @@ En el archivo **Tracking de Producción** (no el de Planificación):
 4. Reemplaza `appsscript.json` con `planificacion-produccion/tracking/appsscript.json`.
 5. Guarda. Si aún no autorizaste el envío: ejecuta **`autorizarEnvioCorreo`** una vez.
 6. Recarga la hoja y usa **Tracking → Actualizar Tablero (Costura)** para llenar ambos tableros.
+
+## Error "Límite excedido: Tamaño del cuerpo del mensaje"
+
+Ese aviso **no es OAuth**. Gmail/MailApp rechazan un HTML de más de ~200 KB. Con ~200 filas de detalle el correo viejo inflaba cada celda con estilos y además duplicaba la tabla en texto plano.
+
+Desde 5.9.9:
+
+- El detalle **completo** va en un **CSV adjunto**.
+- El HTML muestra **hasta 80 filas**. Si aún no cabe, el cuerpo queda solo con los tableros y una nota al CSV.
+- El texto plano del correo es un aviso corto (ya no copia toda la tabla).
+- Si el fallo es de tamaño, el diálogo ya **no** habla de autorización.
+
+Si ves el texto de OAuth **y** debajo `Límite excedido: Tamaño del cuerpo`, pega este `Codigo.gs` y vuelve a enviar. El OAuth solo aplica si GmailApp/MailApp hablan de permisos.
 
 ## Pestaña Correo (dos columnas)
 
@@ -33,6 +46,7 @@ No mezclar las columnas. El reporte diario ya no toma correos de la columna B.
 - Asunto: `Reporte de Producción Diaria y Proyección a Almacén` (sin emojis; Gmail los rompía).
 - El **Resumen General** copia los tableros **diurno**, **nocturno** y el **Total del día**.
 - El **detalle** sí sale solo con **modelos y cantidades nuevas**, con Dia, Fecha, Linea, Turno, MO, SKU, Producto, Genero, Color, Talla, Cantidad.
+- Adjunto: `detalle-produccion-nueva.csv` con **todas** las filas nuevas.
 - Lo ya enviado se guarda en `_Correo Enviado`. Si no hay nada nuevo, no manda correo.
 - Para reenviar todo: **Tracking → Reiniciar historial de correo diario**.
 
@@ -45,6 +59,7 @@ No mezclar las columnas. El reporte diario ya no toma correos de la columna B.
 - El detalle **no** usa el historial diario: resume **toda la semana**.
 - Columnas del detalle: **MO-SKU**, **Producto**, **Genero**, **Color**, **Talla**, **Cantidad**.
 - Si el mismo MO coincide (mismo SKU, producto, color y talla en varios días/líneas/turnos), las cantidades se **suman** en una sola fila.
+- Adjunto: `resumen-gerencia-semana.csv` con el detalle completo.
 - Este envío **no** marca `_Correo Enviado`; el diario sigue restando solo lo que ya avisó operación.
 
 ## Destinatarios (Excel 5)
